@@ -1,0 +1,9 @@
+numpy
+nltk
+pandas
+sox
+soundfile
+absl-py
+librosa
+tensorflow-addons
+matplotlib
