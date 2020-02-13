@@ -1,6 +1,6 @@
 # Vietnamese Automatic Speech Recognition
 
-VASR Implementation in Tensorflow Estimator.
+VASR Implementation in Tensorflow Keras.
 
 ## Dataset
 
@@ -29,5 +29,5 @@ python run.py --helpfull
 
 ## References
 
-1. [https://github.com/tensorflow/models/tree/master/research/deep_speech](https://github.com/tensorflow/models/tree/master/research/deep_speech)
-2. [https://arxiv.org/abs/1512.02595](https://arxiv.org/abs/1512.02595)
+1. [https://arxiv.org/abs/1512.02595](https://arxiv.org/abs/1512.02595)
+2. [https://github.com/NVIDIA/OpenSeq2Seq](https://github.com/NVIDIA/OpenSeq2Seq)
