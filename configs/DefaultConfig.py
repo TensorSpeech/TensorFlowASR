@@ -34,15 +34,15 @@ audio_normalization = True
 num_feature_bins = 128
 
 train_data_transcript_paths = [
-    "/run/media/nlhuy/Miscellanea/Datasets/asr/SmallFixed/Train/transcripts.tsv"
+    "/media/nlhuy/Miscellanea/Datasets/asr/SmallFixed/Train/transcripts.tsv"
 ]
 
 eval_data_transcript_paths = [
-    "/run/media/nlhuy/Miscellanea/Datasets/asr/SmallFixed/Dev/transcripts.tsv"
+    "/media/nlhuy/Miscellanea/Datasets/asr/SmallFixed/Dev/transcripts.tsv"
 ]
 
 test_data_transcript_paths = [
-    "/run/media/nlhuy/Miscellanea/Datasets/asr/SmallFixed/Test/transcripts.tsv"
+    "/media/nlhuy/Miscellanea/Datasets/asr/SmallFixed/Test/transcripts.tsv"
 ]
 
 checkpoint_weights = "/tmp/asr/model.ckpt"
