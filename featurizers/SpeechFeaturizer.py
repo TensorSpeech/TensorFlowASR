@@ -81,8 +81,8 @@ class SpeechFeaturizer:
             audio_duration (float): duration of the signal in seconds
         """
         if isinstance(audio_file_path, str):
-            data, file_sr = soundfile.read(audio_file_path)
-            data = librosa.core.resample(data, orig_sr=file_sr, target_sr=self.sample_rate)
+            data, sr = soundfile.read(audio_file_path)
+            data = librosa.core.resample(data, orig_sr=sr, target_sr=self.sample_rate, scale=True)
         else:
             data = audio_file_path
 
