@@ -1,7 +1,6 @@
 from __future__ import absolute_import
 
 import tensorflow as tf
-from augmentations.Augments import NoAugment
 
 
 class Dataset:
@@ -9,7 +8,7 @@ class Dataset:
         self.data_path = data_path
         self.mode = mode
 
-    def __call__(self, speech_featurizer, text_featurizer, batch_size=32, repeat=1, augmentations=tuple([NoAugment])):
+    def __call__(self, speech_featurizer, text_featurizer, batch_size=32, repeat=1, augmentations=tuple([None])):
         if self.mode == "train":
             self.entries = self.__create_train_entries()
             return self.__create_dataset(speech_featurizer=speech_featurizer, text_featurizer=text_featurizer,
@@ -44,21 +43,19 @@ class Dataset:
                 lines = f.read().splitlines()
         return lines
 
-    def __create_dataset(self, speech_featurizer, text_featurizer, batch_size, repeat=1,
-                         augmentations=tuple([NoAugment])):
+    def __create_dataset(self, speech_featurizer, text_featurizer, batch_size, repeat=1, augmentations=tuple([None])):
         # Dataset properties
         num_feature_bins = speech_featurizer.num_feature_bins
 
         def _gen_data():
             for audio_file, _, transcript in self.entries:
                 for au in augmentations:
-                    if not au.is_post:
-                        features = au(audio_file)
+                    if au is not None:
+                        features = audio_file if au.is_post else au(audio_file)
+                        features = speech_featurizer.compute_speech_features(features)
+                        features = au(features) if au.is_post else features
                     else:
-                        features = audio_file
-                    features = speech_featurizer.compute_speech_features(features)
-                    if au.is_post:
-                        features = au(features)
+                        features = speech_featurizer.compute_speech_features(audio_file)
                     labels = text_featurizer.compute_label_features(transcript)
                     input_length = [len(features)]
                     label_length = [len(labels) if labels is not None else None]

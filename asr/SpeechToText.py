@@ -55,14 +55,14 @@ class SpeechToText:
 
             def check_no_augment():
                 for au in augmentations:
-                    if isinstance(au, NoAugment):
+                    if au is None:
                         return True
                 return False
 
             if not check_no_augment():
-                augmentations.append(NoAugment())
+                augmentations.append(None)
         else:
-            augmentations = [NoAugment]
+            augmentations = [None]
         tf_train_dataset = self.train_dataset(speech_featurizer=self.speech_featurizer,
                                               text_featurizer=self.text_featurizer,
                                               batch_size=self.configs["batch_size"], augmentations=augmentations)

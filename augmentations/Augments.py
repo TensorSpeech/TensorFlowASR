@@ -20,11 +20,6 @@ class Augmentation:
             return self.func(*args, **kwargs)
 
 
-class NoAugment(Augmentation):
-    def __init__(self):
-        super().__init__(func=no_aug, is_post=True)
-
-
 class FreqMasking(Augmentation):
     def __init__(self, **kwargs):
         super().__init__(func=freq_masking, is_post=True, **kwargs)
