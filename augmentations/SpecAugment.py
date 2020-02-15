@@ -59,8 +59,10 @@ def time_warping(spectrogram: tf.Tensor, time_warp_param: int = 50, direction: s
     # Choose a random source point
     if time_warp_param > spectrogram.shape[1] - time_warp_param:
         h_source_point = np.random.randint(spectrogram.shape[1] - time_warp_param, time_warp_param)
-    else:
+    elif time_warp_param < spectrogram.shape[1] - time_warp_param:
         h_source_point = np.random.randint(time_warp_param, spectrogram.shape[1] - time_warp_param)
+    else:
+        h_source_point = time_warp_param
     distance = np.random.randint(0, time_warp_param)
     # Calculate destination point along the direction with a distance
     if direction == "left":
