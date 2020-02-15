@@ -45,6 +45,6 @@ test_data_transcript_paths = [
     "/media/nlhuy/Miscellanea/Datasets/asr/SmallFixed/Test/transcripts.tsv"
 ]
 
-checkpoint_weights = "/tmp/asr/model.ckpt"
+checkpoint_file = "/tmp/asr/model.ckpt"
 
-export_weights = "/tmp/asr/model.h5"
+log_dir = "/tmp/asr/"

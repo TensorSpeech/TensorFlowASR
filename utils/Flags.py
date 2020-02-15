@@ -23,3 +23,8 @@ flags.DEFINE_string(
     name="infer_file_path",
     default="",
     help="Path to the file containing speech file paths for inference")
+
+flags.DEFINE_string(
+    name="export_file",
+    default=None,
+    help="Path to the model file to be exported")

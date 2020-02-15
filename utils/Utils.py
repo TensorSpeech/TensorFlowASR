@@ -17,8 +17,8 @@ conf_options = ["base_model",
                 "train_data_transcript_paths",
                 "eval_data_transcript_paths",
                 "test_data_transcript_paths",
-                "checkpoint_weights",
-                "export_weights"]
+                "checkpoint_file",
+                "log_dir"]
 
 
 def get_config(config_path):

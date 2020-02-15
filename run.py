@@ -30,6 +30,8 @@ def main(argv):
             eval_dataset=eval_dataset,
             configs=configs)
         asr.train_and_eval()
+        if flags_obj.export_file is not None:
+            asr.save_model(flags_obj.export_file)
     elif flags_obj.mode == "test":
         test_dataset = Dataset(data_path=configs["test_data_transcript_paths"], mode="test")
         asr = SpeechToText(

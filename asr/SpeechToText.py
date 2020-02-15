@@ -70,12 +70,17 @@ class SpeechToText:
                                             text_featurizer=self.text_featurizer,
                                             batch_size=self.configs["batch_size"])
         self.models.train_model.summary()
-        cp_callback = tf.keras.callbacks.ModelCheckpoint(filepath=self.configs["checkpoint_weights"],
+        cp_callback = tf.keras.callbacks.ModelCheckpoint(filepath=self.configs["checkpoint_file"],
                                                          save_weights_only=True,
-                                                         verbose=1)
+                                                         verbose=1, save_freq=500)
+        tb_callback = tf.keras.callbacks.TensorBoard(log_dir=self.configs["log_dir"], histogram_freq=1, update_freq=500,
+                                                     write_images=True)
         self.models.train_model.fit(x=tf_train_dataset, epochs=self.configs["num_epochs"],
-                                    validation_data=tf_eval_dataset, shuffle="batch", callbacks=[cp_callback])
-        self.models.train_model.save_weights(filepath=self.configs["export_weights"])
+                                    validation_data=tf_eval_dataset, shuffle="batch",
+                                    callbacks=[cp_callback, tb_callback])
+
+    def save_model(self, export_path):
+        self.models.train_model.save(filepath=export_path)
 
     def test(self):
         print("Testing model ...")
