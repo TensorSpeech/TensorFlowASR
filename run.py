@@ -1,11 +1,15 @@
 from __future__ import absolute_import
 
+import os
+
 from utils.Flags import app, flags_obj
 from utils.Utils import get_config
 from data.Dataset import Dataset
 from featurizers.SpeechFeaturizer import SpeechFeaturizer
 from featurizers.TextFeaturizer import TextFeaturizer
 from asr.SpeechToText import SpeechToText
+
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'  # or any {'0', '1', '3'}
 
 
 def main(argv):
