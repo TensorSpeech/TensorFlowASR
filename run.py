@@ -1,8 +1,8 @@
 from __future__ import absolute_import
 
-import os
+import tensorflow as tf
 
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'  # or any {'0', '1', '3'}
+tf.get_logger().setLevel("ERROR")
 
 from utils.Flags import app, flags_obj
 from utils.Utils import get_config
