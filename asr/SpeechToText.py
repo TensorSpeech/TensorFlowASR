@@ -71,8 +71,7 @@ class SpeechToText:
                                             batch_size=self.configs["batch_size"])
         self.models.train_model.summary()
         cp_callback = tf.keras.callbacks.ModelCheckpoint(filepath=self.configs["checkpoint_file"],
-                                                         save_weights_only=True,
-                                                         verbose=1, save_freq=500)
+                                                         save_weights_only=True)
         tb_callback = tf.keras.callbacks.TensorBoard(log_dir=self.configs["log_dir"], histogram_freq=1, update_freq=500,
                                                      write_images=True)
         self.models.train_model.fit(x=tf_train_dataset, epochs=self.configs["num_epochs"],
