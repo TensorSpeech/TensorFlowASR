@@ -35,12 +35,6 @@ class SpeechFeaturizer:
         self.pre_augmentation = pre_augmentation
         self.post_augmentation = post_augmentation
 
-    def __augment_audio_signal(self, samples):
-        return self.pre_augmentation(signal=samples)
-
-    def __augment_features(self, features):
-        return self.post_augmentation(features=features)
-
     def __compute_spectrogram_feature(self, signal):
         """Function to convert raw audio signal to spectrogram using librosa backend
         Args:

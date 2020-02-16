@@ -29,8 +29,6 @@ frame_ms = 25
 
 stride_ms = 10
 
-audio_normalization = True
-
 num_feature_bins = 128
 
 train_data_transcript_paths = [
