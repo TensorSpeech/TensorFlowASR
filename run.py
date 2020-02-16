@@ -37,6 +37,8 @@ def main(argv):
         if flags_obj.export_file is not None:
             asr.save_model(flags_obj.export_file)
     elif flags_obj.mode == "test":
+        if flags_obj.export_file is None:
+            raise ValueError("Flag 'export_file' must be set")
         test_dataset = Dataset(data_path=configs["test_data_transcript_paths"], mode="test")
         asr = SpeechToText(
             speech_featurizer=speech_featurizer,
@@ -48,6 +50,8 @@ def main(argv):
     elif flags_obj.mode == "infer":
         if flags_obj.infer_file_path == "":
             raise ValueError("Flag 'infer_file_path' must be set")
+        if flags_obj.export_file is None:
+            raise ValueError("Flag 'export_file' must be set")
         asr = SpeechToText(
             speech_featurizer=speech_featurizer,
             text_featurizer=text_featurizer,

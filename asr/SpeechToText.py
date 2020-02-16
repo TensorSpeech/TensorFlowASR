@@ -78,12 +78,12 @@ class SpeechToText:
                                     validation_data=tf_eval_dataset, shuffle="batch",
                                     callbacks=[cp_callback, tb_callback])
 
-    def save_model(self, export_path):
-        self.models.train_model.save(filepath=export_path)
+    def save_model(self, model_file):
+        self.models.train_model.save_weights(filepath=model_file)
 
-    def test(self):
+    def test(self, model_file):
         print("Testing model ...")
-        self.models.test_model.load_weights(filepath=self.configs["export_weights"])
+        self.models.test_model.load_weights(filepath=model_file)
         tf_test_dataset = self.test_dataset(speech_featurizer=self.speech_featurizer,
                                             text_featurizer=self.text_featurizer,
                                             batch_size=self.configs["batch_size"])
@@ -97,8 +97,8 @@ class SpeechToText:
         print("WER: ", total_wer / len(predictions))
         print("CER: ", total_cer / len(predictions))
 
-    def infer(self, speech_file_path):
-        self.models.infer_model.load_weights(filepath=self.configs["export_weights"])
+    def infer(self, speech_file_path, model_file):
+        self.models.infer_model.load_weights(filepath=model_file)
         tf_infer_dataset = Dataset(data_path=speech_file_path, mode="infer")
         tf_infer_dataset = tf_infer_dataset(speech_featurizer=self.speech_featurizer, batch_size=1)
         return self.models.infer_model.predict(x=tf_infer_dataset)
