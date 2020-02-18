@@ -54,7 +54,7 @@ def main(argv):
             test_dataset=test_dataset,
             configs=configs
         )
-        asr.test()
+        asr.test(flags_obj.export_file)
     elif flags_obj.mode == "infer":
         if flags_obj.infer_file_path == "":
             raise ValueError("Flag 'infer_file_path' must be set")
@@ -65,7 +65,7 @@ def main(argv):
             text_featurizer=text_featurizer,
             configs=configs
         )
-        asr.infer(speech_file_path=flags_obj.infer_file_path)
+        asr.infer(speech_file_path=flags_obj.infer_file_path, model_file=flags_obj.export_file)
     else:
         raise ValueError("Flag 'mode' must be either 'save', 'train', 'test' or 'infer'")
 
