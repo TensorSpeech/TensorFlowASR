@@ -94,6 +94,7 @@ class SpeechToText:
         tf_test_dataset = self.test_dataset(speech_featurizer=self.speech_featurizer,
                                             text_featurizer=self.text_featurizer,
                                             batch_size=self.configs["batch_size"])
+        self.models.test_model.summary()
         predictions = self.models.test_model.predict(x=tf_test_dataset)
         total_wer = 0
         total_cer = 0
