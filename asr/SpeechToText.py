@@ -79,7 +79,7 @@ class SpeechToText:
                                     callbacks=[cp_callback, tb_callback])
 
     def save_model(self, model_file):
-        self.models.train_model.save_weights(filepath=model_file)
+        self.models.train_model.save_weights(filepath=model_file, save_format='tf')
 
     def test(self, model_file):
         print("Testing model ...")
