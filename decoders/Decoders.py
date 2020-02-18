@@ -12,10 +12,14 @@ class Decoder:
 
     def convert_to_string(self, decoded):
         # Remove blank indices
-        decoded = np.array(decoded)
-        decoded = decoded[decoded != self.blank_index]
+        def map_cvrt(elem):
+            elem = np.array(elem)
+            elem = elem[elem != self.blank_index]
+            return ''.join([self.index_to_token[i] for i in elem])
+
         # Convert to string
-        return ''.join([self.index_to_token[i] for i in decoded])
+        decoded = tf.map_fn(map_cvrt, decoded)
+        return decoded.numpy()
 
     def decode(self, probs, input_length):
         pass
@@ -27,7 +31,8 @@ class GreedyDecoder(Decoder):
     def decode(self, probs, input_length):
         # probs.shape = [batch_size, time_steps, num_classes]
         decoded = tf.keras.backend.ctc_decode(y_pred=probs, input_length=input_length, greedy=True)
-        # remove the blank index in the decoded sequence
+        # decoded shape = [batch_size, decoded index]
+        decoded = tf.convert_to_tensor(decoded)
         return self.convert_to_string(decoded)
 
 
@@ -43,6 +48,6 @@ class BeamSearchDecoder(Decoder):
         # probs.shape = [batch_size, time_steps, num_classes]
         decoded = tf.keras.backend.ctc_decode(y_pred=probs, input_length=input_length, greedy=False,
                                               beam_width=self.beam_width)
-        # decoded shape = [top_path=1, decoded index]
-        decoded = decoded[0]
+        # decoded shape = [batch_size, top_path=1, decoded index]
+        decoded = tf.squeeze(decoded)
         return self.convert_to_string(decoded)
