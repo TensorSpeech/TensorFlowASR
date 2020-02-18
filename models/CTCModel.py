@@ -19,7 +19,7 @@ def test_lambda_func(args, **arguments):
     y_pred, input_length, labels = args
     decoder = arguments["decoder"]
     predictions = decoder.decode(probs=y_pred, input_length=tf.squeeze(input_length))
-    return predictions, labels
+    return tf.concat([predictions, labels], axis=1)
 
 
 class CTCModel:
@@ -53,7 +53,7 @@ class CTCModel:
                                             arguments={"decoder": decoder}, dynamic=True)([outputs, input_length])
 
         # Lambda layer for analysis
-        test_out = tf.keras.layers.Lambda(test_lambda_func, output_shape=(None, None), name="ctc_test",
+        test_out = tf.keras.layers.Lambda(test_lambda_func, output_shape=(None,), name="ctc_test",
                                           arguments={"decoder": decoder}, dynamic=True)([outputs, input_length, labels])
 
         train_model = tf.keras.Model(inputs={
