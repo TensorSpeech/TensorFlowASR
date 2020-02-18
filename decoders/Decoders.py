@@ -1,6 +1,7 @@
 from __future__ import absolute_import
 
 import tensorflow as tf
+import numpy as np
 
 
 class Decoder:
@@ -12,10 +13,10 @@ class Decoder:
     def convert_to_string(self, decoded):
         # Remove blank indices
         def map_cvrt(elem):
-            decoded_arr = elem.numpy()
-            decoded_arr = decoded_arr[decoded_arr != self.blank_index]
-            decoded_arr = ''.join([self.index_to_token[i] for i in decoded_arr])
-            return tf.convert_to_tensor(decoded_arr)
+            elem = np.array(elem)
+            elem = elem[elem != self.blank_index]
+            elem = ''.join([self.index_to_token[i] for i in elem])
+            return elem
 
         # Convert to string
         return tf.map_fn(map_cvrt, decoded)
