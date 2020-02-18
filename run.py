@@ -36,6 +36,14 @@ def main(argv):
         asr.train_and_eval()
         if flags_obj.export_file is not None:
             asr.save_model(flags_obj.export_file)
+    elif flags_obj.mode == "save":
+        if flags_obj.export_file is None:
+            raise ValueError("Flag 'export_file' must be set")
+        asr = SpeechToText(
+            speech_featurizer=speech_featurizer,
+            text_featurizer=text_featurizer,
+            configs=configs)
+        asr.save_model(flags_obj.export_file)
     elif flags_obj.mode == "test":
         if flags_obj.export_file is None:
             raise ValueError("Flag 'export_file' must be set")
@@ -59,7 +67,7 @@ def main(argv):
         )
         asr.infer(speech_file_path=flags_obj.infer_file_path)
     else:
-        raise ValueError("Flag 'mode' must be either 'train', 'test' or 'infer'")
+        raise ValueError("Flag 'mode' must be either 'save', 'train', 'test' or 'infer'")
 
 
 if __name__ == '__main__':
