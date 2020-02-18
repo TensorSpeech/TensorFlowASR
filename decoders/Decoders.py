@@ -11,12 +11,9 @@ class Decoder:
 
     def convert_to_string(self, decoded):
         # Remove blank indices
-        merge_remove_blank = []
-        for k in decoded:
-            if k != self.blank_index:  # blank index
-                merge_remove_blank.append(k)
+        decoded = decoded[decoded != self.blank_index]
         # Convert to string
-        return ''.join([self.index_to_token[i] for i in merge_remove_blank])
+        return ''.join([self.index_to_token[i] for i in decoded])
 
     def decode(self, probs, input_length):
         pass
