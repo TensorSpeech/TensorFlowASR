@@ -11,9 +11,14 @@ class Decoder:
 
     def convert_to_string(self, decoded):
         # Remove blank indices
-        decoded = decoded[decoded != self.blank_index]
+        def map_cvrt(elem):
+            decoded_arr = elem.numpy()
+            decoded_arr = decoded_arr[decoded_arr != self.blank_index]
+            decoded_arr = ''.join([self.index_to_token[i] for i in decoded_arr])
+            return tf.convert_to_tensor(decoded_arr)
+
         # Convert to string
-        return ''.join([self.index_to_token[i] for i in decoded])
+        return tf.map_fn(map_cvrt, decoded)
 
     def decode(self, probs, input_length):
         pass
