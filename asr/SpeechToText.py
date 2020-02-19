@@ -96,6 +96,7 @@ class SpeechToText:
                                             batch_size=self.configs["batch_size"])
         self.models.test_model.summary()
         predictions = self.models.test_model.predict(x=tf_test_dataset)
+        predictions = predictions.numpy()
         total_wer = 0
         total_cer = 0
         for pred in predictions:
@@ -109,4 +110,6 @@ class SpeechToText:
         self.models.infer_model.load_weights(filepath=model_file)
         tf_infer_dataset = Dataset(data_path=speech_file_path, mode="infer")
         tf_infer_dataset = tf_infer_dataset(speech_featurizer=self.speech_featurizer, batch_size=1)
-        return self.models.infer_model.predict(x=tf_infer_dataset)
+        predictions = self.models.infer_model.predict(x=tf_infer_dataset)
+        predictions = predictions.numpy()
+        return predictions

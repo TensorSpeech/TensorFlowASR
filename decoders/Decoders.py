@@ -18,8 +18,7 @@ class Decoder:
             return ''.join([self.index_to_token[i] for i in elem])
 
         # Convert to string
-        decoded = tf.map_fn(map_cvrt, decoded)
-        return decoded.numpy()
+        return tf.map_fn(map_cvrt, decoded, dtype=tf.string)
 
     def decode(self, probs, input_length):
         pass
@@ -32,7 +31,7 @@ class GreedyDecoder(Decoder):
         # probs.shape = [batch_size, time_steps, num_classes]
         decoded = tf.keras.backend.ctc_decode(y_pred=probs, input_length=input_length, greedy=True)
         # decoded shape = [batch_size, decoded index]
-        decoded = tf.convert_to_tensor(decoded)
+        decoded = decoded[0]  # get the first result
         return self.convert_to_string(decoded)
 
 
@@ -49,5 +48,5 @@ class BeamSearchDecoder(Decoder):
         decoded = tf.keras.backend.ctc_decode(y_pred=probs, input_length=input_length, greedy=False,
                                               beam_width=self.beam_width)
         # decoded shape = [batch_size, top_path=1, decoded index]
-        decoded = tf.squeeze(decoded)
+        decoded = decoded[0]  # get the first object of the list of top-path objects
         return self.convert_to_string(decoded)

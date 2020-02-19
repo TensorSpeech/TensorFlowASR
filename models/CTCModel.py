@@ -19,7 +19,8 @@ def test_lambda_func(args, **arguments):
     y_pred, input_length, labels = args
     decoder = arguments["decoder"]
     predictions = decoder.decode(probs=y_pred, input_length=tf.squeeze(input_length))
-    return tf.concat([predictions, labels], axis=1)
+    string_labels = decoder.convert_to_string(labels)
+    return tf.concat([predictions, string_labels], axis=1)
 
 
 class CTCModel:
