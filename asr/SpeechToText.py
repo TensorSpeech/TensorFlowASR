@@ -77,8 +77,14 @@ class SpeechToText:
                                                          save_best_only=True, mode='min', save_freq='epoch')
         tb_callback = tf.keras.callbacks.TensorBoard(log_dir=self.configs["log_dir"], histogram_freq=1, update_freq=500,
                                                      write_images=True)
+        latest = tf.train.latest_checkpoint(self.configs["checkpoint_dir"])
+        if latest is not None:
+            self.models.train_model.load_weights(latest)
+            initial_epoch = int(latest.split("_")[-1])
+        else:
+            initial_epoch = 0
         self.models.train_model.fit(x=tf_train_dataset, epochs=self.configs["num_epochs"],
-                                    validation_data=tf_eval_dataset, shuffle="batch",
+                                    validation_data=tf_eval_dataset, shuffle="batch", initial_epoch=initial_epoch,
                                     callbacks=[cp_callback, tb_callback])
 
     def save_model(self, model_file):

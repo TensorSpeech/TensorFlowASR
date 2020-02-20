@@ -1,9 +1,9 @@
 from __future__ import absolute_import
 
-from models.DeepSpeech2 import DeepSpeech2
+from models.Small import Small
 from augmentations.Augments import TimeWarping, TimeMasking, FreqMasking
 
-base_model = DeepSpeech2()
+base_model = Small()
 
 decoder = 'beamsearch'
 
