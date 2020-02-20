@@ -16,7 +16,7 @@ conf_options = ["base_model",
                 "train_data_transcript_paths",
                 "eval_data_transcript_paths",
                 "test_data_transcript_paths",
-                "checkpoint_file",
+                "checkpoint_dir",
                 "log_dir"]
 
 

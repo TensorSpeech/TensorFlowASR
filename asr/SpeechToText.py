@@ -71,8 +71,9 @@ class SpeechToText:
                                             text_featurizer=self.text_featurizer,
                                             batch_size=self.configs["batch_size"])
         self.models.train_model.summary()
-        cp_callback = tf.keras.callbacks.ModelCheckpoint(filepath=self.configs["checkpoint_file"],
-                                                         save_weights_only=False, verbose=1, monitor='val_loss',
+        checkpoint_prefix = os.path.join(self.configs["checkpoint_dir"], "ckpt_{epoch}")
+        cp_callback = tf.keras.callbacks.ModelCheckpoint(filepath=checkpoint_prefix,
+                                                         save_weights_only=True, verbose=1, monitor='val_loss',
                                                          save_best_only=True, mode='min', save_freq='epoch')
         tb_callback = tf.keras.callbacks.TensorBoard(log_dir=self.configs["log_dir"], histogram_freq=1, update_freq=500,
                                                      write_images=True)
@@ -81,8 +82,7 @@ class SpeechToText:
                                     callbacks=[cp_callback, tb_callback])
 
     def save_model(self, model_file):
-        checkpoint_dir = os.path.dirname(self.configs["checkpoint_file"])
-        latest = tf.train.latest_checkpoint(checkpoint_dir)
+        latest = tf.train.latest_checkpoint(self.configs["checkpoint_dir"])
         if latest is None:
             raise ValueError("No checkpoint found")
         self.models.train_model.load_weights(latest)
