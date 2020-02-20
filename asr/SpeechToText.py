@@ -94,22 +94,33 @@ class SpeechToText:
         tf_test_dataset = self.test_dataset(speech_featurizer=self.speech_featurizer,
                                             text_featurizer=self.text_featurizer,
                                             batch_size=self.configs["batch_size"])
+        tb_callback = tf.keras.callbacks.TensorBoard(log_dir=self.configs["log_dir"], histogram_freq=1, update_freq=500,
+                                                     write_images=True)
         self.models.test_model.summary()
-        predictions = self.models.test_model.predict(x=tf_test_dataset)
-        predictions = predictions.numpy()
+        error_rates = self.models.test_model.predict(x=tf_test_dataset, callbacks=[tb_callback])
+
         total_wer = 0
         total_cer = 0
-        for pred in predictions:
-            total_wer += wer(decode=pred[0], target=pred[1])
-            total_cer += cer(decode=pred[0], target=pred[1])
 
-        print("WER: ", total_wer / len(predictions))
-        print("CER: ", total_cer / len(predictions))
+        for er in error_rates:
+            total_wer += er[0]
+            total_cer += er[1]
+
+        return total_wer / len(error_rates), total_cer / len(error_rates)
+
+    def save_test_result(self, results, output_file_path):
+        with open(output_file_path, "w", encoding="utf-8") as of:
+            of.write("WER: " + str(results[0]) + "\n")
+            of.write("CER: " + str(results[-1]) + "\n")
 
     def infer(self, speech_file_path, model_file):
         self.models.infer_model.load_weights(filepath=model_file)
         tf_infer_dataset = Dataset(data_path=speech_file_path, mode="infer")
         tf_infer_dataset = tf_infer_dataset(speech_featurizer=self.speech_featurizer, batch_size=1)
         predictions = self.models.infer_model.predict(x=tf_infer_dataset)
-        predictions = predictions.numpy()
         return predictions
+
+    def save_inference(self, predictions, output_file_path):
+        with open(output_file_path, "w", encoding="utf-8") as of:
+            for pred in predictions:
+                of.write(pred + "\n")

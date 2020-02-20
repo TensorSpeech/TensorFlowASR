@@ -1,6 +1,7 @@
 from __future__ import absolute_import
 
 import tensorflow as tf
+import os
 
 tf.get_logger().setLevel("ERROR")
 
@@ -34,7 +35,7 @@ def main(argv):
             eval_dataset=eval_dataset,
             configs=configs)
         asr.train_and_eval()
-        if flags_obj.export_file is not None:
+        if flags_obj.export_file is not None and os.path.isfile(flags_obj.export_file):
             asr.save_model(flags_obj.export_file)
     elif flags_obj.mode == "save":
         if flags_obj.export_file is None:
@@ -54,18 +55,28 @@ def main(argv):
             test_dataset=test_dataset,
             configs=configs
         )
-        asr.test(flags_obj.export_file)
+        error_rates = asr.test(flags_obj.export_file)
+        if flags_obj.output_file_path is not None and os.path.isfile(flags_obj.output_file_path):
+            asr.save_test_result(results=error_rates, output_file_path=flags_obj.output_file_path)
+        else:
+            print("WER: ", error_rates[0])
+            print("CER: ", error_rates[-1])
+
     elif flags_obj.mode == "infer":
-        if flags_obj.infer_file_path == "":
+        if flags_obj.infer_file_path == "" or not os.path.isfile(flags_obj.infer_file_path):
             raise ValueError("Flag 'infer_file_path' must be set")
-        if flags_obj.export_file is None:
+        if flags_obj.export_file is None or not os.path.isfile(flags_obj.export_file):
             raise ValueError("Flag 'export_file' must be set")
         asr = SpeechToText(
             speech_featurizer=speech_featurizer,
             text_featurizer=text_featurizer,
             configs=configs
         )
-        asr.infer(speech_file_path=flags_obj.infer_file_path, model_file=flags_obj.export_file)
+        predictions = asr.infer(speech_file_path=flags_obj.infer_file_path, model_file=flags_obj.export_file)
+        if flags_obj.output_file_path is not None and os.path.isfile(flags_obj.output_file_path):
+            asr.save_inference(predictions=predictions, output_file_path=flags_obj.output_file_path)
+        else:
+            print(predictions)
     else:
         raise ValueError("Flag 'mode' must be either 'save', 'train', 'test' or 'infer'")
 
