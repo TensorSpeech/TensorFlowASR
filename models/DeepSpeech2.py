@@ -32,9 +32,5 @@ class DeepSpeech2:
         layer = tf.keras.layers.Bidirectional(tf.keras.layers.LSTM(256, return_sequences=True))(layer)
         layer = tf.keras.layers.BatchNormalization()(layer)
         layer = tf.keras.layers.Bidirectional(tf.keras.layers.LSTM(256, return_sequences=True))(layer)
-        layer = tf.keras.layers.BatchNormalization()(layer)
-        layer = tf.keras.layers.Bidirectional(tf.keras.layers.LSTM(256, return_sequences=True))(layer)
-        layer = tf.keras.layers.BatchNormalization()(layer)
-        layer = tf.keras.layers.Bidirectional(tf.keras.layers.LSTM(256, return_sequences=True))(layer)
 
         return layer
