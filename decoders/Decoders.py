@@ -37,8 +37,8 @@ class GreedyDecoder(Decoder):
 class BeamSearchDecoder(Decoder):
     """ Decode probs using beam search algorithm """
 
-    def __init__(self, index_to_token, beam_width=1024, lm_path=None, blank_index=-1):
-        super().__init__(index_to_token, blank_index)
+    def __init__(self, index_to_token, beam_width=1024, lm_path=None):
+        super().__init__(index_to_token)
         self.beam_width = beam_width
         self.lm_path = lm_path
 
