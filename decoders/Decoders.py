@@ -5,10 +5,9 @@ import numpy as np
 
 
 class Decoder:
-    def __init__(self, index_to_token, blank_index=-1):
+    def __init__(self, index_to_token):
         self.index_to_token = index_to_token
-        # Blank index default -1: https://www.tensorflow.org/api_docs/python/tf/keras/backend/ctc_decode?hl=en
-        self.blank_index = blank_index
+        self.blank_index = -1
 
     def convert_to_string(self, decoded):
         # Remove blank indices

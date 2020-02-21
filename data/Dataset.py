@@ -57,7 +57,7 @@ class Dataset:
                     else:
                         features = speech_featurizer.compute_speech_features(audio_file)
                     labels = text_featurizer.compute_label_features(transcript)
-                    input_length = [len(features)]
+                    input_length = [features.get_shape().as_list()[0]]
                     label_length = [len(labels) if labels is not None else None]
 
                     yield (
@@ -117,7 +117,7 @@ class Dataset:
         def _gen_data():
             for audio_file in self.entries:
                 features = speech_featurizer.compute_speech_features(audio_file)
-                input_length = [len(features)]
+                input_length = [features.get_shape().as_list()[0]]
                 yield (
                     {
                         "features": features,

@@ -6,8 +6,8 @@ from utils.Utils import wer, cer
 
 def ctc_lambda_func(args):
     y_pred, input_length, labels, label_length = args
-    return tf.keras.backend.ctc_batch_cost(y_true=labels, y_pred=y_pred,
-                                           input_length=input_length, label_length=label_length)
+    return tf.expand_dims(tf.nn.ctc_loss(labels=labels, logits=y_pred, label_length=tf.squeeze(label_length),
+                                         logit_length=tf.squeeze(input_length), logits_time_major=False), 1)
 
 
 def decode_lambda_func(args, **arguments):
@@ -49,7 +49,6 @@ class CTCModel:
         outputs = self.base_model(features=features)
 
         # Fully connected layer
-        outputs = tf.keras.layers.BatchNormalization()(outputs)
         outputs = tf.keras.layers.Dense(units=self.num_classes,
                                         activation=tf.keras.activations.softmax, use_bias=True)(outputs)
 
