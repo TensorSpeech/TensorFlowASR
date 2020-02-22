@@ -1,13 +1,17 @@
 from __future__ import absolute_import
 
 import tensorflow as tf
-from utils.Utils import wer, cer
+from utils.Utils import wer, cer, dense_to_sparse
 
 
 def ctc_lambda_func(args):
     y_pred, input_length, labels, label_length = args
-    return tf.expand_dims(tf.nn.ctc_loss(labels=labels, logits=y_pred, label_length=tf.squeeze(label_length),
-                                         logit_length=tf.squeeze(input_length), logits_time_major=False), 1)
+    return tf.expand_dims(
+        tf.compat.v1.nn.ctc_loss(labels=dense_to_sparse(labels, tf.squeeze(label_length)),
+                                 inputs=y_pred,
+                                 sequence_length=tf.squeeze(input_length),
+                                 ignore_longer_outputs_than_inputs=True,
+                                 time_major=False), 1)
 
 
 def decode_lambda_func(args, **arguments):
@@ -19,7 +23,8 @@ def decode_lambda_func(args, **arguments):
 def test_lambda_func(args, **arguments):
     y_pred, input_length, labels = args
     decoder = arguments["decoder"]
-    predictions = decoder.decode(probs=y_pred, input_length=tf.squeeze(input_length))
+    predictions = decoder.decode(
+        probs=y_pred, input_length=tf.squeeze(input_length))
     string_labels = decoder.convert_to_string(labels)
     outputs = tf.concat([predictions, string_labels], axis=0)
 
@@ -28,7 +33,7 @@ def test_lambda_func(args, **arguments):
         cal_cer = cer(decode=elem[0], target=elem[1])
         return tf.convert_to_tensor([cal_wer, cal_cer])
 
-    return tf.map_fn(cal_each_er, outputs, dtype=tf.float32)
+    return tf.map_fn(cal_each_er, outputs, dtype=tf.float64)
 
 
 class CTCModel:
@@ -37,14 +42,19 @@ class CTCModel:
         self.num_feature_bins = num_feature_bins
         self.learning_rate = learning_rate
         self.base_model = base_model
-        self.train_model, self.test_model, self.infer_model = self.__create(decoder)
+        self.train_model, self.test_model, self.infer_model = self.__create(
+            decoder)
 
     def __create(self, decoder):
         # Convolution layers
-        features = tf.keras.layers.Input(shape=(None, self.num_feature_bins, 1), name="features")
-        input_length = tf.keras.layers.Input(shape=(1,), dtype=tf.int32, name="input_length")
-        labels = tf.keras.layers.Input(shape=(None,), dtype=tf.int32, name="labels")
-        label_length = tf.keras.layers.Input(shape=(1,), dtype=tf.int32, name="label_length")
+        features = tf.keras.layers.Input(
+            shape=(None, self.num_feature_bins, 1), dtype=tf.float64, name="features")
+        input_length = tf.keras.layers.Input(
+            shape=(1,), dtype=tf.int64, name="input_length")
+        labels = tf.keras.layers.Input(
+            shape=(None,), dtype=tf.int64, name="labels")
+        label_length = tf.keras.layers.Input(
+            shape=(1,), dtype=tf.int32, name="label_length")
 
         outputs = self.base_model(features=features)
 

@@ -2,8 +2,43 @@ from __future__ import absolute_import
 
 import tensorflow as tf
 import os
+from logging import handlers, ERROR
 
-tf.get_logger().setLevel("ERROR")
+
+def emit(self, record):
+    """
+    Overwrite the logging.handlers.SMTPHandler.emit function with SMTP_SSL.
+    Emit a record.
+    Format the record and send it to the specified addressees.
+    """
+    try:
+        import smtplib
+        from email.utils import formatdate
+        port = self.mailport
+        if not port:
+            port = smtplib.SMTP_PORT
+        smtp = smtplib.SMTP_SSL(self.mailhost, port, timeout=self._timeout)
+        msg = self.format(record)
+        msg = "From: %s\r\nTo: %s\r\nSubject: %s\r\nDate: %s\r\n\r\n%s" % (
+            self.fromaddr, ", ".join(self.toaddrs), self.getSubject(record), formatdate(), msg)
+        if self.username:
+            smtp.ehlo()
+            smtp.login(self.username, self.password)
+        smtp.sendmail(self.fromaddr, self.toaddrs, msg)
+        smtp.quit()
+    except (KeyboardInterrupt, SystemExit):
+        raise
+    except:
+        self.handleError(record)
+
+
+tf.get_logger().setLevel(ERROR)
+mailHandler = handlers.SMTPHandler(mailhost=("smtp.gmail.com", 587), fromaddr="nlhuy1998@gmail.com",
+                                   toaddrs=["nlhuy.cs.16@gmail.com"], subject="ASR Error",
+                                   credentials=("nlhuy1998@gmail.com", "oqehnspyvxnniiyj"), secure=(None), timeout=30)
+mailHandler.emit = emit
+mailHandler.setLevel(ERROR)
+tf.get_logger().addHandler(mailHandler)
 
 from utils.Flags import app, flags_obj
 from utils.Utils import get_config
