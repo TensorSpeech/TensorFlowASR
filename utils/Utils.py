@@ -68,5 +68,5 @@ def cer(decode, target):
 def dense_to_sparse(dense_tensor, sequence_length):
     indices = tf.where(tf.sequence_mask(sequence_length))
     values = tf.gather_nd(dense_tensor, indices)
-    shape = tf.shape(dense_tensor, out_type=tf.float64)
+    shape = tf.shape(dense_tensor, out_type=tf.int64)
     return tf.SparseTensor(indices, values, shape)
