@@ -74,7 +74,7 @@ class Dataset:
             _gen_data,
             output_types=(
                 {
-                    "features": tf.float64,
+                    "features": tf.float32,
                     "input_length": tf.int32,
                     "labels": tf.int32,
                     "label_length": tf.int32
@@ -130,7 +130,7 @@ class Dataset:
             _gen_data,
             output_types=(
                 {
-                    "features": tf.float64,
+                    "features": tf.float32,
                     "input_length": tf.int32
                 },
                 tf.int32

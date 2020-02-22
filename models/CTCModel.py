@@ -47,7 +47,7 @@ class CTCModel:
 
     def __create(self, decoder):
         # Convolution layers
-        features = tf.keras.layers.Input(shape=(None, self.num_feature_bins, 1), dtype=tf.float64, name="features")
+        features = tf.keras.layers.Input(shape=(None, self.num_feature_bins,1), dtype=tf.float32, name="features")
         input_length = tf.keras.layers.Input(shape=(1,), dtype=tf.int32, name="input_length")
         labels = tf.keras.layers.Input(shape=(None,), dtype=tf.int32, name="labels")
         label_length = tf.keras.layers.Input(shape=(1,), dtype=tf.int32, name="label_length")
