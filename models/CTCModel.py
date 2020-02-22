@@ -6,12 +6,15 @@ from utils.Utils import wer, cer, dense_to_sparse
 
 def ctc_lambda_func(args):
     y_pred, input_length, labels, label_length = args
+    label_length = tf.squeeze(label_length, axis=-1)
+    input_length = tf.squeeze(input_length, axis=-1)
+    sparse_labels = tf.keras.backend.ctc_label_dense_to_sparse(labels, label_length)
+    y_pred = tf.log(tf.transpose(y_pred, perm=[1, 0, 2]) + tf.keras.backend.epsilon())
     return tf.expand_dims(
-        tf.compat.v1.nn.ctc_loss(labels=dense_to_sparse(labels, tf.squeeze(label_length)),
+        tf.compat.v1.nn.ctc_loss(labels=sparse_labels,
                                  inputs=y_pred,
-                                 sequence_length=tf.squeeze(input_length),
-                                 ignore_longer_outputs_than_inputs=True,
-                                 time_major=False), 1)
+                                 sequence_length=input_length,
+                                 ignore_longer_outputs_than_inputs=True), 1)
 
 
 def decode_lambda_func(args, **arguments):
@@ -47,10 +50,14 @@ class CTCModel:
 
     def __create(self, decoder):
         # Convolution layers
-        features = tf.keras.layers.Input(shape=(None, self.num_feature_bins,1), dtype=tf.float32, name="features")
-        input_length = tf.keras.layers.Input(shape=(1,), dtype=tf.int32, name="input_length")
-        labels = tf.keras.layers.Input(shape=(None,), dtype=tf.int32, name="labels")
-        label_length = tf.keras.layers.Input(shape=(1,), dtype=tf.int32, name="label_length")
+        features = tf.keras.layers.Input(
+            shape=(None, self.num_feature_bins, 1), dtype=tf.float32, name="features")
+        input_length = tf.keras.layers.Input(
+            shape=(1,), dtype=tf.int32, name="input_length")
+        labels = tf.keras.layers.Input(
+            shape=(None,), dtype=tf.int32, name="labels")
+        label_length = tf.keras.layers.Input(
+            shape=(1,), dtype=tf.int32, name="label_length")
 
         outputs = self.base_model(features=features)
 
