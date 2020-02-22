@@ -28,7 +28,9 @@ class GreedyDecoder(Decoder):
 
     def decode(self, probs, input_length):
         # probs.shape = [batch_size, time_steps, num_classes]
-        decoded = tf.keras.backend.ctc_decode(y_pred=probs, input_length=input_length, greedy=True)
+        decoded = tf.keras.backend.ctc_decode(y_pred=probs,
+                                              input_length=input_length,
+                                              greedy=True)
         # decoded shape = [batch_size, decoded index]
         decoded = decoded[0]  # get the first result
         return self.convert_to_string(decoded)
@@ -44,7 +46,9 @@ class BeamSearchDecoder(Decoder):
 
     def decode(self, probs, input_length):
         # probs.shape = [batch_size, time_steps, num_classes]
-        decoded = tf.keras.backend.ctc_decode(y_pred=probs, input_length=input_length, greedy=False,
+        decoded = tf.keras.backend.ctc_decode(y_pred=probs,
+                                              input_length=input_length,
+                                              greedy=False,
                                               beam_width=self.beam_width)
         # decoded shape = [batch_size, top_path=1, decoded index]
         decoded = decoded[0]  # get the first object of the list of top-path objects

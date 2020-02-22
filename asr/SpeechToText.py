@@ -26,20 +26,24 @@ class SpeechToText:
         if decoder == "beamsearch":
             if "beam_width" not in self.configs.keys():
                 raise ValueError("Missing 'beam_width' value in the configuration")
-            decoder = BeamSearchDecoder(index_to_token=self.text_featurizer.index_to_token,
-                                        beam_width=self.configs["beam_width"])
+            decoder = BeamSearchDecoder(
+                index_to_token=self.text_featurizer.index_to_token,
+                beam_width=self.configs["beam_width"])
         elif decoder == "beamsearch_lm":
             if "beam_width" not in self.configs.keys():
                 raise ValueError("Missing 'beam_width' value in the configuration")
             if "lm_path" not in self.configs.keys():
                 raise ValueError("Missing 'lm_path' value in the configuration")
-            decoder = BeamSearchDecoder(index_to_token=self.text_featurizer.index_to_token,
-                                        beam_width=self.configs["beam_width"],
-                                        lm_path=self.configs["lm_path"])
+            decoder = BeamSearchDecoder(
+                index_to_token=self.text_featurizer.index_to_token,
+                beam_width=self.configs["beam_width"],
+                lm_path=self.configs["lm_path"])
         elif decoder == "greedy":
-            decoder = GreedyDecoder(index_to_token=self.text_featurizer.index_to_token)
+            decoder = GreedyDecoder(
+                index_to_token=self.text_featurizer.index_to_token)
         else:
-            raise ValueError("'decoder' value must be either 'beamsearch', 'beamsearch_lm' or 'greedy'")
+            raise ValueError("'decoder' value must be either 'beamsearch',\
+                             'beamsearch_lm' or 'greedy'")
 
         models = CTCModel(num_classes=self.text_featurizer.num_classes,
                           num_feature_bins=self.speech_featurizer.num_feature_bins,
@@ -63,29 +67,36 @@ class SpeechToText:
                 augmentations.append(None)
         else:
             augmentations = [None]
-        tf_train_dataset = self.train_dataset(speech_featurizer=self.speech_featurizer,
-                                              text_featurizer=self.text_featurizer,
-                                              batch_size=self.configs["batch_size"], augmentations=augmentations)
+        tf_train_dataset = self.train_dataset(
+            speech_featurizer=self.speech_featurizer,
+            text_featurizer=self.text_featurizer,
+            batch_size=self.configs["batch_size"], augmentations=augmentations)
 
-        tf_eval_dataset = self.eval_dataset(speech_featurizer=self.speech_featurizer,
-                                            text_featurizer=self.text_featurizer,
-                                            batch_size=self.configs["batch_size"])
+        tf_eval_dataset = self.eval_dataset(
+            speech_featurizer=self.speech_featurizer,
+            text_featurizer=self.text_featurizer,
+            batch_size=self.configs["batch_size"])
         self.models.train_model.summary()
-        checkpoint_prefix = os.path.join(self.configs["checkpoint_dir"], "ckpt_{epoch}")
-        cp_callback = tf.keras.callbacks.ModelCheckpoint(filepath=checkpoint_prefix,
-                                                         save_weights_only=True, verbose=1, monitor='val_loss',
-                                                         save_best_only=True, mode='min', save_freq='epoch')
-        tb_callback = tf.keras.callbacks.TensorBoard(log_dir=self.configs["log_dir"], histogram_freq=1, update_freq=500,
-                                                     write_images=True)
+        checkpoint_prefix = os.path.join(self.configs["checkpoint_dir"],
+                                         "ckpt_{epoch}")
+        cp_callback = tf.keras.callbacks.ModelCheckpoint(
+            filepath=checkpoint_prefix,
+            save_weights_only=True, verbose=1, monitor='val_loss',
+            save_best_only=True, mode='min', save_freq='epoch')
+        tb_callback = tf.keras.callbacks.TensorBoard(
+            log_dir=self.configs["log_dir"], histogram_freq=1,
+            update_freq=500, write_images=True)
         latest = tf.train.latest_checkpoint(self.configs["checkpoint_dir"])
         if latest is not None:
             self.models.train_model.load_weights(latest)
             initial_epoch = int(latest.split("_")[-1])
         else:
             initial_epoch = 0
-        self.models.train_model.fit(x=tf_train_dataset, epochs=self.configs["num_epochs"],
-                                    validation_data=tf_eval_dataset, shuffle="batch", initial_epoch=initial_epoch,
-                                    callbacks=[cp_callback, tb_callback])
+        self.models.train_model.fit(
+            x=tf_train_dataset, epochs=self.configs["num_epochs"],
+            validation_data=tf_eval_dataset, shuffle="batch",
+            initial_epoch=initial_epoch,
+            callbacks=[cp_callback, tb_callback])
 
     def save_model(self, model_file):
         latest = tf.train.latest_checkpoint(self.configs["checkpoint_dir"])
@@ -103,7 +114,8 @@ class SpeechToText:
         tb_callback = tf.keras.callbacks.TensorBoard(log_dir=self.configs["log_dir"], histogram_freq=1, update_freq=500,
                                                      write_images=True)
         self.models.test_model.summary()
-        error_rates = self.models.test_model.predict(x=tf_test_dataset, callbacks=[tb_callback])
+        error_rates = self.models.test_model.predict(
+            x=tf_test_dataset, callbacks=[tb_callback])
 
         total_wer = 0
         total_cer = 0
@@ -122,7 +134,8 @@ class SpeechToText:
     def infer(self, speech_file_path, model_file):
         self.models.infer_model.load_weights(filepath=model_file)
         tf_infer_dataset = Dataset(data_path=speech_file_path, mode="infer")
-        tf_infer_dataset = tf_infer_dataset(speech_featurizer=self.speech_featurizer, batch_size=1)
+        tf_infer_dataset = tf_infer_dataset(
+            speech_featurizer=self.speech_featurizer, batch_size=1)
         predictions = self.models.infer_model.predict(x=tf_infer_dataset)
         return predictions
 

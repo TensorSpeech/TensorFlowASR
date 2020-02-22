@@ -8,18 +8,22 @@ class Dataset:
         self.data_path = data_path
         self.mode = mode
 
-    def __call__(self, speech_featurizer, text_featurizer, batch_size=32, repeat=1, augmentations=tuple([None])):
+    def __call__(self, speech_featurizer, text_featurizer, batch_size=32,
+                 repeat=1, augmentations=tuple([None])):
         if self.mode == "train":
             self.entries = self.__create_train_entries()
-            return self.__create_dataset(speech_featurizer=speech_featurizer, text_featurizer=text_featurizer,
-                                         batch_size=batch_size, repeat=repeat, augmentations=augmentations)
+            return self.__create_dataset(
+                speech_featurizer=speech_featurizer, text_featurizer=text_featurizer,
+                batch_size=batch_size, repeat=repeat, augmentations=augmentations)
         elif self.mode == "eval" or self.mode == "test":
             self.entries = self.__create_train_entries()
-            return self.__create_dataset(speech_featurizer=speech_featurizer, text_featurizer=text_featurizer,
-                                         batch_size=batch_size)
+            return self.__create_dataset(
+                speech_featurizer=speech_featurizer, text_featurizer=text_featurizer,
+                batch_size=batch_size)
         elif self.mode == "infer":
             self.entries = self.__create_infer_entries()
-            return self.__create_infer_dataset(speech_featurizer=speech_featurizer, batch_size=batch_size)
+            return self.__create_infer_dataset(speech_featurizer=speech_featurizer,
+                                               batch_size=batch_size)
         else:
             raise ValueError("Mode must be 'train', 'eval' or 'infer'")
 
@@ -43,7 +47,8 @@ class Dataset:
                 lines = f.read().splitlines()
         return lines
 
-    def __create_dataset(self, speech_featurizer, text_featurizer, batch_size, repeat=1, augmentations=tuple([None])):
+    def __create_dataset(self, speech_featurizer, text_featurizer, batch_size,
+                         repeat=1, augmentations=tuple([None])):
         # Dataset properties
         num_feature_bins = speech_featurizer.num_feature_bins
 

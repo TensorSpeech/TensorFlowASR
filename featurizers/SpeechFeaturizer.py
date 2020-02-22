@@ -25,7 +25,8 @@ def normalize_signal(signal):
 class SpeechFeaturizer:
     """A class for extraction speech features"""
 
-    def __init__(self, sample_rate, frame_ms, stride_ms, num_feature_bins, window_fn=WINDOW_FN.get("hanning"),
+    def __init__(self, sample_rate, frame_ms, stride_ms,
+                 num_feature_bins, window_fn=WINDOW_FN.get("hanning"),
                  pre_augmentation=None, post_augmentation=None):
         self.sample_rate = sample_rate
         self.frame_ms = frame_ms
@@ -59,7 +60,8 @@ class SpeechFeaturizer:
         features = 10 * np.log10(powspec.T)
 
         assert self.num_feature_bins <= n_window_size // 2 + 1, \
-            "num_features for spectrogram should be <= (sample_rate * window_size // 2 + 1)"
+            "num_features for spectrogram should \
+            be <= (sample_rate * window_size // 2 + 1)"
 
         # cut high frequency part, keep num_feature_bins features
         features = features[:, :self.num_feature_bins]
@@ -76,7 +78,8 @@ class SpeechFeaturizer:
         """
         if isinstance(audio_file_path, str):
             data, sr = soundfile.read(audio_file_path)
-            data = librosa.core.resample(data, orig_sr=sr, target_sr=self.sample_rate, scale=True)
+            data = librosa.core.resample(
+                data, orig_sr=sr, target_sr=self.sample_rate, scale=True)
         else:
             data = audio_file_path
 

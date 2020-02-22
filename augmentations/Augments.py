@@ -10,7 +10,8 @@ def no_aug(features):
 class Augmentation:
     def __init__(self, func, is_post=True, **kwargs):
         self.func = func
-        self.is_post = is_post  # Whether postaugmentation or preaugmentation of feature extraction
+        # Whether postaugmentation or preaugmentation of feature extraction
+        self.is_post = is_post
         self.kwargs = kwargs  # Save parameters in config
 
     def __call__(self, *args, **kwargs):
