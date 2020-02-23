@@ -1,7 +1,7 @@
 from __future__ import absolute_import
 
 import tensorflow as tf
-from utils.Utils import wer, cer, dense_to_sparse
+from utils.Utils import wer, cer
 
 
 def ctc_lambda_func(args):
