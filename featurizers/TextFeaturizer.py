@@ -2,6 +2,7 @@ from __future__ import absolute_import
 
 import codecs
 import numpy as np
+import os
 
 
 class TextFeaturizer:
