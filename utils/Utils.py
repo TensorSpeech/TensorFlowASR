@@ -29,20 +29,20 @@ def get_config(config_path):
             raise ValueError(
                 '{} has to be defined in the config file'.format(option))
     # convert paths to take ~/ dir
-    train_data = config_dict["train_data_transcript_paths"]
+    train_data = conf_dict["train_data_transcript_paths"]
     for i in range(len(train_data)):
         train_data[i] = os.path.expanduser(train_data[i])
-    config_dict["train_data_transcript_paths"] = train_data
+    conf_dict["train_data_transcript_paths"] = train_data
 
-    test_data = config_dict["test_data_transcript_paths"]
+    test_data = conf_dict["test_data_transcript_paths"]
     for i in range(len(test_data)):
         test_data[i] = os.path.expanduser(test_data[i])
-    config_dict["test_data_transcript_paths"] = test_data
+    conf_dict["test_data_transcript_paths"] = test_data
 
-    eval_data = config_dict["eval_data_transcript_paths"]
+    eval_data = conf_dict["eval_data_transcript_paths"]
     for i in range(len(eval_data)):
         eval_data[i] = os.path.expanduser(eval_data[i])
-    config_dict["eval_data_transcript_paths"] = eval_data
+    conf_dict["eval_data_transcript_paths"] = eval_data
 
     conf_dict["checkpoint_dir"] = os.path.expanduser(conf_dict["checkpoint_dir"])
     conf_dict["log_dir"] = os.path.expanduser(conf_dict["log_dir"])
