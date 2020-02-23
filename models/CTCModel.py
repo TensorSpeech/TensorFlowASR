@@ -99,28 +99,28 @@ class CTCModel:
         # y_true is None because of dummy label and loss is calculated in the layer lambda
         train_model.compile(
             optimizer=self.base_model.optimizer(lr=self.learning_rate),
-            loss={"ctc_loss": ctc_loss_func)}
+            loss={"ctc_loss": ctc_loss_func}
         )
 
-        infer_model=tf.keras.Model(inputs = {
+        infer_model = tf.keras.Model(inputs={
             "features": features,
             "input_length": input_length
-        }, outputs = decode_out)
+        }, outputs=decode_out)
 
         infer_model.compile(
-            optimizer = self.base_model.optimizer(lr=self.learning_rate),
-            loss = {"ctc_decoder": lambda y_true, y_pred: y_pred}
+            optimizer=self.base_model.optimizer(lr=self.learning_rate),
+            loss={"ctc_decoder": lambda y_true, y_pred: y_pred}
         )
 
-        test_model=tf.keras.Model(inputs = {
+        test_model = tf.keras.Model(inputs={
             "features": features,
             "input_length": input_length,
             "labels": labels
-        }, outputs = test_out)
+        }, outputs=test_out)
 
         test_model.compile(
-            optimizer = self.base_model.optimizer(lr=self.learning_rate),
-            loss = {"ctc_test": lambda y_true, y_pred: y_pred}
+            optimizer=self.base_model.optimizer(lr=self.learning_rate),
+            loss={"ctc_test": lambda y_true, y_pred: y_pred}
         )
 
         return train_model, test_model, infer_model
