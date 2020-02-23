@@ -46,6 +46,8 @@ def get_config(config_path):
 
     conf_dict["checkpoint_dir"] = os.path.expanduser(conf_dict["checkpoint_dir"])
     conf_dict["log_dir"] = os.path.expanduser(conf_dict["log_dir"])
+    conf_dict["vocabulary_file_path"] = os.path.expanduser(
+        conf_dict["vocabulary_file_path"])
 
     return conf_dict
 
