@@ -9,8 +9,8 @@ def ctc_lambda_func(args):
     label_length = tf.squeeze(label_length, axis=-1)
     input_length = tf.squeeze(input_length, axis=-1)
     sparse_labels = tf.keras.backend.ctc_label_dense_to_sparse(labels, label_length)
-    y_pred = tf.math.log(tf.transpose(
-        y_pred, perm=[1, 0, 2]) + tf.keras.backend.epsilon())
+    y_pred = tf.math.log(tf.transpose(y_pred, perm=[1, 0, 2]) +
+                         tf.keras.backend.epsilon())
     return tf.expand_dims(
         tf.compat.v1.nn.ctc_loss(labels=sparse_labels,
                                  inputs=y_pred,

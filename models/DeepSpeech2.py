@@ -12,7 +12,7 @@ class DeepSpeech2:
     def __call__(self, features):
         layer = features
         for i in range(3):
-            layer = tf.keras.layers.Conv2D(filters=32, kernel_size=(21, 11),
+            layer = tf.keras.layers.Conv2D(filters=32, kernel_size=(41, 11),
                                            strides=(1, 2), padding="same")(layer)
             layer = tf.keras.layers.BatchNormalization()(layer)
             layer = tf.keras.layers.Activation(activation=self.clipped_relu)(layer)
