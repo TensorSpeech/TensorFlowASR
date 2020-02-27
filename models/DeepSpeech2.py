@@ -11,8 +11,8 @@ class DeepSpeech2:
 
     def __call__(self, features):
         layer = features
-        for i in range(3):
-            layer = tf.keras.layers.Conv2D(filters=32, kernel_size=(41, 11),
+        for i in range(2):
+            layer = tf.keras.layers.Conv2D(filters=32, kernel_size=(21, 11),
                                            strides=(1, 2), padding="same")(layer)
             layer = tf.keras.layers.BatchNormalization()(layer)
             layer = tf.keras.layers.Activation(activation=self.clipped_relu)(layer)
@@ -24,7 +24,7 @@ class DeepSpeech2:
         layer = tf.reshape(layer, [batch_size, -1, feat_size * channel])
 
         # RNN layers
-        for i in range(3):
+        for i in range(2):
             layer = tf.keras.layers.Bidirectional(
                 tf.keras.layers.LSTM(256, return_sequences=True,
                                      recurrent_dropout=0.2))(layer)
