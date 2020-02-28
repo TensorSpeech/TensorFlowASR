@@ -1,9 +1,9 @@
 from __future__ import absolute_import
 
-from models.Small import Small
+from models.DeepSpeech2 import DeepSpeech2
 from augmentations.Augments import TimeWarping, TimeMasking, FreqMasking
 
-base_model = Small()
+base_model = DeepSpeech2()
 
 decoder = 'beamsearch'
 
@@ -15,7 +15,7 @@ augmentations = [
 
 beam_width = 1024
 
-batch_size = 32
+batch_size = 8
 
 num_epochs = 10
 

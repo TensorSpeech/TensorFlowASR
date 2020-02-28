@@ -4,6 +4,14 @@ import tensorflow as tf
 from utils.Utils import wer, cer
 
 
+class CTCLoss(tf.keras.losses.Loss):
+    def __init__(self):
+        super().__init__(reduction=tf.keras.losses.Reduction.NONE, name="CTC Loss")
+
+    def call(self, y_true, y_pred):
+        return tf.reduce_mean(tf.squeeze(y_pred))
+
+
 def ctc_lambda_func(args):
     y_pred, input_length, labels, label_length = args
     label_length = tf.squeeze(label_length, axis=-1)
@@ -16,10 +24,6 @@ def ctc_lambda_func(args):
                                  inputs=y_pred,
                                  sequence_length=input_length,
                                  ignore_longer_outputs_than_inputs=True), 1)
-
-
-def ctc_loss_func(y_true, y_pred):
-    return tf.reduce_mean(tf.squeeze(y_pred))
 
 
 def decode_lambda_func(args, **arguments):
@@ -99,7 +103,7 @@ class CTCModel:
         # y_true is None because of dummy label and loss is calculated in the layer lambda
         train_model.compile(
             optimizer=self.base_model.optimizer(lr=self.learning_rate),
-            loss={"ctc_loss": ctc_loss_func}
+            loss=CTCLoss()
         )
 
         infer_model = tf.keras.Model(inputs={
