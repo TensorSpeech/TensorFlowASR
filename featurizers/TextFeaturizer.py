@@ -34,3 +34,7 @@ class TextFeaturizer:
         tokens = list(text.strip().lower())
         feats = [self.token_to_index[token] for token in tokens]
         return np.array(feats)
+
+
+# class UnicodeFeaturizer:
+#     def __init__(self)

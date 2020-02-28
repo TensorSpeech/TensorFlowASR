@@ -26,7 +26,7 @@ class DeepSpeech2:
         # RNN layers
         for i in range(2):
             layer = tf.keras.layers.Bidirectional(
-                tf.keras.layers.LSTM(256, return_sequences=True,
+                tf.keras.layers.LSTM(128, return_sequences=True,
                                      recurrent_dropout=0.2))(layer)
             layer = tf.keras.layers.BatchNormalization()(layer)
 
