@@ -1,53 +1,56 @@
 from __future__ import absolute_import
 
 import runpy
-import os
-import tensorflow as tf
 from nltk.metrics import distance
+from configs import DefaultConfig
+import os
 
-conf_options = ["base_model",
-                "decoder",
-                "batch_size",
-                "num_epochs",
-                "vocabulary_file_path",
-                "learning_rate",
-                "sample_rate",
-                "frame_ms",
-                "stride_ms",
-                "num_feature_bins",
-                "train_data_transcript_paths",
-                "eval_data_transcript_paths",
-                "test_data_transcript_paths",
-                "checkpoint_dir",
-                "log_dir"]
+conf_required = ["base_model",
+                 "decoder",
+                 "batch_size",
+                 "num_epochs",
+                 "vocabulary_file_path",
+                 "learning_rate",
+                 "sample_rate",
+                 "frame_ms",
+                 "stride_ms",
+                 "num_feature_bins",
+                 "checkpoint_dir"]
+
+conf_paths = ["train_data_transcript_paths",
+              "test_data_transcript_paths",
+              "eval_data_transcript_paths",
+              "vocabulary_file_path",
+              "checkpoint_dir",
+              "log_dir"]
+
+
+def check_key_in_dict(dict, keys):
+    for key in keys:
+        if dict.get(key, None) is None:
+            raise ValueError("{} must be defined".format(key))
+
+
+def preprocess_paths(paths):
+    if isinstance(paths, list):
+        for i in range(len(paths)):
+            paths[i] = os.path.expanduser(paths[i])
+        return paths
+    else:
+        return os.path.expanduser(paths)
 
 
 def get_config(config_path):
     conf_dict = runpy.run_path(config_path)
-    for option in conf_options:
-        if conf_dict.get(option, None) is None:
-            raise ValueError(
-                '{} has to be defined in the config file'.format(option))
+    check_key_in_dict(dict=conf_dict, keys=conf_required)
+    # fill missing default optional values
+    default_dict = vars(DefaultConfig)
+    for key in default_dict.keys():
+        if key not in conf_dict.keys():
+            conf_dict[key] = default_dict[key]
     # convert paths to take ~/ dir
-    train_data = conf_dict["train_data_transcript_paths"]
-    for i in range(len(train_data)):
-        train_data[i] = os.path.expanduser(train_data[i])
-    conf_dict["train_data_transcript_paths"] = train_data
-
-    test_data = conf_dict["test_data_transcript_paths"]
-    for i in range(len(test_data)):
-        test_data[i] = os.path.expanduser(test_data[i])
-    conf_dict["test_data_transcript_paths"] = test_data
-
-    eval_data = conf_dict["eval_data_transcript_paths"]
-    for i in range(len(eval_data)):
-        eval_data[i] = os.path.expanduser(eval_data[i])
-    conf_dict["eval_data_transcript_paths"] = eval_data
-
-    conf_dict["checkpoint_dir"] = os.path.expanduser(conf_dict["checkpoint_dir"])
-    conf_dict["log_dir"] = os.path.expanduser(conf_dict["log_dir"])
-    conf_dict["vocabulary_file_path"] = os.path.expanduser(
-        conf_dict["vocabulary_file_path"])
+    for key in conf_paths:
+        conf_dict[key] = preprocess_paths(conf_dict[key])
 
     return conf_dict
 

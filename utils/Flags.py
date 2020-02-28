@@ -20,11 +20,16 @@ flags.DEFINE_string(
     help="Mode for training, testing or infering")
 
 flags.DEFINE_string(
-    name="infer_file_path",
-    default="",
+    name="speech_file_path",
+    default=None,
     help="Path to the file containing speech file paths for inference")
 
 flags.DEFINE_string(
     name="export_file",
     default=None,
     help="Path to the model file to be exported")
+
+flags.DEFINE_string(
+    name="output_file_path",
+    default=None,
+    help="Path to the file contains results")

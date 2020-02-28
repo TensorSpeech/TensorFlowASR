@@ -53,3 +53,22 @@ class BeamSearchDecoder(Decoder):
         # decoded shape = [batch_size, top_path=1, decoded index]
         decoded = decoded[0]  # get the first object of the list of top-path objects
         return self.convert_to_string(decoded)
+
+
+def create_decoder(name, index_to_token, beam_width=1024, lm_path=None):
+    if name == "beamsearch":
+        decoder = BeamSearchDecoder(index_to_token=index_to_token,
+                                    beam_width=beam_width)
+    elif name == "beamsearch_lm":
+        if lm_path is None:
+            raise ValueError("Missing 'lm_path' value in the configuration")
+        decoder = BeamSearchDecoder(
+            index_to_token=index_to_token,
+            beam_width=beam_width,
+            lm_path=lm_path)
+    elif name == "greedy":
+        decoder = GreedyDecoder(index_to_token=index_to_token)
+    else:
+        raise ValueError("'decoder' value must be either 'beamsearch',\
+                         'beamsearch_lm' or 'greedy'")
+    return decoder
