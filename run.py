@@ -1,14 +1,22 @@
 from __future__ import absolute_import
 from asr.SpeechToText import SpeechToText
-from featurizers.TextFeaturizer import TextFeaturizer
-from featurizers.SpeechFeaturizer import SpeechFeaturizer
-from data.Dataset import Dataset
 from utils.Flags import app, flags_obj
 
 import tensorflow as tf
 from logging import ERROR
 
 tf.get_logger().setLevel(ERROR)
+gpus = tf.config.experimental.list_physical_devices('GPU')
+if gpus:
+    try:
+        # Currently, memory growth needs to be the same across GPUs
+        for gpu in gpus:
+            tf.config.experimental.set_memory_growth(gpu, True)
+        logical_gpus = tf.config.experimental.list_logical_devices('GPU')
+        print(len(gpus), "Physical GPUs,", len(logical_gpus), "Logical GPUs")
+    except RuntimeError as e:
+        # Memory growth must be set before GPUs have been initialized
+        print(e)
 
 
 def main(argv):
