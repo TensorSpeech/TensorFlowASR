@@ -56,8 +56,7 @@ class DeepSpeech2RowConv:
 
         # RNN layers
         for i in range(3):
-            layer = tf.keras.layers.LSTM(self.rnn_unit, return_sequences=True,
-                                         recurrent_dropout=0.2)(layer)
+            layer = tf.keras.layers.LSTM(self.rnn_unit, return_sequences=True)(layer)
             layer = RowConv1D(filters=self.rnn_unit, future_context=2, strides=1,
                               padding="same")(layer)
             layer = tf.keras.layers.BatchNormalization()(layer)
