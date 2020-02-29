@@ -38,7 +38,7 @@ class DeepSpeech2RowConv:
     def __init__(self):
         self.clipped_relu = functools.partial(tf.keras.activations.relu, max_value=20)
         self.optimizer = tf.keras.optimizers.Adam
-        self.rnn_unit = 256
+        self.rnn_unit = 128
 
     def __call__(self, features):
         layer = features
@@ -55,7 +55,7 @@ class DeepSpeech2RowConv:
         layer = tf.reshape(layer, [batch_size, -1, feat_size * channel])
 
         # RNN layers
-        for i in range(3):
+        for i in range(2):
             layer = tf.keras.layers.LSTM(self.rnn_unit, return_sequences=True,
                                          recurrent_dropout=0.2)(layer)
             layer = RowConv1D(filters=self.rnn_unit, future_context=2, strides=1,
