@@ -14,14 +14,6 @@ class CTCLoss(tf.keras.losses.Loss):
 
 def ctc_lambda_func(args):
     y_pred, input_length, labels, label_length = args
-    # sparse_labels = tf.keras.backend.ctc_label_dense_to_sparse(labels, label_length)
-    # y_pred = tf.math.log(tf.transpose(y_pred, perm=[1, 0, 2]) +
-    #                      tf.keras.backend.epsilon())
-    # return tf.expand_dims(
-    #     tf.compat.v1.nn.ctc_loss(labels=sparse_labels,
-    #                              inputs=y_pred,
-    #                              sequence_length=input_length,
-    #                              ignore_longer_outputs_than_inputs=True), 1)
     return tf.nn.ctc_loss(labels=labels, logits=y_pred, label_length=label_length,
                           logit_length=input_length, logits_time_major=False,
                           blank_index=0)
@@ -30,14 +22,14 @@ def ctc_lambda_func(args):
 def decode_lambda_func(args, **arguments):
     y_pred, input_length = args
     decoder = arguments["decoder"]
-    return decoder.decode(probs=y_pred, input_length=tf.squeeze(input_length))
+    return decoder.decode(probs=y_pred, input_length=input_length)
 
 
 def test_lambda_func(args, **arguments):
     y_pred, input_length, labels = args
     decoder = arguments["decoder"]
     predictions = decoder.decode(
-        probs=y_pred, input_length=tf.squeeze(input_length))
+        probs=y_pred, input_length=input_length)
     string_labels = decoder.convert_to_string(labels)
     outputs = tf.concat([predictions, string_labels], axis=0)
 
