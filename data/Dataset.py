@@ -62,10 +62,9 @@ class Dataset:
                     else:
                         features = speech_featurizer.compute_speech_features(audio_file)
                     labels = text_featurizer.compute_label_features(transcript)
-                    input_length = [features.get_shape().as_list()[0]]
-                    label_length = [len(labels) if labels is not None else None]
-                    if label_length[0] is not None and \
-                            input_length[0] < label_length[0]:
+                    input_length = features.get_shape().as_list()[0]
+                    label_length = len(labels) if labels is not None else None
+                    if label_length is not None and input_length < label_length:
                         continue
 
                     yield (
@@ -92,9 +91,9 @@ class Dataset:
             output_shapes=(
                 {
                     "features": tf.TensorShape([None, num_feature_bins, 1]),
-                    "input_length": tf.TensorShape([1]),
+                    "input_length": tf.TensorShape([]),
                     "labels": tf.TensorShape([None]),
-                    "label_length": tf.TensorShape([1])
+                    "label_length": tf.TensorShape([])
                 },
                 tf.TensorShape([])
             )
@@ -107,9 +106,9 @@ class Dataset:
             padded_shapes=(
                 {
                     "features": tf.TensorShape([None, num_feature_bins, 1]),
-                    "input_length": tf.TensorShape([1]),
+                    "input_length": tf.TensorShape([]),
                     "labels": tf.TensorShape([None]),
-                    "label_length": tf.TensorShape([1])
+                    "label_length": tf.TensorShape([])
                 },
                 tf.TensorShape([])
             )
@@ -146,7 +145,7 @@ class Dataset:
             output_shapes=(
                 {
                     "features": tf.TensorShape([None, num_feature_bins, 1]),
-                    "input_length": tf.TensorShape([1])
+                    "input_length": tf.TensorShape([])
                 },
                 tf.TensorShape([])
             )
@@ -159,7 +158,7 @@ class Dataset:
             padded_shapes=(
                 {
                     "features": tf.TensorShape([None, num_feature_bins, 1]),
-                    "input_length": tf.TensorShape([1])
+                    "input_length": tf.TensorShape([])
                 },
                 tf.TensorShape([])
             )

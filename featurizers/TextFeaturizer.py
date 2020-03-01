@@ -17,7 +17,7 @@ class TextFeaturizer:
             lines.extend(fin.readlines())
         self.token_to_index = {}
         self.index_to_token = {}
-        index = 0
+        index = 1  # blank index = 0
         for line in lines:
             line = line[:-1]  # Strip the '\n' char
             if line.startswith("#"):  # Skip comment line
@@ -25,7 +25,7 @@ class TextFeaturizer:
             self.token_to_index[line] = index
             self.index_to_token[index] = line
             index += 1
-        self.num_classes = index  # +1 for blank index (-1)
+        self.num_classes = index - 1
 
     def compute_label_features(self, text):
         if text is None:
