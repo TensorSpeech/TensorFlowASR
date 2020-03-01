@@ -67,7 +67,7 @@ def create_ctc_model(num_classes, num_feature_bins, learning_rate,
 
     # Fully connected layer
     outputs = tf.keras.layers.Dense(units=num_classes,
-                                    activation=tf.keras.activations.softmax,
+                                    activation=tf.keras.activations.linear,
                                     use_bias=True)(outputs)
 
     if mode == "train":
