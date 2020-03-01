@@ -1,9 +1,9 @@
 from __future__ import absolute_import
 
-from models.DeepSpeech2 import DeepSpeech2RowConv
+from models.DeepSpeech2 import DeepSpeech2RowConvBNRNN
 from augmentations.Augments import TimeWarping, TimeMasking, FreqMasking
 
-base_model = DeepSpeech2RowConv()
+base_model = DeepSpeech2RowConvBNRNN()
 
 decoder = 'beamsearch'
 

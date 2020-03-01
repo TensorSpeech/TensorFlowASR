@@ -1,12 +1,12 @@
 from __future__ import absolute_import
 
 import tensorflow as tf
-from tensorflow.python.keras import backend as K
+import tensorflow.keras.backend as K
 from tensorflow.python.ops import array_ops
 
 
 def ds2_rnn_batch_norm(x_i, x_f, x_c, x_o, beta=None, gamma=None):
-    # x is input * weight with shape [batch_size, features]
+    # x is input * weight with shape [batch_size, units * 4]
     # Merge into single array of features
     # https://www.tensorflow.org/api_docs/python/tf/nn/moments
     x = tf.concat([x_i, x_f, x_c, x_o], axis=1)
@@ -19,10 +19,20 @@ def ds2_rnn_batch_norm(x_i, x_f, x_c, x_o, beta=None, gamma=None):
 
 
 class BNLSTMCell(tf.keras.layers.LSTMCell):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.beta = self.add_weight(shape=(self.units * 4,),
+                                    name='bn_beta', initializer='zeros',
+                                    regularizer=None, constraint=None)
+        self.gamma = self.add_weight(shape=(self.units * 4,),
+                                     name='bn_gamma', initializer='ones',
+                                     regularizer=None, constraint=None)
+
     def _compute_carry_and_output(self, x, h_tm1, c_tm1):
         """Computes carry and output using split kernels."""
         x_i, x_f, x_c, x_o = x
-        x_i, x_f, x_c, x_o = ds2_rnn_batch_norm(x_i, x_f, x_c, x_o)
+        x_i, x_f, x_c, x_o = ds2_rnn_batch_norm(x_i, x_f, x_c, x_o,
+                                                beta=self.beta, gamma=self.gamma)
 
         h_tm1_i, h_tm1_f, h_tm1_c, h_tm1_o = h_tm1
         i = self.recurrent_activation(
