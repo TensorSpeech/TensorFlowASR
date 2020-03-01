@@ -88,7 +88,7 @@ def create_ctc_model(num_classes, num_feature_bins, learning_rate,
             loss=CTCLoss()
         )
         return train_model
-    elif mode == "infer":
+    if mode == "infer":
         # Lambda layer for decoding to text
         decode_out = tf.keras.layers.Lambda(decode_lambda_func, output_shape=(None,),
                                             name="ctc_decoder",
@@ -104,7 +104,7 @@ def create_ctc_model(num_classes, num_feature_bins, learning_rate,
             loss={"ctc_decoder": lambda y_true, y_pred: y_pred}
         )
         return infer_model
-    elif mode == "test":
+    if mode == "test":
         # Lambda layer for analysis
         test_out = tf.keras.layers.Lambda(test_lambda_func, output_shape=(None,),
                                           name="ctc_test",
@@ -122,5 +122,4 @@ def create_ctc_model(num_classes, num_feature_bins, learning_rate,
             loss={"ctc_test": lambda y_true, y_pred: y_pred}
         )
         return test_model
-    else:
-        raise ValueError("mode must be either 'train', 'infer' or 'test'")
+    raise ValueError("mode must be either 'train', 'infer' or 'test'")
