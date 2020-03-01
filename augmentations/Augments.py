@@ -17,8 +17,7 @@ class Augmentation:
     def __call__(self, *args, **kwargs):
         if self.kwargs:
             return self.func(*args, **self.kwargs)
-        else:
-            return self.func(*args, **kwargs)
+        return self.func(*args, **kwargs)
 
 
 class FreqMasking(Augmentation):

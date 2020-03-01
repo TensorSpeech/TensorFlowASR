@@ -1,9 +1,9 @@
 from __future__ import absolute_import
 
 import runpy
+import os
 from nltk.metrics import distance
 from configs import DefaultConfig
-import os
 
 conf_required = ["base_model",
                  "decoder",
@@ -25,24 +25,21 @@ conf_paths = ["train_data_transcript_paths",
               "log_dir"]
 
 
-def check_key_in_dict(dict, keys):
+def check_key_in_dict(dictionary, keys):
     for key in keys:
-        if dict.get(key, None) is None:
+        if dictionary.get(key, None) is None:
             raise ValueError("{} must be defined".format(key))
 
 
 def preprocess_paths(paths):
     if isinstance(paths, list):
-        for i in range(len(paths)):
-            paths[i] = os.path.expanduser(paths[i])
-        return paths
-    else:
-        return os.path.expanduser(paths)
+        return list(map(os.path.expanduser, paths))
+    return os.path.expanduser(paths)
 
 
 def get_config(config_path):
     conf_dict = runpy.run_path(config_path)
-    check_key_in_dict(dict=conf_dict, keys=conf_required)
+    check_key_in_dict(dictionary=conf_dict, keys=conf_required)
     # fill missing default optional values
     default_dict = vars(DefaultConfig)
     for key in default_dict.keys():

@@ -1,7 +1,7 @@
 from __future__ import absolute_import
 
-import tensorflow as tf
 import os
+import tensorflow as tf
 
 
 class Dataset:
@@ -16,17 +16,16 @@ class Dataset:
             return self.__create_dataset(
                 speech_featurizer=speech_featurizer, text_featurizer=text_featurizer,
                 batch_size=batch_size, repeat=repeat, augmentations=augmentations)
-        elif self.mode == "eval" or self.mode == "test":
+        if self.mode == "eval" or self.mode == "test":
             self.entries = self.__create_train_entries()
             return self.__create_dataset(
                 speech_featurizer=speech_featurizer, text_featurizer=text_featurizer,
                 batch_size=batch_size)
-        elif self.mode == "infer":
+        if self.mode == "infer":
             self.entries = self.__create_infer_entries()
             return self.__create_infer_dataset(speech_featurizer=speech_featurizer,
                                                batch_size=batch_size)
-        else:
-            raise ValueError("Mode must be 'train', 'eval' or 'infer'")
+        raise ValueError("Mode must be 'train', 'eval' or 'infer'")
 
     def __create_train_entries(self):
         lines = []

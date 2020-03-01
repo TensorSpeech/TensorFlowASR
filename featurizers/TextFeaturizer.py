@@ -2,12 +2,12 @@ from __future__ import absolute_import
 
 import codecs
 import numpy as np
-import os
 
 
 class TextFeaturizer:
     """ Extract text feature based on char-level granularity.
-    By looking up the vocabulary table, each line of transcript will be converted to a sequence of integer indexes.
+    By looking up the vocabulary table, each line of transcript will be
+    converted to a sequence of integer indexes.
     """
 
     def __init__(self, vocab_file):
@@ -30,7 +30,7 @@ class TextFeaturizer:
     def compute_label_features(self, text):
         if text is None:
             return None
-        """ Convert string to a list of integers """
+        # Convert string to a list of integers
         tokens = list(text.strip().lower())
         feats = [self.token_to_index[token] for token in tokens]
         return np.array(feats)

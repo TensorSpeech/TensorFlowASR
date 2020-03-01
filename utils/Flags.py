@@ -1,8 +1,8 @@
 from __future__ import absolute_import
 
-from absl import flags, app
-
 import os
+from absl import flags
+
 
 current_path = os.path.dirname(os.path.abspath(__file__))
 _CONF_FILE = "/".join([current_path, "..", "configs", "DefaultConfig.py"])

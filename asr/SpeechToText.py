@@ -1,7 +1,7 @@
 from __future__ import absolute_import
 
-import tensorflow as tf
 import os
+import tensorflow as tf
 
 from models.CTCModel import create_ctc_model
 from decoders.Decoders import create_decoder
@@ -34,15 +34,16 @@ class SpeechToText:
             decoder=self.decoder, mode=self.mode)
 
     def __call__(self, **kwargs):
-        check_key_in_dict(dict=kwargs, keys=["model_file"])
+        check_key_in_dict(dictionary=kwargs, keys=["model_file"])
         if self.mode == "train":
             self._train_and_eval(model_file=kwargs["model_file"])
         elif self.mode == "test":
-            check_key_in_dict(dict=kwargs, keys=["output_file_path"])
+            check_key_in_dict(dictionary=kwargs, keys=["output_file_path"])
             self._test(model_file=kwargs["model_file"],
                        output_file_path=kwargs["output_file_path"])
         elif self.mode == "infer":
-            check_key_in_dict(dict=kwargs, keys=["speech_file_path", "output_file_path"])
+            check_key_in_dict(dictionary=kwargs, keys=["speech_file_path",
+                                                       "output_file_path"])
             self._infer(speech_file_path=kwargs["speech_file_path"],
                         model_file=kwargs["model_file"],
                         output_file_path=kwargs["output_file_path"])
@@ -51,10 +52,12 @@ class SpeechToText:
 
     def _train_and_eval(self, model_file):
         print("Training and evaluating model ...")
-        check_key_in_dict(dict=self.configs, keys=["train_data_transcript_paths",
-                                                   "eval_data_transcript_paths"])
-        train_dataset = Dataset(data_path=self.configs["train_data_transcript_paths"], mode="train")
-        eval_dataset = Dataset(data_path=self.configs["eval_data_transcript_paths"], mode="eval")
+        check_key_in_dict(dictionary=self.configs, keys=["train_data_transcript_paths",
+                                                         "eval_data_transcript_paths"])
+        train_dataset = Dataset(
+            data_path=self.configs["train_data_transcript_paths"], mode="train")
+        eval_dataset = Dataset(
+            data_path=self.configs["eval_data_transcript_paths"], mode="eval")
         if "augmentations" in self.configs.keys():
             augmentations = self.configs["augmentations"]
 
@@ -106,8 +109,9 @@ class SpeechToText:
 
     def _test(self, model_file, output_file_path):
         print("Testing model ...")
-        check_key_in_dict(dict=self.configs, keys=["test_data_transcript_paths"])
-        test_dataset = Dataset(data_path=self.configs["test_data_transcript_paths"], mode="test")
+        check_key_in_dict(dictionary=self.configs, keys=["test_data_transcript_paths"])
+        test_dataset = Dataset(
+            data_path=self.configs["test_data_transcript_paths"], mode="test")
         self.model.load_weights(filepath=model_file)
         tf_test_dataset = test_dataset(speech_featurizer=self.speech_featurizer,
                                        text_featurizer=self.text_featurizer,

@@ -18,7 +18,7 @@ def freq_masking(spectrogram: tf.Tensor, num_freq_mask: int = 1,
     assert 0 <= freq_mask_param <= spectrogram.shape[1], \
         "0 <= freq_mask_param <= num_feature_bins"
     spectrogram = spectrogram.numpy()  # convert to numpy to use index
-    for idx in range(num_freq_mask):
+    for _ in range(num_freq_mask):
         freq = np.random.randint(0, freq_mask_param)
         freq0 = np.random.randint(0, spectrogram.shape[1] - freq)
         spectrogram[:, freq0:freq0 + freq] = 0  # masking
@@ -32,12 +32,13 @@ def time_masking(spectrogram: tf.Tensor, num_time_mask: int = 1,
     :param spectrogram: shape (time_steps, num_feature_bins, 1)
     :param num_time_mask: number of time masks, default 1
     :param time_mask_param: parameter W of time masking, default 50
-    :param p_upperbound: an upperbound so that the number of masked time steps must not exceed p_upperbound * total_time_steps, default 1.0
+    :param p_upperbound: an upperbound so that the number of masked time
+    steps must not exceed p_upperbound * total_time_steps, default 1.0
     :return: a tensor that's applied time masking
     """
     assert 0.0 <= p_upperbound <= 1.0, "0.0 <= p_upperbound <= 1.0"
     spectrogram = spectrogram.numpy()  # convert to numpy to use index
-    for idx in range(num_time_mask):
+    for _ in range(num_time_mask):
         time = np.random.randint(0, time_mask_param)
         if time > p_upperbound * spectrogram.shape[0]:
             time = int(p_upperbound * spectrogram.shape[0])
@@ -49,15 +50,16 @@ def time_masking(spectrogram: tf.Tensor, num_time_mask: int = 1,
 def time_warping(spectrogram: tf.Tensor, time_warp_param: int = 50,
                  direction: str = "right") -> tf.Tensor:
     """
-    Warping the spectrogram as image with 2 point along the middle horizontal line with a distance to the left or right
+    Warping the spectrogram as image with 2 point along the middle
+    horizontal line with a distance to the left or right
     :param spectrogram: shape (time_steps, num_feature_bins, 1)
     :param time_warp_param: parameter W of time warping, default 50
     :param direction: "left" or "right", default "right"
     :return: a tensor that's applied time warping
     """
-    spectrogram = tf.expand_dims(
-        spectrogram, axis=0)  # Expand to shape (1, time_steps, num_feature_bins, 1)
-    assert direction == "left" or direction == "right", \
+    # Expand to shape (1, time_steps, num_feature_bins, 1)
+    spectrogram = tf.expand_dims(spectrogram, axis=0)
+    assert direction in ("left", "right"), \
         "direction must be either 'left' or 'right'"
     assert 0 <= time_warp_param <= spectrogram.shape[1], \
         "time_warp_param >= 0 and must not exceed time steps"

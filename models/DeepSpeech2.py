@@ -1,7 +1,7 @@
 from __future__ import absolute_import
 
-import tensorflow as tf
 import functools
+import tensorflow as tf
 from models.RowConv1D import RowConv1D
 
 
@@ -12,7 +12,7 @@ class DeepSpeech2:
 
     def __call__(self, features):
         layer = features
-        for i in range(3):
+        for _ in range(3):
             layer = tf.keras.layers.Conv2D(filters=32, kernel_size=(21, 11),
                                            strides=(1, 2), padding="same")(layer)
             layer = tf.keras.layers.BatchNormalization()(layer)
@@ -25,7 +25,7 @@ class DeepSpeech2:
         layer = tf.reshape(layer, [batch_size, -1, feat_size * channel])
 
         # RNN layers
-        for i in range(3):
+        for _ in range(3):
             layer = tf.keras.layers.Bidirectional(
                 tf.keras.layers.LSTM(128, return_sequences=True,
                                      recurrent_dropout=0.2))(layer)
@@ -42,7 +42,7 @@ class DeepSpeech2RowConv:
 
     def __call__(self, features):
         layer = features
-        for i in range(3):
+        for _ in range(3):
             layer = tf.keras.layers.Conv2D(filters=32, kernel_size=(21, 11),
                                            strides=(1, 2), padding="same")(layer)
             layer = tf.keras.layers.BatchNormalization()(layer)
@@ -55,7 +55,7 @@ class DeepSpeech2RowConv:
         layer = tf.reshape(layer, [batch_size, -1, feat_size * channel])
 
         # RNN layers
-        for i in range(3):
+        for _ in range(3):
             layer = tf.keras.layers.LSTM(self.rnn_unit, return_sequences=True,
                                          recurrent_dropout=0.2)(layer)
             layer = RowConv1D(filters=self.rnn_unit, future_context=2, strides=1,

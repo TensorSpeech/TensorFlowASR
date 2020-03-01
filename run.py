@@ -1,9 +1,10 @@
 from __future__ import absolute_import
-from asr.SpeechToText import SpeechToText
-from utils.Flags import app, flags_obj
 
-import tensorflow as tf
 from logging import ERROR
+import tensorflow as tf
+from absl import app
+from utils.Flags import flags_obj
+from asr.SpeechToText import SpeechToText
 
 tf.get_logger().setLevel(ERROR)
 gpus = tf.config.experimental.list_physical_devices('GPU')

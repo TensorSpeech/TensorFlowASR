@@ -7,7 +7,7 @@ from tensorflow.python.keras.utils import conv_utils
 
 class RowConv1D(tf.keras.layers.Conv1D):
     def __init__(self, filters, future_context, **kwargs):
-        assert 0 <= future_context, "Future context must be positive"
+        assert future_context >= 0, "Future context must be positive"
         super().__init__(filters=filters, kernel_size=(future_context * 2 + 1), **kwargs)
         self.future_context = future_context
 
