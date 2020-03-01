@@ -14,16 +14,19 @@ class CTCLoss(tf.keras.losses.Loss):
 
 def ctc_lambda_func(args):
     y_pred, input_length, labels, label_length = args
-    label_length = tf.squeeze(label_length, axis=-1)
-    input_length = tf.squeeze(input_length, axis=-1)
-    sparse_labels = tf.keras.backend.ctc_label_dense_to_sparse(labels, label_length)
-    y_pred = tf.math.log(tf.transpose(y_pred, perm=[1, 0, 2]) +
-                         tf.keras.backend.epsilon())
+    label_length = tf.squeeze(label_length)
+    input_length = tf.squeeze(input_length)
+    # sparse_labels = tf.keras.backend.ctc_label_dense_to_sparse(labels, label_length)
+    # y_pred = tf.math.log(tf.transpose(y_pred, perm=[1, 0, 2]) +
+    #                      tf.keras.backend.epsilon())
+    # return tf.expand_dims(
+    #     tf.compat.v1.nn.ctc_loss(labels=sparse_labels,
+    #                              inputs=y_pred,
+    #                              sequence_length=input_length,
+    #                              ignore_longer_outputs_than_inputs=True), 1)
     return tf.expand_dims(
-        tf.compat.v1.nn.ctc_loss(labels=sparse_labels,
-                                 inputs=y_pred,
-                                 sequence_length=input_length,
-                                 ignore_longer_outputs_than_inputs=True), 1)
+        tf.nn.ctc_loss(labels=labels, logits=y_pred, label_length=label_length,
+                       logit_length=input_length, logits_time_major=False), 1)
 
 
 def decode_lambda_func(args, **arguments):

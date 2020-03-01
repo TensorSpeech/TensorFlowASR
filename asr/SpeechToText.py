@@ -36,21 +36,21 @@ class SpeechToText:
     def __call__(self, **kwargs):
         check_key_in_dict(dictionary=kwargs, keys=["model_file"])
         if self.mode == "train":
-            self._train_and_eval(model_file=kwargs["model_file"])
+            self.__train_and_eval(model_file=kwargs["model_file"])
         elif self.mode == "test":
             check_key_in_dict(dictionary=kwargs, keys=["output_file_path"])
-            self._test(model_file=kwargs["model_file"],
-                       output_file_path=kwargs["output_file_path"])
+            self.__test(model_file=kwargs["model_file"],
+                        output_file_path=kwargs["output_file_path"])
         elif self.mode == "infer":
             check_key_in_dict(dictionary=kwargs, keys=["speech_file_path",
                                                        "output_file_path"])
-            self._infer(speech_file_path=kwargs["speech_file_path"],
-                        model_file=kwargs["model_file"],
-                        output_file_path=kwargs["output_file_path"])
+            self.__infer(speech_file_path=kwargs["speech_file_path"],
+                         model_file=kwargs["model_file"],
+                         output_file_path=kwargs["output_file_path"])
         else:
             raise ValueError("'mode' must be either 'train', 'test' or 'infer'")
 
-    def _train_and_eval(self, model_file):
+    def __train_and_eval(self, model_file):
         print("Training and evaluating model ...")
         check_key_in_dict(dictionary=self.configs, keys=["train_data_transcript_paths",
                                                          "eval_data_transcript_paths"])
@@ -107,7 +107,7 @@ class SpeechToText:
 
         self.model.save_weights(filepath=model_file, save_format='tf')
 
-    def _test(self, model_file, output_file_path):
+    def __test(self, model_file, output_file_path):
         print("Testing model ...")
         check_key_in_dict(dictionary=self.configs, keys=["test_data_transcript_paths"])
         test_dataset = Dataset(
@@ -141,7 +141,7 @@ class SpeechToText:
             of.write("WER: " + str(results[0]) + "\n")
             of.write("CER: " + str(results[-1]) + "\n")
 
-    def _infer(self, speech_file_path, model_file, output_file_path):
+    def __infer(self, speech_file_path, model_file, output_file_path):
         print("Infering ...")
         self.model.load_weights(filepath=model_file)
         tf_infer_dataset = Dataset(data_path=speech_file_path, mode="infer")

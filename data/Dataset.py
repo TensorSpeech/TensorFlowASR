@@ -64,6 +64,9 @@ class Dataset:
                     labels = text_featurizer.compute_label_features(transcript)
                     input_length = [features.get_shape().as_list()[0]]
                     label_length = [len(labels) if labels is not None else None]
+                    if label_length[0] is not None and \
+                            input_length[0] < label_length[0]:
+                        continue
 
                     yield (
                         {
