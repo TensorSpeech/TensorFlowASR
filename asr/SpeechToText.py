@@ -31,7 +31,7 @@ class SpeechToText:
             num_feature_bins=self.speech_featurizer.num_feature_bins,
             learning_rate=self.configs["learning_rate"],
             base_model=self.configs["base_model"],
-            decoder=self.decoder, mode=self.mode)
+            decoder=self.decoder, mode=self.mode, min_lr=self.configs["min_lr"])
 
     def __call__(self, **kwargs):
         check_key_in_dict(dictionary=kwargs, keys=["model_file"])

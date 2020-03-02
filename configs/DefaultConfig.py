@@ -13,7 +13,7 @@ augmentations = [
     TimeWarping(time_warp_param=40, direction="right")
 ]
 
-beam_width = 1024
+beam_width = 500
 
 lm_path = None
 
@@ -23,7 +23,9 @@ num_epochs = 10
 
 vocabulary_file_path = "/mnt/Projects/asrk16/code/data/vocabulary.txt"
 
-learning_rate = 0.005
+learning_rate = 0.001
+
+min_lr = 1e-8
 
 sample_rate = 16000
 

@@ -2,15 +2,18 @@ from __future__ import absolute_import
 
 import tensorflow as tf
 from utils.Utils import wer, cer, mask_nan
+from utils.Schedules import BoundExponentialDecay
 
 
 def ctc_lambda_func(args):
     y_pred, input_length, labels, label_length = args
-    loss = tf.nn.ctc_loss(labels=labels, logits=y_pred,
-                          label_length=label_length, logit_length=input_length,
-                          logits_time_major=False, blank_index=0)
+    y_pred = tf.math.log(tf.transpose(y_pred, perm=[1, 0, 2]) + tf.keras.backend.epsilon())
+    loss = tf.nn.ctc_loss(
+        labels=tf.keras.backend.ctc_label_dense_to_sparse(tf.cast(labels, tf.int32), tf.cast(label_length, tf.int32)),
+        logits=tf.cast(y_pred, tf.float32),
+        label_length=None, logit_length=tf.cast(input_length, tf.int32), blank_index=0)
     loss = mask_nan(loss)
-    return loss
+    return tf.cast(loss, tf.float64)
 
 
 def decode_lambda_func(args, **arguments):
@@ -36,7 +39,7 @@ def test_lambda_func(args, **arguments):
 
 
 def create_ctc_model(num_classes, num_feature_bins, learning_rate,
-                     base_model, decoder, mode="train"):
+                     base_model, decoder, mode="train", min_lr=0.0):
     # Convolution layers
     features = tf.keras.layers.Input(shape=(None, num_feature_bins, 1),
                                      dtype=tf.float64, name="features")
@@ -51,7 +54,7 @@ def create_ctc_model(num_classes, num_feature_bins, learning_rate,
 
     # Fully connected layer
     outputs = tf.keras.layers.Dense(units=num_classes,
-                                    activation=tf.keras.activations.linear,
+                                    activation=tf.keras.activations.softmax,
                                     use_bias=True)(outputs)
 
     if mode == "train":
@@ -68,7 +71,9 @@ def create_ctc_model(num_classes, num_feature_bins, learning_rate,
 
         # y_true is None because of dummy label and loss is calculated in the layer lambda
         train_model.compile(
-            optimizer=base_model.optimizer(lr=learning_rate),
+            optimizer=base_model.optimizer(
+                learning_rate=BoundExponentialDecay(min_lr=min_lr, initial_learning_rate=learning_rate,
+                                                    decay_steps=5000, decay_rate=0.9, staircase=True)),
             loss={"ctc_loss": lambda y_true, y_pred: tf.reduce_mean(y_pred)}
         )
         return train_model
