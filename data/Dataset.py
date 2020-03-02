@@ -62,9 +62,11 @@ class Dataset:
                     else:
                         features = speech_featurizer.compute_speech_features(audio_file)
                     labels = text_featurizer.compute_label_features(transcript)
-                    input_length = features.get_shape().as_list()[0]
-                    label_length = len(labels) if labels is not None else None
-                    if label_length is not None and input_length < label_length:
+                    input_length = tf.convert_to_tensor(
+                        features.get_shape().as_list()[0])
+                    label_length = tf.convert_to_tensor(
+                        labels.get_shape().as_list()[0])
+                    if input_length < label_length:
                         continue
 
                     yield (
@@ -124,7 +126,7 @@ class Dataset:
         def _gen_data():
             for audio_file in self.entries:
                 features = speech_featurizer.compute_speech_features(audio_file)
-                input_length = [features.get_shape().as_list()[0]]
+                input_length = tf.convert_to_tensor(features.get_shape().as_list()[0])
                 yield (
                     {
                         "features": features,

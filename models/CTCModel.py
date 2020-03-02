@@ -67,7 +67,7 @@ def create_ctc_model(num_classes, num_feature_bins, learning_rate,
         # y_true is None because of dummy label and loss is calculated in the layer lambda
         train_model.compile(
             optimizer=base_model.optimizer(lr=learning_rate),
-            loss={"ctc_loss": lambda y_true, y_pred: y_pred}
+            loss={"ctc_loss": lambda y_true, y_pred: tf.reduce_mean(y_pred)}
         )
         return train_model
     if mode == "infer":

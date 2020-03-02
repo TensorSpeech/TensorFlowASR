@@ -1,7 +1,7 @@
 from __future__ import absolute_import
 
 import codecs
-import numpy as np
+import tensorflow as tf
 
 
 class TextFeaturizer:
@@ -28,12 +28,10 @@ class TextFeaturizer:
         self.num_classes = index - 1
 
     def compute_label_features(self, text):
-        if text is None:
-            return None
         # Convert string to a list of integers
         tokens = list(text.strip().lower())
         feats = [self.token_to_index[token] for token in tokens]
-        return np.array(feats)
+        return tf.convert_to_tensor(feats)
 
 
 # class UnicodeFeaturizer:
