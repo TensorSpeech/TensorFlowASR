@@ -14,6 +14,7 @@ class CTCLoss(tf.keras.losses.Loss):
 
 def ctc_lambda_func(args):
     y_pred, input_length, labels, label_length = args
+    y_pred = tf.math.log(y_pred)
     return tf.nn.ctc_loss(labels=labels, logits=y_pred, label_length=label_length,
                           logit_length=input_length, logits_time_major=False,
                           blank_index=0)
@@ -57,7 +58,7 @@ def create_ctc_model(num_classes, num_feature_bins, learning_rate,
 
     # Fully connected layer
     outputs = tf.keras.layers.Dense(units=num_classes,
-                                    activation=tf.keras.activations.linear,
+                                    activation=tf.keras.activations.softmax,
                                     use_bias=True)(outputs)
 
     if mode == "train":
