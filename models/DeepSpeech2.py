@@ -35,8 +35,6 @@ class DeepSpeech2:
                 tf.keras.layers.RNN(BNLSTMCell(self.rnn_units),
                                     return_sequences=True))(layer)
 
-        layer = tf.keras.layers.BatchNormalization()(layer)
-
         return layer
 
 
@@ -70,8 +68,6 @@ class DeepSpeech2RowConv:
             layer = RowConv1D(filters=self.rnn_unit, future_context=2, strides=1,
                               padding="same")(layer)
 
-        layer = tf.keras.layers.BatchNormalization()(layer)
-
         return layer
 
 
@@ -103,7 +99,5 @@ class DeepSpeech2RowConvBNRNN:
                 return_sequences=True, unroll=False)(layer)
             layer = RowConv1D(filters=self.rnn_unit, future_context=2, strides=1,
                               padding="same")(layer)
-
-        layer = tf.keras.layers.BatchNormalization()(layer)
 
         return layer

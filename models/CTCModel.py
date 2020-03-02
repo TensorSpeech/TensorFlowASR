@@ -4,17 +4,8 @@ import tensorflow as tf
 from utils.Utils import wer, cer
 
 
-class CTCLoss(tf.keras.losses.Loss):
-    def __init__(self):
-        super().__init__(reduction=tf.keras.losses.Reduction.NONE, name="CTC Loss")
-
-    def call(self, y_true, y_pred):
-        return tf.reduce_mean(y_pred)
-
-
 def ctc_lambda_func(args):
     y_pred, input_length, labels, label_length = args
-    y_pred = tf.math.log(y_pred)
     return tf.nn.ctc_loss(labels=labels, logits=y_pred, label_length=label_length,
                           logit_length=input_length, logits_time_major=False,
                           blank_index=0)
@@ -58,7 +49,7 @@ def create_ctc_model(num_classes, num_feature_bins, learning_rate,
 
     # Fully connected layer
     outputs = tf.keras.layers.Dense(units=num_classes,
-                                    activation=tf.keras.activations.softmax,
+                                    activation=tf.keras.activations.linear,
                                     use_bias=True)(outputs)
 
     if mode == "train":
@@ -76,7 +67,7 @@ def create_ctc_model(num_classes, num_feature_bins, learning_rate,
         # y_true is None because of dummy label and loss is calculated in the layer lambda
         train_model.compile(
             optimizer=base_model.optimizer(lr=learning_rate),
-            loss=CTCLoss()
+            loss={"ctc_loss": lambda y_true, y_pred: y_pred}
         )
         return train_model
     if mode == "infer":
