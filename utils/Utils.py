@@ -2,6 +2,7 @@ from __future__ import absolute_import
 
 import runpy
 import os
+import tensorflow as tf
 from nltk.metrics import distance
 from configs import DefaultConfig
 
@@ -85,3 +86,10 @@ def wer(decode, target):
 
 def cer(decode, target):
     return distance.edit_distance(decode, target)
+
+
+def mask_nan(x):
+    x_zeros = tf.zeros_like(x)
+    x_mask = tf.math.is_finite(x)
+    y = tf.where(x_mask, x, x_zeros)
+    return y

@@ -1,14 +1,16 @@
 from __future__ import absolute_import
 
 import tensorflow as tf
-from utils.Utils import wer, cer
+from utils.Utils import wer, cer, mask_nan
 
 
 def ctc_lambda_func(args):
     y_pred, input_length, labels, label_length = args
-    return tf.nn.ctc_loss(labels=labels, logits=y_pred, label_length=label_length,
-                          logit_length=input_length, logits_time_major=False,
-                          blank_index=0)
+    loss = tf.nn.ctc_loss(labels=labels, logits=y_pred,
+                          label_length=label_length, logit_length=input_length,
+                          logits_time_major=False, blank_index=0)
+    loss = mask_nan(loss)
+    return loss
 
 
 def decode_lambda_func(args, **arguments):
@@ -37,12 +39,12 @@ def create_ctc_model(num_classes, num_feature_bins, learning_rate,
                      base_model, decoder, mode="train"):
     # Convolution layers
     features = tf.keras.layers.Input(shape=(None, num_feature_bins, 1),
-                                     dtype=tf.float32, name="features")
-    input_length = tf.keras.layers.Input(shape=(), dtype=tf.int32,
+                                     dtype=tf.float64, name="features")
+    input_length = tf.keras.layers.Input(shape=(), dtype=tf.int64,
                                          name="input_length")
-    labels = tf.keras.layers.Input(shape=(None,), dtype=tf.int32,
+    labels = tf.keras.layers.Input(shape=(None,), dtype=tf.int64,
                                    name="labels")
-    label_length = tf.keras.layers.Input(shape=(), dtype=tf.int32,
+    label_length = tf.keras.layers.Input(shape=(), dtype=tf.int64,
                                          name="label_length")
 
     outputs = base_model(features=features)

@@ -31,8 +31,7 @@ class TextFeaturizer:
         # Convert string to a list of integers
         tokens = list(text.strip().lower())
         feats = [self.token_to_index[token] for token in tokens]
-        return tf.convert_to_tensor(feats)
-
+        return tf.convert_to_tensor(feats, dtype=tf.int64)
 
 # class UnicodeFeaturizer:
 #     def __init__(self)
