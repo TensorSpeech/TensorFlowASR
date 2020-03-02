@@ -1,6 +1,5 @@
 from __future__ import absolute_import
 
-import os
 import tensorflow as tf
 
 
@@ -13,14 +12,16 @@ class Dataset:
                  repeat=1, augmentations=tuple([None])):
         if self.mode == "train":
             self.entries = self.__create_train_entries()
-            return self.__create_dataset(
-                speech_featurizer=speech_featurizer, text_featurizer=text_featurizer,
-                batch_size=batch_size, repeat=repeat, augmentations=augmentations)
+            return self.__create_dataset(speech_featurizer=speech_featurizer,
+                                         text_featurizer=text_featurizer,
+                                         batch_size=batch_size, repeat=repeat,
+                                         augmentations=augmentations)
         if self.mode == "eval" or self.mode == "test":
             self.entries = self.__create_train_entries()
-            return self.__create_dataset(
-                speech_featurizer=speech_featurizer, text_featurizer=text_featurizer,
-                batch_size=batch_size)
+            return self.__create_dataset(speech_featurizer=speech_featurizer,
+                                         text_featurizer=text_featurizer,
+                                         batch_size=batch_size,
+                                         augmentations=[None])
         if self.mode == "infer":
             self.entries = self.__create_infer_entries()
             return self.__create_infer_dataset(speech_featurizer=speech_featurizer,
@@ -48,7 +49,10 @@ class Dataset:
         return lines
 
     def __create_dataset(self, speech_featurizer, text_featurizer, batch_size,
-                         repeat=1, augmentations=tuple([None])):
+                         augmentations, repeat=1):
+        if not isinstance(augmentations, list) and \
+                not isinstance(augmentations, tuple):
+            raise ValueError("augmentation must be a list or a tuple")
         # Dataset properties
         num_feature_bins = speech_featurizer.num_feature_bins
 
