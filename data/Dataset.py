@@ -4,9 +4,10 @@ import tensorflow as tf
 
 
 class Dataset:
-    def __init__(self, data_path, mode="train"):
+    def __init__(self, data_path, mode="train", train_sort=False):
         self.data_path = data_path
         self.mode = mode
+        self.train_sort = train_sort
 
     def __call__(self, speech_featurizer, text_featurizer, batch_size=32,
                  repeat=1, augmentations=tuple([None])):
@@ -38,7 +39,8 @@ class Dataset:
         # The files is "\t" seperated
         lines = [line.split("\t", 2) for line in lines]
         # Sort input data by the length of audio sequence
-        lines.sort(key=lambda item: int(item[1]))
+        if self.train_sort:
+            lines.sort(key=lambda item: int(item[1]))
         return [tuple(line) for line in lines]
 
     def __create_infer_entries(self):
