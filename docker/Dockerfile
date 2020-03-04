@@ -12,6 +12,6 @@ RUN pip install tensorflow
 RUN mkdir /app/assets
 COPY $model_file /app/assets/
 
-EXPOSE 3000
+EXPOSE 5000
 
 CMD ["flask", "run"]
