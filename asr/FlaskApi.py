@@ -1,6 +1,7 @@
 from __future__ import absolute_import
 
-import numpy as np
+import soundfile as sf
+import librosa
 from flask import Flask, Blueprint, jsonify, request
 from flask_cors import CORS
 from configs.FlaskConfig import FlaskConfig
@@ -28,9 +29,16 @@ def static_inference():
   file into text and return the text
   :return: Json that contains the text
   """
-  payload = request.json["payload"]
-  payload = np.array(payload)
-  print(payload)
+  payload = request.files["payload"]
+  payload.save(app.config["STATIC_WAV_FILE"])
+  asr = SpeechToText(configs_path=app.config["CONFIG_PATH"],
+                     mode="infer")
+  features = asr.speech_featurizer.compute_speech_features(
+    app.config["STATIC_WAV_FILE"])
+
+  print(features)
+
+  return jsonify({"payload": "haha"})
 
 
 @asr_blueprint.route("/streaming", methods=["POST"])

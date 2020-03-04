@@ -17,4 +17,6 @@ class FlaskConfig:
   MODEL_FILE = os.path.expanduser(os.getenv("MODEL_FILE", ""))
   STATIC_WAV_FILE = os.path.expanduser(
     os.getenv("STATIC_WAV_FILE", "/tmp/temp.wav"))
- 
+
+  CONFIG_PATH = os.path.expanduser(
+    os.getenv("CONFIG_PATH", "/tmp/config.py"))
