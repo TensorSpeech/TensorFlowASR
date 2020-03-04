@@ -29,16 +29,18 @@ def static_inference():
   file into text and return the text
   :return: Json that contains the text
   """
-  payload = request.files["payload"]
-  payload.save(app.config["STATIC_WAV_FILE"])
+  request.files["payload"].save(app.config["STATIC_WAV_FILE"])
   asr = SpeechToText(configs_path=app.config["CONFIG_PATH"],
-                     mode="infer")
+                     mode="infer_single")
   features = asr.speech_featurizer.compute_speech_features(
     app.config["STATIC_WAV_FILE"])
 
-  print(features)
+  transcript = asr(features=features,
+                   model_file=app.config["MODEL_FILE"])
 
-  return jsonify({"payload": "haha"})
+  print(transcript)
+
+  return jsonify({"payload": transcript})
 
 
 @asr_blueprint.route("/streaming", methods=["POST"])

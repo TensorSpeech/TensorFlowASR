@@ -50,6 +50,10 @@ class SpeechToText:
       self.__infer(speech_file_path=kwargs["speech_file_path"],
                    model_file=kwargs["model_file"],
                    output_file_path=kwargs["output_file_path"])
+    elif self.mode == "infer_single":
+      check_key_in_dict(dictionary=kwargs, keys=["features"])
+      self.__infer_single(features=kwargs["features"],
+                          model_file=kwargs["model_file"])
     elif self.mode == "infer_streaming":
       pass
     else:
@@ -174,6 +178,19 @@ class SpeechToText:
     with open(output_file_path, "w", encoding="utf-8") as of:
       for pred in predictions:
         of.write(pred + "\n")
+
+  def __infer_single(self, features, model_file):
+    input_length = tf.convert_to_tensor(
+      features.get_shape().as_list()[0], dtype=tf.int64)
+    self.model.load_weights(filepath=model_file)
+    input = (
+      {
+        "features"    : features,
+        "input_length": input_length
+      },
+      -1
+    )
+    return self.model.predict(x=input, batch_size=1)[0]
 
   def save_model(self, model_file):
     latest = tf.train.latest_checkpoint(

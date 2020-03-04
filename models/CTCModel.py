@@ -108,7 +108,7 @@ def create_ctc_model(num_classes, num_feature_bins,
       loss={"ctc_loss": lambda y_true, y_pred: tf.reduce_mean(y_pred)}
     )
     return train_model
-  if mode == "infer" or mode == "infer_streaming":
+  if mode in ["infer", "infer_single", "infer_streaming"]:
     # Lambda layer for decoding to text
     decode_out = tf.keras.layers.Lambda(
       decode_lambda_func,
