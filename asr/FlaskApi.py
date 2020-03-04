@@ -1,9 +1,10 @@
 from __future__ import absolute_import
 
+import numpy as np
 from flask import Flask, Blueprint, jsonify, request
 from flask_cors import CORS
-from asr.SpeechToText import SpeechToText
 from configs.FlaskConfig import FlaskConfig
+from asr.SpeechToText import SpeechToText
 
 app = Flask(__name__)
 CORS(app, supports_credentials=True)
@@ -27,6 +28,9 @@ def static_inference():
   file into text and return the text
   :return: Json that contains the text
   """
+  payload = request.json["payload"]
+  payload = np.array(payload)
+  print(payload)
 
 
 @asr_blueprint.route("/streaming", methods=["POST"])
