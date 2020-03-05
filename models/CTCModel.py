@@ -35,7 +35,7 @@ def test_lambda_func(args, **arguments):
   predictions = decoder.decode(probs=y_pred,
                                input_length=tf.squeeze(input_length))
   string_labels = decoder.convert_to_string(labels)
-  outputs = tf.concat([predictions, string_labels], axis=0)
+  outputs = tf.concat([predictions, string_labels], axis=1)
 
   def cal_each_er(elem):
     cal_wer = wer(decode=elem[0], target=elem[1])
