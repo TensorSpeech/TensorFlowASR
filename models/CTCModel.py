@@ -25,14 +25,15 @@ def ctc_lambda_func(args):
 def decode_lambda_func(args, **arguments):
   y_pred, input_length = args
   decoder = arguments["decoder"]
-  return decoder.decode(probs=y_pred, input_length=input_length)
+  return decoder.decode(probs=y_pred,
+                        input_length=tf.squeeze(input_length))
 
 
 def test_lambda_func(args, **arguments):
   y_pred, input_length, labels = args
   decoder = arguments["decoder"]
   predictions = decoder.decode(probs=y_pred,
-                               input_length=input_length)
+                               input_length=tf.squeeze(input_length))
   string_labels = decoder.convert_to_string(labels)
   outputs = tf.concat([predictions, string_labels], axis=0)
 
@@ -108,7 +109,7 @@ def create_ctc_model(num_classes, num_feature_bins,
       loss={"ctc_loss": lambda y_true, y_pred: tf.reduce_mean(y_pred)}
     )
     return train_model
-  if mode == "infer" or mode == "infer_streaming":
+  if mode in ["infer", "infer_single", "infer_streaming"]:
     # Lambda layer for decoding to text
     decode_out = tf.keras.layers.Lambda(
       decode_lambda_func,

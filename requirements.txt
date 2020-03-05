@@ -7,3 +7,6 @@ absl-py
 librosa
 tensorflow-addons
 matplotlib
+flask
+flask-cors
+python-dotenv
