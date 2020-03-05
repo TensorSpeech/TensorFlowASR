@@ -181,7 +181,7 @@ class SpeechToText:
 
   def __infer_single(self, features, model_file):
     input_length = tf.convert_to_tensor(
-      features.get_shape().as_list()[0], dtype=tf.int64)
+      features.get_shape().as_list()[0], dtype=tf.int32)
     self.model.load_weights(filepath=model_file)
     input = {
       "features"    : features,

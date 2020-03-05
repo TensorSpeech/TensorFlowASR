@@ -75,9 +75,9 @@ class Dataset:
               audio_file)
           labels = text_featurizer.compute_label_features(transcript)
           input_length = tf.convert_to_tensor(
-            features.get_shape().as_list()[0], dtype=tf.int64)
+            features.get_shape().as_list()[0], dtype=tf.int32)
           label_length = tf.convert_to_tensor(
-            labels.get_shape().as_list()[0], dtype=tf.int64)
+            labels.get_shape().as_list()[0], dtype=tf.int32)
           if input_length < label_length:
             continue
 
@@ -95,10 +95,10 @@ class Dataset:
       _gen_data,
       output_types=(
         {
-          "features"    : tf.float64,
-          "input_length": tf.int64,
-          "labels"      : tf.int64,
-          "label_length": tf.int64
+          "features"    : tf.float32,
+          "input_length": tf.int32,
+          "labels"      : tf.int32,
+          "label_length": tf.int32
         },
         tf.int32
       ),
@@ -142,7 +142,7 @@ class Dataset:
         features = speech_featurizer.compute_speech_features(
           audio_file)
         input_length = tf.convert_to_tensor(
-          features.get_shape().as_list()[0], dtype=tf.int64)
+          features.get_shape().as_list()[0], dtype=tf.int32)
         yield (
           {
             "features"    : features,
@@ -155,8 +155,8 @@ class Dataset:
       _gen_data,
       output_types=(
         {
-          "features"    : tf.float64,
-          "input_length": tf.int64
+          "features"    : tf.float32,
+          "input_length": tf.int32
         },
         tf.int32
       ),

@@ -17,7 +17,7 @@ class TextFeaturizer:
       lines.extend(fin.readlines())
     self.token_to_index = {}
     self.index_to_token = {}
-    index = 1  # blank index = 0
+    index = 0  # blank index = -1
     for line in lines:
       line = line[:-1]  # Strip the '\n' char
       if line.startswith("#"):  # Skip comment line
@@ -25,13 +25,13 @@ class TextFeaturizer:
       self.token_to_index[line] = index
       self.index_to_token[index] = line
       index += 1
-    self.num_classes = index - 1
+    self.num_classes = index + 1  # blank index
 
   def compute_label_features(self, text):
     # Convert string to a list of integers
     tokens = list(text.strip().lower())
     feats = [self.token_to_index[token] for token in tokens]
-    return tf.convert_to_tensor(feats, dtype=tf.int64)
+    return tf.convert_to_tensor(feats, dtype=tf.int32)
 
 # class UnicodeFeaturizer:
 #     def __init__(self)

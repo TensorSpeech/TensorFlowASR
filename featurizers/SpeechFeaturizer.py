@@ -94,4 +94,4 @@ class SpeechFeaturizer:
 
     # Adding Channel dimmension for conv2D input
     data = np.expand_dims(data, axis=2)
-    return tf.convert_to_tensor(data, dtype=tf.float64)
+    return tf.convert_to_tensor(data, dtype=tf.float32)
