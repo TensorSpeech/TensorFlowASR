@@ -123,7 +123,7 @@ class SpeechToText:
       initial_epoch=initial_epoch,
       callbacks=callbacks)
 
-    self.model.save_weights(filepath=model_file, save_format='tf')
+    self.model.save_weights(filepath=model_file)
 
   def __test(self, model_file, output_file_path):
     print("Testing model ...")
@@ -196,7 +196,7 @@ class SpeechToText:
     if latest is None:
       raise ValueError("No checkpoint found")
     self.model.load_weights(latest)
-    self.model.save_weights(filepath=model_file, save_format='tf')
+    self.model.save_weights(filepath=model_file)
 
   def __infer_streaming(self, input_buffer,
                         model_file, output_buffer):
