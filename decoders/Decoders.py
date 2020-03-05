@@ -8,15 +8,14 @@ class Decoder:
   def __init__(self, index_to_token):
     self.index_to_token = index_to_token
     # tensorflow.org/api_docs/python/tf/keras/backend/ctc_decode
-    # default blank index are 0 and -1
-    self.blank_index = [0, -1]
+    # default blank index is -1
+    self.blank_index = -1
 
   def convert_to_string(self, decoded):
     # Remove blank indices
     def map_cvrt(elem):
       elem = np.array(elem)
-      for blank in self.blank_index:
-        elem = elem[elem != blank]
+      elem = elem[elem != self.blank_index]
       return ''.join([self.index_to_token[i] for i in elem])
 
     # Convert to string

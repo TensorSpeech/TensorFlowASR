@@ -7,19 +7,14 @@ from utils.Schedules import BoundExponentialDecay
 
 def ctc_lambda_func(args):
   y_pred, input_length, labels, label_length = args
-  y_pred = tf.math.log(
-    tf.transpose(y_pred, perm=[1, 0, 2]) +
-    tf.keras.backend.epsilon())
-  loss = tf.nn.ctc_loss(
-    labels=tf.keras.backend.ctc_label_dense_to_sparse(
-      tf.cast(labels, tf.int32),
-      tf.cast(label_length, tf.int32)),
-    logits=tf.cast(y_pred, tf.float32),
-    label_length=None,
-    logit_length=tf.cast(input_length, tf.int32),
-    blank_index=0)
-  loss = mask_nan(loss)
-  return tf.cast(loss, tf.float64)
+  label_length = tf.expand_dims(label_length, 1)
+  input_length = tf.expand_dims(input_length, 1)
+  loss = tf.keras.backend.ctc_batch_cost(
+    y_pred=y_pred,
+    input_length=input_length,
+    y_true=labels,
+    label_length=label_length)
+  return mask_nan(loss)
 
 
 def decode_lambda_func(args, **arguments):
@@ -60,18 +55,18 @@ def create_ctc_model(num_classes, num_feature_bins,
   # Convolution layers
   features = tf.keras.layers.Input(shape=(None, num_feature_bins, 1),
                                    batch_size=bsize,
-                                   dtype=tf.float64,
+                                   dtype=tf.float32,
                                    name="features")
   input_length = tf.keras.layers.Input(shape=(),
-                                       dtype=tf.int64,
+                                       dtype=tf.int32,
                                        batch_size=bsize,
                                        name="input_length")
   labels = tf.keras.layers.Input(shape=(None,),
-                                 dtype=tf.int64,
+                                 dtype=tf.int32,
                                  batch_size=bsize,
                                  name="labels")
   label_length = tf.keras.layers.Input(shape=(),
-                                       dtype=tf.int64,
+                                       dtype=tf.int32,
                                        batch_size=bsize,
                                        name="label_length")
 
@@ -111,7 +106,7 @@ def create_ctc_model(num_classes, num_feature_bins,
           decay_steps=5000,
           decay_rate=0.9,
           staircase=True)),
-      loss={"ctc_loss": lambda y_true, y_pred: tf.reduce_mean(y_pred)}
+      loss={"ctc_loss": lambda y_true, y_pred: y_pred}
     )
     return train_model
   if mode in ["infer", "infer_single", "infer_streaming"]:
