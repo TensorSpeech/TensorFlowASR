@@ -25,14 +25,15 @@ def ctc_lambda_func(args):
 def decode_lambda_func(args, **arguments):
   y_pred, input_length = args
   decoder = arguments["decoder"]
-  return decoder.decode(probs=y_pred, input_length=input_length)
+  return decoder.decode(probs=y_pred,
+                        input_length=tf.squeeze(input_length))
 
 
 def test_lambda_func(args, **arguments):
   y_pred, input_length, labels = args
   decoder = arguments["decoder"]
   predictions = decoder.decode(probs=y_pred,
-                               input_length=input_length)
+                               input_length=tf.squeeze(input_length))
   string_labels = decoder.convert_to_string(labels)
   outputs = tf.concat([predictions, string_labels], axis=0)
 

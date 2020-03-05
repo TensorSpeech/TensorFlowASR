@@ -16,8 +16,7 @@ conf_required = ["base_model",
                  "sample_rate",
                  "frame_ms",
                  "stride_ms",
-                 "num_feature_bins",
-                 "checkpoint_dir"]
+                 "num_feature_bins"]
 
 conf_paths = ["train_data_transcript_paths",
               "test_data_transcript_paths",

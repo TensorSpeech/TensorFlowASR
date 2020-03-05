@@ -132,7 +132,7 @@ class SpeechToText:
     test_dataset = Dataset(
       data_path=self.configs["test_data_transcript_paths"],
       mode="test")
-    self.model.load_weights(filepath=model_file)
+    # self.model.load_weights(filepath=model_file)
     tf_test_dataset = test_dataset(
       speech_featurizer=self.speech_featurizer,
       text_featurizer=self.text_featurizer,
@@ -183,14 +183,12 @@ class SpeechToText:
     input_length = tf.convert_to_tensor(
       features.get_shape().as_list()[0], dtype=tf.int64)
     self.model.load_weights(filepath=model_file)
-    input = (
-      {
-        "features"    : features,
-        "input_length": input_length
-      },
-      -1
-    )
-    return self.model.predict(x=input, batch_size=1)[0]
+    input = {
+      "features"    : features,
+      "input_length": input_length
+    }
+    print(input)
+    return self.model.predict(x=input, batch_size=1)
 
   def save_model(self, model_file):
     latest = tf.train.latest_checkpoint(
