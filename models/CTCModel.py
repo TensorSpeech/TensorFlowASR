@@ -40,8 +40,11 @@ def test_lambda_func(args, **arguments):
   outputs = tf.concat([predictions, string_labels], axis=-1)
 
   def cal_each_er(elem):
-    cal_wer = wer(decode=elem[0], target=elem[1])
-    cal_cer = cer(decode=elem[0], target=elem[1])
+    pred = elem[0].numpy().decode("utf-8")
+    target = elem[1].numpy().decode("utf-8")
+    print(pred)
+    cal_wer = wer(decode=pred, target=target)
+    cal_cer = cer(decode=pred, target=target)
     return tf.convert_to_tensor([cal_wer, cal_cer])
 
   return tf.map_fn(cal_each_er, outputs, dtype=tf.float64)
