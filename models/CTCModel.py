@@ -21,14 +21,16 @@ def decode_lambda_func(args, **arguments):
   y_pred, input_length = args
   decoder = arguments["decoder"]
   return decoder.decode(probs=y_pred,
-                        input_length=tf.squeeze(input_length))
+                        input_length=tf.squeeze(input_length,
+                                                axis=-1))
 
 
 def test_lambda_func(args, **arguments):
   y_pred, input_length, labels = args
   decoder = arguments["decoder"]
   predictions = decoder.decode(probs=y_pred,
-                               input_length=tf.squeeze(input_length))
+                               input_length=tf.squeeze(input_length,
+                                                       axis=-1))
   string_labels = decoder.convert_to_string(labels)
   predictions = tf.expand_dims(predictions, 1)
   string_labels = tf.expand_dims(string_labels, 1)
@@ -38,6 +40,7 @@ def test_lambda_func(args, **arguments):
     pred = elem[0].numpy().decode("utf-8")
     target = elem[1].numpy().decode("utf-8")
     print(pred)
+    print(target)
     cal_wer = wer(decode=pred, target=target)
     cal_cer = cer(decode=pred, target=target)
     return tf.convert_to_tensor([cal_wer, cal_cer])

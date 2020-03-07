@@ -25,7 +25,7 @@ class TextFeaturizer:
       self.token_to_index[line] = index
       self.index_to_token[index] = line
       index += 1
-    self.num_classes = index + 1  # blank index
+    self.num_classes = index  # blank index is added later
 
   def compute_label_features(self, text):
     # Convert string to a list of integers
