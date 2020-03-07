@@ -54,7 +54,7 @@ class BeamSearchDecoder(Decoder):
                                           beam_width=self.beam_width)
     # decoded shape = [batch_size, top_path=1, decoded index]
     # get the first object of the list of top-path objects
-    decoded = decoded[0]
+    decoded = tf.squeeze(decoded[0], axis=1)
     return self.convert_to_string(decoded)
 
 
