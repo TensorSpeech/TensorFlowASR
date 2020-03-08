@@ -20,12 +20,13 @@ class TextFeaturizer:
     index = 0  # blank index = -1
     for line in lines:
       line = line[:-1]  # Strip the '\n' char
-      if line.startswith("#"):  # Skip comment line
+      # Skip comment line, empty line
+      if line.startswith("#") or not line or line == "\n":
         continue
-      self.token_to_index[line] = index
-      self.index_to_token[index] = line
+      self.token_to_index[line[0]] = index
+      self.index_to_token[index] = line[0]
       index += 1
-    self.num_classes = index  # blank index is added later
+    self.num_classes = index + 1  # blank index is added later
 
   def compute_label_features(self, text):
     # Convert string to a list of integers

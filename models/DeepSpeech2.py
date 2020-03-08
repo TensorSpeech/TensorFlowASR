@@ -32,13 +32,19 @@ class DeepSpeech2:
     feat_size, channel = layer.get_shape().as_list()[2:]
     layer = tf.reshape(layer, [batch_size, -1, feat_size * channel])
 
+    # Convert to time_major
+    layer = tf.transpose(layer, [1, 0, 2])
+
     # RNN layers
     for _ in range(self.num_rnn):
       layer = tf.keras.layers.Bidirectional(
         tf.keras.layers.RNN(
           BNLSTMCell(self.rnn_units),
           return_sequences=True, unroll=False,
-          stateful=False))(layer)
+          time_major=True, stateful=False))(layer)
+
+    # Convert to batch_major
+    layer = tf.transpose(layer, [1, 0, 2])
 
     return layer
 
@@ -71,7 +77,7 @@ class DeepSpeech2RowConv:
                    activation='tanh',
                    recurrent_activation='sigmoid',
                    use_bias=True),
-        return_sequences=True,
+        return_sequences=True, time_major=True,
         unroll=False, stateful=streaming)(layer)
       layer = RowConv1D(
         filters=self.rnn_unit, future_context=2,

@@ -20,23 +20,28 @@ if gpus:
     # Memory growth must be set before GPUs have been initialized
     print(e)
 
+tf.keras.backend.clear_session()
+
 
 def main(argv):
   if flags_obj.export_file is None:
     raise ValueError("Flag 'export_file' must be set")
   if flags_obj.mode == "train":
+    tf.compat.v1.set_random_seed(1)
     asr = SpeechToText(configs_path=flags_obj.config, mode="train")
     asr(model_file=flags_obj.export_file)
   elif flags_obj.mode == "save":
     asr = SpeechToText(configs_path=flags_obj.config, mode="infer")
     asr.save_model(flags_obj.export_file)
   elif flags_obj.mode == "test":
+    tf.compat.v1.set_random_seed(0)
     asr = SpeechToText(configs_path=flags_obj.config, mode="test")
     if flags_obj.output_file_path is None:
       raise ValueError("Flag 'output_file_path must be set")
     asr(model_file=flags_obj.export_file,
         output_file_path=flags_obj.output_file_path)
   elif flags_obj.mode == "infer":
+    tf.compat.v1.set_random_seed(0)
     if flags_obj.output_file_path is None:
       raise ValueError("Flag 'output_file_path must be set")
     if flags_obj.speech_file_path is None:

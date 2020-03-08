@@ -51,10 +51,7 @@ def test_lambda_func(args, **arguments):
 def create_ctc_model(num_classes, num_feature_bins,
                      learning_rate, base_model, decoder,
                      mode="train", min_lr=0.0):
-  if mode == "infer_streaming":
-    bsize = 1
-  else:
-    bsize = None
+  bsize = 1 if mode == "infer_streaming" else None
   # Convolution layers
   features = tf.keras.layers.Input(shape=(None, num_feature_bins, 1),
                                    batch_size=bsize,
@@ -64,27 +61,38 @@ def create_ctc_model(num_classes, num_feature_bins,
                                        dtype=tf.int32,
                                        batch_size=bsize,
                                        name="input_length")
-  labels = tf.keras.layers.Input(shape=(None,),
-                                 dtype=tf.int32,
-                                 batch_size=bsize,
-                                 name="labels")
-  label_length = tf.keras.layers.Input(shape=(),
-                                       dtype=tf.int32,
-                                       batch_size=bsize,
-                                       name="label_length")
 
   if mode == 'infer_streaming':
     outputs = base_model(features=features, streaming=True)
   else:
     outputs = base_model(features=features, streaming=False)
 
+  batch_size = tf.shape(outputs)[0]
+  n_hidden = outputs.get_shape().as_list()[-1]
+  # reshape from [B, T, A] --> [B*T, A].
+  # Output shape: [n_steps * batch_size, n_hidden]
+  outputs = tf.reshape(outputs, [-1, n_hidden])
+
   # Fully connected layer
   outputs = tf.keras.layers.Dense(
     units=num_classes,
-    activation=tf.keras.activations.softmax,
+    activation='softmax',
+    name="fully_connected",
     use_bias=True)(outputs)
 
+  outputs = tf.reshape(outputs,
+                       [batch_size, -1, num_classes],
+                       name="logits")
+
   if mode == "train":
+    labels = tf.keras.layers.Input(shape=(None,),
+                                   dtype=tf.int32,
+                                   batch_size=bsize,
+                                   name="labels")
+    label_length = tf.keras.layers.Input(shape=(),
+                                         dtype=tf.int32,
+                                         batch_size=bsize,
+                                         name="label_length")
     # Lambda layer for computing loss function
     loss_out = tf.keras.layers.Lambda(
       ctc_lambda_func,
@@ -93,9 +101,9 @@ def create_ctc_model(num_classes, num_feature_bins,
                         labels, label_length])
 
     train_model = tf.keras.Model(inputs={
-      "features"    : features,
+      "features": features,
       "input_length": input_length,
-      "labels"      : labels,
+      "labels": labels,
       "label_length": label_length
     }, outputs=loss_out)
 
@@ -122,16 +130,16 @@ def create_ctc_model(num_classes, num_feature_bins,
       dynamic=True)([outputs, input_length])
 
     infer_model = tf.keras.Model(inputs={
-      "features"    : features,
+      "features": features,
       "input_length": input_length
     }, outputs=decode_out)
 
-    infer_model.compile(
-      optimizer=base_model.optimizer(lr=learning_rate),
-      loss={"ctc_decoder": lambda y_true, y_pred: y_pred}
-    )
     return infer_model
   if mode == "test":
+    labels = tf.keras.layers.Input(shape=(None,),
+                                   dtype=tf.int32,
+                                   batch_size=bsize,
+                                   name="labels")
     # Lambda layer for analysis
     test_out = tf.keras.layers.Lambda(
       test_lambda_func,
@@ -141,14 +149,10 @@ def create_ctc_model(num_classes, num_feature_bins,
       dynamic=True)([outputs, input_length, labels])
 
     test_model = tf.keras.Model(inputs={
-      "features"    : features,
+      "features": features,
       "input_length": input_length,
-      "labels"      : labels
+      "labels": labels
     }, outputs=test_out)
 
-    test_model.compile(
-      optimizer=base_model.optimizer(lr=learning_rate),
-      loss={"ctc_test": lambda y_true, y_pred: y_pred}
-    )
     return test_model
   raise ValueError("mode must be either 'train', 'infer' or 'test'")
