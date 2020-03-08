@@ -20,11 +20,14 @@ if gpus:
     # Memory growth must be set before GPUs have been initialized
     print(e)
 
+tf.keras.backend.clear_session()
+
 
 def main(argv):
   if flags_obj.export_file is None:
     raise ValueError("Flag 'export_file' must be set")
   if flags_obj.mode == "train":
+    tf.compat.v1.set_random_seed(1)
     asr = SpeechToText(configs_path=flags_obj.config, mode="train")
     asr(model_file=flags_obj.export_file)
   elif flags_obj.mode == "save":
