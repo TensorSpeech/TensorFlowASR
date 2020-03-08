@@ -34,14 +34,12 @@ def main(argv):
     asr = SpeechToText(configs_path=flags_obj.config, mode="infer")
     asr.save_model(flags_obj.export_file)
   elif flags_obj.mode == "test":
-    tf.compat.v1.set_random_seed(0)
     asr = SpeechToText(configs_path=flags_obj.config, mode="test")
     if flags_obj.output_file_path is None:
       raise ValueError("Flag 'output_file_path must be set")
     asr(model_file=flags_obj.export_file,
         output_file_path=flags_obj.output_file_path)
   elif flags_obj.mode == "infer":
-    tf.compat.v1.set_random_seed(0)
     if flags_obj.output_file_path is None:
       raise ValueError("Flag 'output_file_path must be set")
     if flags_obj.speech_file_path is None:

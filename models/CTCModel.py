@@ -50,7 +50,11 @@ def test_lambda_func(args, **arguments):
 
 def create_ctc_model(num_classes, num_feature_bins,
                      learning_rate, base_model, decoder,
-                     mode="train", min_lr=0.0):
+                     mode="train", min_lr=0.0, seed=1):
+  if mode != "train":
+    tf.compat.v1.set_random_seed(0)
+  else:
+    tf.compat.v1.set_random_seed(seed)
   bsize = 1 if mode == "infer_streaming" else None
   # Convolution layers
   features = tf.keras.layers.Input(shape=(None, num_feature_bins, 1),
