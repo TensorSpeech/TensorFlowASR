@@ -113,6 +113,14 @@ class SpeechToText:
     latest = tf.train.latest_checkpoint(
       self.configs["checkpoint_dir"])
     if latest is not None:
+      self.model = create_ctc_model(
+        num_classes=self.text_featurizer.num_classes,
+        num_feature_bins=self.speech_featurizer.num_feature_bins,
+        learning_rate=self.configs["learning_rate"],
+        base_model=self.configs["base_model"],
+        decoder=self.decoder, mode=self.mode,
+        min_lr=self.configs["min_lr"],
+        seed=0)
       self.model.load_weights(latest)
       initial_epoch = int(latest.split("_")[-1])
     else:
