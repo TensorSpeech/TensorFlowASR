@@ -94,3 +94,7 @@ def mask_nan(x):
   x_mask = tf.math.is_finite(x)
   y = tf.where(x_mask, x, x_zeros)
   return y
+
+
+def bytes_to_string(array, encoding: str = "utf-8"):
+  return [transcript.decode(encoding) for transcript in array]

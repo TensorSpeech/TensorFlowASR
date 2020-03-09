@@ -1,6 +1,7 @@
 FROM python:3.7.4
 
 ARG model_file=/tmp/model.tf
+ARG config_file=/tmp/config.py
 
 WORKDIR /app
 
@@ -11,6 +12,7 @@ RUN pip install -r requirements.txt
 RUN pip install tensorflow
 RUN mkdir /app/assets
 COPY $model_file /app/assets/
+COPY $config_file /app/assets/
 
 EXPOSE 5000
 

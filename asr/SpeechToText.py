@@ -7,7 +7,7 @@ from models.CTCModel import create_ctc_model
 from decoders.Decoders import create_decoder
 from featurizers.SpeechFeaturizer import SpeechFeaturizer
 from featurizers.TextFeaturizer import TextFeaturizer
-from utils.Utils import get_config, check_key_in_dict
+from utils.Utils import get_config, check_key_in_dict, bytes_to_string
 from data.Dataset import Dataset
 
 
@@ -51,9 +51,9 @@ class SpeechToText:
                    model_file=kwargs["model_file"],
                    output_file_path=kwargs["output_file_path"])
     elif self.mode == "infer_single":
-      check_key_in_dict(dictionary=kwargs, keys=["features"])
-      self.__infer_single(features=kwargs["features"],
-                          model_file=kwargs["model_file"])
+      check_key_in_dict(dictionary=kwargs, keys=["audio_path"])
+      return self.__infer_single(audio_path=kwargs["audio_path"],
+                                 model_file=kwargs["model_file"])
     elif self.mode == "infer_streaming":
       pass
     else:
@@ -187,15 +187,23 @@ class SpeechToText:
       for pred in predictions:
         of.write(pred + "\n")
 
-  def __infer_single(self, features, model_file):
-    input_length = tf.convert_to_tensor(
-      features.get_shape().as_list()[0], dtype=tf.int32)
-    self.model.load_weights(filepath=model_file)
-    inputs = {
+  def __infer_single(self, audio_path, model_file):
+    features = self.speech_featurizer.compute_speech_features(audio_path)
+    input_length = tf.convert_to_tensor(features.get_shape().as_list()[0],
+                                        dtype=tf.int32)
+    # expand dim for batch dimension
+    features = tf.expand_dims(features, 0)
+    input_length = tf.expand_dims(input_length, 0)
+    try:
+      self.model.load_weights(filepath=model_file)
+    except Exception:
+      return "Model is not trained"
+    predictions = self.model.predict(x={
       "features": features,
       "input_length": input_length
-    }
-    return self.model.predict(x=inputs, batch_size=1)
+    }, batch_size=1)
+
+    return bytes_to_string(predictions)[0]
 
   def save_model(self, model_file):
     latest = tf.train.latest_checkpoint(
