@@ -133,10 +133,12 @@ def create_ctc_model(num_classes, num_feature_bins,
       arguments={"decoder": decoder},
       dynamic=True)([outputs, input_length])
 
-    infer_model = tf.keras.Model(inputs={
-      "features": features,
-      "input_length": input_length
-    }, outputs=decode_out)
+    infer_model = tf.keras.Model(
+      inputs={
+        "features": features,
+        "input_length": input_length
+      },
+      outputs=decode_out)
 
     return infer_model
   if mode == "test":

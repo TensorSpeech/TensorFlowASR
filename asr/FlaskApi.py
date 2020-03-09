@@ -1,11 +1,13 @@
 from __future__ import absolute_import
 
-import soundfile as sf
-import librosa
+from logging import ERROR
+import tensorflow as tf
 from flask import Flask, Blueprint, jsonify, request
 from flask_cors import CORS
 from configs.FlaskConfig import FlaskConfig
 from asr.SpeechToText import SpeechToText
+
+tf.get_logger().setLevel(ERROR)
 
 app = Flask(__name__)
 CORS(app, supports_credentials=True)
@@ -22,7 +24,7 @@ asr_blueprint = Blueprint("asr", __name__, url_prefix="/api")
 """
 
 
-@asr_blueprint.route("/static", methods=["POST"])
+@asr_blueprint.route("/asr_static", methods=["POST"])
 def static_inference():
   """
   Saves audio bytes from requests into a file, then transcribes that
@@ -32,10 +34,7 @@ def static_inference():
   request.files["payload"].save(app.config["STATIC_WAV_FILE"])
   asr = SpeechToText(configs_path=app.config["CONFIG_PATH"],
                      mode="infer_single")
-  features = asr.speech_featurizer.compute_speech_features(
-    app.config["STATIC_WAV_FILE"])
-
-  transcript = asr(features=features,
+  transcript = asr(audio_path=app.config["STATIC_WAV_FILE"],
                    model_file=app.config["MODEL_FILE"])
 
   print(transcript)
@@ -43,7 +42,7 @@ def static_inference():
   return jsonify({"payload": transcript})
 
 
-@asr_blueprint.route("/streaming", methods=["POST"])
+@asr_blueprint.route("/asr_streaming", methods=["POST"])
 def streaming_inference():
   """
   Transcribes the audio bytes sent in realtime and
