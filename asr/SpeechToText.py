@@ -194,7 +194,10 @@ class SpeechToText:
     # expand dim for batch dimension
     features = tf.expand_dims(features, 0)
     input_length = tf.expand_dims(input_length, 0)
-    # self.model.load_weights(filepath=model_file)
+    try:
+      self.model.load_weights(filepath=model_file)
+    except Exception:
+      return "Model is not trained"
     predictions = self.model.predict(x={
       "features": features,
       "input_length": input_length
