@@ -11,7 +11,7 @@ COPY . /app
 RUN pip install -r requirements.txt
 RUN pip install tensorflow
 RUN mkdir /app/assets
-COPY $model_file /app/assets/
+RUN [ -f $model_file ] && cp $model_file /app/assets/
 COPY $config_file /app/assets/config.py
 
 EXPOSE 5000
