@@ -24,6 +24,11 @@ asr_blueprint = Blueprint("asr", __name__, url_prefix="/api")
 """
 
 
+@asr_blueprint.route("/", methods=["GET"])
+def hello():
+  return "Hello world"
+
+
 @asr_blueprint.route("/asr_static", methods=["POST"])
 def static_inference():
   """

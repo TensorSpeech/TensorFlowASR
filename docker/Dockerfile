@@ -18,4 +18,4 @@ COPY $config_file /app/assets/config.py
 
 EXPOSE 5000
 
-CMD ["flask", "run"]
+CMD ["flask", "run", "--host", "0.0.0.0"]
