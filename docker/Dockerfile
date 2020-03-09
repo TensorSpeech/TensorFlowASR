@@ -5,8 +5,8 @@ ARG config_file=/tmp/config.py
 
 WORKDIR /app
 
-COPY .env.production /app/.env
 COPY . /app
+COPY .env.production /app/.env
 
 RUN apt update && apt upgrade -y
 RUN apt install libsndfile1 ffmpeg gcc g++ -y
