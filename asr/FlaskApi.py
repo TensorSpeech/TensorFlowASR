@@ -37,7 +37,7 @@ def static_inference():
   :return: Json that contains the text
   """
   request.files["payload"].save(app.config["STATIC_WAV_FILE"])
-  asr = SpeechToText(configs_path=app.config["CONFIG_PATH"],
+  asr = SpeechToText(configs_path=app.config["BI_CONFIG_PATH"],
                      mode="infer_single")
   transcript = asr(audio_path=app.config["STATIC_WAV_FILE"],
                    model_file=app.config["MODEL_FILE"])
@@ -54,6 +54,7 @@ def streaming_inference():
   immediately returns the text at that time-step
   :return: Json that contains the text
   """
+  return "Hello"
 
 
 app.register_blueprint(asr_blueprint)
