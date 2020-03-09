@@ -18,5 +18,8 @@ class FlaskConfig:
   STATIC_WAV_FILE = os.path.expanduser(
     os.getenv("STATIC_WAV_FILE", "/tmp/temp.wav"))
 
-  CONFIG_PATH = os.path.expanduser(
-    os.getenv("CONFIG_PATH", "/tmp/config.py"))
+  UNI_CONFIG_PATH = os.path.expanduser(
+    os.getenv("UNI_CONFIG_PATH", "/app/configs/UniConfig.py"))
+
+  BI_CONFIG_PATH = os.path.expanduser(
+    os.getenv("BI_CONFIG_PATH", "/app/configs/BiConfig.py"))
