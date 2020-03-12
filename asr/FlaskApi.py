@@ -1,11 +1,13 @@
 from __future__ import absolute_import
 
+import functools
 from logging import ERROR
 import tensorflow as tf
 from flask import Flask, Blueprint, jsonify, request
 from flask_cors import CORS
 from configs.FlaskConfig import FlaskConfig
 from asr.SpeechToText import SpeechToText
+from utils.Utils import check_key_in_dict
 
 tf.get_logger().setLevel(ERROR)
 
@@ -24,26 +26,37 @@ asr_blueprint = Blueprint("asr", __name__, url_prefix="/api")
 """
 
 
+def check_request(func):
+  @functools.wraps(func)
+  def decorated_func(*args, **kwargs):
+    try:
+      check_key_in_dict(dictionary=request.json,
+                        keys=["payload", "sampleRate", "channels"])
+    except ValueError as e:
+      return jsonify({"payload": str(e)})
+    return func(*args, **kwargs)
+
+  return decorated_func
+
+
+asr = SpeechToText(configs_path=app.config["UNI_CONFIG_PATH"],
+                   mode="infer_single")
+asr_streaming = SpeechToText(
+  configs_path=app.config["UNI_CONFIG_PATH"],
+  mode="infer_streaming")
+
+
 @asr_blueprint.route("/", methods=["GET"])
 def hello():
   return "Hello world"
 
 
-@asr_blueprint.route("/asr_static", methods=["POST"])
-def static_inference():
-  """
-  Saves audio bytes from requests into a file, then transcribes that
-  file into text and return the text
-  :return: Json that contains the text
-  """
-  request.files["payload"].save(app.config["STATIC_WAV_FILE"])
-  asr = SpeechToText(configs_path=app.config["BI_CONFIG_PATH"],
-                     mode="infer_single")
-  transcript = asr(audio_path=app.config["STATIC_WAV_FILE"],
-                   model_file=app.config["MODEL_FILE"])
-
-  print(transcript)
-
+@asr_blueprint.route("/asr", methods=["POST"])
+@check_request
+def asr_inference():
+  payload = request.json["payload"]
+  payload = bytes(payload, "utf-8")
+  transcript = asr(audio=payload, model_file=app.config["MODEL_FILE"])
   return jsonify({"payload": transcript})
 
 
@@ -54,7 +67,12 @@ def streaming_inference():
   immediately returns the text at that time-step
   :return: Json that contains the text
   """
-  return "Hello"
+  payload = request.json["payload"]
+  payload = bytes(payload, "utf-8")
+  features = asr_streaming.speech_featurizer.compute_speech_features(
+    payload)
+  print(features)
+  return jsonify({"payload": "haha"})
 
 
 app.register_blueprint(asr_blueprint)

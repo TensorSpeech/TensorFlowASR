@@ -51,8 +51,8 @@ class SpeechToText:
                    model_file=kwargs["model_file"],
                    output_file_path=kwargs["output_file_path"])
     elif self.mode == "infer_single":
-      check_key_in_dict(dictionary=kwargs, keys=["audio_path"])
-      return self.__infer_single(audio_path=kwargs["audio_path"],
+      check_key_in_dict(dictionary=kwargs, keys=["audio"])
+      return self.__infer_single(audio=kwargs["audio"],
                                  model_file=kwargs["model_file"])
     elif self.mode == "infer_streaming":
       pass
@@ -187,19 +187,19 @@ class SpeechToText:
       for pred in predictions:
         of.write(pred + "\n")
 
-  def __infer_single(self, audio_path, model_file):
-    features = self.speech_featurizer.compute_speech_features(audio_path)
-    input_length = tf.convert_to_tensor(features.get_shape().as_list()[0],
-                                        dtype=tf.int32)
-    # expand dim for batch dimension
-    features = tf.expand_dims(features, 0)
-    input_length = tf.expand_dims(input_length, 0)
+  def __infer_single(self, audio, model_file):
+    features = tf.expand_dims(
+      self.speech_featurizer.compute_speech_features(audio),
+      axis=0)
+    input_length = tf.expand_dims(
+      tf.convert_to_tensor(features.get_shape().as_list()[0],
+                           dtype=tf.int32), axis=0)
     try:
       self.model.load_weights(filepath=model_file)
     except Exception:
       return "Model is not trained"
     predictions = self.model.predict(x={
-      "features": features,
+      "features"    : features,
       "input_length": input_length
     }, batch_size=1)
 
@@ -213,6 +213,5 @@ class SpeechToText:
     self.model.load_weights(latest)
     self.model.save_weights(filepath=model_file)
 
-  def __infer_streaming(self, input_buffer,
-                        model_file, output_buffer):
+  def __infer_streaming(self, audio_path, model_file):
     pass

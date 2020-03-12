@@ -4,6 +4,7 @@ import soundfile
 import numpy as np
 import librosa
 import tensorflow as tf
+from utils.Utils import buffer_to_np_array
 
 WINDOW_FN = {"hanning": np.hanning, "hamming": np.hamming}
 
@@ -70,23 +71,31 @@ class SpeechFeaturizer:
 
     return features
 
-  def compute_speech_features(self, audio_file_path):
+  def compute_speech_features(self, audio_file_path, sr=44100):
     """Load audio file, preprocessing, compute features,
     postprocessing
     Args:
         audio_file_path (string or np.array): the path to audio file
         or audio data
+        sr (int): default sample rate
     Returns:
         features (np.array): spectrogram of shape=[num_timesteps,
         num_feature_bins, 1]
         audio_duration (float): duration of the signal in seconds
     """
     if isinstance(audio_file_path, str):
-      data, sr = librosa.core.load(audio_file_path)
+      data, sr = librosa.core.load(audio_file_path, sr=None)
       data = librosa.core.resample(
         data, orig_sr=sr, target_sr=self.sample_rate, scale=True)
-    else:
+    elif isinstance(audio_file_path, bytes):
+      data = librosa.util.buf_to_float(audio_file_path, n_bytes=1)
+      data = librosa.core.resample(
+        data, orig_sr=sr, target_sr=self.sample_rate, scale=True)
+    elif isinstance(audio_file_path, tf.Tensor):
       data = audio_file_path
+    else:
+      raise ValueError(
+        "audio_file_path must be string, bytes or tf.Tensor")
 
     data = normalize_signal(data.astype(np.float32))
     data = self.__compute_spectrogram_feature(data)

@@ -2,6 +2,7 @@ from __future__ import absolute_import
 
 import runpy
 import os
+import numpy as np
 import tensorflow as tf
 from nltk.metrics import distance
 from configs import DefaultConfig
@@ -98,3 +99,7 @@ def mask_nan(x):
 
 def bytes_to_string(array, encoding: str = "utf-8"):
   return [transcript.decode(encoding) for transcript in array]
+
+
+def buffer_to_np_array(buffer):
+  return np.frombuffer(buffer, dtype=np.float32)
