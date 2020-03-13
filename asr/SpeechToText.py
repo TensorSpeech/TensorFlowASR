@@ -53,7 +53,8 @@ class SpeechToText:
                    output_file_path=kwargs["output_file_path"])
     elif self.mode in ["infer_single", "infer_streaming"]:
       check_key_in_dict(dictionary=kwargs, keys=["audio"])
-      return self.__infer_single(audio=kwargs["audio"])
+      return self.__infer_single(audio=kwargs["audio"],
+                                 sample_rate=kwargs["sample_rate"])
     else:
       raise ValueError(
         "'mode' must be either 'train', 'test', 'infer' or "
@@ -192,8 +193,12 @@ class SpeechToText:
       axis=0)
     if self.mode == "infer_streaming":
       features = tf.pad(features,
-                        [[0, 0], [0, 30 - features.shape[1]], [0, 0], [0, 0]],
+                        [[0, 0],
+                         [0, 30 - features.shape[1]],
+                         [0, 0],
+                         [0, 0]],
                         "CONSTANT")
+      print(features)
     input_length = tf.expand_dims(
       tf.convert_to_tensor(features.get_shape().as_list()[0],
                            dtype=tf.int32), axis=0)

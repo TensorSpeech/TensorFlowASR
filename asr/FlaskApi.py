@@ -64,23 +64,19 @@ def hello():
 def asr_inference():
   payload = request.json["payload"]
   payload = bytes(payload, "utf-8")
-  transcript = asr(audio=payload)
+  transcript = asr(audio=payload, sample_rate=48000)
   return jsonify({"payload": transcript})
-
-
-@socketio.on("connect", namespace="/asr_streaming")
-def on_connect_socker():
-  print("Connected")
-  emit("connect", "connected")
 
 
 @socketio.on("asr_streaming", namespace="/asr_streaming")
 def asr_stream(json):
   payload = json["payload"]
-  payload = bytes(payload, "utf-8")
-  transcript = asr_streaming(audio=payload,
-                             sample_rate=json["sampleRate"])
-  emit("asr_streaming", {'payload': transcript})
+  # payload = bytes(payload)
+  print(payload)
+  sampleRate = int(json["sampleRate"])
+  # transcript = asr_streaming(audio=payload,
+  #                            sample_rate=sampleRate)
+  return {"payload": payload}
 
 
 app.register_blueprint(asr_blueprint)
