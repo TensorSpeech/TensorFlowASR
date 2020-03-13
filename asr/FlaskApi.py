@@ -4,6 +4,7 @@ import functools
 from logging import ERROR
 import tensorflow as tf
 from flask import Flask, Blueprint, jsonify, request
+from flask_socketio import SocketIO, emit
 from flask_cors import CORS
 from configs.FlaskConfig import FlaskConfig
 from asr.SpeechToText import SpeechToText
@@ -11,12 +12,16 @@ from utils.Utils import check_key_in_dict
 
 tf.get_logger().setLevel(ERROR)
 
+socketio = SocketIO()
+
 app = Flask(__name__)
 CORS(app, supports_credentials=True)
 
 app.config.from_object(FlaskConfig)
 
-asr_blueprint = Blueprint("asr", __name__, url_prefix="/api")
+socketio.init_app(app, cors_allowed_origins="*")
+
+asr_blueprint = Blueprint("asr", __name__)
 
 """
   Json request format:
@@ -41,9 +46,12 @@ def check_request(func):
 
 asr = SpeechToText(configs_path=app.config["UNI_CONFIG_PATH"],
                    mode="infer_single")
+is_asr_loaded = asr.load_model(app.config["MODEL_FILE"])
+
 asr_streaming = SpeechToText(
   configs_path=app.config["UNI_CONFIG_PATH"],
   mode="infer_streaming")
+is_asr_streaming_loaded = asr.load_model(app.config["MODEL_FILE"])
 
 
 @asr_blueprint.route("/", methods=["GET"])
@@ -56,23 +64,23 @@ def hello():
 def asr_inference():
   payload = request.json["payload"]
   payload = bytes(payload, "utf-8")
-  transcript = asr(audio=payload, model_file=app.config["MODEL_FILE"])
+  transcript = asr(audio=payload)
   return jsonify({"payload": transcript})
 
 
-@asr_blueprint.route("/asr_streaming", methods=["POST"])
-def streaming_inference():
-  """
-  Transcribes the audio bytes sent in realtime and
-  immediately returns the text at that time-step
-  :return: Json that contains the text
-  """
-  payload = request.json["payload"]
+@socketio.on("connect", namespace="/asr_streaming")
+def on_connect_socker():
+  print("Connected")
+  emit("connect", "connected")
+
+
+@socketio.on("asr_streaming", namespace="/asr_streaming")
+def asr_stream(json):
+  payload = json["payload"]
   payload = bytes(payload, "utf-8")
-  features = asr_streaming.speech_featurizer.compute_speech_features(
-    payload)
-  print(features)
-  return jsonify({"payload": "haha"})
+  transcript = asr_streaming(audio=payload,
+                             sample_rate=json["sampleRate"])
+  emit("asr_streaming", {'payload': transcript})
 
 
 app.register_blueprint(asr_blueprint)

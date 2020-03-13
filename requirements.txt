@@ -9,4 +9,5 @@ tensorflow-addons
 matplotlib
 flask
 flask-cors
+flask-socketio
 python-dotenv

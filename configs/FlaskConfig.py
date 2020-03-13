@@ -12,6 +12,7 @@ class FlaskConfig:
   """
   # General
   FLASK_APP = os.getenv("FLASK_APP", "api.py")
+  SECRET_KEY = "this is a secret key muahahah"
 
   # ASR
   MODEL_FILE = os.path.expanduser(os.getenv("MODEL_FILE", ""))

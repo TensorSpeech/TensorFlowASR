@@ -59,7 +59,7 @@ def create_ctc_model(num_classes, num_feature_bins,
   # Convolution layers
   if mode == "infer_streaming":
     features = tf.keras.layers.Input(
-      batch_shape=(1, 4000, num_feature_bins, 1),
+      batch_shape=(1, 30, num_feature_bins, 1),
       dtype=tf.float32,
       name="features")
     input_length = tf.keras.layers.Input(
@@ -112,9 +112,9 @@ def create_ctc_model(num_classes, num_feature_bins,
                         labels, label_length])
 
     train_model = tf.keras.Model(inputs={
-      "features"    : features,
+      "features": features,
       "input_length": input_length,
-      "labels"      : labels,
+      "labels": labels,
       "label_length": label_length
     }, outputs=loss_out)
 
@@ -142,7 +142,7 @@ def create_ctc_model(num_classes, num_feature_bins,
 
     infer_model = tf.keras.Model(
       inputs={
-        "features"    : features,
+        "features": features,
         "input_length": input_length
       },
       outputs=decode_out)
@@ -162,9 +162,9 @@ def create_ctc_model(num_classes, num_feature_bins,
       dynamic=True)([outputs, input_length, labels])
 
     test_model = tf.keras.Model(inputs={
-      "features"    : features,
+      "features": features,
       "input_length": input_length,
-      "labels"      : labels
+      "labels": labels
     }, outputs=test_out)
 
     return test_model
