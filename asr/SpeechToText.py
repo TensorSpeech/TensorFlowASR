@@ -53,8 +53,12 @@ class SpeechToText:
                    output_file_path=kwargs["output_file_path"])
     elif self.mode in ["infer_single", "infer_streaming"]:
       check_key_in_dict(dictionary=kwargs, keys=["audio"])
+      if isinstance(kwargs["audio"], str):
+        return self.__infer_single(audio=kwargs["audio"])
       return self.__infer_single(audio=kwargs["audio"],
-                                 sample_rate=kwargs["sample_rate"])
+                                 sample_rate=kwargs["sample_rate"],
+                                 channels=kwargs["channels"])
+
     else:
       raise ValueError(
         "'mode' must be either 'train', 'test', 'infer' or "
@@ -186,11 +190,13 @@ class SpeechToText:
       for pred in predictions:
         of.write(pred + "\n")
 
-  def __infer_single(self, audio, sample_rate=44100):
-    features = tf.expand_dims(
-      self.speech_featurizer.compute_speech_features(audio,
-                                                     sr=sample_rate),
-      axis=0)
+  def __infer_single(self, audio, sample_rate=None, channels=None):
+    if sample_rate and channels:
+      features = self.speech_featurizer.compute_speech_features(
+        audio, sr=sample_rate, channels=channels)
+    else:
+      features = self.speech_featurizer.compute_speech_features(audio)
+    features = tf.expand_dims(features, axis=0)
     if self.mode == "infer_streaming":
       features = tf.pad(features,
                         [[0, 0],

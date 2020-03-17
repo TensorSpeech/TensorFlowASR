@@ -1,10 +1,10 @@
 from __future__ import absolute_import
 
 import soundfile
+import audioread
 import numpy as np
 import librosa
 import tensorflow as tf
-from utils.Utils import buffer_to_np_array
 
 WINDOW_FN = {"hanning": np.hanning, "hamming": np.hamming}
 
@@ -63,7 +63,7 @@ class SpeechFeaturizer:
     features = 10 * np.log10(powspec.T)
 
     assert self.num_feature_bins <= n_window_size // 2 + 1, \
-      "num_features for spectrogram should \
+        "num_features for spectrogram should \
           be <= (sample_rate * window_size // 2 + 1)"
 
     # cut high frequency part, keep num_feature_bins features
@@ -71,7 +71,15 @@ class SpeechFeaturizer:
 
     return features
 
-  def compute_speech_features(self, audio_file_path, sr=44100):
+  @staticmethod
+  def convert_bytesarray_to_float(bytesarray, channels=2):
+    # 16-bit little-endian requires 2 bytes to construct 32-bit float
+    bytesarray = librosa.util.buf_to_float(bytesarray, n_bytes=2)
+    if channels == 2:
+      bytesarray = bytesarray.reshape((-1, channels)).T
+    return librosa.core.to_mono(bytesarray)
+
+  def compute_speech_features(self, audio_file_path, sr=44100, channels=2):
     """Load audio file, preprocessing, compute features,
     postprocessing
     Args:
@@ -88,7 +96,8 @@ class SpeechFeaturizer:
       data = librosa.core.resample(
         data, orig_sr=sr, target_sr=self.sample_rate, scale=True)
     elif isinstance(audio_file_path, bytes):
-      data = librosa.util.buf_to_float(audio_file_path, n_bytes=1)
+      data = self.convert_bytesarray_to_float(audio_file_path,
+                                              channels=channels)
       data = librosa.core.resample(
         data, orig_sr=sr, target_sr=self.sample_rate, scale=True)
     elif isinstance(audio_file_path, tf.Tensor):

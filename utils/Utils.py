@@ -99,7 +99,3 @@ def mask_nan(x):
 
 def bytes_to_string(array, encoding: str = "utf-8"):
   return [transcript.decode(encoding) for transcript in array]
-
-
-def buffer_to_np_array(buffer):
-  return np.frombuffer(buffer, dtype=np.float32)
