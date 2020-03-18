@@ -200,11 +200,10 @@ class SpeechToText:
     if self.mode == "infer_streaming":
       features = tf.pad(features,
                         [[0, 0],
-                         [0, 30 - features.shape[1]],
+                         [0, 49 - features.shape[1]],
                          [0, 0],
                          [0, 0]],
                         "CONSTANT")
-      print(features)
     input_length = tf.expand_dims(
       tf.convert_to_tensor(features.get_shape().as_list()[0],
                            dtype=tf.int32), axis=0)

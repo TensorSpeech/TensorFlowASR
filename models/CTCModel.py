@@ -59,7 +59,7 @@ def create_ctc_model(num_classes, num_feature_bins,
   # Convolution layers
   if mode == "infer_streaming":
     features = tf.keras.layers.Input(
-      batch_shape=(1, 30, num_feature_bins, 1),
+      batch_shape=(1, 49, num_feature_bins, 1),
       dtype=tf.float32,
       name="features")
     input_length = tf.keras.layers.Input(

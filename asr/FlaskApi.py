@@ -3,7 +3,7 @@ from __future__ import absolute_import
 import functools
 from logging import ERROR
 import tensorflow as tf
-from flask import Flask, Blueprint, jsonify, request, Response
+from flask import Flask, Blueprint, jsonify, request, make_response
 from flask_socketio import SocketIO
 from flask_cors import CORS
 from configs.FlaskConfig import FlaskConfig
@@ -38,7 +38,7 @@ def check_form_request(func):
       check_key_in_dict(dictionary=request.form,
                         keys=["sampleRate", "channels"])
     except ValueError as e:
-      return jsonify({"payload": str(e)})
+      return make_response(({"payload": str(e)}, 400))
     return func(*args, **kwargs)
 
   return decorated_func
@@ -61,34 +61,33 @@ def hello():
 
 @asr_blueprint.route("/asr", methods=["POST"])
 @check_form_request
-def asr_inference():
+def inference():
   if "payload" not in request.files.keys():
-    return Response(jsonify({"error": "Missing audio binary file/blob"}),
-                    status=400, mimetype="application/json")
+    return make_response((
+      {"error": "Missing audio binary file/blob"}, 400))
 
   payload = request.files["payload"].read()
-  sampleRate = request.form["sampleRate"]
-  channels = request.form["channels"]
-  transcript = asr(payload, sample_rate=sampleRate, channels=channels)
-  return Response(jsonify({"payload": transcript}),
-                  status=200, mimetype="application/json")
+  sampleRate = int(request.form["sampleRate"])
+  channels = int(request.form["channels"])
+  transcript = asr(audio=payload, sample_rate=sampleRate, channels=channels)
+  return make_response(({"payload": transcript}, 200))
 
 
 @asr_blueprint.route("/asrfile", methods=["POST"])
-def asr_file():
+def file():
   if "payload" not in request.files.keys():
-    return Response(jsonify({"error": "Missing audio binary file/blob"}),
-                    status=400, mimetype="application/json")
+    return make_response((
+      {"error": "Missing audio binary file/blob"}, 400))
 
   request.files["payload"].save(app.config["STATIC_WAV_FILE"])
-  transcript = asr(app.config["STATIC_WAV_FILE"])
-  return Response(jsonify({"payload": transcript}),
-                  status=200, mimetype="application/json")
+  transcript = asr(audio=app.config["STATIC_WAV_FILE"])
+  return make_response(({"payload": transcript}, 200))
 
 
 @socketio.on("asr_streaming", namespace="/asr_streaming")
-def asr_stream(content, sample_rate, channels):
-  return asr_stream(content, sample_rate=sample_rate, channels=channels)
+def streaming(content, sample_rate, channels):
+  return asr_streaming(audio=content, sample_rate=int(sample_rate),
+                       channels=int(channels))
 
 
 app.register_blueprint(asr_blueprint)
