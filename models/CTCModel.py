@@ -56,26 +56,23 @@ def create_ctc_model(num_classes, num_feature_bins,
   else:
     tf.compat.v1.set_random_seed(seed)
 
-  # Convolution layers
+  input_length = tf.keras.layers.Input(
+    shape=(),
+    dtype=tf.int32,
+    name="input_length")
+
   if mode == "infer_streaming":
+    # Fixed input shape is required for live streaming audio
     features = tf.keras.layers.Input(
       batch_shape=(1, 49, num_feature_bins, 1),
       dtype=tf.float32,
       name="features")
-    input_length = tf.keras.layers.Input(
-      shape=(),
-      dtype=tf.int32,
-      name="input_length")
     outputs = base_model(features=features, streaming=True)
   else:
     features = tf.keras.layers.Input(
       shape=(None, num_feature_bins, 1),
       dtype=tf.float32,
       name="features")
-    input_length = tf.keras.layers.Input(
-      shape=(),
-      dtype=tf.int32,
-      name="input_length")
     outputs = base_model(features=features, streaming=False)
 
   batch_size = tf.shape(outputs)[0]
@@ -98,11 +95,9 @@ def create_ctc_model(num_classes, num_feature_bins,
   if mode == "train":
     labels = tf.keras.layers.Input(shape=(None,),
                                    dtype=tf.int32,
-                                   batch_size=bsize,
                                    name="labels")
     label_length = tf.keras.layers.Input(shape=(),
                                          dtype=tf.int32,
-                                         batch_size=bsize,
                                          name="label_length")
     # Lambda layer for computing loss function
     loss_out = tf.keras.layers.Lambda(
@@ -151,7 +146,6 @@ def create_ctc_model(num_classes, num_feature_bins,
   if mode == "test":
     labels = tf.keras.layers.Input(shape=(None,),
                                    dtype=tf.int32,
-                                   batch_size=bsize,
                                    name="labels")
     # Lambda layer for analysis
     test_out = tf.keras.layers.Lambda(
@@ -168,4 +162,5 @@ def create_ctc_model(num_classes, num_feature_bins,
     }, outputs=test_out)
 
     return test_model
-  raise ValueError("mode must be either 'train', 'infer' or 'test'")
+  raise ValueError("mode must be either 'train', 'infer', \
+    'infer_streaming' or 'test'")
