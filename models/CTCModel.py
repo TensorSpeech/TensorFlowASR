@@ -55,20 +55,27 @@ def create_ctc_model(num_classes, num_feature_bins,
     tf.compat.v1.set_random_seed(0)
   else:
     tf.compat.v1.set_random_seed(seed)
-  bsize = 1 if mode == "infer_streaming" else None
-  # Convolution layers
-  features = tf.keras.layers.Input(shape=(None, num_feature_bins, 1),
-                                   batch_size=bsize,
-                                   dtype=tf.float32,
-                                   name="features")
-  input_length = tf.keras.layers.Input(shape=(),
-                                       dtype=tf.int32,
-                                       batch_size=bsize,
-                                       name="input_length")
 
-  if mode == 'infer_streaming':
+  # Convolution layers
+  if mode == "infer_streaming":
+    features = tf.keras.layers.Input(
+      batch_shape=(1, 49, num_feature_bins, 1),
+      dtype=tf.float32,
+      name="features")
+    input_length = tf.keras.layers.Input(
+      shape=(),
+      dtype=tf.int32,
+      name="input_length")
     outputs = base_model(features=features, streaming=True)
   else:
+    features = tf.keras.layers.Input(
+      shape=(None, num_feature_bins, 1),
+      dtype=tf.float32,
+      name="features")
+    input_length = tf.keras.layers.Input(
+      shape=(),
+      dtype=tf.int32,
+      name="input_length")
     outputs = base_model(features=features, streaming=False)
 
   batch_size = tf.shape(outputs)[0]

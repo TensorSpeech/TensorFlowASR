@@ -36,7 +36,8 @@ class SpeechToText:
       min_lr=self.configs["min_lr"])
 
   def __call__(self, *args, **kwargs):
-    check_key_in_dict(dictionary=kwargs, keys=["model_file"])
+    if self.mode not in ["infer_single", "infer_streaming"]:
+      check_key_in_dict(dictionary=kwargs, keys=["model_file"])
     if self.mode == "train":
       self.__train_and_eval(model_file=kwargs["model_file"])
     elif self.mode == "test":
@@ -50,12 +51,14 @@ class SpeechToText:
       self.__infer(speech_file_path=kwargs["speech_file_path"],
                    model_file=kwargs["model_file"],
                    output_file_path=kwargs["output_file_path"])
-    elif self.mode == "infer_single":
-      check_key_in_dict(dictionary=kwargs, keys=["audio_path"])
-      return self.__infer_single(audio_path=kwargs["audio_path"],
-                                 model_file=kwargs["model_file"])
-    elif self.mode == "infer_streaming":
-      pass
+    elif self.mode in ["infer_single", "infer_streaming"]:
+      check_key_in_dict(dictionary=kwargs, keys=["audio"])
+      if isinstance(kwargs["audio"], str):
+        return self.__infer_single(audio=kwargs["audio"])
+      return self.__infer_single(audio=kwargs["audio"],
+                                 sample_rate=kwargs["sample_rate"],
+                                 channels=kwargs["channels"])
+
     else:
       raise ValueError(
         "'mode' must be either 'train', 'test', 'infer' or "
@@ -187,17 +190,23 @@ class SpeechToText:
       for pred in predictions:
         of.write(pred + "\n")
 
-  def __infer_single(self, audio_path, model_file):
-    features = self.speech_featurizer.compute_speech_features(audio_path)
-    input_length = tf.convert_to_tensor(features.get_shape().as_list()[0],
-                                        dtype=tf.int32)
-    # expand dim for batch dimension
-    features = tf.expand_dims(features, 0)
-    input_length = tf.expand_dims(input_length, 0)
-    try:
-      self.model.load_weights(filepath=model_file)
-    except Exception:
-      return "Model is not trained"
+  def __infer_single(self, audio, sample_rate=None, channels=None):
+    if sample_rate and channels:
+      features = self.speech_featurizer.compute_speech_features(
+        audio, sr=sample_rate, channels=channels)
+    else:
+      features = self.speech_featurizer.compute_speech_features(audio)
+    features = tf.expand_dims(features, axis=0)
+    if self.mode == "infer_streaming":
+      features = tf.pad(features,
+                        [[0, 0],
+                         [0, 49 - features.shape[1]],
+                         [0, 0],
+                         [0, 0]],
+                        "CONSTANT")
+    input_length = tf.expand_dims(
+      tf.convert_to_tensor(features.get_shape().as_list()[0],
+                           dtype=tf.int32), axis=0)
     predictions = self.model.predict(x={
       "features": features,
       "input_length": input_length
@@ -213,6 +222,9 @@ class SpeechToText:
     self.model.load_weights(latest)
     self.model.save_weights(filepath=model_file)
 
-  def __infer_streaming(self, input_buffer,
-                        model_file, output_buffer):
-    pass
+  def load_model(self, model_file):
+    try:
+      self.model.load_weights(filepath=model_file)
+    except Exception:
+      return "Model is not trained"
+    return None

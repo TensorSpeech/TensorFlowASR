@@ -26,7 +26,7 @@ vocabulary_file_path = "/mnt/Projects/asrk16/code/data/vocabulary.txt"
 
 learning_rate = 0.001
 
-min_lr = 1e-8
+min_lr = 0.0
 
 sample_rate = 16000
 
