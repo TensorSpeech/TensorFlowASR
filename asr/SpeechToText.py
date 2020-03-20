@@ -200,7 +200,7 @@ class SpeechToText:
     if self.mode == "infer_streaming":
       features = tf.pad(features,
                         [[0, 0],
-                         [0, 49 - features.shape[1]],
+                         [0, 60 - features.shape[1]],
                          [0, 0],
                          [0, 0]],
                         "CONSTANT")

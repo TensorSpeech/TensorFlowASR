@@ -64,7 +64,7 @@ def create_ctc_model(num_classes, num_feature_bins,
   if mode == "infer_streaming":
     # Fixed input shape is required for live streaming audio
     features = tf.keras.layers.Input(
-      batch_shape=(1, 49, num_feature_bins, 1),
+      batch_shape=(1, 60, num_feature_bins, 1),
       dtype=tf.float32,
       name="features")
     outputs = base_model(features=features, streaming=True)
