@@ -51,10 +51,10 @@ def test_lambda_func(args, **arguments):
 def create_ctc_model(num_classes, num_feature_bins,
                      learning_rate, base_model, decoder,
                      mode="train", min_lr=0.0, seed=1):
-  if mode != "train":
-    tf.compat.v1.set_random_seed(0)
-  else:
+  if mode == "train":
     tf.compat.v1.set_random_seed(seed)
+  else:
+    tf.compat.v1.set_random_seed(0)
 
   input_length = tf.keras.layers.Input(
     shape=(),
@@ -64,7 +64,7 @@ def create_ctc_model(num_classes, num_feature_bins,
   if mode == "infer_streaming":
     # Fixed input shape is required for live streaming audio
     features = tf.keras.layers.Input(
-      batch_shape=(1, 49, num_feature_bins, 1),
+      batch_shape=(1, 60, num_feature_bins, 1),
       dtype=tf.float32,
       name="features")
     outputs = base_model(features=features, streaming=True)
