@@ -51,10 +51,10 @@ def test_lambda_func(args, **arguments):
 def create_ctc_model(num_classes, num_feature_bins,
                      learning_rate, base_model, decoder,
                      mode="train", min_lr=0.0, seed=1):
-  if mode != "train":
-    tf.compat.v1.set_random_seed(0)
-  else:
+  if mode == "train":
     tf.compat.v1.set_random_seed(seed)
+  else:
+    tf.compat.v1.set_random_seed(0)
 
   input_length = tf.keras.layers.Input(
     shape=(),
