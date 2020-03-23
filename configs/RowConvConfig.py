@@ -20,7 +20,7 @@ batch_size = 32
 
 num_epochs = 10
 
-vocabulary_file_path = "/mnt/Projects/asrk16/code/data/vocabulary.txt"
+vocabulary_file_path = "~/drives/d/asrk16/code/data/vocabulary.txt"
 
 learning_rate = 0.005
 
