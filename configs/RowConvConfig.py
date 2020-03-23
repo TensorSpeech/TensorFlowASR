@@ -14,7 +14,7 @@ augmentations = [
   TimeWarping(time_warp_param=40, direction="right")
 ]
 
-beam_width = 500
+beam_width = 128
 
 batch_size = 32
 

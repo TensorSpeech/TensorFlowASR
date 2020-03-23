@@ -37,18 +37,15 @@ stride_ms = 10
 num_feature_bins = 128
 
 train_data_transcript_paths = [
-  "/media/nlhuy/Miscellanea/Datasets/asr/SmallFixed/Train"
-  "/transcripts.tsv"
+  "~/drives/e/ML/ASR/Preprocessed/SmallFixed/Train/transcripts.tsv"
 ]
 
 eval_data_transcript_paths = [
-  "/media/nlhuy/Miscellanea/Datasets/asr/SmallFixed/Dev/transcripts"
-  ".tsv"
+  "~/drives/e/ML/ASR/Preprocessed/SmallFixed/Dev/transcripts.tsv"
 ]
 
 test_data_transcript_paths = [
-  "/media/nlhuy/Miscellanea/Datasets/asr/SmallFixed/Test"
-  "/transcripts.tsv"
+  "~/drives/e/ML/ASR/Preprocessed/SmallFixed/Test/transcripts.tsv"
 ]
 
 checkpoint_dir = "/tmp/asr/checkpoint_dir/"
