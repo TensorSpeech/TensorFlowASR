@@ -1,19 +1,12 @@
 from __future__ import absolute_import
 
 from models.DeepSpeech2 import DeepSpeech2RowConv
-from augmentations.Augments import TimeWarping, TimeMasking, FreqMasking
 
 base_model = DeepSpeech2RowConv()
 
 decoder = 'beamsearch'
 
-augmentations = [
-    TimeMasking(num_time_mask=1, time_mask_param=30, p_upperbound=0.2),
-    FreqMasking(num_freq_mask=1, freq_mask_param=10),
-    TimeWarping(time_warp_param=20, direction="right")
-]
-
-beam_width = 500
+beam_width = 128
 
 batch_size = 24
 
