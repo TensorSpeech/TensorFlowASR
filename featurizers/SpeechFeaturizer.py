@@ -100,7 +100,6 @@ class SpeechFeaturizer:
                                               channels=channels)
       data = librosa.core.resample(
         data, orig_sr=sr, target_sr=self.sample_rate, scale=True)
-      print(len(data))
     elif isinstance(audio_file_path, tf.Tensor):
       data = audio_file_path
     else:

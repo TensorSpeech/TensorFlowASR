@@ -205,7 +205,7 @@ class SpeechToText:
                          [0, 0]],
                         "CONSTANT")
     input_length = tf.expand_dims(
-      tf.convert_to_tensor(features.get_shape().as_list()[0],
+      tf.convert_to_tensor(features.get_shape().as_list()[1],
                            dtype=tf.int32), axis=0)
     predictions = self.model.predict(x={
       "features": features,

@@ -62,6 +62,8 @@ def hello():
 @asr_blueprint.route("/asr", methods=["POST"])
 @check_form_request
 def inference():
+  if is_asr_loaded:
+    return make_response(({"payload": is_asr_loaded}, 200))
   if "payload" not in request.files.keys():
     return make_response((
       {"error": "Missing audio binary file/blob"}, 400))
@@ -75,6 +77,8 @@ def inference():
 
 @asr_blueprint.route("/asrfile", methods=["POST"])
 def file():
+  if is_asr_loaded:
+    return make_response(({"payload": is_asr_loaded}, 200))
   if "payload" not in request.files.keys():
     return make_response((
       {"error": "Missing audio binary file/blob"}, 400))
@@ -82,6 +86,13 @@ def file():
   request.files["payload"].save(app.config["STATIC_WAV_FILE"])
   transcript = asr(audio=app.config["STATIC_WAV_FILE"])
   return make_response(({"payload": transcript}, 200))
+
+
+@socketio.on("connect", namespace="/asr_streaming")
+def connect():
+  if is_asr_streaming_loaded:
+    return is_asr_streaming_loaded, False
+  return "Connected", True
 
 
 @socketio.on("asr_streaming", namespace="/asr_streaming")
