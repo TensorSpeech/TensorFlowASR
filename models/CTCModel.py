@@ -1,7 +1,7 @@
 from __future__ import absolute_import
 
 import tensorflow as tf
-from utils.Utils import wer, cer, mask_nan
+from utils.Utils import wer, cer, mask_nan, mywer
 from utils.Schedules import BoundExponentialDecay
 
 
@@ -41,11 +41,11 @@ def test_lambda_func(args, **arguments):
     target = elem[1].numpy().decode("utf-8")
     print(pred)
     print(target)
-    cal_wer = wer(decode=pred, target=target)
-    cal_cer = cer(decode=pred, target=target)
-    return tf.convert_to_tensor([cal_wer, cal_cer])
+    cal_dist, cal_count = mywer(decode=pred, target=target)
+    #cal_cer = cer(decode=pred, target=target)
+    return tf.convert_to_tensor([cal_dist, cal_count])
 
-  return tf.map_fn(cal_each_er, outputs, dtype=tf.int32)
+  return tf.map_fn(cal_each_er, outputs, dtype=tf.float32)
 
 
 def create_ctc_model(num_classes, num_feature_bins,

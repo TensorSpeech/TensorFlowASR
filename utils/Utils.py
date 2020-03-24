@@ -86,6 +86,11 @@ def wer(decode, target):
                                 ''.join(new_target))
 
 
+def mywer(decode, target):
+  dist = levenshtein(target.lower().split(), decode.lower().split())
+  return dist, len(target.split())
+
+
 def cer(decode, target):
   return distance.edit_distance(decode, target)
 

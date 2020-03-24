@@ -59,12 +59,12 @@ class DeepSpeech2RowConv:
 
   def __call__(self, features, streaming=False):
     layer = features
-    for i in range(self.num_conv):
+    for _ in range(self.num_conv):
       layer = tf.keras.layers.Conv2D(
         filters=32, kernel_size=(41, 11),
-        strides=(1, 2), padding="same", name=f"cnn_{i}")(layer)
-      layer = tf.keras.layers.BatchNormalization(name=f"bn_cnn_{i}")(layer)
-      layer = tf.keras.layers.ReLU(max_value=20, name=f"relu_cnn_{i}")(layer)
+        strides=(1, 2), padding="same")(layer)
+      layer = tf.keras.layers.BatchNormalization()(layer)
+      layer = tf.keras.layers.ReLU(max_value=20)(layer)
 
     # combine channel dimension to features
     batch_size = tf.shape(layer)[0]
@@ -72,17 +72,17 @@ class DeepSpeech2RowConv:
     layer = tf.reshape(layer, [batch_size, -1, feat_size * channel])
 
     # RNN layers
-    for i in range(self.num_rnn):
+    for _ in range(self.num_rnn):
       layer = tf.keras.layers.RNN(
         BNLSTMCell(self.rnn_unit,
                    activation='tanh',
                    recurrent_activation='sigmoid',
                    use_bias=True),
-        return_sequences=True, time_major=True, name=f"lstm_{i}",
+        return_sequences=True, time_major=True,
         unroll=False, stateful=streaming)(layer)
       layer = RowConv1D(
         filters=self.rnn_unit, future_context=2,
-        strides=1, padding="same", name=f"row_conv_{i}")(layer)
+        strides=1, padding="same")(layer)
 
     return layer
 
