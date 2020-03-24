@@ -45,7 +45,7 @@ def test_lambda_func(args, **arguments):
     #cal_cer = cer(decode=pred, target=target)
     return tf.convert_to_tensor([cal_dist, cal_count])
 
-  return tf.map_fn(cal_each_er, outputs, dtype=tf.float32)
+  return tf.map_fn(cal_each_er, outputs, dtype=tf.int32)
 
 
 def create_ctc_model(num_classes, num_feature_bins,
