@@ -1,7 +1,7 @@
 from __future__ import absolute_import
 
 import tensorflow as tf
-from utils.Utils import wer, cer, mask_nan, mywer
+from utils.Utils import wer, cer, mask_nan
 from utils.Schedules import BoundExponentialDecay
 
 
@@ -80,11 +80,10 @@ def create_ctc_model(num_classes, num_feature_bins,
   outputs = tf.reshape(outputs, [-1, n_hidden])
 
   # Fully connected layer
-  outputs = tf.keras.layers.Dense(
-    units=num_classes,
-    activation='softmax',
-    name="fully_connected",
-    use_bias=True)(outputs)
+  outputs = tf.keras.layers.Dense(units=num_classes,
+                                  activation='softmax',
+                                  name="fully_connected",
+                                  use_bias=True)(outputs)
 
   outputs = tf.reshape(outputs,
                        [batch_size, -1, num_classes],

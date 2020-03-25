@@ -105,7 +105,7 @@ class SpeechToText:
                                      "ckpt_{epoch}")
     cp_callback = tf.keras.callbacks.ModelCheckpoint(
       filepath=checkpoint_prefix,
-      save_weights_only=True, verbose=1, monitor='val_loss',
+      save_weights_only=False, verbose=1, monitor='val_loss',
       save_best_only=True, mode='min', save_freq='epoch')
     callbacks = [cp_callback]
     if "log_dir" in self.configs.keys():
@@ -116,15 +116,7 @@ class SpeechToText:
     latest = tf.train.latest_checkpoint(
       self.configs["checkpoint_dir"])
     if latest is not None:
-      self.model = create_ctc_model(
-        num_classes=self.text_featurizer.num_classes,
-        num_feature_bins=self.speech_featurizer.num_feature_bins,
-        learning_rate=self.configs["learning_rate"],
-        base_model=self.configs["base_model"],
-        decoder=self.decoder, mode=self.mode,
-        min_lr=self.configs["min_lr"],
-        seed=0)
-      self.model.load_weights(latest)
+      self.model = tf.keras.models.load_model(latest)
       initial_epoch = int(latest.split("_")[-1])
     else:
       initial_epoch = 0
@@ -219,17 +211,32 @@ class SpeechToText:
 
     return bytes_to_string(predictions)[0]
 
-  def save_model(self, model_file):
+  def save_infer_model(self, model_file):
+    assert self.mode in ["infer", "infer_single", "infer_streaming"], \
+      "Mode must be either infer, infer_single or infer_streaming"
     latest = tf.train.latest_checkpoint(
       self.configs["checkpoint_dir"])
     if latest is None:
       raise ValueError("No checkpoint found")
-    self.model.load_weights(latest)
-    self.model.save_weights(filepath=model_file)
+    trained_model = tf.keras.models.load_model(latest)
+    trained_model.save_weights(filepath=model_file)
+    self.model.load_weights(model_file)
+    self.model.save(model_file)
 
-  def load_model(self, model_file):
+  def load_infer_model(self, model_file):
+    assert self.mode in ["infer", "infer_single", "infer_streaming"], \
+      "Mode must be either infer, infer_single or infer_streaming"
     try:
-      self.model.load_weights(filepath=model_file)
+      self.model = tf.keras.models.load_model(model_file)
+    except Exception:
+      return "Model is not trained"
+    return None
+
+  def load_infer_model_from_weights(self, model_file):
+    assert self.mode in ["infer", "infer_single", "infer_streaming"], \
+      "Mode must be either infer, infer_single or infer_streaming"
+    try:
+      self.model.load_weights(model_file)
     except Exception:
       return "Model is not trained"
     return None
