@@ -159,15 +159,18 @@ class SpeechToText:
     error_rates = self.model.predict(x=tf_test_dataset,
                                      callbacks=callbacks)
 
-    total_wer = 0
-    total_cer = 0
+    total_wer = 0.0
+    wer_count = 0.0
+    total_cer = 0.0
+    cer_count = 0.0
 
     for er in error_rates:
       total_wer += er[0]
-      total_cer += er[1]
+      wer_count += er[1]
+      total_cer += er[2]
+      cer_count += er[3]
 
-    results = (
-      total_wer / len(error_rates), total_cer / len(error_rates))
+    results = (total_wer / wer_count, total_cer / cer_count)
     print("WER: ", results[0])
     print("CER: ", results[-1])
 
@@ -181,12 +184,14 @@ class SpeechToText:
     tf_infer_dataset = Dataset(data_path=speech_file_path,
                                mode="infer")
     tf_infer_dataset = tf_infer_dataset(
-      speech_featurizer=self.speech_featurizer, batch_size=1)
+      speech_featurizer=self.speech_featurizer,
+      batch_size=self.configs["batch_size"])
     predictions = self.model.predict(x=tf_infer_dataset)
 
     print(predictions)
 
     with open(output_file_path, "w", encoding="utf-8") as of:
+      of.write("Predictions\n")
       for pred in predictions:
         of.write(pred + "\n")
 
