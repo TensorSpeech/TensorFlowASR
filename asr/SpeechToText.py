@@ -8,6 +8,7 @@ from decoders.Decoders import create_decoder
 from featurizers.SpeechFeaturizer import SpeechFeaturizer
 from featurizers.TextFeaturizer import TextFeaturizer
 from utils.Utils import get_config, check_key_in_dict, bytes_to_string
+from utils.TimeHistory import TimeHistory
 from data.Dataset import Dataset
 
 
@@ -100,19 +101,34 @@ class SpeechToText:
       speech_featurizer=self.speech_featurizer,
       text_featurizer=self.text_featurizer,
       batch_size=self.configs["batch_size"])
+
     self.model.summary()
-    checkpoint_prefix = os.path.join(self.configs["checkpoint_dir"],
-                                     "ckpt_{epoch}")
+
+    # Must save whole model because optimizer's state needs to be
+    # reloaded when resuming training
     cp_callback = tf.keras.callbacks.ModelCheckpoint(
-      filepath=checkpoint_prefix,
+      filepath=os.path.join(self.configs["checkpoint_dir"],
+                            "ckpt_{epoch}"),
       save_weights_only=False, verbose=1, monitor='val_loss',
       save_best_only=True, mode='min', save_freq='epoch')
     callbacks = [cp_callback]
+
     if "log_dir" in self.configs.keys():
       tb_callback = tf.keras.callbacks.TensorBoard(
         log_dir=self.configs["log_dir"], histogram_freq=1,
         update_freq=500, write_images=True)
       callbacks.append(tb_callback)
+      csv_callback = tf.keras.callbacks.CSVLogger(
+        filename=os.path.join(self.configs["log_dir"], "training.log"),
+        append=True)
+      callbacks.append(csv_callback)
+      time_callback = TimeHistory(os.path.join(self.configs["log_dir"],
+                                               "time.log"))
+      callbacks.append(time_callback)
+      with open(os.path.join(self.configs["log_dir"],
+                             "model.json"), "w") as f:
+        f.write(self.model.to_json())
+
     latest = tf.train.latest_checkpoint(
       self.configs["checkpoint_dir"])
     if latest is not None:
@@ -120,6 +136,7 @@ class SpeechToText:
       initial_epoch = int(latest.split("_")[-1])
     else:
       initial_epoch = 0
+
     self.model.fit(
       x=train_dataset, epochs=self.configs["num_epochs"],
       validation_data=eval_dataset, shuffle="batch",
