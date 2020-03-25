@@ -83,7 +83,7 @@ def wer(decode, target):
   new_target = [chr(word2char[w]) for w in target.split()]
 
   return distance.edit_distance(''.join(new_decode),
-                                ''.join(new_target))
+                                ''.join(new_target)), len(target.split())
 
 
 def mywer(decode, target):
@@ -92,7 +92,7 @@ def mywer(decode, target):
 
 
 def cer(decode, target):
-  return distance.edit_distance(decode, target)
+  return distance.edit_distance(decode, target), len(target)
 
 
 def mask_nan(x):

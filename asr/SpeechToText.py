@@ -159,22 +159,24 @@ class SpeechToText:
     error_rates = self.model.predict(x=tf_test_dataset,
                                      callbacks=callbacks)
 
-    total_dist = 0
-    total_count = 0
+    total_wer = 0.0
+    wer_count = 0.0
+    total_cer = 0.0
+    cer_count = 0.0
 
     for er in error_rates:
-      total_dist += er[0]
-      total_count += er[1]
+      total_wer += er[0]
+      wer_count += er[1]
+      total_cer += er[2]
+      cer_count += er[3]
 
-    # results = (
-    #  total_wer / len(error_rates), total_cer / len(error_rates))
-    results = total_dist / total_count
-    print("WER: ", results)
-    # print("CER: ", results[-1])
+    results = (total_wer / wer_count, total_cer / cer_count)
+    print("WER: ", results[0])
+    print("CER: ", results[-1])
 
     with open(output_file_path, "w", encoding="utf-8") as of:
-      of.write("WER: " + str(results) + "\n")
-      # of.write("CER: " + str(results[-1]) + "\n")
+      of.write("WER: " + str(results[0]) + "\n")
+      of.write("CER: " + str(results[-1]) + "\n")
 
   def __infer(self, speech_file_path, model_file, output_file_path):
     print("Infering ...")

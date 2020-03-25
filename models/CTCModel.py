@@ -39,11 +39,9 @@ def test_lambda_func(args, **arguments):
   def cal_each_er(elem):
     pred = elem[0].numpy().decode("utf-8")
     target = elem[1].numpy().decode("utf-8")
-    print(pred)
-    print(target)
-    cal_dist, cal_count = mywer(decode=pred, target=target)
-    #cal_cer = cer(decode=pred, target=target)
-    return tf.convert_to_tensor([cal_dist, cal_count])
+    cal_wer, wer_count = wer(decode=pred, target=target)
+    cal_cer, cer_count = cer(decode=pred, target=target)
+    return tf.convert_to_tensor([cal_wer, wer_count, cal_cer, cer_count])
 
   return tf.map_fn(cal_each_er, outputs, dtype=tf.int32)
 
