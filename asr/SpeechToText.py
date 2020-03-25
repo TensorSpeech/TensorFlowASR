@@ -90,13 +90,13 @@ class SpeechToText:
         augmentations.append(None)
     else:
       augmentations = [None]
-    tf_train_dataset = train_dataset(
+    train_dataset = train_dataset(
       speech_featurizer=self.speech_featurizer,
       text_featurizer=self.text_featurizer,
       batch_size=self.configs["batch_size"],
       augmentations=augmentations)
 
-    tf_eval_dataset = eval_dataset(
+    eval_dataset = eval_dataset(
       speech_featurizer=self.speech_featurizer,
       text_featurizer=self.text_featurizer,
       batch_size=self.configs["batch_size"])
@@ -129,8 +129,8 @@ class SpeechToText:
     else:
       initial_epoch = 0
     self.model.fit(
-      x=tf_train_dataset, epochs=self.configs["num_epochs"],
-      validation_data=tf_eval_dataset, shuffle="batch",
+      x=train_dataset, epochs=self.configs["num_epochs"],
+      validation_data=eval_dataset, shuffle="batch",
       initial_epoch=initial_epoch,
       callbacks=callbacks)
 
