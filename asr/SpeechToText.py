@@ -1,6 +1,7 @@
 from __future__ import absolute_import
 
 import os
+import tempfile
 import tensorflow as tf
 
 from models.CTCModel import create_ctc_model
@@ -236,8 +237,9 @@ class SpeechToText:
     if latest is None:
       raise ValueError("No checkpoint found")
     trained_model = tf.keras.models.load_model(latest)
-    trained_model.save_weights(filepath=model_file)
-    self.model.load_weights(model_file)
+    tempdir = os.path.join(tempfile.gettempdir(), "asr.tf")
+    trained_model.save_weights(tempdir)
+    self.model.load_weights(tempdir)
     self.model.save(model_file)
 
   def load_infer_model(self, model_file):
@@ -248,6 +250,11 @@ class SpeechToText:
     except Exception:
       return "Model is not trained"
     return None
+
+  def save_infer_model_from_weights(self, model_file):
+    assert self.mode in ["infer", "infer_single", "infer_streaming"], \
+      "Mode must be either infer, infer_single or infer_streaming"
+    self.model.save(model_file)
 
   def load_infer_model_from_weights(self, model_file):
     assert self.mode in ["infer", "infer_single", "infer_streaming"], \
