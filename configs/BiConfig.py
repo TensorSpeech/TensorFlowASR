@@ -5,9 +5,13 @@ from augmentations.Augments import TimeWarping, TimeMasking, FreqMasking
 
 base_model = DeepSpeech2()
 
-decoder = 'beamsearch'
-
-beam_width = 128
+decoder = {
+  "name": "beamsearch",
+  "beam_width": 500,
+  "lm_path": "/app/assets/lm.binary",
+  "alpha": 1.0,
+  "beta": 0.5
+}
 
 batch_size = 24
 
