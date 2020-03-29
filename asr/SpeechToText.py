@@ -1,6 +1,7 @@
 from __future__ import absolute_import
 
 import os
+import tempfile
 import tensorflow as tf
 
 from models.CTCModel import create_ctc_model
@@ -8,6 +9,7 @@ from decoders.Decoders import create_decoder
 from featurizers.SpeechFeaturizer import SpeechFeaturizer
 from featurizers.TextFeaturizer import TextFeaturizer
 from utils.Utils import get_config, check_key_in_dict, bytes_to_string
+from utils.TimeHistory import TimeHistory
 from data.Dataset import Dataset
 
 
@@ -23,10 +25,9 @@ class SpeechToText:
     self.text_featurizer = TextFeaturizer(
       self.configs["vocabulary_file_path"])
     self.decoder = create_decoder(
-      name=self.configs["decoder"],
+      decoder_config=self.configs["decoder"],
       index_to_token=self.text_featurizer.index_to_token,
-      beam_width=self.configs["beam_width"],
-      lm_path=self.configs["lm_path"])
+      vocab_array=self.text_featurizer.vocab_array)
     self.model = create_ctc_model(
       num_classes=self.text_featurizer.num_classes,
       num_feature_bins=self.speech_featurizer.num_feature_bins,
@@ -46,9 +47,8 @@ class SpeechToText:
                   output_file_path=kwargs["output_file_path"])
     elif self.mode == "infer":
       check_key_in_dict(dictionary=kwargs,
-                        keys=["speech_file_path",
-                              "output_file_path"])
-      self.__infer(speech_file_path=kwargs["speech_file_path"],
+                        keys=["input_file_path", "output_file_path"])
+      self.__infer(input_file_path=kwargs["input_file_path"],
                    model_file=kwargs["model_file"],
                    output_file_path=kwargs["output_file_path"])
     elif self.mode in ["infer_single", "infer_streaming"]:
@@ -90,47 +90,55 @@ class SpeechToText:
         augmentations.append(None)
     else:
       augmentations = [None]
-    tf_train_dataset = train_dataset(
+    train_dataset = train_dataset(
       speech_featurizer=self.speech_featurizer,
       text_featurizer=self.text_featurizer,
       batch_size=self.configs["batch_size"],
       augmentations=augmentations)
 
-    tf_eval_dataset = eval_dataset(
+    eval_dataset = eval_dataset(
       speech_featurizer=self.speech_featurizer,
       text_featurizer=self.text_featurizer,
       batch_size=self.configs["batch_size"])
+
     self.model.summary()
-    checkpoint_prefix = os.path.join(self.configs["checkpoint_dir"],
-                                     "ckpt_{epoch}")
+
+    # Must save whole model because optimizer's state needs to be
+    # reloaded when resuming training
     cp_callback = tf.keras.callbacks.ModelCheckpoint(
-      filepath=checkpoint_prefix,
-      save_weights_only=True, verbose=1, monitor='val_loss',
+      filepath=os.path.join(self.configs["checkpoint_dir"],
+                            "ckpt_{epoch}"),
+      save_weights_only=False, verbose=1, monitor='val_loss',
       save_best_only=True, mode='min', save_freq='epoch')
     callbacks = [cp_callback]
+
     if "log_dir" in self.configs.keys():
       tb_callback = tf.keras.callbacks.TensorBoard(
         log_dir=self.configs["log_dir"], histogram_freq=1,
         update_freq=500, write_images=True)
       callbacks.append(tb_callback)
+      csv_callback = tf.keras.callbacks.CSVLogger(
+        filename=os.path.join(self.configs["log_dir"], "training.log"),
+        append=True)
+      callbacks.append(csv_callback)
+      time_callback = TimeHistory(os.path.join(self.configs["log_dir"],
+                                               "time.log"))
+      callbacks.append(time_callback)
+      with open(os.path.join(self.configs["log_dir"],
+                             "model.json"), "w") as f:
+        f.write(self.model.to_json())
+
     latest = tf.train.latest_checkpoint(
       self.configs["checkpoint_dir"])
     if latest is not None:
-      self.model = create_ctc_model(
-        num_classes=self.text_featurizer.num_classes,
-        num_feature_bins=self.speech_featurizer.num_feature_bins,
-        learning_rate=self.configs["learning_rate"],
-        base_model=self.configs["base_model"],
-        decoder=self.decoder, mode=self.mode,
-        min_lr=self.configs["min_lr"],
-        seed=0)
-      self.model.load_weights(latest)
+      self.model = tf.keras.models.load_model(latest)
       initial_epoch = int(latest.split("_")[-1])
     else:
       initial_epoch = 0
+
     self.model.fit(
-      x=tf_train_dataset, epochs=self.configs["num_epochs"],
-      validation_data=tf_eval_dataset, shuffle="batch",
+      x=train_dataset, epochs=self.configs["num_epochs"],
+      validation_data=eval_dataset, shuffle="batch",
       initial_epoch=initial_epoch,
       callbacks=callbacks)
 
@@ -178,17 +186,17 @@ class SpeechToText:
       of.write("WER: " + str(results[0]) + "\n")
       of.write("CER: " + str(results[-1]) + "\n")
 
-  def __infer(self, speech_file_path, model_file, output_file_path):
+  def __infer(self, input_file_path, model_file, output_file_path):
     print("Infering ...")
     self.model.load_weights(filepath=model_file)
-    tf_infer_dataset = Dataset(data_path=speech_file_path,
+    tf_infer_dataset = Dataset(data_path=input_file_path,
                                mode="infer")
     tf_infer_dataset = tf_infer_dataset(
       speech_featurizer=self.speech_featurizer,
       batch_size=self.configs["batch_size"])
     predictions = self.model.predict(x=tf_infer_dataset)
 
-    print(predictions)
+    predictions = bytes_to_string(predictions)
 
     with open(output_file_path, "w", encoding="utf-8") as of:
       of.write("Predictions\n")
@@ -219,17 +227,38 @@ class SpeechToText:
 
     return bytes_to_string(predictions)[0]
 
-  def save_model(self, model_file):
+  def save_infer_model(self, model_file):
+    assert self.mode in ["infer", "infer_single", "infer_streaming"], \
+      "Mode must be either infer, infer_single or infer_streaming"
     latest = tf.train.latest_checkpoint(
       self.configs["checkpoint_dir"])
     if latest is None:
       raise ValueError("No checkpoint found")
-    self.model.load_weights(latest)
-    self.model.save_weights(filepath=model_file)
+    trained_model = tf.keras.models.load_model(latest)
+    tempdir = os.path.join(tempfile.gettempdir(), "asr.tf")
+    trained_model.save_weights(tempdir)
+    self.model.load_weights(tempdir)
+    self.model.save(model_file)
 
-  def load_model(self, model_file):
+  def load_infer_model(self, model_file):
+    assert self.mode in ["infer", "infer_single", "infer_streaming"], \
+      "Mode must be either infer, infer_single or infer_streaming"
     try:
-      self.model.load_weights(filepath=model_file)
+      self.model = tf.keras.models.load_model(model_file)
+    except Exception:
+      return "Model is not trained"
+    return None
+
+  def save_infer_model_from_weights(self, model_file):
+    assert self.mode in ["infer", "infer_single", "infer_streaming"], \
+      "Mode must be either infer, infer_single or infer_streaming"
+    self.model.save(model_file)
+
+  def load_infer_model_from_weights(self, model_file):
+    assert self.mode in ["infer", "infer_single", "infer_streaming"], \
+      "Mode must be either infer, infer_single or infer_streaming"
+    try:
+      self.model.load_weights(model_file)
     except Exception:
       return "Model is not trained"
     return None

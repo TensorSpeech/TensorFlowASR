@@ -46,13 +46,13 @@ def check_form_request(func):
 
 asr = SpeechToText(configs_path=app.config["UNI_CONFIG_PATH"],
                    mode="infer_single")
-is_asr_loaded = asr.load_model(app.config["MODEL_FILE"])
-print(is_asr_loaded)
+is_asr_loaded = asr.load_infer_model(app.config["MODEL_FILE"])
+
 asr_streaming = SpeechToText(
   configs_path=app.config["UNI_CONFIG_PATH"],
   mode="infer_streaming")
-is_asr_streaming_loaded = asr.load_model(app.config["MODEL_FILE"])
-print(is_asr_streaming_loaded)
+is_asr_streaming_loaded = asr_streaming.load_infer_model(
+  app.config["MODEL_FILE"])
 
 
 @asr_blueprint.route("/", methods=["GET"])

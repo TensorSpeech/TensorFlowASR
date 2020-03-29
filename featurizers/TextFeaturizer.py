@@ -17,6 +17,7 @@ class TextFeaturizer:
       lines.extend(fin.readlines())
     self.token_to_index = {}
     self.index_to_token = {}
+    self.vocab_array = []
     index = 0  # blank index = -1
     for line in lines:
       line = line[:-1]  # Strip the '\n' char
@@ -25,6 +26,7 @@ class TextFeaturizer:
         continue
       self.token_to_index[line[0]] = index
       self.index_to_token[index] = line[0]
+      self.vocab_array.append(line[0])
       index += 1
     self.num_classes = index + 1  # blank index is added later
 

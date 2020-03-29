@@ -9,7 +9,7 @@ class Dataset:
     self.mode = mode
     self.train_sort = train_sort
 
-  def __call__(self, speech_featurizer, text_featurizer,
+  def __call__(self, speech_featurizer, text_featurizer=None,
                batch_size=32, repeat=1,
                augmentations=tuple([None])):
     if self.mode == "train":
@@ -49,15 +49,16 @@ class Dataset:
 
   def __create_infer_entries(self):
     lines = []
-    for file_path in self.data_path:
-      with tf.io.gfile.GFile(file_path, "r") as f:
-        lines = f.read().splitlines()
+    with tf.io.gfile.GFile(self.data_path, "r") as f:
+      lines += f.read().splitlines()[1:]
+    # The files is "\t" seperated
+    lines = [line.split("\t", 2) for line in lines]
     return lines
 
   def __create_dataset(self, speech_featurizer, text_featurizer,
                        batch_size, augmentations, repeat=1):
     if not isinstance(augmentations, list) and \
-        not isinstance(augmentations, tuple):
+            not isinstance(augmentations, tuple):
       raise ValueError("augmentation must be a list or a tuple")
     # Dataset properties
     num_feature_bins = speech_featurizer.num_feature_bins
@@ -83,9 +84,9 @@ class Dataset:
 
           yield (
             {
-              "features"    : features,
+              "features": features,
               "input_length": input_length,
-              "labels"      : labels,
+              "labels": labels,
               "label_length": label_length
             },
             -1  # Dummy label
@@ -95,18 +96,18 @@ class Dataset:
       _gen_data,
       output_types=(
         {
-          "features"    : tf.float32,
+          "features": tf.float32,
           "input_length": tf.int32,
-          "labels"      : tf.int32,
+          "labels": tf.int32,
           "label_length": tf.int32
         },
         tf.int32
       ),
       output_shapes=(
         {
-          "features"    : tf.TensorShape([None, num_feature_bins, 1]),
+          "features": tf.TensorShape([None, num_feature_bins, 1]),
           "input_length": tf.TensorShape([]),
-          "labels"      : tf.TensorShape([None]),
+          "labels": tf.TensorShape([None]),
           "label_length": tf.TensorShape([])
         },
         tf.TensorShape([])
@@ -119,9 +120,9 @@ class Dataset:
       batch_size=batch_size,
       padded_shapes=(
         {
-          "features"    : tf.TensorShape([None, num_feature_bins, 1]),
+          "features": tf.TensorShape([None, num_feature_bins, 1]),
           "input_length": tf.TensorShape([]),
-          "labels"      : tf.TensorShape([None]),
+          "labels": tf.TensorShape([None]),
           "label_length": tf.TensorShape([])
         },
         tf.TensorShape([])
@@ -138,14 +139,13 @@ class Dataset:
     num_feature_bins = speech_featurizer.num_feature_bins
 
     def _gen_data():
-      for audio_file in self.entries:
-        features = speech_featurizer.compute_speech_features(
-          audio_file)
+      for audio_file, _, _ in self.entries:
+        features = speech_featurizer.compute_speech_features(audio_file)
         input_length = tf.convert_to_tensor(
           features.get_shape().as_list()[0], dtype=tf.int32)
         yield (
           {
-            "features"    : features,
+            "features": features,
             "input_length": input_length
           },
           -1  # Dummy label
@@ -155,14 +155,14 @@ class Dataset:
       _gen_data,
       output_types=(
         {
-          "features"    : tf.float32,
+          "features": tf.float32,
           "input_length": tf.int32
         },
         tf.int32
       ),
       output_shapes=(
         {
-          "features"    : tf.TensorShape([None, num_feature_bins, 1]),
+          "features": tf.TensorShape([None, num_feature_bins, 1]),
           "input_length": tf.TensorShape([])
         },
         tf.TensorShape([])
@@ -175,7 +175,7 @@ class Dataset:
       batch_size=batch_size,
       padded_shapes=(
         {
-          "features"    : tf.TensorShape([None, num_feature_bins, 1]),
+          "features": tf.TensorShape([None, num_feature_bins, 1]),
           "input_length": tf.TensorShape([])
         },
         tf.TensorShape([])

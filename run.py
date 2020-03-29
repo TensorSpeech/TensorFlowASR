@@ -2,8 +2,7 @@ from __future__ import absolute_import
 
 from logging import ERROR
 import tensorflow as tf
-from absl import app
-from utils.Flags import flags_obj
+from utils.Flags import args_parser
 from asr.SpeechToText import SpeechToText
 
 tf.get_logger().setLevel(ERROR)
@@ -22,36 +21,36 @@ if gpus:
 
 tf.keras.backend.clear_session()
 
-
-def main(argv):
-  if flags_obj.export_file is None:
-    raise ValueError("Flag 'export_file' must be set")
-  if flags_obj.mode == "train":
-    tf.compat.v1.set_random_seed(1)
-    asr = SpeechToText(configs_path=flags_obj.config, mode="train")
-    asr(model_file=flags_obj.export_file)
-  elif flags_obj.mode == "save":
-    asr = SpeechToText(configs_path=flags_obj.config, mode="infer")
-    asr.save_model(flags_obj.export_file)
-  elif flags_obj.mode == "test":
-    asr = SpeechToText(configs_path=flags_obj.config, mode="test")
-    if flags_obj.output_file_path is None:
-      raise ValueError("Flag 'output_file_path must be set")
-    asr(model_file=flags_obj.export_file,
-        output_file_path=flags_obj.output_file_path)
-  elif flags_obj.mode == "infer":
-    if flags_obj.output_file_path is None:
-      raise ValueError("Flag 'output_file_path must be set")
-    if flags_obj.speech_file_path is None:
-      raise ValueError("Flag 'speech_file_path must be set")
-    asr = SpeechToText(configs_path=flags_obj.config, mode="infer")
-    asr(model_file=flags_obj.export_file,
-        speech_file_path=flags_obj.speech_file_path,
-        output_file_path=flags_obj.output_file_path)
-  else:
-    raise ValueError("Flag 'mode' must be either 'save', 'train', \
-                         'test' or 'infer'")
-
-
-if __name__ == '__main__':
-  app.run(main)
+if args_parser.export_file is None:
+  raise ValueError("Flag 'export_file' must be set")
+if args_parser.mode == "train":
+  tf.compat.v1.set_random_seed(1)
+  asr = SpeechToText(configs_path=args_parser.config, mode="train")
+  asr(model_file=args_parser.export_file)
+elif args_parser.mode == "test":
+  asr = SpeechToText(configs_path=args_parser.config, mode="test")
+  if args_parser.output_file_path is None:
+    raise ValueError("Flag 'output_file_path must be set")
+  asr(model_file=args_parser.export_file,
+      output_file_path=args_parser.output_file_path)
+elif args_parser.mode == "infer":
+  if args_parser.output_file_path is None:
+    raise ValueError("Flag 'output_file_path must be set")
+  if args_parser.input_file_path is None:
+    raise ValueError("Flag 'input_file_path must be set")
+  asr = SpeechToText(configs_path=args_parser.config, mode="infer")
+  asr(model_file=args_parser.export_file,
+      input_file_path=args_parser.input_file_path,
+      output_file_path=args_parser.output_file_path)
+elif args_parser.mode == "save":
+  asr = SpeechToText(configs_path=args_parser.config, mode="infer")
+  asr.save_infer_model(args_parser.export_file)
+elif args_parser.mode == "save_from_weights":
+  if args_parser.input_file_path is None:
+    raise ValueError("Flag 'input_file_path must be set")
+  asr = SpeechToText(configs_path=args_parser.config, mode="infer")
+  asr.load_infer_model(args_parser.input_file_path)
+  asr.save_infer_model_from_weights(args_parser.export_file)
+else:
+  raise ValueError("Flag 'mode' must be either 'train', 'test', \
+    'infer', 'save' or 'save_from_weights'")
