@@ -6,11 +6,12 @@ COPY . /app
 COPY .env.production /app/.env
 
 RUN apt update && apt upgrade -y
-RUN apt install libsndfile1 ffmpeg gcc g++ -y
-RUN pip install -r requirements.txt
+RUN apt install libsndfile1 ffmpeg gcc g++ -y sox libboost-all-dev swig
 RUN pip install tensorflow==2.1.0
+RUN /app/setup.sh
 RUN mkdir /app/assets
-COPY export_dir /app/assets/export_dir
+
+VOLUME /app/assets
 
 EXPOSE 5000
 
