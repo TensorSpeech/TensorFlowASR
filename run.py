@@ -40,7 +40,7 @@ elif args_parser.mode == "infer":
     raise ValueError("Flag 'input_file_path must be set")
   asr = SpeechToText(configs_path=args_parser.config, mode="infer")
   asr(model_file=args_parser.export_file,
-      speech_file_path=args_parser.speech_file_path,
+      input_file_path=args_parser.input_file_path,
       output_file_path=args_parser.output_file_path)
 elif args_parser.mode == "save":
   asr = SpeechToText(configs_path=args_parser.config, mode="infer")

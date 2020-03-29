@@ -25,10 +25,9 @@ class SpeechToText:
     self.text_featurizer = TextFeaturizer(
       self.configs["vocabulary_file_path"])
     self.decoder = create_decoder(
-      name=self.configs["decoder"],
+      decoder_config=self.configs["decoder"],
       index_to_token=self.text_featurizer.index_to_token,
-      beam_width=self.configs["beam_width"],
-      lm_path=self.configs["lm_path"])
+      vocab_array=self.text_featurizer.vocab_array)
     self.model = create_ctc_model(
       num_classes=self.text_featurizer.num_classes,
       num_feature_bins=self.speech_featurizer.num_feature_bins,
@@ -48,9 +47,8 @@ class SpeechToText:
                   output_file_path=kwargs["output_file_path"])
     elif self.mode == "infer":
       check_key_in_dict(dictionary=kwargs,
-                        keys=["speech_file_path",
-                              "output_file_path"])
-      self.__infer(speech_file_path=kwargs["speech_file_path"],
+                        keys=["input_file_path", "output_file_path"])
+      self.__infer(input_file_path=kwargs["input_file_path"],
                    model_file=kwargs["model_file"],
                    output_file_path=kwargs["output_file_path"])
     elif self.mode in ["infer_single", "infer_streaming"]:
@@ -188,17 +186,17 @@ class SpeechToText:
       of.write("WER: " + str(results[0]) + "\n")
       of.write("CER: " + str(results[-1]) + "\n")
 
-  def __infer(self, speech_file_path, model_file, output_file_path):
+  def __infer(self, input_file_path, model_file, output_file_path):
     print("Infering ...")
     self.model.load_weights(filepath=model_file)
-    tf_infer_dataset = Dataset(data_path=speech_file_path,
+    tf_infer_dataset = Dataset(data_path=input_file_path,
                                mode="infer")
     tf_infer_dataset = tf_infer_dataset(
       speech_featurizer=self.speech_featurizer,
       batch_size=self.configs["batch_size"])
     predictions = self.model.predict(x=tf_infer_dataset)
 
-    print(predictions)
+    predictions = bytes_to_string(predictions)
 
     with open(output_file_path, "w", encoding="utf-8") as of:
       of.write("Predictions\n")

@@ -1,7 +1,7 @@
 from __future__ import absolute_import
 
 import tensorflow as tf
-from utils.Utils import wer, cer, mask_nan
+from utils.Utils import wer, cer, mask_nan, bytes_to_string
 from utils.Schedules import BoundExponentialDecay
 
 
@@ -20,9 +20,10 @@ def ctc_lambda_func(args):
 def decode_lambda_func(args, **arguments):
   y_pred, input_length = args
   decoder = arguments["decoder"]
-  return decoder.decode(probs=y_pred,
-                        input_length=tf.squeeze(input_length,
-                                                axis=-1))
+  result = decoder.decode(probs=y_pred,
+                          input_length=tf.squeeze(input_length,
+                                                  axis=-1))
+  return result
 
 
 def test_lambda_func(args, **arguments):
@@ -39,6 +40,8 @@ def test_lambda_func(args, **arguments):
   def cal_each_er(elem):
     pred = elem[0].numpy().decode("utf-8")
     target = elem[1].numpy().decode("utf-8")
+    print("Prediction: ", pred)
+    print("Groundtruth: ", target)
     cal_wer, wer_count = wer(decode=pred, target=target)
     cal_cer, cer_count = cer(decode=pred, target=target)
     return tf.convert_to_tensor([cal_wer, wer_count, cal_cer, cer_count])
