@@ -38,6 +38,8 @@ stride_ms = 10
 
 num_feature_bins = 128
 
+feature_type = "mfcc"
+
 train_data_transcript_paths = [
   "~/drives/e/ML/ASR/Preprocessed/SmallFixed/Train/transcripts.tsv"
 ]

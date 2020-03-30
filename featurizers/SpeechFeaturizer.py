@@ -26,16 +26,14 @@ def normalize_signal(signal):
 class SpeechFeaturizer:
   """A class for extraction speech features"""
 
-  def __init__(self, sample_rate, frame_ms, stride_ms,
-               num_feature_bins, window_fn=WINDOW_FN.get("hanning"),
-               pre_augmentation=None, post_augmentation=None):
+  def __init__(self, sample_rate, frame_ms, stride_ms, num_feature_bins,
+               window_fn=WINDOW_FN.get("hanning"), feature_type="mfcc"):
     self.sample_rate = sample_rate
     self.frame_ms = frame_ms
     self.stride_ms = stride_ms
     self.num_feature_bins = num_feature_bins
     self.window_fn = window_fn
-    self.pre_augmentation = pre_augmentation
-    self.post_augmentation = post_augmentation
+    self.feature_type = feature_type
 
   def __compute_spectrogram_feature(self, signal):
     """Function to convert raw audio signal to spectrogram using
@@ -70,6 +68,20 @@ class SpeechFeaturizer:
     features = features[:, :self.num_feature_bins]
 
     return features
+
+  def __compute_mfcc_feature(self, signal):
+    """Function to convert raw audio signal to mfcc using
+    librosa backend
+    Args:
+        signal (np.array): np.array containing raw audio signal
+    Returns:
+        features (np.array): mfcc of shape=[num_timesteps,
+        num_feature_bins]
+        audio_duration (float): duration of the signal in seconds
+    """
+    features = librosa.feature.mfcc(y=signal, sr=self.sample_rate,
+                                    n_mfcc=self.num_feature_bins)
+    return np.transpose(features, [1, 0])
 
   @staticmethod
   def convert_bytesarray_to_float(bytesarray, channels=2):
@@ -107,7 +119,12 @@ class SpeechFeaturizer:
         "audio_file_path must be string, bytes or tf.Tensor")
 
     data = normalize_signal(data.astype(np.float32))
-    data = self.__compute_spectrogram_feature(data)
+    if self.feature_type == "mfcc":
+      data = self.__compute_mfcc_feature(data)
+    elif self.feature_type == "spectrogram":
+      data = self.__compute_spectrogram_feature(data)
+    else:
+      raise ValueError("feature_type must be either 'mfcc' or 'spectrogram'")
     data = normalize_audio_feature(data)
 
     # Adding Channel dimmension for conv2D input

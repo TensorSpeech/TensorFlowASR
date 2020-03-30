@@ -21,7 +21,8 @@ class SpeechToText:
       sample_rate=self.configs["sample_rate"],
       frame_ms=self.configs["frame_ms"],
       stride_ms=self.configs["stride_ms"],
-      num_feature_bins=self.configs["num_feature_bins"])
+      num_feature_bins=self.configs["num_feature_bins"],
+      feature_type=self.configs["feature_type"])
     self.text_featurizer = TextFeaturizer(
       self.configs["vocabulary_file_path"])
     self.decoder = create_decoder(
