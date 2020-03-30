@@ -10,8 +10,8 @@ decoder = {
   "name": "beamsearch",
   "beam_width": 500,
   "lm_path": "~/drives/e/ML/NLP/vntc_5gram_probing.binary",
-  "alpha": 0.0,
-  "beta": 0.0
+  "alpha": 1.0,
+  "beta": 0.5
 }
 
 augmentations = [
