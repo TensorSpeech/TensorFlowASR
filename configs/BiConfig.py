@@ -30,3 +30,5 @@ frame_ms = 20
 stride_ms = 10
 
 num_feature_bins = 128
+
+feature_type = "mfcc"

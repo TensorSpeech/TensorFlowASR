@@ -10,11 +10,14 @@ from models.components.BNRNNCell import BNLSTMCell
 
 
 class DeepSpeech2:
-  def __init__(self, num_conv=3, num_rnn=3, rnn_units=128):
+  def __init__(self, num_conv=3, num_rnn=3, rnn_units=128,
+               filters=32, kernel_size=(21, 11)):
     self.optimizer = tf.keras.optimizers.Adam
     self.num_conv = num_conv
     self.num_rnn = num_rnn
     self.rnn_units = rnn_units
+    self.filters = filters
+    self.kernel_size = kernel_size
 
   def __call__(self, features, streaming=False):
     if streaming:
@@ -22,7 +25,7 @@ class DeepSpeech2:
     layer = features
     for i in range(self.num_conv):
       layer = tf.keras.layers.Conv2D(
-        filters=32, kernel_size=(41, 11),
+        filters=self.filters, kernel_size=self.kernel_size,
         strides=(1, 2), padding="same", name=f"cnn_{i}")(layer)
       layer = tf.keras.layers.BatchNormalization(name=f"bn_cnn_{i}")(layer)
       layer = tf.keras.layers.ReLU(max_value=20, name=f"relu_cnn_{i}")(layer)
@@ -42,7 +45,7 @@ class DeepSpeech2:
           BNLSTMCell(self.rnn_units),
           return_sequences=True, unroll=False,
           time_major=True, stateful=False),
-        name=f"blstm_{i}")(layer)
+        name=f"bilstm_{i}")(layer)
 
     # Convert to batch_major
     layer = tf.transpose(layer, [1, 0, 2])
@@ -59,12 +62,12 @@ class DeepSpeech2RowConv:
 
   def __call__(self, features, streaming=False):
     layer = features
-    for _ in range(self.num_conv):
+    for i in range(self.num_conv):
       layer = tf.keras.layers.Conv2D(
         filters=32, kernel_size=(41, 11),
-        strides=(1, 2), padding="same")(layer)
-      layer = tf.keras.layers.BatchNormalization()(layer)
-      layer = tf.keras.layers.ReLU(max_value=20)(layer)
+        strides=(1, 2), padding="same", name=f"cnn_{i}")(layer)
+      layer = tf.keras.layers.BatchNormalization(name=f"bn_cnn_{i}")(layer)
+      layer = tf.keras.layers.ReLU(max_value=20, name=f"relu_cnn_{i}")(layer)
 
     # combine channel dimension to features
     batch_size = tf.shape(layer)[0]
@@ -72,13 +75,13 @@ class DeepSpeech2RowConv:
     layer = tf.reshape(layer, [batch_size, -1, feat_size * channel])
 
     # RNN layers
-    for _ in range(self.num_rnn):
+    for i in range(self.num_rnn):
       layer = tf.keras.layers.RNN(
         BNLSTMCell(self.rnn_unit,
                    activation='tanh',
                    recurrent_activation='sigmoid',
                    use_bias=True),
-        return_sequences=True, time_major=True,
+        return_sequences=True, time_major=True, name=f"bnlstm_{i}",
         unroll=False, stateful=streaming)(layer)
       layer = RowConv1D(
         filters=self.rnn_unit, future_context=2,
@@ -118,7 +121,7 @@ class UDeepSpeech2:
                    activation='tanh',
                    recurrent_activation='sigmoid',
                    use_bias=True),
-        return_sequences=True, time_major=True, name=f"lstm_{i}",
+        return_sequences=True, time_major=True, name=f"bnlstm_{i}",
         unroll=False, stateful=streaming)(layer)
 
     # Convert to batch_major
