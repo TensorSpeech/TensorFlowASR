@@ -43,8 +43,10 @@ elif args_parser.mode == "infer":
       input_file_path=args_parser.input_file_path,
       output_file_path=args_parser.output_file_path)
 elif args_parser.mode == "save":
+  if args_parser.input_file_path is None:
+    raise ValueError("Flag 'input_file_path must be set")
   asr = SpeechToText(configs_path=args_parser.config, mode="infer")
-  asr.save_infer_model(args_parser.export_file)
+  asr.save_infer_model(args_parser.export_file, args_parser.input_file_path)
 elif args_parser.mode == "save_from_weights":
   if args_parser.input_file_path is None:
     raise ValueError("Flag 'input_file_path must be set")
