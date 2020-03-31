@@ -86,7 +86,7 @@ class SpeechFeaturizer:
     """
     n_window_size = int(self.sample_rate * (self.frame_ms / 1000))
     n_window_stride = int(self.sample_rate * (self.stride_ms / 1000))
-    num_fft = 2**math.ceil(math.log2(self.frame_ms*self.sample_rate))
+    num_fft = 2**math.ceil(math.log2(n_window_size))
 
     signal = preemphasis(signal, coeff=0.97)
     S = np.square(
@@ -114,7 +114,7 @@ class SpeechFeaturizer:
     """
     n_window_size = int(self.sample_rate * (self.frame_ms / 1000))
     n_window_stride = int(self.sample_rate * (self.stride_ms / 1000))
-    num_fft = 2**math.ceil(math.log2(self.frame_ms*self.sample_rate))
+    num_fft = 2**math.ceil(math.log2(n_window_size))
 
     signal = preemphasis(signal, coeff=0.97)
     S = np.square(
