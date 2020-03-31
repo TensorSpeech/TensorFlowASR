@@ -2,6 +2,7 @@ from __future__ import absolute_import
 
 import soundfile
 import audioread
+import math
 import numpy as np
 import librosa
 import tensorflow as tf
@@ -21,6 +22,10 @@ def normalize_signal(signal):
   """Normailize signal to [-1, 1] range"""
   gain = 1.0 / (np.max(np.abs(signal)) + 1e-5)
   return signal * gain
+
+
+def preemphasis(signal, coeff=0.97):
+  return np.append(signal[0], signal[1:] - coeff * signal[:-1])
 
 
 class SpeechFeaturizer:
@@ -79,9 +84,53 @@ class SpeechFeaturizer:
         num_feature_bins]
         audio_duration (float): duration of the signal in seconds
     """
-    features = librosa.feature.mfcc(y=signal, sr=self.sample_rate,
-                                    n_mfcc=self.num_feature_bins)
-    return np.transpose(features, [1, 0])
+    n_window_size = int(self.sample_rate * (self.frame_ms / 1000))
+    n_window_stride = int(self.sample_rate * (self.stride_ms / 1000))
+    num_fft = 2**math.ceil(math.log2(n_window_size))
+
+    signal = preemphasis(signal, coeff=0.97)
+    S = np.square(
+      np.abs(
+        librosa.core.stft(
+          signal, n_fft=num_fft,
+          hop_length=n_window_stride,
+          win_length=n_window_size,
+          center=True, window=self.window_fn
+        )))
+
+    return librosa.feature.mfcc(sr=self.sample_rate, S=S,
+                                n_mfcc=self.num_feature_bins,
+                                n_mels=2*self.num_feature_bins).T
+
+  def __compute_logfbank_feature(self, signal):
+    """Function to convert raw audio signal to logfbank using
+    librosa backend
+    Args:
+        signal (np.array): np.array containing raw audio signal
+    Returns:
+        features (np.array): mfcc of shape=[num_timesteps,
+        num_feature_bins]
+        audio_duration (float): duration of the signal in seconds
+    """
+    n_window_size = int(self.sample_rate * (self.frame_ms / 1000))
+    n_window_stride = int(self.sample_rate * (self.stride_ms / 1000))
+    num_fft = 2**math.ceil(math.log2(n_window_size))
+
+    signal = preemphasis(signal, coeff=0.97)
+    S = np.square(
+      np.abs(
+        librosa.core.stft(
+          signal, n_fft=num_fft,
+          hop_length=n_window_stride,
+          win_length=n_window_size,
+          center=True, window=self.window_fn
+        )))
+
+    mel_basis = librosa.filters.mel(self.sample_rate, num_fft,
+                                    n_mels=self.num_feature_bins,
+                                    fmin=0, fmax=int(self.sample_rate / 2))
+
+    return np.log(np.dot(mel_basis, S) + 1e-20).T
 
   @staticmethod
   def convert_bytesarray_to_float(bytesarray, channels=2):
@@ -123,8 +172,11 @@ class SpeechFeaturizer:
       data = self.__compute_mfcc_feature(data)
     elif self.feature_type == "spectrogram":
       data = self.__compute_spectrogram_feature(data)
+    elif self.feature_type == "logfbank":
+      data = self.__compute_logfbank_feature(data)
     else:
-      raise ValueError("feature_type must be either 'mfcc' or 'spectrogram'")
+      raise ValueError("feature_type must be either 'mfcc', 'spectrogram' \
+                       or 'logfbank'")
     data = normalize_audio_feature(data)
 
     # Adding Channel dimmension for conv2D input

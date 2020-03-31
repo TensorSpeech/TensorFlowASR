@@ -108,7 +108,7 @@ class SpeechToText:
     # reloaded when resuming training
     cp_callback = tf.keras.callbacks.ModelCheckpoint(
       filepath=os.path.join(self.configs["checkpoint_dir"],
-                            "ckpt_{epoch}"),
+                            "ckpt.{epoch:02d}.hdf5"),
       save_weights_only=False, verbose=1, monitor='val_loss',
       save_best_only=True, mode='min', save_freq='epoch')
     callbacks = [cp_callback]
@@ -133,7 +133,7 @@ class SpeechToText:
       self.configs["checkpoint_dir"])
     if latest is not None:
       self.model = tf.keras.models.load_model(latest)
-      initial_epoch = int(latest.split("_")[-1])
+      initial_epoch = int(latest.split(".")[1])
     else:
       initial_epoch = 0
 
@@ -143,7 +143,7 @@ class SpeechToText:
       initial_epoch=initial_epoch,
       callbacks=callbacks)
 
-    self.model.save_weights(filepath=model_file)
+    self.model.save(model_file)
 
   def __test(self, model_file, output_file_path):
     print("Testing model ...")
@@ -152,7 +152,7 @@ class SpeechToText:
     test_dataset = Dataset(
       data_path=self.configs["test_data_transcript_paths"],
       mode="test")
-    self.model.load_weights(filepath=model_file)
+    self.model = tf.keras.models.load_model(model_file)
     tf_test_dataset = test_dataset(
       speech_featurizer=self.speech_featurizer,
       text_featurizer=self.text_featurizer,
@@ -189,7 +189,7 @@ class SpeechToText:
 
   def __infer(self, input_file_path, model_file, output_file_path):
     print("Infering ...")
-    self.model.load_weights(filepath=model_file)
+    self.model = tf.keras.models.load_model(model_file)
     tf_infer_dataset = Dataset(data_path=input_file_path,
                                mode="infer")
     tf_infer_dataset = tf_infer_dataset(
@@ -228,14 +228,10 @@ class SpeechToText:
 
     return bytes_to_string(predictions)[0]
 
-  def save_infer_model(self, model_file):
+  def save_infer_model(self, model_file, input_file_path):
     assert self.mode in ["infer", "infer_single", "infer_streaming"], \
       "Mode must be either infer, infer_single or infer_streaming"
-    latest = tf.train.latest_checkpoint(
-      self.configs["checkpoint_dir"])
-    if latest is None:
-      raise ValueError("No checkpoint found")
-    trained_model = tf.keras.models.load_model(latest)
+    trained_model = tf.keras.models.load_model(input_file_path)
     tempdir = os.path.join(tempfile.gettempdir(), "asr.tf")
     trained_model.save_weights(tempdir)
     self.model.load_weights(tempdir)
