@@ -5,8 +5,8 @@ to use cuDNN-LSTM
 from __future__ import absolute_import
 
 import tensorflow as tf
-from models.components.RowConv1D import RowConv1D
-from models.components.BNRNNCell import BNLSTMCell
+from models.deepspeech2.RowConv1D import RowConv1D
+from models.deepspeech2.BNRNNCell import BNLSTMCell
 
 
 class DeepSpeech2:
