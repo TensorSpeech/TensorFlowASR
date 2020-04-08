@@ -15,12 +15,12 @@ decoder = {
 }
 
 augmentations = [
-  TimeMasking(num_time_mask=1, time_mask_param=30, p_upperbound=0.2),
-  FreqMasking(num_freq_mask=1, freq_mask_param=10),
-  TimeWarping(time_warp_param=40, direction="right")
+  #TimeMasking(num_time_mask=1, time_mask_param=30, p_upperbound=0.2),
+  #FreqMasking(num_freq_mask=1, freq_mask_param=10),
+  #TimeWarping(time_warp_param=40, direction="right")
 ]
 
-batch_size = 32
+batch_size = 16
 
 num_epochs = 10
 
@@ -52,6 +52,6 @@ test_data_transcript_paths = [
   "/mnt/Data/ML/ASR/Preprocessed/SmallFixed/Test/transcripts.tsv"
 ]
 
-checkpoint_dir = "/tmp/asr/checkpoint_dir/"
+checkpoint_dir = "/mnt/Projects/asrk16/trained/med-bilstm/checkpoint_dir/"
 
-log_dir = "/tmp/asr/tensorboard/"
+log_dir = "/mnt/Projects/asrk16/trained/med-bilstm/tensorboard/"
