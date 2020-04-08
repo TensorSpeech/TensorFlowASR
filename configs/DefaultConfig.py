@@ -4,7 +4,7 @@ from models.deepspeech2.DeepSpeech2 import DeepSpeech2
 from augmentations.Augments import TimeWarping, TimeMasking, \
   FreqMasking
 
-base_model = DeepSpeech2()
+base_model = DeepSpeech2(num_conv=2, num_rnn=3, rnn_units=256)
 
 decoder = {
   "name": "beamsearch",
