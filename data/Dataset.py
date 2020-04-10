@@ -28,9 +28,11 @@ class Dataset:
         augmentations=[None])
     if self.mode == "infer":
       self.entries = self.__create_infer_entries()
-      return self.__create_infer_dataset(
+      return self.__create_dataset(
         speech_featurizer=speech_featurizer,
-        batch_size=batch_size)
+        text_featurizer=None,
+        batch_size=batch_size,
+        augmentations=[None])
     raise ValueError("Mode must be 'train', 'eval' or 'infer'")
 
   def __create_train_entries(self):
@@ -106,59 +108,6 @@ class Dataset:
       padded_shapes=(
         tf.TensorShape([None, num_feature_bins, 1]),
         tf.TensorShape([None, 1])
-      )
-    )
-    # Prefetch to improve speed of input length
-    dataset = dataset.prefetch(
-      buffer_size=tf.data.experimental.AUTOTUNE)
-    return dataset
-
-  def __create_infer_dataset(self, speech_featurizer,
-                             batch_size, repeat=1):
-    # Dataset properties
-    num_feature_bins = speech_featurizer.num_feature_bins
-
-    def _gen_data():
-      for audio_file, _, _ in self.entries:
-        features = speech_featurizer.compute_speech_features(audio_file)
-        input_length = tf.convert_to_tensor(
-          features.get_shape().as_list()[0], dtype=tf.int32)
-        yield (
-          {
-            "features": features,
-            "input_length": input_length
-          },
-          -1  # Dummy label
-        )
-
-    dataset = tf.data.Dataset.from_generator(
-      _gen_data,
-      output_types=(
-        {
-          "features": tf.float32,
-          "input_length": tf.int32
-        },
-        tf.int32
-      ),
-      output_shapes=(
-        {
-          "features": tf.TensorShape([None, num_feature_bins, 1]),
-          "input_length": tf.TensorShape([])
-        },
-        tf.TensorShape([])
-      )
-    )
-    # Repeat and batch the dataset
-    dataset = dataset.repeat(repeat)
-    # Padding the features to its max length dimensions
-    dataset = dataset.padded_batch(
-      batch_size=batch_size,
-      padded_shapes=(
-        {
-          "features": tf.TensorShape([None, num_feature_bins, 1]),
-          "input_length": tf.TensorShape([])
-        },
-        tf.TensorShape([])
       )
     )
     # Prefetch to improve speed of input length

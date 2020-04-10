@@ -4,7 +4,7 @@ import multiprocessing
 import os
 import tensorflow as tf
 import numpy as np
-from utils.Utils import check_key_in_dict
+from utils.Utils import check_key_in_dict, bytes_to_string
 from ctc_decoders import Scorer
 from ctc_decoders import ctc_beam_search_decoder_batch
 
@@ -24,7 +24,9 @@ class Decoder:
       return ''.join([self.index_to_token[i] for i in elem])
 
     # Convert to string
-    return tf.map_fn(map_cvrt, decoded, dtype=tf.string)
+    result = tf.map_fn(map_cvrt, decoded, dtype=tf.string)
+    result = tf.make_ndarray(result)
+    return bytes_to_string(result)
 
   def decode(self, probs, input_length):
     pass

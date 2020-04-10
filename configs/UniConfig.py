@@ -4,6 +4,8 @@ from models.deepspeech2.DeepSpeech2 import DeepSpeech2RowConv
 
 base_model = DeepSpeech2RowConv()
 
+streaming_size = 10
+
 decoder = {
   "name": "beamsearch",
   "beam_width": 500,

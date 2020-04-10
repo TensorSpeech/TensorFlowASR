@@ -1,32 +1,8 @@
 from __future__ import absolute_import
 
 import tensorflow as tf
-from utils.Utils import wer, cer, mask_nan, \
-  bytes_to_string, get_length
+from utils.Utils import ctc_loss_func
 from utils.Schedules import BoundExponentialDecay
-
-
-def ctc_loss_func(y_true, y_pred):
-  label_length = get_length(y_true)
-  input_length = get_length(y_pred)
-  loss = tf.keras.backend.ctc_batch_cost(
-    y_pred=y_pred,
-    input_length=input_length,
-    y_true=tf.squeeze(y_true, -1),
-    label_length=label_length)
-  return mask_nan(loss)
-
-
-def ctc_lambda_func(args):
-  y_pred, input_length, labels, label_length = args
-  label_length = tf.expand_dims(label_length, 1)
-  input_length = tf.expand_dims(input_length, 1)
-  loss = tf.keras.backend.ctc_batch_cost(
-    y_pred=y_pred,
-    input_length=input_length,
-    y_true=labels,
-    label_length=label_length)
-  return mask_nan(loss)
 
 
 def decode_lambda_func(args, **arguments):
@@ -62,22 +38,12 @@ def test_lambda_func(args, **arguments):
 
 
 def create_ctc_model(num_classes, num_feature_bins,
-                     learning_rate, base_model, decoder,
-                     mode="train", min_lr=0.0, seed=1):
-  if mode == "train":
-    tf.compat.v1.set_random_seed(seed)
-  else:
-    tf.compat.v1.set_random_seed(0)
-
-  input_length = tf.keras.layers.Input(
-    shape=(),
-    dtype=tf.int32,
-    name="input_length")
-
-  if mode == "infer_streaming":
+                     learning_rate, base_model,
+                     min_lr=0.0, streaming_size=None):
+  if streaming_size:
     # Fixed input shape is required for live streaming audio
     features = tf.keras.layers.Input(
-      batch_shape=(1, 60, num_feature_bins, 1),
+      batch_shape=(1, streaming_size, num_feature_bins, 1),
       dtype=tf.float32,
       name="features")
     outputs = base_model(features=features, streaming=True)
@@ -104,70 +70,18 @@ def create_ctc_model(num_classes, num_feature_bins,
                        [batch_size, -1, num_classes],
                        name="logits")
 
-  if mode == "train":
-    labels = tf.keras.layers.Input(shape=(None,),
-                                   dtype=tf.int32,
-                                   name="labels")
-    # label_length = tf.keras.layers.Input(shape=(),
-    #                                      dtype=tf.int32,
-    #                                      name="label_length")
-    # Lambda layer for computing loss function
-    # loss_out = tf.keras.layers.Lambda(
-    #   ctc_lambda_func,
-    #   output_shape=(),
-    #   name="ctc_loss")([outputs, input_length,
-    #                     labels, label_length])
+  model = tf.keras.Model(inputs=features, outputs=outputs)
 
-    train_model = tf.keras.Model(inputs=features, outputs=outputs)
-
-    # y_true is None because of dummy label and loss is calculated
-    # in the layer lambda
-    train_model.compile(
-      optimizer=base_model.optimizer(
-        learning_rate=BoundExponentialDecay(
-          min_lr=min_lr,
-          initial_learning_rate=learning_rate,
-          decay_steps=5000,
-          decay_rate=0.9,
-          staircase=True)),
-      loss=ctc_loss_func
-    )
-    return train_model
-  if mode in ["infer", "infer_single", "infer_streaming"]:
-    # Lambda layer for decoding to text
-    decode_out = tf.keras.layers.Lambda(
-      decode_lambda_func,
-      output_shape=(None,),
-      name="ctc_decoder",
-      arguments={"decoder": decoder},
-      dynamic=True)([outputs, input_length])
-
-    infer_model = tf.keras.Model(
-      inputs={
-        "features": features,
-        "input_length": input_length
-      },
-      outputs=decode_out)
-
-    return infer_model
-  if mode == "test":
-    labels = tf.keras.layers.Input(shape=(None,),
-                                   dtype=tf.int32,
-                                   name="labels")
-    # Lambda layer for analysis
-    test_out = tf.keras.layers.Lambda(
-      test_lambda_func,
-      output_shape=(None,),
-      name="ctc_test",
-      arguments={"decoder": decoder},
-      dynamic=True)([outputs, input_length, labels])
-
-    test_model = tf.keras.Model(inputs={
-      "features": features,
-      "input_length": input_length,
-      "labels": labels
-    }, outputs=test_out)
-
-    return test_model
-  raise ValueError("mode must be either 'train', 'infer', \
-    'infer_streaming' or 'test'")
+  # y_true is None because of dummy label and loss is calculated
+  # in the layer lambda
+  model.compile(
+    optimizer=base_model.optimizer(
+      learning_rate=BoundExponentialDecay(
+        min_lr=min_lr,
+        initial_learning_rate=learning_rate,
+        decay_steps=5000,
+        decay_rate=0.9,
+        staircase=True)),
+    loss=ctc_loss_func
+  )
+  return model

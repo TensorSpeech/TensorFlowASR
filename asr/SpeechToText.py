@@ -8,7 +8,8 @@ from models.CTCModel import create_ctc_model
 from decoders.Decoders import create_decoder
 from featurizers.SpeechFeaturizer import SpeechFeaturizer
 from featurizers.TextFeaturizer import TextFeaturizer
-from utils.Utils import get_config, check_key_in_dict, bytes_to_string
+from utils.Utils import get_config, check_key_in_dict, \
+  bytes_to_string, get_length, wer, cer
 from utils.TimeHistory import TimeHistory
 from data.Dataset import Dataset
 
@@ -33,9 +34,9 @@ class SpeechToText:
       num_classes=self.text_featurizer.num_classes,
       num_feature_bins=self.speech_featurizer.num_feature_bins,
       learning_rate=self.configs["learning_rate"],
+      min_lr=self.configs["min_lr"],
       base_model=self.configs["base_model"],
-      decoder=self.decoder, mode=self.mode,
-      min_lr=self.configs["min_lr"])
+      streaming_size=self.configs["streamning_size"])
 
   def __call__(self, *args, **kwargs):
     if self.mode not in ["infer_single", "infer_streaming"]:
@@ -59,7 +60,6 @@ class SpeechToText:
       return self.__infer_single(audio=kwargs["audio"],
                                  sample_rate=kwargs["sample_rate"],
                                  channels=kwargs["channels"])
-
     else:
       raise ValueError(
         "'mode' must be either 'train', 'test', 'infer' or "
@@ -157,27 +157,27 @@ class SpeechToText:
       speech_featurizer=self.speech_featurizer,
       text_featurizer=self.text_featurizer,
       batch_size=self.configs["batch_size"])
-    if "log_dir" in self.configs.keys():
-      tb_callback = tf.keras.callbacks.TensorBoard(
-        log_dir=self.configs["log_dir"], histogram_freq=1,
-        update_freq=500, write_images=True)
-      callbacks = [tb_callback]
-    else:
-      callbacks = []
+
     self.model.summary()
-    error_rates = self.model.predict(x=tf_test_dataset,
-                                     callbacks=callbacks)
+    logits = self.model.predict(x=tf_test_dataset)
+    predictions = self.decoder.decode(
+      probs=logits,
+      input_length=tf.squeeze(get_length(logits), -1))
 
     total_wer = 0.0
     wer_count = 0.0
     total_cer = 0.0
     cer_count = 0.0
 
-    for er in error_rates:
-      total_wer += er[0]
-      wer_count += er[1]
-      total_cer += er[2]
-      cer_count += er[3]
+    for idx, labels in enumerate(test_dataset.entries):
+      _wer, _wer_count = wer(decode=predictions[idx],
+                             target=labels[-1])
+      _cer, _cer_count = cer(decode=predictions[idx],
+                             target=labels[-1])
+      total_wer += _wer
+      total_cer += _cer
+      wer_count += _wer_count
+      cer_count += _cer_count
 
     results = (total_wer / wer_count, total_cer / cer_count)
     print("WER: ", results[0])
@@ -195,9 +195,10 @@ class SpeechToText:
     tf_infer_dataset = tf_infer_dataset(
       speech_featurizer=self.speech_featurizer,
       batch_size=self.configs["batch_size"])
-    predictions = self.model.predict(x=tf_infer_dataset)
-
-    predictions = bytes_to_string(predictions)
+    logits = self.model.predict(x=tf_infer_dataset)
+    predictions = self.decoder.decode(
+      probs=logits,
+      input_length=tf.squeeze(get_length(logits), -1))
 
     with open(output_file_path, "w", encoding="utf-8") as of:
       of.write("Predictions\n")
@@ -214,19 +215,16 @@ class SpeechToText:
     if self.mode == "infer_streaming":
       features = tf.pad(features,
                         [[0, 0],
-                         [0, 60 - features.shape[1]],
+                         [0, self.configs["streaming_size"] - features.shape[1]],
                          [0, 0],
                          [0, 0]],
                         "CONSTANT")
-    input_length = tf.expand_dims(
-      tf.convert_to_tensor(features.get_shape().as_list()[1],
-                           dtype=tf.int32), axis=0)
-    predictions = self.model.predict(x={
-      "features": features,
-      "input_length": input_length
-    }, batch_size=1)
+    logits = self.model.predict(x=features, batch_size=1)
+    predictions = self.decoder.decode(
+      probs=logits,
+      input_length=tf.squeeze(get_length(logits), -1))
 
-    return bytes_to_string(predictions)[0]
+    return predictions[0]
 
   def save_infer_model(self, model_file, input_file_path):
     assert self.mode in ["infer", "infer_single", "infer_streaming"], \

@@ -5,6 +5,8 @@ from augmentations.Augments import TimeWarping, TimeMasking, FreqMasking
 
 base_model = DeepSpeech2()
 
+streaming_size = None
+
 decoder = {
   "name": "beamsearch",
   "beam_width": 500,
