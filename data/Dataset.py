@@ -84,7 +84,7 @@ class Dataset:
 
           yield (
             features,
-            labels
+            tf.expand_dims(labels, 1)
           )
 
     dataset = tf.data.Dataset.from_generator(
@@ -95,7 +95,7 @@ class Dataset:
       ),
       output_shapes=(
         tf.TensorShape([None, num_feature_bins, 1]),
-        tf.TensorShape([None])
+        tf.TensorShape([None, 1])
       )
     )
     # Repeat and batch the dataset
@@ -105,7 +105,7 @@ class Dataset:
       batch_size=batch_size,
       padded_shapes=(
         tf.TensorShape([None, num_feature_bins, 1]),
-        tf.TensorShape([None])
+        tf.TensorShape([None, 1])
       )
     )
     # Prefetch to improve speed of input length

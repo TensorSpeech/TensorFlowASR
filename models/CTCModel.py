@@ -12,7 +12,7 @@ def ctc_loss_func(y_true, y_pred):
   loss = tf.keras.backend.ctc_batch_cost(
     y_pred=y_pred,
     input_length=input_length,
-    y_true=y_true,
+    y_true=tf.squeeze(y_true, -1),
     label_length=label_length)
   return mask_nan(loss)
 
