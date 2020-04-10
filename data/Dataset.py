@@ -83,34 +83,19 @@ class Dataset:
             continue
 
           yield (
-            {
-              "features": features,
-              "input_length": input_length,
-              "labels": labels,
-              "label_length": label_length
-            },
-            -1  # Dummy label
+            features,
+            labels
           )
 
     dataset = tf.data.Dataset.from_generator(
       _gen_data,
       output_types=(
-        {
-          "features": tf.float32,
-          "input_length": tf.int32,
-          "labels": tf.int32,
-          "label_length": tf.int32
-        },
+        tf.float32,
         tf.int32
       ),
       output_shapes=(
-        {
-          "features": tf.TensorShape([None, num_feature_bins, 1]),
-          "input_length": tf.TensorShape([]),
-          "labels": tf.TensorShape([None]),
-          "label_length": tf.TensorShape([])
-        },
-        tf.TensorShape([])
+        tf.TensorShape([None, num_feature_bins, 1]),
+        tf.TensorShape([None])
       )
     )
     # Repeat and batch the dataset
@@ -119,13 +104,8 @@ class Dataset:
     dataset = dataset.padded_batch(
       batch_size=batch_size,
       padded_shapes=(
-        {
-          "features": tf.TensorShape([None, num_feature_bins, 1]),
-          "input_length": tf.TensorShape([]),
-          "labels": tf.TensorShape([None]),
-          "label_length": tf.TensorShape([])
-        },
-        tf.TensorShape([])
+        tf.TensorShape([None, num_feature_bins, 1]),
+        tf.TensorShape([None])
       )
     )
     # Prefetch to improve speed of input length

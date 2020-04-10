@@ -23,10 +23,10 @@ class BNLSTMCell(tf.keras.layers.LSTMCell):
   def __init__(self, *args, **kwargs):
     super().__init__(*args, **kwargs)
     self.beta = self.add_weight(shape=(self.units * 4,),
-                                name='bn_beta', initializer='zeros',
+                                name='lstm_bn_beta', initializer='zeros',
                                 regularizer=None, constraint=None)
     self.gamma = self.add_weight(shape=(self.units * 4,),
-                                 name='bn_gamma', initializer='ones',
+                                 name='lstm_bn_gamma', initializer='ones',
                                  regularizer=None, constraint=None)
 
   def _compute_carry_and_output(self, x, h_tm1, c_tm1):

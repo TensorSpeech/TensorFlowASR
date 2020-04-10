@@ -1,8 +1,20 @@
 from __future__ import absolute_import
 
 import tensorflow as tf
-from utils.Utils import wer, cer, mask_nan, bytes_to_string
+from utils.Utils import wer, cer, mask_nan, \
+  bytes_to_string, get_length
 from utils.Schedules import BoundExponentialDecay
+
+
+def ctc_loss_func(y_true, y_pred):
+  label_length = get_length(y_true)
+  input_length = get_length(y_pred)
+  loss = tf.keras.backend.ctc_batch_cost(
+    y_pred=y_pred,
+    input_length=input_length,
+    y_true=y_true,
+    label_length=label_length)
+  return mask_nan(loss)
 
 
 def ctc_lambda_func(args):
@@ -96,22 +108,17 @@ def create_ctc_model(num_classes, num_feature_bins,
     labels = tf.keras.layers.Input(shape=(None,),
                                    dtype=tf.int32,
                                    name="labels")
-    label_length = tf.keras.layers.Input(shape=(),
-                                         dtype=tf.int32,
-                                         name="label_length")
+    # label_length = tf.keras.layers.Input(shape=(),
+    #                                      dtype=tf.int32,
+    #                                      name="label_length")
     # Lambda layer for computing loss function
-    loss_out = tf.keras.layers.Lambda(
-      ctc_lambda_func,
-      output_shape=(),
-      name="ctc_loss")([outputs, input_length,
-                        labels, label_length])
+    # loss_out = tf.keras.layers.Lambda(
+    #   ctc_lambda_func,
+    #   output_shape=(),
+    #   name="ctc_loss")([outputs, input_length,
+    #                     labels, label_length])
 
-    train_model = tf.keras.Model(inputs={
-      "features": features,
-      "input_length": input_length,
-      "labels": labels,
-      "label_length": label_length
-    }, outputs=loss_out)
+    train_model = tf.keras.Model(inputs=features, outputs=outputs)
 
     # y_true is None because of dummy label and loss is calculated
     # in the layer lambda
@@ -123,7 +130,7 @@ def create_ctc_model(num_classes, num_feature_bins,
           decay_steps=5000,
           decay_rate=0.9,
           staircase=True)),
-      loss={"ctc_loss": lambda y_true, y_pred: y_pred}
+      loss=ctc_loss_func
     )
     return train_model
   if mode in ["infer", "infer_single", "infer_streaming"]:

@@ -4,7 +4,7 @@ from models.deepspeech2.DeepSpeech2 import DeepSpeech2
 from augmentations.Augments import TimeWarping, TimeMasking, \
   FreqMasking
 
-base_model = DeepSpeech2(num_conv=2, num_rnn=3, rnn_units=256)
+base_model = DeepSpeech2(num_conv=3, num_rnn=2, rnn_units=256)
 
 decoder = {
   "name": "beamsearch",
@@ -52,6 +52,6 @@ test_data_transcript_paths = [
   "/mnt/Data/ML/ASR/Preprocessed/SmallFixed/Test/transcripts.tsv"
 ]
 
-checkpoint_dir = "/mnt/Projects/asrk16/trained/med-bilstm/checkpoint_dir/"
+checkpoint_dir = "/mnt/Projects/asrk16/trained/med-bilstm/checkpoints/"
 
 log_dir = "/mnt/Projects/asrk16/trained/med-bilstm/tensorboard/"
