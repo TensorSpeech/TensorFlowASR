@@ -36,7 +36,7 @@ class SpeechToText:
       learning_rate=self.configs["learning_rate"],
       min_lr=self.configs["min_lr"],
       base_model=self.configs["base_model"],
-      streaming_size=self.configs["streamning_size"])
+      streaming_size=self.configs["streaming_size"])
 
   def __call__(self, *args, **kwargs):
     if self.mode not in ["infer_single", "infer_streaming"]:
