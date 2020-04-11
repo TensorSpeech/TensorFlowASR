@@ -108,7 +108,7 @@ class SpeechToText:
     # reloaded when resuming training
     cp_callback = tf.keras.callbacks.ModelCheckpoint(
       filepath=os.path.join(self.configs["checkpoint_dir"],
-                            "ckpt.{epoch:02d}.tf"),
+                            "ckpt.{epoch:02d}.h5"),
       save_weights_only=False, verbose=1, monitor='val_loss',
       save_best_only=True, mode='min', save_freq='epoch')
     callbacks = [cp_callback]
@@ -257,3 +257,6 @@ class SpeechToText:
     except Exception:
       return "Model is not trained"
     return None
+
+  def save_model(self, model_file):
+    self.model.save(model_file)

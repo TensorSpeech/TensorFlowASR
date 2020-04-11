@@ -5,6 +5,7 @@ to use cuDNN-LSTM
 from __future__ import absolute_import
 
 import tensorflow as tf
+from tensorflow.keras.layers import LSTMCell
 from models.deepspeech2.RowConv1D import RowConv1D
 from models.deepspeech2.BNRNNCell import BNLSTMCell
 
@@ -42,7 +43,7 @@ class DeepSpeech2:
     for i in range(self.num_rnn):
       layer = tf.keras.layers.Bidirectional(
         tf.keras.layers.RNN(
-          BNLSTMCell(self.rnn_units),
+          LSTMCell(self.rnn_units, dropout=0.2),
           return_sequences=True, unroll=False,
           time_major=True, stateful=False),
         name=f"bilstm_{i}")(layer)
