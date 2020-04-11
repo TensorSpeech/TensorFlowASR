@@ -108,7 +108,7 @@ class SpeechToText:
     # reloaded when resuming training
     cp_callback = tf.keras.callbacks.ModelCheckpoint(
       filepath=os.path.join(self.configs["checkpoint_dir"],
-                            "ckpt.{epoch:02d}.h5"),
+                            "ckpt.{epoch:02d}.tf"),
       save_weights_only=False, verbose=1, monitor='val_loss',
       save_best_only=True, mode='min', save_freq='epoch')
     callbacks = [cp_callback]
