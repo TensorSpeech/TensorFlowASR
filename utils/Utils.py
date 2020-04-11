@@ -31,7 +31,7 @@ conf_paths = ["train_data_transcript_paths",
 
 def check_key_in_dict(dictionary, keys):
   for key in keys:
-    if dictionary.get(key, None) is None:
+    if key not in dictionary.keys():
       raise ValueError("{} must be defined".format(key))
 
 
