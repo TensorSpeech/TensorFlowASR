@@ -24,9 +24,10 @@ tf.keras.backend.clear_session()
 if args_parser.export_file is None:
   raise ValueError("Flag 'export_file' must be set")
 if args_parser.mode == "train":
-  tf.compat.v1.set_random_seed(1)
+  
   asr = SpeechToText(configs_path=args_parser.config, mode="train")
-  asr(model_file=args_parser.export_file)
+  asr(model_file=args_parser.export_file,
+      pretrained=args_parser.pretrained)
 elif args_parser.mode == "test":
   asr = SpeechToText(configs_path=args_parser.config, mode="test")
   if args_parser.output_file_path is None:

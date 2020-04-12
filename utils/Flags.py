@@ -22,6 +22,9 @@ parser.add_argument("--input_file_path", "-i", type=str, default=None,
 parser.add_argument("--export_file", "-e", type=str, default=None,
                     help="Path to the model file to be exported")
 
+parser.add_argument("--pretrained", "-p", type=str, default=None,
+                    help="Path to the previous checkpoint to retrain")
+
 parser.add_argument("--output_file_path", "-o", type=str, default=None,
                     help="Path to output file")
 

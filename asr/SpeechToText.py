@@ -42,7 +42,8 @@ class SpeechToText:
     if self.mode not in ["infer_single", "infer_streaming"]:
       check_key_in_dict(dictionary=kwargs, keys=["model_file"])
     if self.mode == "train":
-      self.__train_and_eval(model_file=kwargs["model_file"])
+      self.__train_and_eval(model_file=kwargs["model_file"],
+                            pretrained=kwargs["pretrained"])
     elif self.mode == "test":
       check_key_in_dict(dictionary=kwargs, keys=["output_file_path"])
       self.__test(model_file=kwargs["model_file"],
@@ -65,7 +66,8 @@ class SpeechToText:
         "'mode' must be either 'train', 'test', 'infer' or "
         "'infer_streaming")
 
-  def __train_and_eval(self, model_file):
+  def __train_and_eval(self, model_file, pretrained=None):
+    tf.compat.v1.set_random_seed(1)
     print("Training and evaluating model ...")
     check_key_in_dict(dictionary=self.configs,
                       keys=["train_data_transcript_paths",
@@ -108,7 +110,7 @@ class SpeechToText:
     # reloaded when resuming training
     cp_callback = tf.keras.callbacks.ModelCheckpoint(
       filepath=os.path.join(self.configs["checkpoint_dir"],
-                            "ckpt.{epoch:02d}.h5"),
+                            "ckpt_{epoch:02d}"),
       save_weights_only=False, verbose=1, monitor='val_loss',
       save_best_only=True, mode='min', save_freq='epoch')
     callbacks = [cp_callback]
@@ -129,11 +131,11 @@ class SpeechToText:
                              "model.json"), "w") as f:
         f.write(self.model.to_json())
 
-    latest = tf.train.latest_checkpoint(
-      self.configs["checkpoint_dir"])
-    if latest is not None:
-      self.model = tf.keras.models.load_model(latest)
-      initial_epoch = int(latest.split(".")[1])
+    # latest = tf.train.latest_checkpoint(
+    #   self.configs["checkpoint_dir"])
+    if pretrained is not None:
+      self.model = tf.keras.models.load_model(pretrained)
+      initial_epoch = int(pretrained.split("_")[-1])
     else:
       initial_epoch = 0
 
@@ -146,6 +148,7 @@ class SpeechToText:
     self.model.save(model_file)
 
   def __test(self, model_file, output_file_path):
+    tf.compat.v1.set_random_seed(0)
     print("Testing model ...")
     check_key_in_dict(dictionary=self.configs,
                       keys=["test_data_transcript_paths"])
@@ -188,6 +191,7 @@ class SpeechToText:
       of.write("CER: " + str(results[-1]) + "\n")
 
   def __infer(self, input_file_path, model_file, output_file_path):
+    tf.compat.v1.set_random_seed(0)
     print("Infering ...")
     self.model = tf.keras.models.load_model(model_file)
     tf_infer_dataset = Dataset(data_path=input_file_path,
@@ -213,12 +217,13 @@ class SpeechToText:
       features = self.speech_featurizer.compute_speech_features(audio)
     features = tf.expand_dims(features, axis=0)
     if self.mode == "infer_streaming":
-      features = tf.pad(features,
-                        [[0, 0],
-                         [0, self.configs["streaming_size"] - features.shape[1]],
-                         [0, 0],
-                         [0, 0]],
-                        "CONSTANT")
+      features = tf.pad(
+        features,
+        [[0, 0],
+         [0, int(self.configs["streaming_size"]) - features.shape[1]],
+         [0, 0],
+         [0, 0]],
+        "CONSTANT")
     logits = self.model.predict(x=features, batch_size=1)
     predictions = self.decoder.decode(
       probs=logits,
@@ -226,37 +231,22 @@ class SpeechToText:
 
     return predictions[0]
 
-  def save_infer_model(self, model_file, input_file_path):
+  def load_model(self, model_file):
+    tf.compat.v1.set_random_seed(0)
     assert self.mode in ["infer", "infer_single", "infer_streaming"], \
-      "Mode must be either infer, infer_single or infer_streaming"
-    trained_model = tf.keras.models.load_model(input_file_path)
-    tempdir = os.path.join(tempfile.gettempdir(), "asr.tf")
-    trained_model.save_weights(tempdir)
-    self.model.load_weights(tempdir)
-    self.model.save(model_file)
-
-  def load_infer_model(self, model_file):
-    assert self.mode in ["infer", "infer_single", "infer_streaming"], \
-      "Mode must be either infer, infer_single or infer_streaming"
+        "Mode must be either infer, infer_single or infer_streaming"
     try:
       self.model = tf.keras.models.load_model(model_file)
     except Exception:
       return "Model is not trained"
     return None
 
-  def save_infer_model_from_weights(self, model_file):
+  def loadmodel_from_weights(self, model_file):
+    tf.compat.v1.set_random_seed(0)
     assert self.mode in ["infer", "infer_single", "infer_streaming"], \
-      "Mode must be either infer, infer_single or infer_streaming"
-    self.model.save(model_file)
-
-  def load_infer_model_from_weights(self, model_file):
-    assert self.mode in ["infer", "infer_single", "infer_streaming"], \
-      "Mode must be either infer, infer_single or infer_streaming"
+        "Mode must be either infer, infer_single or infer_streaming"
     try:
       self.model.load_weights(model_file)
     except Exception:
       return "Model is not trained"
     return None
-
-  def save_model(self, model_file):
-    self.model.save(model_file)

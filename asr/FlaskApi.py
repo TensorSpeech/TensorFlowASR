@@ -44,14 +44,14 @@ def check_form_request(func):
   return decorated_func
 
 
-asr = SpeechToText(configs_path=app.config["UNI_CONFIG_PATH"],
+asr = SpeechToText(configs_path=app.config["BI_CONFIG_PATH"],
                    mode="infer_single")
-is_asr_loaded = asr.load_infer_model_from_weights(app.config["MODEL_FILE"])
+is_asr_loaded = asr.load_model(app.config["MODEL_FILE"])
 
 asr_streaming = SpeechToText(
   configs_path=app.config["UNI_CONFIG_PATH"],
   mode="infer_streaming")
-is_asr_streaming_loaded = asr_streaming.load_infer_model_from_weights(
+is_asr_streaming_loaded = asr_streaming.load_model(
   app.config["MODEL_FILE"])
 
 
