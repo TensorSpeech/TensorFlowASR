@@ -4,7 +4,7 @@ import multiprocessing
 import os
 import tensorflow as tf
 import numpy as np
-from utils.Utils import check_key_in_dict
+from utils.Utils import check_key_in_dict, bytes_to_string
 from ctc_decoders import Scorer
 from ctc_decoders import ctc_beam_search_decoder_batch
 
@@ -24,7 +24,8 @@ class Decoder:
       return ''.join([self.index_to_token[i] for i in elem])
 
     # Convert to string
-    return tf.map_fn(map_cvrt, decoded, dtype=tf.string)
+    result = tf.map_fn(map_cvrt, decoded, dtype=tf.string)
+    return bytes_to_string(result.numpy())
 
   def decode(self, probs, input_length):
     pass
@@ -64,7 +65,7 @@ class BeamSearchDecoder(Decoder):
   def decode(self, probs, input_length):
     # probs.shape = [batch_size, time_steps, num_classes]
     if self.lm_path:
-      decoded = ctc_beam_search_decoder_batch(probs.numpy(), self.vocab_array,
+      decoded = ctc_beam_search_decoder_batch(probs, self.vocab_array,
                                               beam_size=self.beam_width,
                                               num_processes=self.num_cpus,
                                               ext_scoring_func=self.scorer)
@@ -72,7 +73,7 @@ class BeamSearchDecoder(Decoder):
         _, text = [v for v in zip(*value)]
         decoded[idx] = text[0]
 
-      return tf.convert_to_tensor(decoded)
+      return decoded
 
     decoded = tf.keras.backend.ctc_decode(y_pred=probs,
                                           input_length=input_length,
@@ -88,7 +89,7 @@ def create_decoder(decoder_config, index_to_token, vocab_array):
   check_key_in_dict(decoder_config, keys=["name"])
   if decoder_config["name"] == "beamsearch":
     check_key_in_dict(decoder_config, keys=["beam_width"])
-    if "lm_path" in decoder_config.keys():
+    if decoder_config.get("lm_path", None) is not None:
       check_key_in_dict(decoder_config, keys=["alpha", "beta"])
       decoder = BeamSearchDecoder(
         index_to_token=index_to_token,

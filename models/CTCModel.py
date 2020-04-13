@@ -1,166 +1,88 @@
 from __future__ import absolute_import
 
 import tensorflow as tf
-from utils.Utils import wer, cer, mask_nan, bytes_to_string
+from utils.Utils import get_length, mask_nan
 from utils.Schedules import BoundExponentialDecay
 
 
-def ctc_lambda_func(args):
-  y_pred, input_length, labels, label_length = args
-  label_length = tf.expand_dims(label_length, 1)
-  input_length = tf.expand_dims(input_length, 1)
-  loss = tf.keras.backend.ctc_batch_cost(
-    y_pred=y_pred,
-    input_length=input_length,
-    y_true=labels,
-    label_length=label_length)
-  return mask_nan(loss)
-
-
-def decode_lambda_func(args, **arguments):
-  y_pred, input_length = args
-  decoder = arguments["decoder"]
-  result = decoder.decode(probs=y_pred,
-                          input_length=tf.squeeze(input_length,
-                                                  axis=-1))
-  return result
-
-
-def test_lambda_func(args, **arguments):
-  y_pred, input_length, labels = args
-  decoder = arguments["decoder"]
-  predictions = decoder.decode(probs=y_pred,
-                               input_length=tf.squeeze(input_length,
-                                                       axis=-1))
-  string_labels = decoder.convert_to_string(labels)
-  predictions = tf.expand_dims(predictions, 1)
-  string_labels = tf.expand_dims(string_labels, 1)
-  outputs = tf.concat([predictions, string_labels], axis=-1)
-
-  def cal_each_er(elem):
-    pred = elem[0].numpy().decode("utf-8")
-    target = elem[1].numpy().decode("utf-8")
-    print("Prediction: ", pred)
-    print("Groundtruth: ", target)
-    cal_wer, wer_count = wer(decode=pred, target=target)
-    cal_cer, cer_count = cer(decode=pred, target=target)
-    return tf.convert_to_tensor([cal_wer, wer_count, cal_cer, cer_count])
-
-  return tf.map_fn(cal_each_er, outputs, dtype=tf.int32)
-
-
-def create_ctc_model(num_classes, num_feature_bins,
-                     learning_rate, base_model, decoder,
-                     mode="train", min_lr=0.0, seed=1):
-  if mode == "train":
-    tf.compat.v1.set_random_seed(seed)
-  else:
-    tf.compat.v1.set_random_seed(0)
-
-  input_length = tf.keras.layers.Input(
-    shape=(),
-    dtype=tf.int32,
-    name="input_length")
-
-  if mode == "infer_streaming":
-    # Fixed input shape is required for live streaming audio
-    features = tf.keras.layers.Input(
-      batch_shape=(1, 60, num_feature_bins, 1),
-      dtype=tf.float32,
-      name="features")
-    outputs = base_model(features=features, streaming=True)
-  else:
-    features = tf.keras.layers.Input(
-      shape=(None, num_feature_bins, 1),
-      dtype=tf.float32,
-      name="features")
-    outputs = base_model(features=features, streaming=False)
-
-  batch_size = tf.shape(outputs)[0]
-  n_hidden = outputs.get_shape().as_list()[-1]
-  # reshape from [B, T, A] --> [B*T, A].
-  # Output shape: [n_steps * batch_size, n_hidden]
-  outputs = tf.reshape(outputs, [-1, n_hidden])
-
-  # Fully connected layer
-  outputs = tf.keras.layers.Dense(units=num_classes,
-                                  activation='softmax',
-                                  name="fully_connected",
-                                  use_bias=True)(outputs)
-
-  outputs = tf.reshape(outputs,
-                       [batch_size, -1, num_classes],
-                       name="logits")
-
-  if mode == "train":
-    labels = tf.keras.layers.Input(shape=(None,),
-                                   dtype=tf.int32,
-                                   name="labels")
-    label_length = tf.keras.layers.Input(shape=(),
-                                         dtype=tf.int32,
-                                         name="label_length")
-    # Lambda layer for computing loss function
-    loss_out = tf.keras.layers.Lambda(
-      ctc_lambda_func,
-      output_shape=(),
-      name="ctc_loss")([outputs, input_length,
-                        labels, label_length])
-
-    train_model = tf.keras.Model(inputs={
-      "features": features,
-      "input_length": input_length,
-      "labels": labels,
-      "label_length": label_length
-    }, outputs=loss_out)
-
-    # y_true is None because of dummy label and loss is calculated
-    # in the layer lambda
-    train_model.compile(
-      optimizer=base_model.optimizer(
-        learning_rate=BoundExponentialDecay(
+class CTCModel:
+  def __init__(self, num_classes, num_feature_bins, base_model,
+               learning_rate, min_lr=0.0, streaming_size=None):
+    self.optimizer = base_model.optimizer(
+      learning_rate=BoundExponentialDecay(
           min_lr=min_lr,
           initial_learning_rate=learning_rate,
           decay_steps=5000,
           decay_rate=0.9,
-          staircase=True)),
-      loss={"ctc_loss": lambda y_true, y_pred: y_pred}
+          staircase=True)
     )
-    return train_model
-  if mode in ["infer", "infer_single", "infer_streaming"]:
-    # Lambda layer for decoding to text
-    decode_out = tf.keras.layers.Lambda(
-      decode_lambda_func,
-      output_shape=(None,),
-      name="ctc_decoder",
-      arguments={"decoder": decoder},
-      dynamic=True)([outputs, input_length])
+    self.num_classes = num_classes
+    self.num_feature_bins = num_feature_bins
+    self.streaming_size = streaming_size
+    self.model = self.create(base_model)
 
-    infer_model = tf.keras.Model(
-      inputs={
-        "features": features,
-        "input_length": input_length
-      },
-      outputs=decode_out)
+  def create(self, base_model):
+    if self.streaming_size:
+      # Fixed input shape is required for live streaming audio
+      features = tf.keras.layers.Input(
+        batch_shape=(1, self.streaming_size, self.num_feature_bins, 1),
+        dtype=tf.float32,
+        name="features")
+      outputs = base_model(features=features, streaming=True)
+    else:
+      features = tf.keras.layers.Input(
+        shape=(None, self.num_feature_bins, 1),
+        dtype=tf.float32,
+        name="features")
+      outputs = base_model(features=features, streaming=False)
 
-    return infer_model
-  if mode == "test":
-    labels = tf.keras.layers.Input(shape=(None,),
-                                   dtype=tf.int32,
-                                   name="labels")
-    # Lambda layer for analysis
-    test_out = tf.keras.layers.Lambda(
-      test_lambda_func,
-      output_shape=(None,),
-      name="ctc_test",
-      arguments={"decoder": decoder},
-      dynamic=True)([outputs, input_length, labels])
+    batch_size = tf.shape(outputs)[0]
+    n_hidden = outputs.get_shape().as_list()[-1]
+    # reshape from [B, T, A] --> [B*T, A].
+    # Output shape: [n_steps * batch_size, n_hidden]
+    outputs = tf.reshape(outputs, [-1, n_hidden])
 
-    test_model = tf.keras.Model(inputs={
-      "features": features,
-      "input_length": input_length,
-      "labels": labels
-    }, outputs=test_out)
+    # Fully connected layer
+    outputs = tf.keras.layers.Dense(units=self.num_classes,
+                                    activation='softmax',
+                                    name="fully_connected",
+                                    use_bias=True)(outputs)
 
-    return test_model
-  raise ValueError("mode must be either 'train', 'infer', \
-    'infer_streaming' or 'test'")
+    outputs = tf.reshape(outputs,
+                         [batch_size, -1, self.num_classes],
+                         name="logits")
+
+    model = tf.keras.Model(inputs=features, outputs=outputs)
+    return model
+
+  @tf.function
+  def loss(self, y_true, y_pred):
+    label_length = get_length(y_true)
+    input_length = get_length(y_pred)
+    loss = tf.keras.backend.ctc_batch_cost(
+      y_pred=y_pred,
+      input_length=input_length,
+      y_true=tf.squeeze(y_true, -1),
+      label_length=label_length)
+    return mask_nan(loss)
+
+  def predict(self, *args, **kwargs):
+    return self.model.predict(*args, **kwargs)
+
+  def compile(self, *args, **kwargs):
+    return self.model.compile(*args, **kwargs)
+
+  def fit(self, *args, **kwargs):
+    return self.model.fit(*args, **kwargs)
+
+  def load_model(self, model_file):
+    self.model = tf.keras.models.load_model(model_file)
+
+  def load_weights(self, model_file):
+    self.model.load_weights(model_file)
+
+  def summary(self, *args, **kwargs):
+    return self.model.summary(*args, **kwargs)
+
+  def to_json(self):
+    return self.model.to_json()

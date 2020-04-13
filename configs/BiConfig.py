@@ -1,9 +1,11 @@
 from __future__ import absolute_import
 
-from models.DeepSpeech2 import DeepSpeech2
+from models.deepspeech2.DeepSpeech2 import DeepSpeech2
 from augmentations.Augments import TimeWarping, TimeMasking, FreqMasking
 
 base_model = DeepSpeech2()
+
+streaming_size = None
 
 decoder = {
   "name": "beamsearch",
@@ -23,7 +25,7 @@ learning_rate = 0.0006
 
 min_lr = 0.0
 
-sample_rate = 16000
+sample_rate = 16384
 
 frame_ms = 20
 

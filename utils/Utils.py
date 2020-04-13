@@ -18,7 +18,8 @@ conf_required = ["base_model",
                  "frame_ms",
                  "stride_ms",
                  "num_feature_bins",
-                 "feature_type"]
+                 "feature_type",
+                 "streaming_size"]
 
 conf_paths = ["train_data_transcript_paths",
               "test_data_transcript_paths",
@@ -30,7 +31,7 @@ conf_paths = ["train_data_transcript_paths",
 
 def check_key_in_dict(dictionary, keys):
   for key in keys:
-    if dictionary.get(key, None) is None:
+    if key not in dictionary.keys():
       raise ValueError("{} must be defined".format(key))
 
 
@@ -105,3 +106,10 @@ def mask_nan(x):
 
 def bytes_to_string(array, encoding: str = "utf-8"):
   return [transcript.decode(encoding) for transcript in array]
+
+
+def get_length(batch_data):
+  def map_fn(elem):
+    size = tf.shape(elem)
+    return tf.convert_to_tensor([size[0]])
+  return tf.map_fn(map_fn, batch_data, dtype=tf.int32)
