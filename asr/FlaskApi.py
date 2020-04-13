@@ -44,15 +44,11 @@ def check_form_request(func):
   return decorated_func
 
 
-asr = SpeechToText(configs_path=app.config["BI_CONFIG_PATH"],
-                   mode="infer_single")
+asr = SpeechToText(configs_path=app.config["BI_CONFIG_PATH"])
 is_asr_loaded = asr.load_model(app.config["MODEL_FILE"])
 
-asr_streaming = SpeechToText(
-  configs_path=app.config["UNI_CONFIG_PATH"],
-  mode="infer_streaming")
-is_asr_streaming_loaded = asr_streaming.load_model(
-  app.config["MODEL_FILE"])
+asr_streaming = SpeechToText(configs_path=app.config["UNI_CONFIG_PATH"])
+is_asr_streaming_loaded = asr_streaming.load_model(app.config["MODEL_FILE"])
 
 
 @asr_blueprint.route("/", methods=["GET"])
@@ -72,7 +68,8 @@ def inference():
   payload = request.files["payload"].read()
   sampleRate = int(request.form["sampleRate"])
   channels = int(request.form["channels"])
-  transcript = asr(audio=payload, sample_rate=sampleRate, channels=channels)
+  transcript = asr.infer_single(audio=payload, sample_rate=sampleRate,
+                                channels=channels)
   return make_response(({"payload": transcript}, 200))
 
 
@@ -85,7 +82,7 @@ def file():
       {"error": "Missing audio binary file/blob"}, 400))
 
   request.files["payload"].save(app.config["STATIC_WAV_FILE"])
-  transcript = asr(audio=app.config["STATIC_WAV_FILE"])
+  transcript = asr.infer_single(audio=app.config["STATIC_WAV_FILE"])
   return make_response(({"payload": transcript}, 200))
 
 
@@ -98,8 +95,10 @@ def connect():
 
 @socketio.on("asr_streaming", namespace="/asr_streaming")
 def streaming(content, sample_rate, channels):
-  return asr_streaming(audio=content, sample_rate=int(sample_rate),
-                       channels=int(channels))
+  return asr_streaming.infer_single(audio=content,
+                                    sample_rate=int(sample_rate),
+                                    channels=int(channels),
+                                    streaming=True)
 
 
 app.register_blueprint(asr_blueprint)

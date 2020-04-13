@@ -113,14 +113,3 @@ def get_length(batch_data):
     size = tf.shape(elem)
     return tf.convert_to_tensor([size[0]])
   return tf.map_fn(map_fn, batch_data, dtype=tf.int32)
-
-
-def ctc_loss_func(y_true, y_pred):
-  label_length = get_length(y_true)
-  input_length = get_length(y_pred)
-  loss = tf.keras.backend.ctc_batch_cost(
-    y_pred=y_pred,
-    input_length=input_length,
-    y_true=tf.squeeze(y_true, -1),
-    label_length=label_length)
-  return mask_nan(loss)
