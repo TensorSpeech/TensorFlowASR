@@ -43,10 +43,10 @@ class DeepSpeech2:
     for i in range(self.num_rnn):
       layer = tf.keras.layers.Bidirectional(
         tf.keras.layers.RNN(
-          LSTMCell(self.rnn_units, dropout=0.2),
+          BNLSTMCell(self.rnn_units),
           return_sequences=True, unroll=False,
           time_major=True, stateful=False),
-        name=f"bilstm_{i}")(layer)
+        name=f"bibnlstm_{i}")(layer)
 
     # Convert to batch_major
     layer = tf.transpose(layer, [1, 0, 2])
