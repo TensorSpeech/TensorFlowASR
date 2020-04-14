@@ -5,13 +5,19 @@ from models.segan.Ops import DownConv, DeConv
 
 
 class Z(tf.keras.layers.Layer):
+  def __init__(self, mean=0., stddev=1., name="segan_z"):
+    self.mean = mean,
+    self.stddev = stddev
+    self.name = name
+    super(Z, self).__init__(name=name)
+
   def __call__(self, inputs):
     batch = tf.shape(inputs)[0]
     dim = tf.shape(inputs)[1]
     depth = tf.shape(inputs)[-1]
     z = tf.keras.backend.random_normal(shape=[batch, dim, depth],
-                                       mean=0., stddev=1.)
-    return tf.keras.layers.Concatenate(axis=2)([z, inputs])
+                                       mean=self.mean, stddev=self.stddev)
+    return tf.keras.layers.Concatenate(axis=2, name=f"{self.name}_concat")([z, inputs])
 
 
 class GEncoder(tf.keras.layers.Layer):
@@ -21,6 +27,7 @@ class GEncoder(tf.keras.layers.Layer):
     self.kwidth = kwidth
     self.ratio = ratio
     self.skips = []
+    self.name = name
     super(GEncoder, self).__init__(name=name)
 
   def __call__(self, inputs):
@@ -29,9 +36,10 @@ class GEncoder(tf.keras.layers.Layer):
       c = DownConv(depth=layer_depth,
                    kwidth=self.kwidth,
                    pool=self.ratio,
-                   name=f"segan_g_encoder_{layer_idx}")(c)
+                   name=f"{self.name}_conv_{layer_idx}")(c)
       if layer_idx < len(self.g_enc_depths) - 1:
         self.skips.append(c)
+      c = tf.keras.layers.PReLU(name=f"{self.name}_prelu_{layer_idx}")(c)
     return c, self.skips
 
 
@@ -41,6 +49,7 @@ class GDecoder(tf.keras.layers.Layer):
     self.g_dec_depths = g_dec_depths
     self.kwidth = kwidth
     self.ratio = ratio
+    self.name = name
     super(GDecoder, self).__init__(name=name)
 
   def __call__(self, inputs, skips):
@@ -50,7 +59,8 @@ class GDecoder(tf.keras.layers.Layer):
       output = DeConv(depth=layer_depth,
                       kwidth=self.kwidth,
                       dilation=self.ratio,
-                      name=f"segan_g_decoder_{layer_idx}")(output)
+                      name=f"{self.name}_deconv_{layer_idx}")(output)
+      output = tf.keras.layers.PReLU(name=f"{self.name}_prelu_{layer_idx}")(output)
       _skip = skips[-(layer_idx + 1)]
       output = tf.keras.layers.Concatenate(axis=2)([output, _skip])
     return output
