@@ -16,8 +16,8 @@ class DownConv(tf.keras.layers.Layer):
       bias_initializer=tf.keras.initializers.zeros
     )
 
-  def __call__(self, inputs):
-    return self.layer(inputs)
+  def __call__(self, inputs, training=False):
+    return self.layer(inputs, training)
 
 
 class DeConv(tf.keras.layers.Layer):
@@ -32,6 +32,9 @@ class DeConv(tf.keras.layers.Layer):
       kernel_initializer=tf.keras.initializers.TruncatedNormal(stddev=0.02),
       bias_initializer=tf.keras.initializers.zeros
     )
+
+  def __call__(self, inputs, training=False):
+    return self.layer(inputs, training)
 
 
 class VirtualBatchNorm(tf.keras.layers.Layer):
@@ -84,7 +87,7 @@ class VirtualBatchNorm(tf.keras.layers.Layer):
 
 class GaussianNoise(tf.keras.layers.Layer):
   def __init__(self, name, std):
-    super(GaussianNoise, self).__init__(name=name)
+    super(GaussianNoise, self).__init__(name=name, trainable=False)
     self.std = std
 
   def __call__(self, inputs):
@@ -97,7 +100,7 @@ class GaussianNoise(tf.keras.layers.Layer):
 
 class Reshape1to3(tf.keras.layers.Layer):
   def __init__(self, name="reshape_1_to_3"):
-    super(Reshape1to3, self).__init__(name=name)
+    super(Reshape1to3, self).__init__(name=name, trainable=False)
 
   def __call__(self, inputs):
     batch_size = tf.shape(inputs)[0]
@@ -106,7 +109,7 @@ class Reshape1to3(tf.keras.layers.Layer):
 
 class Reshape3to1(tf.keras.layers.Layer):
   def __init__(self, name="reshape_3_to_1"):
-    super(Reshape3to1, self).__init__(name=name)
+    super(Reshape3to1, self).__init__(name=name, trainable=False)
 
   def __call__(self, inputs):
     batch_size = tf.shape(inputs)[0]
