@@ -80,3 +80,34 @@ class VirtualBatchNorm(tf.keras.layers.Layer):
     out = out * gamma
     out = out + beta
     return out
+
+
+class GaussianNoise(tf.keras.layers.Layer):
+  def __init__(self, name, std):
+    super(GaussianNoise, self).__init__(name=name)
+    self.std = std
+
+  def __call__(self, inputs):
+    noise = tf.keras.backend.random_normal(
+      shape=inputs.get_shape().as_list(),
+      mean=0.0, stddev=self.std,
+      dtype=tf.float32)
+    return inputs + noise
+
+
+class Reshape1to3(tf.keras.layers.Layer):
+  def __init__(self, name="reshape_1_to_3"):
+    super(Reshape1to3, self).__init__(name=name)
+
+  def __call__(self, inputs):
+    batch_size = tf.shape(inputs)[0]
+    return tf.reshape(inputs, [batch_size, -1, 1, 1])
+
+
+class Reshape3to1(tf.keras.layers.Layer):
+  def __init__(self, name="reshape_3_to_1"):
+    super(Reshape3to1, self).__init__(name=name)
+
+  def __call__(self, inputs):
+    batch_size = tf.shape(inputs)[0]
+    return tf.reshape(inputs, [batch_size, -1])

@@ -1,7 +1,7 @@
 from __future__ import absolute_import
 
 import tensorflow as tf
-from models.segan.Ops import DownConv, DeConv
+from models.segan.Ops import DownConv, DeConv, Reshape1to3, Reshape3to1
 
 
 class Z(tf.keras.layers.Layer):
@@ -31,6 +31,7 @@ class GEncoder(tf.keras.layers.Layer):
     super(GEncoder, self).__init__(name=name)
 
   def __call__(self, inputs):
+    # input_shape = [batch_size, 16384, 1, 1]
     c = inputs
     for layer_idx, layer_depth in enumerate(self.g_enc_depths):
       c = DownConv(depth=layer_depth,
@@ -64,6 +65,7 @@ class GDecoder(tf.keras.layers.Layer):
       _skip = skips[-(layer_idx + 1)]
       output = tf.keras.layers.Concatenate(axis=2)([output, _skip])
     return output
+    # output_shape = [batch_size, 16384, 1, 1]
 
 
 class Generator(tf.keras.Model):
@@ -71,6 +73,7 @@ class Generator(tf.keras.Model):
     super(Generator, self).__init__()
     self.kwidth = kwidth
     self.ratio = ratio
+    self.reshape_input = Reshape1to3("segan_g_reshape_input")
     self.encoder = GEncoder(g_enc_depths=g_enc_depths,
                             kwidth=self.kwidth,
                             ratio=self.ratio)
@@ -78,9 +81,14 @@ class Generator(tf.keras.Model):
     self.decoder = GDecoder(g_dec_depths=g_dec_depths,
                             kwidth=self.kwidth,
                             ratio=self.ratio)
+    self.reshape_output = Reshape3to1("segan_g_reshape_output")
 
   def __call__(self, inputs):
+    # input_shape = [batch_size, 16384]
+    inputs = self.reshape_input(inputs)
     output, skips = self.encoder(inputs)
     output = self.z(output)
     output = self.decoder(inputs=output, skips=skips)
+    output = self.reshape_output(output)
+    # output_shape = [batch_size, 16384]
     return output
