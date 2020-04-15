@@ -32,3 +32,51 @@ class DeConv(tf.keras.layers.Layer):
       kernel_initializer=tf.keras.initializers.TruncatedNormal(stddev=0.02),
       bias_initializer=tf.keras.initializers.zeros
     )
+
+
+class VirtualBatchNorm(tf.keras.layers.Layer):
+  def __init__(self, x, name, epsilon=1e-5):
+    super(VirtualBatchNorm, self).__init__()
+    assert isinstance(epsilon, float)
+    shape = x.get_shape().as_list()
+    assert len(shape) == 3, shape
+    self.epsilon = epsilon
+    self.name = name
+    self.mean = tf.reduce_mean(x, [0, 1], keep_dims=True)
+    self.mean_sq = tf.reduce_mean(tf.square(x), [0, 1], keep_dims=True)
+    self.batch_size = int(x.get_shape()[0])
+    assert x is not None
+    assert self.mean is not None
+    assert self.mean_sq is not None
+    out = self.__normalize(x, self.mean, self.mean_sq)
+    self.reference_out = out
+
+  def build(self, input_shape):
+    self.gamma = self.add_weight(
+      shape=[input_shape[-1]], name=f"{self.name}_gamma",
+      initializer=tf.random_normal_initializer(1., 0.02)
+    )
+    self.beta = self.add_weight(
+      shape=[input_shape[-1]], name=f"{self.name}_beta",
+      initializer=tf.keras.initializers.constant(0.)
+    )
+
+  def __call__(self, x):
+    new_coeff = 1 / (self.batch_size + 1.)
+    old_coeff = 1. - new_coeff
+    new_mean = tf.reduce_mean(x, [0, 1], keep_dims=True)
+    new_mean_sq = tf.reduce_mean(tf.square(x), [0, 1], keep_dims=True)
+    mean = new_coeff * new_mean + old_coeff * self.mean
+    mean_sq = new_coeff * new_mean_sq + old_coeff * self.mean_sq
+    out = self.__normalize(x, mean, mean_sq)
+    return out
+
+  def __normalize(self, x, mean, mean_sq):
+    gamma = tf.reshape(self.gamma, [1, 1, -1])
+    beta = tf.reshape(self.beta, [1, 1, -1])
+    std = tf.sqrt(self.epsilon + mean_sq - tf.square(mean))
+    out = x - mean
+    out = out / std
+    out = out * gamma
+    out = out + beta
+    return out
