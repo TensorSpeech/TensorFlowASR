@@ -40,6 +40,12 @@ class SEGAN:
     self.ckpt_manager = tf.train.CheckpointManager(
       self.checkpoint, self.configs["checkpoint_dir"], max_to_keep=5)
 
+    initial_epoch = 0
+    if self.ckpt_manager.latest_checkpoint:
+      initial_epoch = int(self.ckpt_manager.latest_checkpoint.split('-')[-1])
+      # restoring the latest checkpoint in checkpoint_path
+      self.checkpoint.restore(self.ckpt_manager.latest_checkpoint)
+
     @tf.function
     def train_step(clean_wavs, noisy_wavs):
       with tf.GradientTape() as gen_tape, tf.GradientTape() as disc_tape:
@@ -62,7 +68,7 @@ class SEGAN:
         self.discriminator_optimizer.apply_gradients(zip(gradients_of_discriminator, self.discriminator.trainable_variables))
         return gen_loss, disc_loss
 
-    for epoch in range(epochs):
+    for epoch in range(initial_epoch, epochs):
       start = time.time()
       batch_idx = 0
 
