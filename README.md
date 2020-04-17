@@ -1,6 +1,6 @@
-# Vietnamese Automatic Speech Recognition
+# Vietnamese Automatic Speech Recognition and SEGAN
 
-VASR Implementation in Tensorflow Keras.
+VASR and SEGAN Implementation in Tensorflow Keras.
 
 ## Dataset
 
@@ -24,10 +24,11 @@ python run.py --mode=train
 Run the following command to see the flags:
 
 ```bash
-python run.py --helpfull
+python run.py --help
 ```
 
 ## References
 
 1. [https://arxiv.org/abs/1512.02595](https://arxiv.org/abs/1512.02595)
 2. [https://github.com/NVIDIA/OpenSeq2Seq](https://github.com/NVIDIA/OpenSeq2Seq)
+3. [https://github.com/santi-pdp/segan](https://github.com/santi-pdp/segan)
