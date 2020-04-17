@@ -2,7 +2,7 @@ from __future__ import absolute_import
 
 import tensorflow as tf
 from models.segan.Ops import DownConv, VirtualBatchNorm, \
-  GaussianNoise, Reshape1to3
+  GaussianNoise, Reshape1to3, PreEmph
 
 
 class DiscBlock(tf.keras.layers.Layer):
@@ -25,16 +25,19 @@ class DiscBlock(tf.keras.layers.Layer):
 
 
 class Discriminator(tf.keras.Model):
-  def __init__(self, d_num_fmaps, noise_std, kwidth=31, pooling=2, **kwargs):
-    super(Discriminator, self).__init__(**kwargs)
+  def __init__(self, d_num_fmaps, noise_std, kwidth=31, pooling=2, coeff=0.95):
+    super(Discriminator, self).__init__()
     self.d_num_fmaps = d_num_fmaps
     self.kwidth = kwidth
     self.pooling = pooling
     self.noise_std = noise_std
+    self.pre_emph = PreEmph(coeff=coeff, name="segan_g_preemph")
 
   def __call__(self, clean_wav, noisy_wav, training=False):
     # clean_wav_shape = [batch_size, 16384]
     # noisy_wav_shape = [batch_size, 16384]
+    clean_wav = self.pre_emph(clean_wav)
+    noisy_wav = self.pre_emph(noisy_wav)
     clean_wav = Reshape1to3("segan_d_reshape_1_to_3_clean")(clean_wav)
     noisy_wav = Reshape1to3("segan_d_reshape_1_to_3_noisy")(noisy_wav)
     hi = tf.keras.layers.Concatenate(name="segan_d_concat_clean_noisy",

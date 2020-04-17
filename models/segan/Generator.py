@@ -1,7 +1,8 @@
 from __future__ import absolute_import
 
 import tensorflow as tf
-from models.segan.Ops import DownConv, DeConv, Reshape1to3, Reshape3to1
+from models.segan.Ops import DownConv, DeConv, \
+  Reshape1to3, Reshape3to1, PreEmph, DeEmph
 
 
 class Z(tf.keras.layers.Layer):
@@ -69,12 +70,13 @@ class GDecoder(tf.keras.layers.Layer):
 
 
 class Generator(tf.keras.Model):
-  def __init__(self, g_enc_depths, kwidth=31, ratio=2, **kwargs):
-    super(Generator, self).__init__(**kwargs)
+  def __init__(self, g_enc_depths, kwidth=31, ratio=2, coeff=0.95):
+    super(Generator, self).__init__()
     self.kwidth = kwidth
     self.ratio = ratio
     self.g_dec_depths = g_enc_depths.copy()
     self.g_dec_depths.reverse()
+    self.pre_emph = PreEmph(coeff=coeff, name="segan_g_preemph")
     self.reshape_input = Reshape1to3("segan_g_reshape_input")
     self.encoder = GEncoder(g_enc_depths=g_enc_depths,
                             kwidth=self.kwidth,
@@ -84,9 +86,11 @@ class Generator(tf.keras.Model):
                             kwidth=self.kwidth,
                             ratio=self.ratio)
     self.reshape_output = Reshape3to1("segan_g_reshape_output")
+    self.de_emph = DeEmph(coeff=coeff, name="segan_g_deemph")
 
   def __call__(self, inputs, training=False):
     # input_shape = [batch_size, 16384]
+    inputs = self.pre_emph(inputs)
     inputs = self.reshape_input(inputs)
     output, skips = self.encoder(inputs, training)
     output = self.z(output)
@@ -95,7 +99,7 @@ class Generator(tf.keras.Model):
                           training=training)
     output = self.reshape_output(output)
     # output_shape = [batch_size, 16384]
-    return output
+    return self.de_emph(output)
 
   @tf.function
   def loss(self, y_true, y_pred, l1_lambda, d_fake_logit):

@@ -1,6 +1,40 @@
 from __future__ import absolute_import
 
 import tensorflow as tf
+import numpy as np
+
+
+class PreEmph(tf.keras.layers.Layer):
+  def __init__(self, coeff=0.95, name="pre_emph"):
+    super(PreEmph, self).__init__(name=name, trainable=False)
+    self.coeff = coeff
+
+  def __call__(self, inputs):
+    # input_shape = [batch_size, 16384]
+    def map_fn(elem):
+      x0 = tf.reshape(elem[0], [1, ])
+      diff = elem[1:] - self.coeff * elem[:-1]
+      return tf.concat([x0, diff], axis=0)
+    return tf.map_fn(map_fn, inputs)
+
+
+class DeEmph(tf.keras.layers.Layer):
+  def __init__(self, coeff=0.95, name="de_emph"):
+    super(DeEmph, self).__init__(name=name, trainable=False)
+    self.coeff = coeff
+
+  def __call__(self, inputs):
+    # input_shape = [batch_size, 16384]
+    def map_fn(elem):
+      elem = elem.numpy()
+      if self.coeff <= 0:
+        return elem
+      x = np.zeros(elem.shape[0], dtype=np.float32)
+      x[0] = elem[0]
+      for n in range(1, elem.shape[0], 1):
+        x[n] = self.coeff * x[n - 1] + elem[n]
+      return tf.convert_to_tensor(x)
+    return tf.map_fn(map_fn, inputs)
 
 
 class DownConv(tf.keras.layers.Layer):
