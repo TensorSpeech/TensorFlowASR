@@ -5,28 +5,44 @@ import os
 import numpy as np
 import tensorflow as tf
 from nltk.metrics import distance
-from configs import DefaultConfig
+from configs import DefaultConfig, SeganConfig
 
-conf_required = ["base_model",
-                 "decoder",
-                 "batch_size",
-                 "num_epochs",
-                 "vocabulary_file_path",
-                 "learning_rate",
-                 "min_lr",
-                 "sample_rate",
-                 "frame_ms",
-                 "stride_ms",
-                 "num_feature_bins",
-                 "feature_type",
-                 "streaming_size"]
+asr_conf_required = ["base_model",
+                     "decoder",
+                     "batch_size",
+                     "num_epochs",
+                     "vocabulary_file_path",
+                     "learning_rate",
+                     "min_lr",
+                     "sample_rate",
+                     "frame_ms",
+                     "stride_ms",
+                     "num_feature_bins",
+                     "feature_type",
+                     "streaming_size"]
 
-conf_paths = ["train_data_transcript_paths",
-              "test_data_transcript_paths",
-              "eval_data_transcript_paths",
-              "vocabulary_file_path",
-              "checkpoint_dir",
-              "log_dir"]
+asr_conf_paths = ["train_data_transcript_paths",
+                  "test_data_transcript_paths",
+                  "eval_data_transcript_paths",
+                  "vocabulary_file_path",
+                  "checkpoint_dir",
+                  "log_dir"]
+
+segan_conf_required = ["batch_size",
+                       "num_epochs",
+                       "kwidth",
+                       "ratio",
+                       "noise_std",
+                       "l1_lambda",
+                       "pre_emph",
+                       "g_learning_rate",
+                       "d_learning_rate"]
+
+segan_conf_paths = ["train_data_paths",
+                    "test_data_paths",
+                    "eval_data_paths",
+                    "checkpoint_dir",
+                    "log_dir"]
 
 
 def check_key_in_dict(dictionary, keys):
@@ -41,16 +57,31 @@ def preprocess_paths(paths):
   return os.path.expanduser(paths)
 
 
-def get_config(config_path):
+def get_asr_config(config_path):
   conf_dict = runpy.run_path(config_path)
-  check_key_in_dict(dictionary=conf_dict, keys=conf_required)
+  check_key_in_dict(dictionary=conf_dict, keys=asr_conf_required)
+  # fill missing default optional values
+  default_dict = vars(SeganConfig)
+  for key in default_dict.keys():
+    if key not in conf_dict.keys():
+      conf_dict[key] = default_dict[key]
+  # convert paths to take ~/ dir
+  for key in asr_conf_paths:
+    conf_dict[key] = preprocess_paths(conf_dict[key])
+
+  return conf_dict
+
+
+def get_segan_config(config_path):
+  conf_dict = runpy.run_path(config_path)
+  check_key_in_dict(dictionary=conf_dict, keys=segan_conf_required)
   # fill missing default optional values
   default_dict = vars(DefaultConfig)
   for key in default_dict.keys():
     if key not in conf_dict.keys():
       conf_dict[key] = default_dict[key]
   # convert paths to take ~/ dir
-  for key in conf_paths:
+  for key in segan_conf_paths:
     conf_dict[key] = preprocess_paths(conf_dict[key])
 
   return conf_dict

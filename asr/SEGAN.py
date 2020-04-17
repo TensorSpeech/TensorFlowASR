@@ -4,27 +4,29 @@ import time
 import tensorflow as tf
 from models.segan.Discriminator import Discriminator
 from models.segan.Generator import Generator
+from utils.Utils import get_segan_config
 
 
 class SEGAN:
-  def __init__(self, configs):
+  def __init__(self, config_path):
     self.g_enc_depths = [16, 32, 32, 64, 64, 128, 128, 256, 256, 512, 1024]
     self.d_num_fmaps = [16, 32, 32, 64, 64, 128, 128, 256, 256, 512, 1024]
 
-    self.configs = configs
+    self.configs = get_segan_config(config_path)
 
     self.kwidth = self.configs["kwidth"]
     self.ratio = self.configs["ratio"]
     self.noise_std = self.configs["noise_std"]
     self.l1_lambda = self.configs["l1_lambda"]
+    self.coeff = self.configs["pre_emph"]
 
     self.generator = Generator(g_enc_depths=self.g_enc_depths,
-                               kwidth=self.kwidth, ratio=self.ratio)
+                               kwidth=self.kwidth, ratio=self.ratio, coeff=self.coeff)
 
     self.discriminator = Discriminator(d_num_fmaps=self.d_num_fmaps,
                                        noise_std=self.noise_std,
                                        kwidth=self.kwidth,
-                                       pooling=self.ratio)
+                                       pooling=self.ratio, coeff=self.coeff)
 
     self.generator_optimizer = tf.keras.optimizers.RMSprop(self.configs["g_learning_rate"])
     self.discriminator_optimizer = tf.keras.optimizers.RMSprop(self.configs["d_learning_rate"])
