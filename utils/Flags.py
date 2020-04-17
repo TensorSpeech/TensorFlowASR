@@ -10,6 +10,10 @@ _CONF_FILE = os.path.join(current_path,
 
 parser = argparse.ArgumentParser(description="ASR Commands")
 
+
+parser.add_argument("--model", type=str, default="asr",
+                    help="asr or segan")
+
 parser.add_argument("--mode", "-m", type=str, default="",
                     help="Mode for training, testing or infering")
 

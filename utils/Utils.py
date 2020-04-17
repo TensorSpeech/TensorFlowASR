@@ -35,12 +35,15 @@ segan_conf_required = ["batch_size",
                        "noise_std",
                        "l1_lambda",
                        "pre_emph",
+                       "window_size",
+                       "stride",
                        "g_learning_rate",
                        "d_learning_rate"]
 
-segan_conf_paths = ["train_data_paths",
-                    "test_data_paths",
-                    "eval_data_paths",
+segan_conf_paths = ["clean_train_data_dir",
+                    "noisy_train_data_dir",
+                    "clean_test_data_dir",
+                    "noisy_test_data_dir",
                     "checkpoint_dir",
                     "log_dir"]
 
@@ -144,3 +147,30 @@ def get_length(batch_data):
     size = tf.shape(elem)
     return tf.convert_to_tensor([size[0]])
   return tf.map_fn(map_fn, batch_data, dtype=tf.int32)
+
+
+def slice_signal(signal, window_size, stride=0.5):
+  """ Return windows of the given signal by sweeping in stride fractions
+      of window
+  """
+  assert signal.ndim == 1, signal.ndim
+  n_samples = signal.shape[0]
+  offset = int(window_size * stride)
+  slices = []
+  for beg_i, end_i in zip(range(0, n_samples, offset),
+                          range(window_size, n_samples + offset,
+                                offset)):
+    if end_i - beg_i < window_size:
+      break
+    slice_ = signal[beg_i:end_i]
+    if slice_.shape[0] == window_size:
+      slices.append(slice_)
+  return np.array(slices, dtype=np.int32)
+
+
+def merge_slices(slices):
+  # slices shape = [batch, window_size]
+  merged = []
+  for s in slices:
+    merged.append(s)
+  return np.array(merged, dtype=np.int32)

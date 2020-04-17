@@ -14,21 +14,21 @@ l1_lambda = 100.
 
 pre_emph = 0.95
 
+window_size = 2 ** 14
+
+stride = 0.5
+
 g_learning_rate = 0.002
 
 d_learning_rate = 0.002
 
-train_data_paths = [
-  "/mnt/Data/ML/ASR/Preprocessed/SmallFixed/Train/transcripts.tsv"
-]
+clean_train_data_dir =
 
-eval_data_paths = [
-  "/mnt/Data/ML/ASR/Preprocessed/SmallFixed/Dev/transcripts.tsv"
-]
+noisy_train_data_dir =
 
-test_data_paths = [
-  "/mnt/Data/ML/ASR/Preprocessed/SmallFixed/Test/transcripts.tsv"
-]
+clean_test_data_dir =
+
+noisy_test_data_dir =
 
 checkpoint_dir = "/mnt/Projects/asrk16/trained/segan/checkpoints/"
 
