@@ -8,7 +8,7 @@ from models.CTCModel import CTCModel
 from decoders.Decoders import create_decoder
 from featurizers.SpeechFeaturizer import SpeechFeaturizer
 from featurizers.TextFeaturizer import TextFeaturizer
-from utils.Utils import get_config, check_key_in_dict, \
+from utils.Utils import get_asr_config, check_key_in_dict, \
   bytes_to_string, get_length, wer, cer
 from utils.TimeHistory import TimeHistory
 from utils.Checkpoint import Checkpoint
@@ -17,7 +17,7 @@ from data.Dataset import Dataset
 
 class SpeechToText:
   def __init__(self, configs_path):
-    self.configs = get_config(configs_path)
+    self.configs = get_asr_config(configs_path)
     self.speech_featurizer = SpeechFeaturizer(
       sample_rate=self.configs["sample_rate"],
       frame_ms=self.configs["frame_ms"],
@@ -49,7 +49,7 @@ class SpeechToText:
                             "eval_data_transcript_paths"])
     train_dataset = Dataset(
       data_path=self.configs["train_data_transcript_paths"],
-      mode="train")
+      mode="train", train_sort=True)
     eval_dataset = Dataset(
       data_path=self.configs["eval_data_transcript_paths"],
       mode="eval")
@@ -113,7 +113,7 @@ class SpeechToText:
     test_dataset = Dataset(
       data_path=self.configs["test_data_transcript_paths"],
       mode="test")
-    # self.load_model(model_file)
+    self.load_model(model_file)
     tf_test_dataset = test_dataset(
       speech_featurizer=self.speech_featurizer,
       text_featurizer=self.text_featurizer,
@@ -194,14 +194,14 @@ class SpeechToText:
     tf.compat.v1.set_random_seed(0)
     try:
       self.model.load_model(model_file)
-    except Exception:
-      return "Model is not trained"
+    except Exception as e:
+      raise ValueError("Model is not trained: ", e)
     return None
 
   def load_model_from_weights(self, model_file):
     tf.compat.v1.set_random_seed(0)
     try:
       self.model.load_weights(model_file)
-    except Exception:
-      return "Model is not trained"
+    except Exception as e:
+      raise ValueError("Model is not trained: ", e)
     return None

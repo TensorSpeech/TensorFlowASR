@@ -5,28 +5,47 @@ import os
 import numpy as np
 import tensorflow as tf
 from nltk.metrics import distance
-from configs import DefaultConfig
+from configs import DefaultConfig, SeganConfig
 
-conf_required = ["base_model",
-                 "decoder",
-                 "batch_size",
-                 "num_epochs",
-                 "vocabulary_file_path",
-                 "learning_rate",
-                 "min_lr",
-                 "sample_rate",
-                 "frame_ms",
-                 "stride_ms",
-                 "num_feature_bins",
-                 "feature_type",
-                 "streaming_size"]
+asr_conf_required = ["base_model",
+                     "decoder",
+                     "batch_size",
+                     "num_epochs",
+                     "vocabulary_file_path",
+                     "learning_rate",
+                     "min_lr",
+                     "sample_rate",
+                     "frame_ms",
+                     "stride_ms",
+                     "num_feature_bins",
+                     "feature_type",
+                     "streaming_size"]
 
-conf_paths = ["train_data_transcript_paths",
-              "test_data_transcript_paths",
-              "eval_data_transcript_paths",
-              "vocabulary_file_path",
-              "checkpoint_dir",
-              "log_dir"]
+asr_conf_paths = ["train_data_transcript_paths",
+                  "test_data_transcript_paths",
+                  "eval_data_transcript_paths",
+                  "vocabulary_file_path",
+                  "checkpoint_dir",
+                  "log_dir"]
+
+segan_conf_required = ["batch_size",
+                       "num_epochs",
+                       "kwidth",
+                       "ratio",
+                       "noise_std",
+                       "l1_lambda",
+                       "pre_emph",
+                       "window_size",
+                       "stride",
+                       "g_learning_rate",
+                       "d_learning_rate"]
+
+segan_conf_paths = ["clean_train_data_dir",
+                    "noisy_train_data_dir",
+                    "clean_test_data_dir",
+                    "noisy_test_data_dir",
+                    "checkpoint_dir",
+                    "log_dir"]
 
 
 def check_key_in_dict(dictionary, keys):
@@ -41,16 +60,31 @@ def preprocess_paths(paths):
   return os.path.expanduser(paths)
 
 
-def get_config(config_path):
+def get_asr_config(config_path):
   conf_dict = runpy.run_path(config_path)
-  check_key_in_dict(dictionary=conf_dict, keys=conf_required)
+  check_key_in_dict(dictionary=conf_dict, keys=asr_conf_required)
+  # fill missing default optional values
+  default_dict = vars(SeganConfig)
+  for key in default_dict.keys():
+    if key not in conf_dict.keys():
+      conf_dict[key] = default_dict[key]
+  # convert paths to take ~/ dir
+  for key in asr_conf_paths:
+    conf_dict[key] = preprocess_paths(conf_dict[key])
+
+  return conf_dict
+
+
+def get_segan_config(config_path):
+  conf_dict = runpy.run_path(config_path)
+  check_key_in_dict(dictionary=conf_dict, keys=segan_conf_required)
   # fill missing default optional values
   default_dict = vars(DefaultConfig)
   for key in default_dict.keys():
     if key not in conf_dict.keys():
       conf_dict[key] = default_dict[key]
   # convert paths to take ~/ dir
-  for key in conf_paths:
+  for key in segan_conf_paths:
     conf_dict[key] = preprocess_paths(conf_dict[key])
 
   return conf_dict
@@ -113,3 +147,30 @@ def get_length(batch_data):
     size = tf.shape(elem)
     return tf.convert_to_tensor([size[0]])
   return tf.map_fn(map_fn, batch_data, dtype=tf.int32)
+
+
+def slice_signal(signal, window_size, stride=0.5):
+  """ Return windows of the given signal by sweeping in stride fractions
+      of window
+  """
+  assert signal.ndim == 1, signal.ndim
+  n_samples = signal.shape[0]
+  offset = int(window_size * stride)
+  slices = []
+  for beg_i, end_i in zip(range(0, n_samples, offset),
+                          range(window_size, n_samples + offset,
+                                offset)):
+    if end_i - beg_i < window_size:
+      break
+    slice_ = signal[beg_i:end_i]
+    if slice_.shape[0] == window_size:
+      slices.append(slice_)
+  return np.array(slices, dtype=np.int32)
+
+
+def merge_slices(slices):
+  # slices shape = [batch, window_size]
+  merged = []
+  for s in slices:
+    merged.append(s)
+  return np.array(merged, dtype=np.int32)
