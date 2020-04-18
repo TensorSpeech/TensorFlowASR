@@ -55,15 +55,28 @@ class CTCModel:
     model = tf.keras.Model(inputs=features, outputs=outputs)
     return model
 
+  # @tf.function
+  # def loss(self, y_true, y_pred):
+  #   label_length = get_length(y_true)
+  #   input_length = get_length(y_pred)
+  #   loss = tf.keras.backend.ctc_batch_cost(
+  #     y_pred=y_pred,
+  #     input_length=input_length,
+  #     y_true=tf.squeeze(y_true, -1),
+  #     label_length=label_length)
+  #   return mask_nan(loss)
+
   @tf.function
   def loss(self, y_true, y_pred):
     label_length = get_length(y_true)
     input_length = get_length(y_pred)
-    loss = tf.keras.backend.ctc_batch_cost(
-      y_pred=y_pred,
-      input_length=input_length,
-      y_true=tf.squeeze(y_true, -1),
-      label_length=label_length)
+    loss = tf.nn.ctc_loss(
+      labels=tf.cast(tf.squeeze(y_true, -1), tf.int32),
+      logit_length=input_length,
+      logits=y_pred,
+      label_length=label_length,
+      logits_time_major=False,
+      blank_index=self.num_classes - 1)
     return mask_nan(loss)
 
   def predict(self, *args, **kwargs):
