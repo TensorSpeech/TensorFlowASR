@@ -44,7 +44,6 @@ class SEGAN:
         self.checkpoint, self.configs["checkpoint_dir"], max_to_keep=5)
 
   def train(self):
-
     train_dataset = SeganDataset(clean_data_dir=self.configs["clean_train_data_dir"],
                                  noisy_data_dir=self.configs["noisy_train_data_dir"],
                                  window_size=self.window_size, stride=self.stride)

@@ -7,25 +7,26 @@ from models.segan.Ops import DownConv, VirtualBatchNorm, \
 
 class DiscBlock(tf.keras.layers.Layer):
   def __init__(self, kwidth, nfmaps, pooling=2, name="disc_block"):
-    self.name = name
+    self.cname = name
     self.kwidth = kwidth
     self.nfmaps = nfmaps
     self.pooling = pooling
-    super(DiscBlock, self).__init__(name=name)
+    super(DiscBlock, self).__init__(dtype=tf.float32)
 
-  def __call__(self, inputs, training=False):
+  def call(self, inputs, training=False):
     hi = DownConv(depth=self.nfmaps,
                   kwidth=self.kwidth,
                   pool=self.pooling,
-                  name=f"{self.name}_downconv")(inputs, training)
-    hi = VirtualBatchNorm(hi, name=f"{self.name}_vbn")(hi)
+                  name=f"{self.cname}_downconv")(inputs, training=training)
+    hi = VirtualBatchNorm(hi, name=f"{self.cname}_vbn")(hi)
     hi = tf.keras.layers.LeakyReLU(
-      alpha=0.3, name=f"{self.name}_leakyrelu")(hi)
+      alpha=0.3, name=f"{self.cname}_leakyrelu")(hi)
     return hi
 
 
 class Discriminator(tf.keras.Model):
-  def __init__(self, d_num_fmaps, noise_std, kwidth=31, pooling=2, coeff=0.95):
+  def __init__(self, d_num_fmaps, noise_std,
+               kwidth=31, pooling=2, coeff=0.95):
     super(Discriminator, self).__init__()
     self.d_num_fmaps = d_num_fmaps
     self.kwidth = kwidth
@@ -33,7 +34,7 @@ class Discriminator(tf.keras.Model):
     self.noise_std = noise_std
     self.pre_emph = PreEmph(coeff=coeff, name="segan_g_preemph")
 
-  def __call__(self, clean_wav, noisy_wav, training=False):
+  def call(self, clean_wav, noisy_wav, training=False):
     # clean_wav_shape = [batch_size, 16384]
     # noisy_wav_shape = [batch_size, 16384]
     clean_wav = self.pre_emph(clean_wav)
@@ -51,7 +52,7 @@ class Discriminator(tf.keras.Model):
       hi = DiscBlock(kwidth=self.kwidth,
                      nfmaps=nfmaps,
                      pooling=self.pooling,
-                     name=f"segan_d_{block_idx}")(hi, training)
+                     name=f"segan_d_{block_idx}")(hi, training=training)
     hi = tf.keras.layers.Flatten(name="segan_d_flatten")(hi)
     hi = tf.expand_dims(hi, -1, name="segan_d_expand_dims")
     hi = tf.keras.layers.Conv1D(filters=1, kernel_size=1,

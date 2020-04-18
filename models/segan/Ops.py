@@ -5,80 +5,84 @@ import numpy as np
 
 
 class PreEmph(tf.keras.layers.Layer):
-  def __init__(self, coeff=0.95, name="pre_emph"):
-    super(PreEmph, self).__init__(name=name, trainable=False)
+  def __init__(self, coeff=0.95, name="pre_emph", **kwargs):
+    super(PreEmph, self).__init__(trainable=False, dtype=tf.float32, **kwargs)
     self.coeff = coeff
+    self.cname = name
 
-  def __call__(self, inputs):
+  def call(self, inputs):
     # input_shape = [batch_size, 16384]
     def map_fn(elem):
       x0 = tf.reshape(elem[0], [1, ])
       diff = elem[1:] - self.coeff * elem[:-1]
       return tf.concat([x0, diff], axis=0)
-    return tf.map_fn(map_fn, inputs)
+    return tf.map_fn(map_fn, inputs, name=self.cname)
 
 
 class DeEmph(tf.keras.layers.Layer):
-  def __init__(self, coeff=0.95, name="de_emph"):
-    super(DeEmph, self).__init__(name=name, trainable=False)
+  def __init__(self, coeff=0.95, name="de_emph", **kwargs):
+    super(DeEmph, self).__init__(trainable=False, dtype=tf.float32, **kwargs)
     self.coeff = coeff
+    self.cname = name
 
-  def __call__(self, inputs):
+  def call(self, inputs):
     # input_shape = [batch_size, 16384]
     def map_fn(elem):
-      elem = elem.numpy()
       if self.coeff <= 0:
         return elem
-      x = np.zeros(elem.shape[0], dtype=np.float32)
-      x[0] = elem[0]
+      x = tf.zeros(elem.shape[0] - 1, dtype=tf.float32)
+      x0 = tf.reshape(elem[0], [1, ])
+      x = tf.concat([x0, x], axis=0)
       for n in range(1, elem.shape[0], 1):
         x[n] = self.coeff * x[n - 1] + elem[n]
       return tf.convert_to_tensor(x)
-    return tf.map_fn(map_fn, inputs)
+    return tf.map_fn(map_fn, inputs, name=self.cname)
 
 
 class DownConv(tf.keras.layers.Layer):
-  def __init__(self, depth, kwidth=5, pool=2, name="downconv"):
-    super(DownConv, self).__init__(name=name)
+  def __init__(self, depth, kwidth=5, pool=2, name="downconv", **kwargs):
+    super(DownConv, self).__init__(dtype=tf.float32, **kwargs)
     self.layer = tf.keras.layers.Conv2D(
       filters=depth,
       kernel_size=(kwidth, 1),
       strides=(pool, 1),
       padding="same",
       use_bias=True,
+      name=name,
       kernel_initializer=tf.keras.initializers.TruncatedNormal(stddev=0.02),
       bias_initializer=tf.keras.initializers.zeros
     )
 
-  def __call__(self, inputs, training=False):
-    return self.layer(inputs, training)
+  def call(self, inputs, training=False):
+    return self.layer(inputs, training=training)
 
 
 class DeConv(tf.keras.layers.Layer):
-  def __init__(self, depth, kwidth=5, dilation=2, name="deconv"):
-    super(DeConv, self).__init__(name=name)
+  def __init__(self, depth, kwidth=5, dilation=2, name="deconv", **kwargs):
+    super(DeConv, self).__init__(dtype=tf.float32, **kwargs)
     self.layer = tf.keras.layers.Conv2DTranspose(
       filters=depth,
       kernel_size=(kwidth, 1),
       strides=(dilation, 1),
       padding="same",
       use_bias=True,
+      name=name,
       kernel_initializer=tf.keras.initializers.TruncatedNormal(stddev=0.02),
       bias_initializer=tf.keras.initializers.zeros
     )
 
-  def __call__(self, inputs, training=False):
-    return self.layer(inputs, training)
+  def call(self, inputs, training=False):
+    return self.layer(inputs, training=training)
 
 
 class VirtualBatchNorm(tf.keras.layers.Layer):
-  def __init__(self, x, name, epsilon=1e-5):
-    super(VirtualBatchNorm, self).__init__()
+  def __init__(self, x, name, epsilon=1e-5, **kwargs):
+    super(VirtualBatchNorm, self).__init__(dtype=tf.float32, **kwargs)
     assert isinstance(epsilon, float)
     shape = x.get_shape().as_list()
     assert len(shape) == 3, shape
     self.epsilon = epsilon
-    self.name = name
+    self.cname = name
     self.mean = tf.reduce_mean(x, [0, 1], keep_dims=True)
     self.mean_sq = tf.reduce_mean(tf.square(x), [0, 1], keep_dims=True)
     self.batch_size = int(x.get_shape()[0])
@@ -90,15 +94,17 @@ class VirtualBatchNorm(tf.keras.layers.Layer):
 
   def build(self, input_shape):
     self.gamma = self.add_weight(
-      shape=[input_shape[-1]], name=f"{self.name}_gamma",
-      initializer=tf.random_normal_initializer(1., 0.02)
+      shape=[input_shape[-1]], name=f"{self.cname}_gamma",
+      initializer=tf.random_normal_initializer(1., 0.02),
+      trainable=True
     )
     self.beta = self.add_weight(
-      shape=[input_shape[-1]], name=f"{self.name}_beta",
-      initializer=tf.keras.initializers.constant(0.)
+      shape=[input_shape[-1]], name=f"{self.cname}_beta",
+      initializer=tf.keras.initializers.constant(0.),
+      trainable=True
     )
 
-  def __call__(self, x):
+  def call(self, x):
     new_coeff = 1 / (self.batch_size + 1.)
     old_coeff = 1. - new_coeff
     new_mean = tf.reduce_mean(x, [0, 1], keep_dims=True)
@@ -120,11 +126,12 @@ class VirtualBatchNorm(tf.keras.layers.Layer):
 
 
 class GaussianNoise(tf.keras.layers.Layer):
-  def __init__(self, name, std):
-    super(GaussianNoise, self).__init__(name=name, trainable=False)
+  def __init__(self, name, std, **kwargs):
+    super(GaussianNoise, self).__init__(trainable=False, dtype=tf.float32, **kwargs)
     self.std = std
+    self.cname = name
 
-  def __call__(self, inputs):
+  def call(self, inputs):
     noise = tf.keras.backend.random_normal(
       shape=inputs.get_shape().as_list(),
       mean=0.0, stddev=self.std,
@@ -133,18 +140,20 @@ class GaussianNoise(tf.keras.layers.Layer):
 
 
 class Reshape1to3(tf.keras.layers.Layer):
-  def __init__(self, name="reshape_1_to_3"):
-    super(Reshape1to3, self).__init__(name=name, trainable=False)
+  def __init__(self, name="reshape_1_to_3", **kwargs):
+    super(Reshape1to3, self).__init__(trainable=False, dtype=tf.float32, **kwargs)
+    self.cname = name
 
-  def __call__(self, inputs):
+  def call(self, inputs):
     batch_size = tf.shape(inputs)[0]
-    return tf.reshape(inputs, [batch_size, -1, 1, 1])
+    return tf.reshape(inputs, [batch_size, -1, 1, 1], name=self.cname)
 
 
 class Reshape3to1(tf.keras.layers.Layer):
-  def __init__(self, name="reshape_3_to_1"):
-    super(Reshape3to1, self).__init__(name=name, trainable=False)
+  def __init__(self, name="reshape_3_to_1", **kwargs):
+    super(Reshape3to1, self).__init__(trainable=False, dtype=tf.float32, **kwargs)
+    self.cname = name
 
-  def __call__(self, inputs):
+  def call(self, inputs):
     batch_size = tf.shape(inputs)[0]
-    return tf.reshape(inputs, [batch_size, -1])
+    return tf.reshape(inputs, [batch_size, -1], name=self.cname)

@@ -64,7 +64,7 @@ def get_asr_config(config_path):
   conf_dict = runpy.run_path(config_path)
   check_key_in_dict(dictionary=conf_dict, keys=asr_conf_required)
   # fill missing default optional values
-  default_dict = vars(SeganConfig)
+  default_dict = vars(DefaultConfig)
   for key in default_dict.keys():
     if key not in conf_dict.keys():
       conf_dict[key] = default_dict[key]
@@ -79,7 +79,7 @@ def get_segan_config(config_path):
   conf_dict = runpy.run_path(config_path)
   check_key_in_dict(dictionary=conf_dict, keys=segan_conf_required)
   # fill missing default optional values
-  default_dict = vars(DefaultConfig)
+  default_dict = vars(SeganConfig)
   for key in default_dict.keys():
     if key not in conf_dict.keys():
       conf_dict[key] = default_dict[key]
