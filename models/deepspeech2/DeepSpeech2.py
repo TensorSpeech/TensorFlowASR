@@ -7,6 +7,7 @@ from __future__ import absolute_import
 import tensorflow as tf
 from models.deepspeech2.RowConv1D import RowConv1D
 from models.deepspeech2.BNRNNCell import BNLSTMCell
+from tensorflow.keras.layers import LSTMCell
 
 
 class DeepSpeech2:
@@ -46,18 +47,23 @@ class DeepSpeech2:
       if self.is_bidirectional:
         layer = tf.keras.layers.Bidirectional(
           tf.keras.layers.RNN(
-            BNLSTMCell(self.rnn_units),
+            LSTMCell(self.rnn_units, dropout=0.2),
             return_sequences=True, unroll=False,
             time_major=True, stateful=False),
-          name=f"bibnlstm_{i}")(layer)
+          name=f"bilstm_{i}")(layer)
       else:
         layer = tf.keras.layers.RNN(
-            BNLSTMCell(self.rnn_units),
+            LSTMCell(self.rnn_units, dropout=0.2),
             return_sequences=True, unroll=False,
             time_major=True, stateful=streaming,
-            name=f"bnlstm_{i}")(layer)
+            name=f"lstm_{i}")(layer)
 
     # Convert to batch_major
     layer = tf.transpose(layer, [1, 0, 2])
+
+    layer = tf.keras.layers.Dense(units=1024,
+                                  name="pre_fully_connected",
+                                  use_bias=True)(layer)
+    layer = tf.keras.layers.ReLU(max_value=20, name=f"relu_pre_fc_{i}")(layer)
 
     return layer
