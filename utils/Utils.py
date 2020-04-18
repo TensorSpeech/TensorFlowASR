@@ -145,7 +145,7 @@ def bytes_to_string(array, encoding: str = "utf-8"):
 def get_length(batch_data):
   def map_fn(elem):
     size = tf.shape(elem)
-    return tf.convert_to_tensor(size[0])
+    return tf.convert_to_tensor([size[0]])
   return tf.map_fn(map_fn, batch_data, dtype=tf.int32)
 
 
