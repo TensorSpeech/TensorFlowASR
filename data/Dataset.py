@@ -111,6 +111,5 @@ class Dataset:
       )
     )
     # Prefetch to improve speed of input length
-    dataset = dataset.prefetch(
-      buffer_size=tf.data.experimental.AUTOTUNE)
+    dataset = dataset.prefetch(4)
     return dataset
