@@ -30,11 +30,11 @@ class DeEmph(tf.keras.layers.Layer):
     def map_fn(elem):
       if self.coeff <= 0:
         return elem
-      x = tf.zeros(elem.shape[0] - 1, dtype=tf.float32)
-      x0 = tf.reshape(elem[0], [1, ])
-      x = tf.concat([x0, x], axis=0)
+      x = tf.reshape(elem[0], [1, ])
       for n in range(1, elem.shape[0], 1):
-        x[n] = self.coeff * x[n - 1] + elem[n]
+        x_next = self.coeff * x[n - 1] + elem[n]
+        x_next = tf.reshape(x_next, [1, ])
+        x = tf.concat([x, x_next], axis=0)
       return tf.convert_to_tensor(x)
     return tf.map_fn(map_fn, inputs, name=self.cname)
 
