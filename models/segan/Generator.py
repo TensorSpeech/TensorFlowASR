@@ -6,27 +6,25 @@ from models.segan.Ops import DownConv, DeConv, \
 
 
 class Z(tf.keras.layers.Layer):
-  def __init__(self, mean=0., stddev=1., name="segan_z"):
+  def __init__(self, mean=0., stddev=1., name="segan_z", **kwargs):
     self.mean = mean,
     self.stddev = stddev
-    self.cname = name
-    super(Z, self).__init__()
+    super(Z, self).__init__(name=name, **kwargs)
 
   def call(self, inputs):
-    z = tf.keras.backend.random_normal(shape=inputs.get_shape().as_list(),
+    z = tf.keras.backend.random_normal(shape=tf.shape(inputs),
                                        mean=self.mean, stddev=self.stddev)
-    return tf.keras.layers.Concatenate(axis=3, name=f"{self.cname}_concat")([z, inputs])
+    return tf.keras.layers.Concatenate(axis=3)([z, inputs])
 
 
 class GEncoder(tf.keras.layers.Layer):
   def __init__(self, g_enc_depths, kwidth=5, ratio=2,
-               name="segan_g_encoder"):
+               name="segan_g_encoder", **kwargs):
     self.g_enc_depths = g_enc_depths
     self.kwidth = kwidth
     self.ratio = ratio
     self.skips = []
-    self.cname = name
-    super(GEncoder, self).__init__(dtype=tf.float32)
+    super(GEncoder, self).__init__(name=name, **kwargs)
 
   def call(self, inputs, training=False):
     # input_shape = [batch_size, 16384, 1, 1]
@@ -35,21 +33,20 @@ class GEncoder(tf.keras.layers.Layer):
       c = DownConv(depth=layer_depth,
                    kwidth=self.kwidth,
                    pool=self.ratio,
-                   name=f"{self.cname}_conv_{layer_idx}")(c, training=training)
+                   name=f"downconv_{layer_idx}")(c, training=training)
       if layer_idx < len(self.g_enc_depths) - 1:
         self.skips.append(c)
-      c = tf.keras.layers.PReLU(name=f"{self.cname}_prelu_{layer_idx}")(c)
+      c = tf.keras.layers.LeakyReLU(name=f"downconv_prelu_{layer_idx}")(c)
     return c, self.skips
 
 
 class GDecoder(tf.keras.layers.Layer):
   def __init__(self, g_dec_depths, kwidth=5,
-               ratio=2, name="segan_g_decoder"):
+               ratio=2, name="segan_g_decoder", **kwargs):
     self.g_dec_depths = g_dec_depths
     self.kwidth = kwidth
     self.ratio = ratio
-    self.cname = name
-    super(GDecoder, self).__init__(dtype=tf.float32)
+    super(GDecoder, self).__init__(name=name, **kwargs)
 
   def call(self, inputs, skips, training=False):
     assert skips and len(skips) > 0
@@ -58,52 +55,40 @@ class GDecoder(tf.keras.layers.Layer):
       output = DeConv(depth=layer_depth,
                       kwidth=self.kwidth,
                       dilation=self.ratio,
-                      name=f"{self.cname}_deconv_{layer_idx}")(output, training=training)
-      output = tf.keras.layers.PReLU(name=f"{self.cname}_prelu_{layer_idx}")(output)
+                      name=f"deconv_{layer_idx}")(output, training=training)
+      output = tf.keras.layers.LeakyReLU(name=f"deconv_prelu_{layer_idx}")(output)
       _skip = skips[-(layer_idx + 1)]
-      output = tf.keras.layers.Concatenate(axis=3)([output, _skip])
+      output = tf.keras.layers.Concatenate(axis=3, name=f"concat_skip_{layer_idx}")([output, _skip])
     return DeConv(depth=1, kwidth=self.kwidth, dilation=self.ratio,
-                  name=f"{self.cname}_deconv_last")(output, training=training)
+                  name=f"deconv_last")(output, training=training)
     # output_shape = [batch_size, 16384, 1, 1]
 
 
-class Generator(tf.keras.Model):
-  def __init__(self, g_enc_depths,
-               kwidth=31, ratio=2, coeff=0.95):
-    super(Generator, self).__init__()
-    self.kwidth = kwidth
-    self.ratio = ratio
-    self.g_dec_depths = g_enc_depths.copy()
-    self.g_dec_depths.reverse()
-    self.g_dec_depths = self.g_dec_depths[1:]
-    self.pre_emph = PreEmph(coeff=coeff, name="segan_g_preemph")
-    self.reshape_input = Reshape1to3("segan_g_reshape_input")
-    self.encoder = GEncoder(g_enc_depths=g_enc_depths,
-                            kwidth=self.kwidth,
-                            ratio=self.ratio)
-    self.z = Z()
-    self.decoder = GDecoder(g_dec_depths=self.g_dec_depths,
-                            kwidth=self.kwidth,
-                            ratio=self.ratio)
-    self.reshape_output = Reshape3to1("segan_g_reshape_output")
-    self.de_emph = DeEmph(coeff=coeff, name="segan_g_deemph")
+def create_generator(g_enc_depths, window_size, kwidth=31, ratio=2, coeff=0.95):
+  g_dec_depths = g_enc_depths.copy()
+  g_dec_depths.reverse()
+  g_dec_depths = g_dec_depths[1:]
 
-  @tf.function
-  def call(self, inputs, training=False):
-    # input_shape = [batch_size, 16384]
-    inputs = self.pre_emph(inputs)
-    inputs = self.reshape_input(inputs)
-    output, skips = self.encoder(inputs, training=training)
-    output = self.z(output)
-    output = self.decoder(inputs=output,
-                          skips=skips,
-                          training=training)
-    output = self.reshape_output(output)
-    # output_shape = [batch_size, 16384]
-    return self.de_emph(output)
+  # input_shape = [batch_size, 16384]
+  signal = tf.keras.Input(shape=(window_size,),
+                          name="noisy_input", dtype=tf.float32)
+  pre_emph = PreEmph(coeff=coeff, name="segan_g_preemph")(signal)
+  reshape_input = Reshape1to3("segan_g_reshape_input")(pre_emph)
+  encoder, skips = GEncoder(g_enc_depths=g_enc_depths,
+                            kwidth=kwidth,
+                            ratio=ratio)(reshape_input)
+  z = Z()(encoder)
+  decoder = GDecoder(g_dec_depths=g_dec_depths,
+                     kwidth=kwidth, ratio=ratio)(z, skips)
+  reshape_output = Reshape3to1("segan_g_reshape_output")(decoder)
+  de_emph = DeEmph(coeff=coeff, name="segan_g_deemph")(reshape_output)
+  # output_shape = [batch_size, 16384]
 
-  @tf.function
-  def loss(self, y_true, y_pred, l1_lambda, d_fake_logit):
-    l1_loss = l1_lambda * tf.reduce_mean(tf.abs(tf.math.subtract(y_pred, y_true)))
-    g_adv_loss = tf.reduce_mean(tf.math.squared_difference(d_fake_logit, 1.))
-    return l1_loss + g_adv_loss
+  return tf.keras.Model(inputs=signal, outputs=de_emph)
+
+
+@tf.function
+def generator_loss(y_true, y_pred, l1_lambda, d_fake_logit):
+  l1_loss = l1_lambda * tf.reduce_mean(tf.abs(tf.math.subtract(y_pred, y_true)))
+  g_adv_loss = tf.reduce_mean(tf.math.squared_difference(d_fake_logit, 1.))
+  return l1_loss + g_adv_loss
