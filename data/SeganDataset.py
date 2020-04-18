@@ -42,15 +42,7 @@ class SeganDataset:
     )
     # Repeat and batch the dataset
     dataset = dataset.repeat(repeat)
-    # Padding the features to its max length dimensions
-    dataset = dataset.padded_batch(
-      batch_size=batch_size,
-      padded_shapes=(
-        tf.TensorShape([self.window_size]),
-        tf.TensorShape([self.window_size])
-      )
-    )
+    dataset = dataset.batch(batch_size)
     # Prefetch to improve speed of input length
-    dataset = dataset.prefetch(
-      buffer_size=tf.data.experimental.AUTOTUNE)
+    dataset = dataset.prefetch(4)
     return dataset
