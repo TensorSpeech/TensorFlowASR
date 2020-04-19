@@ -99,3 +99,6 @@ class CTCModel:
 
   def to_json(self):
     return self.model.to_json()
+
+  def save(self, model_file):
+    return self.model.save(model_file)
