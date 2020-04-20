@@ -6,15 +6,17 @@ import tensorflow as tf
 import numpy as np
 from utils.Utils import check_key_in_dict, bytes_to_string
 from ctc_decoders import Scorer
-from ctc_decoders import ctc_beam_search_decoder_batch
+from ctc_decoders import ctc_beam_search_decoder_batch, ctc_greedy_decoder
 
 
 class Decoder:
-  def __init__(self, index_to_token):
+  def __init__(self, index_to_token, vocab_array=None):
     self.index_to_token = index_to_token
     # tensorflow.org/api_docs/python/tf/keras/backend/ctc_decode
     # default blank index is -1
     self.blank_index = -1
+    self.num_cpus = multiprocessing.cpu_count()
+    self.vocab_array = vocab_array
 
   def convert_to_string(self, decoded):
     # Remove blank indices
@@ -34,14 +36,27 @@ class Decoder:
 class GreedyDecoder(Decoder):
   """ Decode the best guess from probs using greedy algorithm """
 
+  def map_fn(self, splited_logits):
+    _d = []
+    for idx, value in enumerate(splited_logits):
+      _d.append(ctc_greedy_decoder(probs_seq=value, vocabulary=self.vocab_array))
+    return _d
+
   def decode(self, probs, input_length):
     # probs.shape = [batch_size, time_steps, num_classes]
-    decoded = tf.keras.backend.ctc_decode(y_pred=probs,
-                                          input_length=input_length,
-                                          greedy=True)
-    # decoded shape = [batch_size, decoded index]
-    decoded = decoded[0]
-    return self.convert_to_string(decoded)
+    # decoded = tf.keras.backend.ctc_decode(y_pred=probs,
+    #                                       input_length=input_length,
+    #                                       greedy=True)
+    # # decoded shape = [batch_size, decoded index]
+    # decoded = decoded[0]
+    # return self.convert_to_string(decoded)
+
+    undecoded = np.split(probs.numpy(), self.num_cpus)
+
+    with multiprocessing.Pool(self.num_cpus) as pool:
+      decoded = pool.map(self.map_fn, undecoded)
+
+    return np.concatenate(decoded)
 
 
 class BeamSearchDecoder(Decoder):
@@ -49,40 +64,42 @@ class BeamSearchDecoder(Decoder):
 
   def __init__(self, index_to_token, beam_width=1024, lm_path=None,
                alpha=None, beta=None, vocab_array=None):
-    super().__init__(index_to_token)
+    super().__init__(index_to_token, vocab_array)
     self.beam_width = beam_width
     self.lm_path = lm_path
     self.alpha = alpha
     self.beta = beta
-    self.vocab_array = vocab_array
-    self.num_cpus = multiprocessing.cpu_count()
     if self.lm_path:
       assert self.alpha and self.beta and self.vocab_array, \
         "alpha, beta and vocab_array must be specified"
       self.scorer = Scorer(self.alpha, self.beta, model_path=self.lm_path,
                            vocabulary=self.vocab_array)
+    else:
+      self.scorer = None
 
   def decode(self, probs, input_length):
     # probs.shape = [batch_size, time_steps, num_classes]
-    if self.lm_path:
-      decoded = ctc_beam_search_decoder_batch(probs.numpy(), self.vocab_array,
-                                              beam_size=self.beam_width,
-                                              num_processes=self.num_cpus,
-                                              ext_scoring_func=self.scorer)
-      for idx, value in enumerate(decoded):
-        _, text = [v for v in zip(*value)]
-        decoded[idx] = text[0]
+    decoded = ctc_beam_search_decoder_batch(probs_split=probs.numpy(),
+                                            vocabulary=self.vocab_array,
+                                            beam_size=self.beam_width,
+                                            num_processes=self.num_cpus,
+                                            ext_scoring_func=self.scorer)
 
-      return decoded
+    for idx, value in enumerate(decoded):
+      _, text = [v for v in zip(*value)]
+      decoded[idx] = text[0]
 
-    decoded = tf.keras.backend.ctc_decode(y_pred=probs,
-                                          input_length=input_length,
-                                          greedy=False,
-                                          beam_width=self.beam_width)
-    # decoded shape = [batch_size, top_path=1, decoded index]
-    # get the first object of the list of top-path objects
-    decoded = decoded[0]
-    return self.convert_to_string(decoded)
+    return decoded
+
+  # decoded = tf.keras.backend.ctc_decode(y_pred=probs,
+  #                                       input_length=input_length,
+  #                                       greedy=False,
+  #                                       beam_width=self.beam_width)
+  # # decoded shape = [batch_size, top_path=1, decoded index]
+  # # get the first object of the list of top-path objects
+  # decoded = decoded[0]
+  # print(decoded)
+  # return self.convert_to_string(decoded)
 
 
 def create_decoder(decoder_config, index_to_token, vocab_array):
@@ -100,9 +117,10 @@ def create_decoder(decoder_config, index_to_token, vocab_array):
         vocab_array=vocab_array)
     else:
       decoder = BeamSearchDecoder(index_to_token=index_to_token,
-                                  beam_width=decoder_config["beam_width"])
+                                  beam_width=decoder_config["beam_width"],
+                                  vocab_array=vocab_array)
   elif decoder_config["name"] == "greedy":
-    decoder = GreedyDecoder(index_to_token=index_to_token)
+    decoder = GreedyDecoder(index_to_token=index_to_token, vocab_array=vocab_array)
   else:
     raise ValueError("'decoder' value must be either 'beamsearch',\
                          'beamsearch_lm' or 'greedy'")

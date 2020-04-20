@@ -23,8 +23,7 @@ class SpeechToText:
       stride_ms=self.configs["stride_ms"],
       num_feature_bins=self.configs["num_feature_bins"],
       feature_type=self.configs["feature_type"])
-    self.text_featurizer = TextFeaturizer(
-      self.configs["vocabulary_file_path"])
+    self.text_featurizer = TextFeaturizer(self.configs["vocabulary_file_path"])
     self.decoder = create_decoder(
       decoder_config=self.configs["decoder"],
       index_to_token=self.text_featurizer.index_to_token,
