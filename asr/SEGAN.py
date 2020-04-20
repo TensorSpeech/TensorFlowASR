@@ -23,16 +23,22 @@ class SEGAN:
     self.window_size = self.configs["window_size"]
     self.stride = self.configs["stride"]
 
-    self.generator = create_generator(g_enc_depths=self.g_enc_depths, window_size=self.window_size,
-                                      kwidth=self.kwidth, ratio=self.ratio, coeff=self.coeff)
+    self.generator = create_generator(g_enc_depths=self.g_enc_depths,
+                                      window_size=self.window_size,
+                                      kwidth=self.kwidth, ratio=self.ratio,
+                                      coeff=self.coeff)
 
     if mode == "training":
-      self.discriminator = create_discriminator(d_num_fmaps=self.d_num_fmaps, window_size=self.window_size,
-                                                noise_std=self.noise_std, kwidth=self.kwidth,
+      self.discriminator = create_discriminator(d_num_fmaps=self.d_num_fmaps,
+                                                window_size=self.window_size,
+                                                noise_std=self.noise_std,
+                                                kwidth=self.kwidth,
                                                 ratio=self.ratio, coeff=self.coeff)
 
-      self.generator_optimizer = tf.keras.optimizers.RMSprop(self.configs["g_learning_rate"])
-      self.discriminator_optimizer = tf.keras.optimizers.RMSprop(self.configs["d_learning_rate"])
+      self.generator_optimizer = tf.keras.optimizers.RMSprop(
+        self.configs["g_learning_rate"])
+      self.discriminator_optimizer = tf.keras.optimizers.RMSprop(
+        self.configs["d_learning_rate"])
 
       self.checkpoint = tf.train.Checkpoint(
         generator=self.generator,
@@ -69,19 +75,23 @@ class SEGAN:
         d_real_logit = self.discriminator(clean_wavs, noisy_wavs, training=True)
         d_fake_logit = self.discriminator(g_clean_wavs, noisy_wavs, training=True)
 
-        gen_loss = generator_loss(y_true=clean_wavs,
-                                  y_pred=g_clean_wavs,
-                                  l1_lambda=self.l1_lambda,
-                                  d_fake_logit=d_fake_logit)
+        _gen_loss = generator_loss(y_true=clean_wavs,
+                                   y_pred=g_clean_wavs,
+                                   l1_lambda=self.l1_lambda,
+                                   d_fake_logit=d_fake_logit)
 
-        disc_loss = discriminator_loss(d_real_logit, d_fake_logit)
+        _disc_loss = discriminator_loss(d_real_logit, d_fake_logit)
 
-        gradients_of_generator = gen_tape.gradient(gen_loss, self.generator.trainable_weights)
-        gradients_of_discriminator = disc_tape.gradient(disc_loss, self.discriminator.trainable_weights)
+        gradients_of_generator = gen_tape.gradient(_gen_loss,
+                                                   self.generator.trainable_weights)
+        gradients_of_discriminator = disc_tape.gradient(_disc_loss,
+                                                        self.discriminator.trainable_weights)
 
-        self.generator_optimizer.apply_gradients(zip(gradients_of_generator, self.generator.trainable_weights))
-        self.discriminator_optimizer.apply_gradients(zip(gradients_of_discriminator, self.discriminator.trainable_weights))
-        return gen_loss, disc_loss
+        self.generator_optimizer.apply_gradients(
+          zip(gradients_of_generator, self.generator.trainable_weights))
+        self.discriminator_optimizer.apply_gradients(
+          zip(gradients_of_discriminator, self.discriminator.trainable_weights))
+        return _gen_loss, _disc_loss
 
     for epoch in range(initial_epoch, epochs):
       start = time.time()
@@ -89,7 +99,8 @@ class SEGAN:
 
       for clean_wav, noisy_wav in tf_train_dataset:
         gen_loss, disc_loss = train_step(clean_wav, noisy_wav)
-        print(f"{epoch + 1}/{epochs}, batch: {batch_idx}, gen_loss = {gen_loss}, disc_loss = {disc_loss}")
+        print(f"{epoch + 1}/{epochs}, batch: {batch_idx}, gen_loss = {gen_loss},"
+              "disc_loss = {disc_loss}")
         batch_idx += 1
 
       self.ckpt_manager.save()
@@ -116,14 +127,14 @@ class SEGAN:
       d_real_logit = self.discriminator(clean_wavs, noisy_wavs, training=False)
       d_fake_logit = self.discriminator(g_clean_wavs, noisy_wavs, training=False)
 
-      gen_loss = self.generator.loss(y_true=clean_wavs,
-                                     y_pred=g_clean_wavs,
-                                     l1_lambda=self.l1_lambda,
-                                     d_fake_logit=d_fake_logit)
+      _gen_loss = self.generator.loss(y_true=clean_wavs,
+                                      y_pred=g_clean_wavs,
+                                      l1_lambda=self.l1_lambda,
+                                      d_fake_logit=d_fake_logit)
 
-      disc_loss = self.discriminator.loss(d_real_logit, d_fake_logit)
+      _disc_loss = self.discriminator.loss(d_real_logit, d_fake_logit)
       # Evaluation methods
-      return gen_loss, disc_loss
+      return _gen_loss, _disc_loss
 
     start = time.time()
     batch_idx = 0

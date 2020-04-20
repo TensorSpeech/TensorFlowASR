@@ -2,7 +2,7 @@ from __future__ import absolute_import
 
 import tensorflow as tf
 from models.segan.Ops import DownConv, DeConv, \
-  Reshape1to3, Reshape3to1, PreEmph, DeEmph
+  Reshape1to3, Reshape3to1, PreEmph, DeEmph, SeganPrelu
 
 
 class Z(tf.keras.layers.Layer):
@@ -11,7 +11,7 @@ class Z(tf.keras.layers.Layer):
     self.stddev = stddev
     super(Z, self).__init__(name=name, **kwargs)
 
-  def call(self, inputs):
+  def call(self, inputs, training=False):
     z = tf.keras.backend.random_normal(shape=tf.shape(inputs),
                                        mean=self.mean, stddev=self.stddev)
     return tf.keras.layers.Concatenate(axis=3)([z, inputs])
@@ -36,28 +36,29 @@ class GEncoder(tf.keras.layers.Layer):
                    name=f"downconv_{layer_idx}")(c, training=training)
       if layer_idx < len(self.g_enc_depths) - 1:
         self.skips.append(c)
-      c = tf.keras.layers.LeakyReLU(name=f"downconv_prelu_{layer_idx}")(c)
+      c = SeganPrelu(name=f"downconv_prelu_{layer_idx}")(c)
     return c, self.skips
 
 
 class GDecoder(tf.keras.layers.Layer):
-  def __init__(self, g_dec_depths, kwidth=5,
+  def __init__(self, g_dec_depths, skips, kwidth=5,
                ratio=2, name="segan_g_decoder", **kwargs):
     self.g_dec_depths = g_dec_depths
     self.kwidth = kwidth
     self.ratio = ratio
+    self.skips = skips
     super(GDecoder, self).__init__(name=name, **kwargs)
 
-  def call(self, inputs, skips, training=False):
-    assert skips and len(skips) > 0
+  def call(self, inputs, training=False):
+    assert self.skips and len(self.skips) > 0
     output = inputs
     for layer_idx, layer_depth in enumerate(self.g_dec_depths):
       output = DeConv(depth=layer_depth,
                       kwidth=self.kwidth,
                       dilation=self.ratio,
                       name=f"deconv_{layer_idx}")(output, training=training)
-      output = tf.keras.layers.LeakyReLU(name=f"deconv_prelu_{layer_idx}")(output)
-      _skip = skips[-(layer_idx + 1)]
+      output = SeganPrelu(name=f"deconv_prelu_{layer_idx}")(output)
+      _skip = self.skips[-(layer_idx + 1)]
       output = tf.keras.layers.Concatenate(axis=3, name=f"concat_skip_{layer_idx}")([output, _skip])
     return DeConv(depth=1, kwidth=self.kwidth, dilation=self.ratio,
                   name=f"deconv_last")(output, training=training)
@@ -78,8 +79,8 @@ def create_generator(g_enc_depths, window_size, kwidth=31, ratio=2, coeff=0.95):
                             kwidth=kwidth,
                             ratio=ratio)(reshape_input)
   z = Z()(encoder)
-  decoder = GDecoder(g_dec_depths=g_dec_depths,
-                     kwidth=kwidth, ratio=ratio)(z, skips)
+  decoder = GDecoder(g_dec_depths=g_dec_depths, skips=skips,
+                     kwidth=kwidth, ratio=ratio)(z)
   reshape_output = Reshape3to1("segan_g_reshape_output")(decoder)
   de_emph = DeEmph(coeff=coeff, name="segan_g_deemph")(reshape_output)
   # output_shape = [batch_size, 16384]

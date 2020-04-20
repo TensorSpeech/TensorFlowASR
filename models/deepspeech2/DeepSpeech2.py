@@ -63,6 +63,7 @@ class DeepSpeech2:
     layer = tf.keras.layers.Dense(units=1024,
                                   name="pre_fully_connected",
                                   use_bias=True)(layer)
-    layer = tf.keras.layers.ReLU(max_value=20, name=f"relu_pre_fc_{i}")(layer)
+    layer = tf.keras.layers.BatchNormalization(name="pre_fc_bn")(layer)
+    layer = tf.keras.layers.ReLU(max_value=20, name=f"relu_pre_fc")(layer)
 
     return layer

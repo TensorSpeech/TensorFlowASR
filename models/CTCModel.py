@@ -10,11 +10,11 @@ class CTCModel:
                learning_rate, min_lr=0.0, streaming_size=None):
     self.optimizer = base_model.optimizer(
       learning_rate=BoundExponentialDecay(
-          min_lr=min_lr,
-          initial_learning_rate=learning_rate,
-          decay_steps=5000,
-          decay_rate=0.9,
-          staircase=True)
+        min_lr=min_lr,
+        initial_learning_rate=learning_rate,
+        decay_steps=5000,
+        decay_rate=0.9,
+        staircase=True)
     )
     self.num_classes = num_classes
     self.num_feature_bins = num_feature_bins
@@ -89,7 +89,7 @@ class CTCModel:
     return self.model.fit(*args, **kwargs)
 
   def load_model(self, model_file):
-    self.model = tf.keras.models.load_model(model_file)
+    self.model = tf.saved_model.load(model_file)
 
   def load_weights(self, model_file):
     self.model.load_weights(model_file)

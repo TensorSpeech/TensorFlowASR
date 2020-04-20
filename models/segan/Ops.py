@@ -1,7 +1,6 @@
 from __future__ import absolute_import
 
 import tensorflow as tf
-import numpy as np
 
 
 class PreEmph(tf.keras.layers.Layer):
@@ -10,12 +9,13 @@ class PreEmph(tf.keras.layers.Layer):
     self.coeff = coeff
     self.cname = name
 
-  def call(self, inputs):
+  def call(self, inputs, trainig=False):
     # input_shape = [batch_size, 16384]
     def map_fn(elem):
       x0 = tf.reshape(elem[0], [1, ])
       diff = elem[1:] - self.coeff * elem[:-1]
       return tf.concat([x0, diff], axis=0)
+
     return tf.map_fn(map_fn, inputs, name=self.cname)
 
 
@@ -25,7 +25,7 @@ class DeEmph(tf.keras.layers.Layer):
     self.coeff = coeff
     self.cname = name
 
-  def call(self, inputs):
+  def call(self, inputs, training=False):
     # input_shape = [batch_size, 16384]
     def map_fn(elem):
       if self.coeff <= 0:
@@ -36,6 +36,7 @@ class DeEmph(tf.keras.layers.Layer):
         x_next = tf.reshape(x_next, [1, ])
         x = tf.concat([x, x_next], axis=0)
       return tf.convert_to_tensor(x)
+
     return tf.map_fn(map_fn, inputs, name=self.cname)
 
 
@@ -102,7 +103,7 @@ class VirtualBatchNorm(tf.keras.layers.Layer):
       trainable=True
     )
 
-  def call(self, x):
+  def call(self, x, training=False):
     new_coeff = 1 / (self.batch_size + 1.)
     old_coeff = 1. - new_coeff
     new_mean = tf.reduce_mean(x, [0, 1], keep_dims=True)
@@ -113,8 +114,8 @@ class VirtualBatchNorm(tf.keras.layers.Layer):
     return out
 
   def __normalize(self, x, mean, mean_sq):
-    gamma = tf.reshape(self.gamma, [1, 1, -1])
-    beta = tf.reshape(self.beta, [1, 1, -1])
+    gamma = tf.reshape(self.gamma, [1, 1, 1, -1])
+    beta = tf.reshape(self.beta, [1, 1, 1, -1])
     std = tf.sqrt(self.epsilon + mean_sq - tf.square(mean))
     out = x - mean
     out = out / std
@@ -129,7 +130,7 @@ class GaussianNoise(tf.keras.layers.Layer):
     self.std = std
     self.cname = name
 
-  def call(self, inputs):
+  def call(self, inputs, training=False):
     noise = tf.keras.backend.random_normal(
       shape=tf.shape(inputs),
       mean=0.0, stddev=self.std,
@@ -141,7 +142,7 @@ class Reshape1to3(tf.keras.layers.Layer):
   def __init__(self, name="reshape_1_to_3", **kwargs):
     super(Reshape1to3, self).__init__(trainable=False, name=name, **kwargs)
 
-  def call(self, inputs):
+  def call(self, inputs, trainig=False):
     batch_size = tf.shape(inputs)[0]
     return tf.reshape(inputs, [batch_size, -1, 1, 1])
 
@@ -150,6 +151,23 @@ class Reshape3to1(tf.keras.layers.Layer):
   def __init__(self, name="reshape_3_to_1", **kwargs):
     super(Reshape3to1, self).__init__(trainable=False, name=name, **kwargs)
 
-  def call(self, inputs):
+  def call(self, inputs, trainig=False):
     batch_size = tf.shape(inputs)[0]
     return tf.reshape(inputs, [batch_size, -1])
+
+
+class SeganPrelu(tf.keras.layers.Layer):
+  def __init__(self, name="segan_prelu", **kwargs):
+    super(SeganPrelu, self).__init__(trainable=True, name=name, **kwargs)
+
+  def build(self, input_shape):
+    self.alpha = self.add_weight(name="alpha",
+                                 shape=input_shape[-1],
+                                 initializer=tf.keras.initializers.zeros,
+                                 dtype=tf.float32,
+                                 trainable=True)
+
+  def call(self, x, training=False):
+    pos = tf.nn.relu(x)
+    neg = self.alpha * (x - tf.abs(x)) * .5
+    return pos + neg
