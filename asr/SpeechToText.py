@@ -122,6 +122,7 @@ class SpeechToText:
     @tf.function
     def test_step(features, transcripts):
       logits = self.model(features, training=False)
+      logits = logits.numpy()
       print(logits)
       predictions = self.decoder.decode(
         probs=logits,
