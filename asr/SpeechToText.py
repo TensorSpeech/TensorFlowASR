@@ -128,6 +128,7 @@ class SpeechToText:
       b_cer_count = 0.0
 
       for idx, decoded in enumerate(predictions):
+        print(decoded)
         _wer, _wer_count = wer(decode=decoded, target=transcripts[idx])
         _cer, _cer_count = cer(decode=decoded, target=transcripts[idx])
         b_wer += _wer
