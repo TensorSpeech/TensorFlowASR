@@ -24,8 +24,8 @@ class Decoder:
       return ''.join([self.index_to_token[i] for i in elem])
 
     # Convert to string
-    result = tf.map_fn(map_cvrt, decoded, dtype=tf.string)
-    return bytes_to_string(result.numpy())
+    decoded = tf.map_fn(map_cvrt, decoded, dtype=tf.string)
+    return bytes_to_string(decoded.numpy())
 
   def decode(self, probs, input_length):
     pass
@@ -65,7 +65,7 @@ class BeamSearchDecoder(Decoder):
   def decode(self, probs, input_length):
     # probs.shape = [batch_size, time_steps, num_classes]
     if self.lm_path:
-      decoded = ctc_beam_search_decoder_batch(probs, self.vocab_array,
+      decoded = ctc_beam_search_decoder_batch(probs.numpy(), self.vocab_array,
                                               beam_size=self.beam_width,
                                               num_processes=self.num_cpus,
                                               ext_scoring_func=self.scorer)

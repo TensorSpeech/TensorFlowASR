@@ -1,7 +1,6 @@
 from __future__ import absolute_import
 
 import os
-import tempfile
 import tensorflow as tf
 
 from models.CTCModel import CTCModel
@@ -106,7 +105,6 @@ class SpeechToText:
       self.model.save(model_file)
 
   def test(self, model_file, output_file_path):
-    tf.compat.v1.set_random_seed(0)
     print("Testing model ...")
     check_key_in_dict(dictionary=self.configs,
                       keys=["test_data_transcript_paths"])
@@ -119,18 +117,10 @@ class SpeechToText:
       text_featurizer=self.text_featurizer,
       batch_size=self.configs["batch_size"])
 
-    @tf.function
     def test_step(features, transcripts):
-      logits = self.model(features, training=False)
-      logits = logits.numpy()
-      print(logits)
-      predictions = self.decoder.decode(
-        probs=logits,
-        input_length=tf.squeeze(get_length(logits), -1))
+      predictions = self.predict(features)
 
-      print(predictions)
-
-      transcripts = transcripts.numpy()
+      transcripts = self.decoder.convert_to_string(transcripts)
 
       b_wer = 0.0
       b_wer_count = 0.0
@@ -145,6 +135,7 @@ class SpeechToText:
         b_wer_count += _wer_count
         b_cer_count += _cer_count
 
+      print(f"batch_wer: {b_wer / b_wer_count}, batch_cer: {b_cer / b_cer_count}")
       return b_wer, b_wer_count, b_cer, b_cer_count
 
     total_wer = 0.0
@@ -166,23 +157,25 @@ class SpeechToText:
       of.write("CER: " + str(results[-1]) + "\n")
 
   def infer(self, input_file_path, model_file, output_file_path):
-    tf.compat.v1.set_random_seed(0)
     print("Infering ...")
-    self.model = tf.keras.models.load_model(model_file)
+    self.load_model(model_file)
     tf_infer_dataset = Dataset(data_path=input_file_path,
                                mode="infer")
     tf_infer_dataset = tf_infer_dataset(
       speech_featurizer=self.speech_featurizer,
       batch_size=self.configs["batch_size"])
-    logits = self.model.predict(x=tf_infer_dataset)
-    predictions = self.decoder.decode(
-      probs=logits,
-      input_length=tf.squeeze(get_length(logits), -1))
 
-    with open(output_file_path, "w", encoding="utf-8") as of:
-      of.write("Predictions\n")
-      for pred in predictions:
-        of.write(pred + "\n")
+    def infer_step(feature):
+      prediction = self.predict(feature)
+      return bytes_to_string(prediction.numpy())
+
+    for features in tf_infer_dataset:
+      predictions = infer_step(features)
+
+      with open(output_file_path, "a", encoding="utf-8") as of:
+        of.write("Predictions\n")
+        for pred in predictions:
+          of.write(pred + "\n")
 
   def infer_single(self, audio, sample_rate=None,
                    channels=None, streaming=False):
@@ -200,12 +193,9 @@ class SpeechToText:
          [0, 0],
          [0, 0]],
         "CONSTANT")
-    logits = self.model.predict(x=features, batch_size=1)
-    predictions = self.decoder.decode(
-      probs=logits,
-      input_length=tf.squeeze(get_length(logits), -1))
+    pred = self.predict(features)
 
-    return predictions[0]
+    return pred[0]
 
   def load_model(self, model_file):
     tf.compat.v1.set_random_seed(0)
@@ -222,3 +212,7 @@ class SpeechToText:
     except Exception as e:
       raise ValueError("Model is not trained: ", e)
     return None
+
+  def predict(self, features):
+    logits = self.model(features, training=False)
+    return self.decoder.decode(probs=logits, input_length=get_length(logits))
