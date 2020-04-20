@@ -21,6 +21,9 @@ class CTCModel:
     self.streaming_size = streaming_size
     self.model = self.create(base_model)
 
+  def __call__(self, *args, **kwargs):
+    return self.model(*args, **kwargs)
+
   def create(self, base_model):
     if self.streaming_size:
       # Fixed input shape is required for live streaming audio
