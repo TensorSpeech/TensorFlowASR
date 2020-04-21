@@ -49,7 +49,7 @@ if args_parser.model == "asr":
 elif args_parser.model == "segan":
   segan = SEGAN(config_path=args_parser.config, mode="training")
   if args_parser.mode == "train":
-    segan.train()
+    segan.train(export_dir=args_parser.export_file)
   elif args_parser.mode == "test":
     segan.test()
   else:
