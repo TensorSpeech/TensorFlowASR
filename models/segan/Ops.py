@@ -19,27 +19,6 @@ class PreEmph(tf.keras.layers.Layer):
     return tf.map_fn(map_fn, inputs, name=self.cname)
 
 
-class DeEmph(tf.keras.layers.Layer):
-  def __init__(self, coeff=0.95, name="de_emph", **kwargs):
-    super(DeEmph, self).__init__(name=name, trainable=False, **kwargs)
-    self.coeff = coeff
-    self.cname = name
-
-  def call(self, inputs, training=False):
-    # input_shape = [batch_size, 16384]
-    def map_fn(elem):
-      if self.coeff <= 0:
-        return elem
-      x = tf.reshape(elem[0], [1, ])
-      for n in range(1, tf.shape(elem)[0], 1):
-        x_next = self.coeff * x[n - 1] + elem[n]
-        x_next = tf.reshape(x_next, [1, ])
-        x = tf.concat([x, x_next], axis=0)
-      return tf.convert_to_tensor(x)
-
-    return tf.map_fn(map_fn, inputs, name=self.cname)
-
-
 class DownConv(tf.keras.layers.Layer):
   def __init__(self, depth, kwidth=5, pool=2, name="downconv", **kwargs):
     super(DownConv, self).__init__(name=name, **kwargs)
@@ -78,49 +57,42 @@ class VirtualBatchNorm(tf.keras.layers.Layer):
   def __init__(self, x, name, epsilon=1e-5, **kwargs):
     super(VirtualBatchNorm, self).__init__(name=name, **kwargs)
     assert isinstance(epsilon, float)
-    shape = x.get_shape().as_list()
-    assert len(shape) == 4, shape
+    self.first = False
     self.epsilon = epsilon
-    self.cname = name
-    self.mean = tf.reduce_mean(x, [0, 1], keep_dims=True)
-    self.mean_sq = tf.reduce_mean(tf.square(x), [0, 1], keep_dims=True)
-    self.batch_size = int(x.get_shape()[0])
-    assert x is not None
-    assert self.mean is not None
-    assert self.mean_sq is not None
-    out = self.__normalize(x, self.mean, self.mean_sq)
-    self.reference_out = out
 
   def build(self, input_shape):
     self.gamma = self.add_weight(
-      shape=[input_shape[-1]], name=f"{self.cname}_gamma",
+      shape=[1, 1, 1, input_shape[-1]], name="gamma",
       initializer=tf.random_normal_initializer(1., 0.02),
       trainable=True
     )
     self.beta = self.add_weight(
-      shape=[input_shape[-1]], name=f"{self.cname}_beta",
+      shape=[1, 1, 1, input_shape[-1]], name="beta",
       initializer=tf.keras.initializers.constant(0.),
       trainable=True
     )
 
   def call(self, x, training=False):
-    new_coeff = 1 / (self.batch_size + 1.)
+    if not self.first:
+      self.mean = tf.reduce_mean(x, [1, 2], keepdims=True)
+      self.mean_sq = tf.reduce_mean(tf.square(x), [1, 2], keepdims=True)
+      self.batch_size = tf.cast(tf.shape(x)[0], dtype=tf.float32)
+
+    new_coeff = 1. / (self.batch_size + 1.)
     old_coeff = 1. - new_coeff
-    new_mean = tf.reduce_mean(x, [0, 1], keep_dims=True)
-    new_mean_sq = tf.reduce_mean(tf.square(x), [0, 1], keep_dims=True)
+    new_mean = tf.reduce_mean(x, [1, 2], keepdims=True)
+    new_mean_sq = tf.reduce_mean(tf.square(x), [1, 2], keepdims=True)
     mean = new_coeff * new_mean + old_coeff * self.mean
     mean_sq = new_coeff * new_mean_sq + old_coeff * self.mean_sq
-    out = self.__normalize(x, mean, mean_sq)
+    out = self.normalize(x, mean, mean_sq)
     return out
 
-  def __normalize(self, x, mean, mean_sq):
-    gamma = tf.reshape(self.gamma, [1, 1, 1, -1])
-    beta = tf.reshape(self.beta, [1, 1, 1, -1])
+  def normalize(self, x, mean, mean_sq):
     std = tf.sqrt(self.epsilon + mean_sq - tf.square(mean))
     out = x - mean
     out = out / std
-    out = out * gamma
-    out = out + beta
+    out = out * self.gamma
+    out = out + self.beta
     return out
 
 

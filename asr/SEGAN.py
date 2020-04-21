@@ -72,8 +72,14 @@ class SEGAN:
       with tf.GradientTape() as gen_tape, tf.GradientTape() as disc_tape:
         g_clean_wavs = self.generator(noisy_wavs, training=True)
 
-        d_real_logit = self.discriminator(clean_wavs, noisy_wavs, training=True)
-        d_fake_logit = self.discriminator(g_clean_wavs, noisy_wavs, training=True)
+        d_real_logit = self.discriminator({
+          "clean": clean_wavs,
+          "noisy": noisy_wavs
+        }, training=True)
+        d_fake_logit = self.discriminator({
+          "clean": g_clean_wavs,
+          "noisy": noisy_wavs
+        }, training=True)
 
         _gen_loss = generator_loss(y_true=clean_wavs,
                                    y_pred=g_clean_wavs,
@@ -83,14 +89,14 @@ class SEGAN:
         _disc_loss = discriminator_loss(d_real_logit, d_fake_logit)
 
         gradients_of_generator = gen_tape.gradient(_gen_loss,
-                                                   self.generator.trainable_weights)
+                                                   self.generator.trainable_variables)
         gradients_of_discriminator = disc_tape.gradient(_disc_loss,
-                                                        self.discriminator.trainable_weights)
+                                                        self.discriminator.trainable_variables)
 
-        self.generator_optimizer.apply_gradients(
-          zip(gradients_of_generator, self.generator.trainable_weights))
-        self.discriminator_optimizer.apply_gradients(
-          zip(gradients_of_discriminator, self.discriminator.trainable_weights))
+        self.generator_optimizer.apply_gradients(zip(gradients_of_generator,
+                                                     self.generator.trainable_variables))
+        self.discriminator_optimizer.apply_gradients(zip(gradients_of_discriminator,
+                                                         self.discriminator.trainable_variables))
         return _gen_loss, _disc_loss
 
     for epoch in range(initial_epoch, epochs):
@@ -99,8 +105,8 @@ class SEGAN:
 
       for clean_wav, noisy_wav in tf_train_dataset:
         gen_loss, disc_loss = train_step(clean_wav, noisy_wav)
-        print(f"{epoch + 1}/{epochs}, batch: {batch_idx}, gen_loss = {gen_loss},"
-              "disc_loss = {disc_loss}")
+        print(f"Epoch: {epoch + 1}/{epochs}, batch: {batch_idx}, "
+              f"gen_loss = {gen_loss}, disc_loss = {disc_loss}")
         batch_idx += 1
 
       self.ckpt_manager.save()
@@ -147,15 +153,15 @@ class SEGAN:
     print(f"Time for testing is {time.time() - start} secs")
 
   def generate(self, signal):
-    slices = slice_signal(signal, self.window_size, self.stride)
-    slices = tf.convert_to_tensor(slices)
-    slices = tf.reshape(slices, [-1, self.window_size])
+    slices = slice_signal(signal, self.window_size, stride=1)
 
-    g_wavs = self.generator(slices, training=False)
+    @tf.function
+    def gen(sliced_signal):
+      sliced_signal = tf.reshape(sliced_signal, [-1, self.window_size])
+      g_wavs = self.generator(sliced_signal, training=False)
+      return merge_slices(g_wavs)
 
-    g_wavs = g_wavs.numpy()
-
-    return merge_slices(g_wavs)
+    return gen(tf.convert_to_tensor(slices))
 
   def save_from_checkpoint(self, export_dir):
     if self.ckpt_manager.latest_checkpoint:

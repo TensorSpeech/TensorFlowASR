@@ -146,6 +146,7 @@ def get_length(batch_data):
   def map_fn(elem):
     size = tf.shape(elem)
     return tf.convert_to_tensor(size[0])
+
   return tf.map_fn(map_fn, batch_data, dtype=tf.int32)
 
 
@@ -160,17 +161,13 @@ def slice_signal(signal, window_size, stride=0.5):
   for beg_i, end_i in zip(range(0, n_samples, offset),
                           range(window_size, n_samples + offset,
                                 offset)):
-    if end_i - beg_i < window_size:
-      break
     slice_ = signal[beg_i:end_i]
-    if slice_.shape[0] == window_size:
-      slices.append(slice_)
-  return np.array(slices, dtype=np.int32)
+    if slice_.shape[0] < window_size:
+      slice_ = np.pad(slice_, (0, window_size - slice_.shape[0]), 'constant', constant_values=0.0)
+    slices.append(slice_)
+  return np.array(slices, dtype=np.float32)
 
 
 def merge_slices(slices):
   # slices shape = [batch, window_size]
-  merged = []
-  for s in slices:
-    merged.append(s)
-  return np.array(merged, dtype=np.int32)
+  return tf.keras.backend.flatten(slices)  # return shape = [-1, ]

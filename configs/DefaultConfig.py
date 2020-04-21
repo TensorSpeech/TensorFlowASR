@@ -9,17 +9,17 @@ base_model = DeepSpeech2(num_conv=2, num_rnn=3, rnn_units=256, is_bidirectional=
 streaming_size = None
 
 decoder = {
-  "name": "beamsearch",
+  "name":       "beamsearch",
   "beam_width": 500,
-  "lm_path": "/mnt/Data/ML/NLP/vntc_5gram_probing.binary",
-  "alpha": 1.0,
-  "beta": 0.5
+  "lm_path":    "/mnt/Data/ML/NLP/vntc_5gram_probing.binary",
+  "alpha":      1.0,
+  "beta":       0.5
 }
 
 augmentations = [
-  #TimeMasking(num_time_mask=1, time_mask_param=30, p_upperbound=0.2),
-  #FreqMasking(num_freq_mask=1, freq_mask_param=10),
-  #TimeWarping(time_warp_param=40, direction="right")
+  TimeMasking(num_time_mask=1, time_mask_param=30, p_upperbound=0.2),
+  FreqMasking(num_freq_mask=1, freq_mask_param=10),
+  TimeWarping(time_warp_param=40, direction="right")
 ]
 
 batch_size = 16
