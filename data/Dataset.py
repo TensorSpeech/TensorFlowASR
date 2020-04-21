@@ -86,7 +86,7 @@ class Dataset:
 
           yield (
             features,
-            tf.expand_dims(labels, 1)
+            tf.expand_dims(labels, -1)
           )
 
     dataset = tf.data.Dataset.from_generator(

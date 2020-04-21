@@ -29,10 +29,10 @@ class RowConv1D(tf.keras.layers.Conv1D):
     # (only keep future
     # context)
     left_kernel_dims = (
-    self.future_context, input_channel, self.filters)
+      self.future_context, input_channel, self.filters)
     left_kernel = tf.fill(dims=left_kernel_dims, value=0)
     right_kernel_dims = (
-    self.future_context + 1, input_channel, self.filters)
+      self.future_context + 1, input_channel, self.filters)
     right_kernel = tf.fill(dims=right_kernel_dims, value=1)
     mask_kernel = tf.cast(
       tf.concat([left_kernel, right_kernel], axis=0),
@@ -52,9 +52,7 @@ class RowConv1D(tf.keras.layers.Conv1D):
       self.bias = None
     channel_axis = self._get_channel_axis()
     self.input_spec = tf.keras.layers.InputSpec(ndim=self.rank + 2,
-                                                axes={
-                                                  channel_axis:
-                                                      input_channel})
+                                                axes={channel_axis: input_channel})
 
     self._build_conv_op_input_shape = input_shape
     self._build_input_channel = input_channel

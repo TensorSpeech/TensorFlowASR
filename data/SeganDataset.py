@@ -27,13 +27,15 @@ class SeganDataset:
         noisy_slices = slice_signal(noisy_wav, self.window_size, self.stride)
 
         for clean_slice, noisy_slice in zip(clean_slices, noisy_slices):
+          if len(clean_slice) == 0:
+            continue
           yield clean_slice, noisy_slice
 
     dataset = tf.data.Dataset.from_generator(
       _gen_data,
       output_types=(
-        tf.int32,
-        tf.int32
+        tf.float32,
+        tf.float32
       ),
       output_shapes=(
         tf.TensorShape([self.window_size]),

@@ -10,16 +10,19 @@ class CTCModel:
                learning_rate, min_lr=0.0, streaming_size=None):
     self.optimizer = base_model.optimizer(
       learning_rate=BoundExponentialDecay(
-          min_lr=min_lr,
-          initial_learning_rate=learning_rate,
-          decay_steps=5000,
-          decay_rate=0.9,
-          staircase=True)
+        min_lr=min_lr,
+        initial_learning_rate=learning_rate,
+        decay_steps=5000,
+        decay_rate=0.9,
+        staircase=True)
     )
     self.num_classes = num_classes
     self.num_feature_bins = num_feature_bins
     self.streaming_size = streaming_size
     self.model = self.create(base_model)
+
+  def __call__(self, *args, **kwargs):
+    return self.model(*args, **kwargs)
 
   def create(self, base_model):
     if self.streaming_size:
@@ -45,7 +48,7 @@ class CTCModel:
     # Fully connected layer
     outputs = tf.keras.layers.Dense(units=self.num_classes,
                                     activation='softmax',
-                                    name="fully_connected",
+                                    name="fully_connected_softmax",
                                     use_bias=True)(outputs)
 
     outputs = tf.reshape(outputs,
@@ -57,14 +60,27 @@ class CTCModel:
 
   @tf.function
   def loss(self, y_true, y_pred):
-    label_length = get_length(y_true)
-    input_length = get_length(y_pred)
+    label_length = tf.expand_dims(get_length(y_true), -1)
+    input_length = tf.expand_dims(get_length(y_pred), -1)
     loss = tf.keras.backend.ctc_batch_cost(
       y_pred=y_pred,
       input_length=input_length,
-      y_true=tf.squeeze(y_true, -1),
+      y_true=tf.cast(tf.squeeze(y_true, -1), tf.int32),
       label_length=label_length)
     return mask_nan(loss)
+
+  # @tf.function
+  # def loss(self, y_true, y_pred):
+  #   label_length = get_length(y_true)
+  #   input_length = get_length(y_pred)
+  #   loss = tf.nn.ctc_loss(
+  #     labels=tf.cast(tf.squeeze(y_true, -1), tf.int32),
+  #     logit_length=input_length,
+  #     logits=y_pred,
+  #     label_length=label_length,
+  #     logits_time_major=False,
+  #     blank_index=self.num_classes - 1)
+  #   return mask_nan(loss)
 
   def predict(self, *args, **kwargs):
     return self.model.predict(*args, **kwargs)
@@ -76,7 +92,7 @@ class CTCModel:
     return self.model.fit(*args, **kwargs)
 
   def load_model(self, model_file):
-    self.model = tf.keras.models.load_model(model_file)
+    self.model = tf.saved_model.load(model_file)
 
   def load_weights(self, model_file):
     self.model.load_weights(model_file)
@@ -86,3 +102,6 @@ class CTCModel:
 
   def to_json(self):
     return self.model.to_json()
+
+  def save(self, model_file):
+    return self.model.save(model_file)

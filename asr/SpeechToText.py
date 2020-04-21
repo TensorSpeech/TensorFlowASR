@@ -1,7 +1,6 @@
 from __future__ import absolute_import
 
 import os
-import tempfile
 import tensorflow as tf
 
 from models.CTCModel import CTCModel
@@ -24,8 +23,7 @@ class SpeechToText:
       stride_ms=self.configs["stride_ms"],
       num_feature_bins=self.configs["num_feature_bins"],
       feature_type=self.configs["feature_type"])
-    self.text_featurizer = TextFeaturizer(
-      self.configs["vocabulary_file_path"])
+    self.text_featurizer = TextFeaturizer(self.configs["vocabulary_file_path"])
     self.decoder = create_decoder(
       decoder_config=self.configs["decoder"],
       index_to_token=self.text_featurizer.index_to_token,
@@ -106,7 +104,6 @@ class SpeechToText:
       self.model.save(model_file)
 
   def test(self, model_file, output_file_path):
-    tf.compat.v1.set_random_seed(0)
     print("Testing model ...")
     check_key_in_dict(dictionary=self.configs,
                       keys=["test_data_transcript_paths"])
@@ -119,53 +116,66 @@ class SpeechToText:
       text_featurizer=self.text_featurizer,
       batch_size=self.configs["batch_size"])
 
-    self.model.summary()
-    logits = self.model.predict(x=tf_test_dataset)
-    predictions = self.decoder.decode(
-      probs=logits,
-      input_length=tf.squeeze(get_length(logits), -1))
+    def test_step(features, transcripts):
+      predictions = self.predict(features)
+
+      transcripts = self.decoder.convert_to_string(transcripts)
+
+      b_wer = 0.0
+      b_wer_count = 0.0
+      b_cer = 0.0
+      b_cer_count = 0.0
+
+      for idx, decoded in enumerate(predictions):
+        print(decoded)
+        _wer, _wer_count = wer(decode=decoded, target=transcripts[idx])
+        _cer, _cer_count = cer(decode=decoded, target=transcripts[idx])
+        b_wer += _wer
+        b_cer += _cer
+        b_wer_count += _wer_count
+        b_cer_count += _cer_count
+
+      print(f"batch_wer: {b_wer / b_wer_count}, batch_cer: {b_cer / b_cer_count}")
+      return b_wer, b_wer_count, b_cer, b_cer_count
 
     total_wer = 0.0
     wer_count = 0.0
     total_cer = 0.0
     cer_count = 0.0
 
-    for idx, labels in enumerate(test_dataset.entries):
-      _wer, _wer_count = wer(decode=predictions[idx],
-                             target=labels[-1])
-      _cer, _cer_count = cer(decode=predictions[idx],
-                             target=labels[-1])
-      total_wer += _wer
-      total_cer += _cer
-      wer_count += _wer_count
-      cer_count += _cer_count
+    for feature, label in tf_test_dataset:
+      batch_wer, batch_wer_count, batch_cer, batch_cer_count = test_step(feature, label)
+      total_wer += batch_wer
+      total_cer += batch_cer
+      wer_count += batch_wer_count
+      cer_count += batch_cer_count
 
     results = (total_wer / wer_count, total_cer / cer_count)
-    print("WER: ", results[0])
-    print("CER: ", results[-1])
 
     with open(output_file_path, "w", encoding="utf-8") as of:
       of.write("WER: " + str(results[0]) + "\n")
       of.write("CER: " + str(results[-1]) + "\n")
 
   def infer(self, input_file_path, model_file, output_file_path):
-    tf.compat.v1.set_random_seed(0)
     print("Infering ...")
-    self.model = tf.keras.models.load_model(model_file)
+    self.load_model(model_file)
     tf_infer_dataset = Dataset(data_path=input_file_path,
                                mode="infer")
     tf_infer_dataset = tf_infer_dataset(
       speech_featurizer=self.speech_featurizer,
       batch_size=self.configs["batch_size"])
-    logits = self.model.predict(x=tf_infer_dataset)
-    predictions = self.decoder.decode(
-      probs=logits,
-      input_length=tf.squeeze(get_length(logits), -1))
 
-    with open(output_file_path, "w", encoding="utf-8") as of:
-      of.write("Predictions\n")
-      for pred in predictions:
-        of.write(pred + "\n")
+    def infer_step(feature):
+      prediction = self.predict(feature)
+      return bytes_to_string(prediction.numpy())
+
+    for features in tf_infer_dataset:
+      predictions = infer_step(features)
+
+      with open(output_file_path, "a", encoding="utf-8") as of:
+        of.write("Predictions\n")
+        for pred in predictions:
+          of.write(pred + "\n")
 
   def infer_single(self, audio, sample_rate=None,
                    channels=None, streaming=False):
@@ -183,12 +193,9 @@ class SpeechToText:
          [0, 0],
          [0, 0]],
         "CONSTANT")
-    logits = self.model.predict(x=features, batch_size=1)
-    predictions = self.decoder.decode(
-      probs=logits,
-      input_length=tf.squeeze(get_length(logits), -1))
+    pred = self.predict(features)
 
-    return predictions[0]
+    return pred[0]
 
   def load_model(self, model_file):
     tf.compat.v1.set_random_seed(0)
@@ -205,3 +212,7 @@ class SpeechToText:
     except Exception as e:
       raise ValueError("Model is not trained: ", e)
     return None
+
+  def predict(self, features):
+    logits = self.model(features, training=False)
+    return self.decoder.decode(probs=logits, input_length=get_length(logits))

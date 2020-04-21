@@ -53,4 +53,4 @@ elif args_parser.model == "segan":
   elif args_parser.mode == "test":
     segan.test()
   else:
-    range ValueError("Flag 'mode' must be either 'train' or 'test'")
+    raise ValueError("Flag 'mode' must be either 'train' or 'test'")

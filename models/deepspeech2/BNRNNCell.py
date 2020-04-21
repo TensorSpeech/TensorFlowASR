@@ -24,10 +24,10 @@ class BNLSTMCell(tf.keras.layers.LSTMCell):
     super().__init__(*args, **kwargs)
     self.beta = self.add_weight(shape=(self.units * 4,),
                                 name='lstm_bn_beta', initializer='zeros',
-                                regularizer=None, constraint=None)
+                                regularizer=None, constraint=None, trainable=True)
     self.gamma = self.add_weight(shape=(self.units * 4,),
                                  name='lstm_bn_gamma', initializer='ones',
-                                 regularizer=None, constraint=None)
+                                 regularizer=None, constraint=None, trainable=True)
 
   def _compute_carry_and_output(self, x, h_tm1, c_tm1):
     """Computes carry and output using split kernels."""
