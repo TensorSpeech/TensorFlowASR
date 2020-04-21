@@ -52,7 +52,7 @@ class SEGAN:
       print(self.generator.summary())
       print(self.discriminator.summary())
 
-  def train(self):
+  def train(self, export_dir=None):
     train_dataset = SeganDataset(clean_data_dir=self.configs["clean_train_data_dir"],
                                  noisy_data_dir=self.configs["noisy_train_data_dir"],
                                  window_size=self.window_size, stride=self.stride)
@@ -112,6 +112,9 @@ class SEGAN:
       self.ckpt_manager.save()
 
       print(f"Time for epoch {epoch + 1} is {time.time() - start} secs")
+
+    if export_dir:
+      tf.saved_model.save(self.generator, export_dir)
 
   def test(self):
     test_dataset = SeganDataset(clean_data_dir=self.configs["clean_test_data_dir"],
