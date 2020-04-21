@@ -32,13 +32,13 @@ learning_rate = 0.001
 
 min_lr = 0.0
 
-sample_rate = 16384
+sample_rate = 16000
 
 frame_ms = 20
 
 stride_ms = 10
 
-num_feature_bins = 86
+num_feature_bins = 128
 
 feature_type = "mfcc"
 

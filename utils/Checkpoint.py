@@ -9,5 +9,5 @@ class Checkpoint(tf.keras.callbacks.Callback):
     super().__init__()
 
   def on_epoch_end(self, epoch, logs=None):
-    print(f"Save checkpoint at epoch {epoch}")
     self.ckpt_manager.save()
+    print(f"Saved checkpoint at epoch {epoch + 1}")
