@@ -13,8 +13,8 @@ class Z(tf.keras.layers.Layer):
     super(Z, self).__init__(name=name, **kwargs)
 
   def build(self, input_shape):
-    self.z = tf.random.normal(shape=[self.batch_size] + input_shape[1:],
-                              mean=self.mean, stddev=self.stddev, name="z")
+    self.z = self.add_weight(shape=[self.batch_size] + input_shape[1:], name="z", trainable=False,
+                             initializer=tf.random_normal_initializer(mean=self.mean, stddev=self.stddev))
 
   def call(self, inputs, training=False):
     return tf.keras.layers.Concatenate(axis=3)([self.z, inputs])
