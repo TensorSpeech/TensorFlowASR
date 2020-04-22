@@ -54,29 +54,36 @@ class DeConv(tf.keras.layers.Layer):
 
 
 class VirtualBatchNorm(tf.keras.layers.Layer):
-  def __init__(self, x, name, epsilon=1e-5, **kwargs):
+  def __init__(self, batch_size, name, epsilon=1e-5, **kwargs):
     super(VirtualBatchNorm, self).__init__(name=name, **kwargs)
     assert isinstance(epsilon, float)
-    self.first = False
     self.epsilon = epsilon
+    self.batch_size = batch_size
+    self.first = False
 
   def build(self, input_shape):
+    init = tf.random_normal_initializer()
     self.gamma = self.add_weight(
-      shape=[1, 1, 1, input_shape[-1]], name="gamma",
+      shape=[input_shape[-1]], name="gamma",
       initializer=tf.random_normal_initializer(1., 0.02),
       trainable=True
     )
     self.beta = self.add_weight(
-      shape=[1, 1, 1, input_shape[-1]], name="beta",
+      shape=[input_shape[-1]], name="beta",
       initializer=tf.keras.initializers.constant(0.),
       trainable=True
     )
+    self.mean = tf.Variable(initial_value=init(shape=[1, 1, 1] + [input_shape[-1]]),
+                            name="mean", dtype=tf.float32, trainable=False)
+    self.mean_sq = tf.Variable(initial_value=init(shape=[1, 1, 1] + [input_shape[-1]]),
+                               name="mean_sq", dtype=tf.float32, trainable=False)
+    self.built = True
 
-  def call(self, x, training=False):
+  def call(self, x, **kwargs):
     if not self.first:
-      self.mean = tf.reduce_mean(x, [1, 2], keepdims=True)
-      self.mean_sq = tf.reduce_mean(tf.square(x), [1, 2], keepdims=True)
-      self.batch_size = tf.cast(tf.shape(x)[0], dtype=tf.float32)
+      self.mean.assign(tf.reduce_mean(x, [0, 1, 2], keepdims=True))
+      self.mean_sq.assign(tf.reduce_mean(tf.square(x), [0, 1, 2], keepdims=True))
+      self.first = True
 
     new_coeff = 1. / (self.batch_size + 1.)
     old_coeff = 1. - new_coeff
@@ -88,11 +95,13 @@ class VirtualBatchNorm(tf.keras.layers.Layer):
     return out
 
   def normalize(self, x, mean, mean_sq):
+    gamma = tf.reshape(self.gamma, [1, 1, 1, -1])
+    beta = tf.reshape(self.beta, [1, 1, 1, -1])
     std = tf.sqrt(self.epsilon + mean_sq - tf.square(mean))
     out = x - mean
     out = out / std
-    out = out * self.gamma
-    out = out + self.beta
+    out = out * gamma
+    out = out + beta
     return out
 
 
@@ -114,18 +123,20 @@ class Reshape1to3(tf.keras.layers.Layer):
   def __init__(self, name="reshape_1_to_3", **kwargs):
     super(Reshape1to3, self).__init__(trainable=False, name=name, **kwargs)
 
-  def call(self, inputs, trainig=False):
+  def call(self, inputs, training=False):
     batch_size = tf.shape(inputs)[0]
-    return tf.reshape(inputs, [batch_size, -1, 1, 1])
+    width = inputs.get_shape().as_list()[1]
+    return tf.reshape(inputs, [batch_size, width, 1, 1])
 
 
 class Reshape3to1(tf.keras.layers.Layer):
   def __init__(self, name="reshape_3_to_1", **kwargs):
     super(Reshape3to1, self).__init__(trainable=False, name=name, **kwargs)
 
-  def call(self, inputs, trainig=False):
+  def call(self, inputs, training=False):
     batch_size = tf.shape(inputs)[0]
-    return tf.reshape(inputs, [batch_size, -1])
+    width = inputs.get_shape().as_list()[1]
+    return tf.reshape(inputs, [batch_size, width])
 
 
 class SeganPrelu(tf.keras.layers.Layer):

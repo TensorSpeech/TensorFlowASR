@@ -6,25 +6,28 @@ from models.segan.Ops import DownConv, DeConv, \
 
 
 class Z(tf.keras.layers.Layer):
-  def __init__(self, mean=0., stddev=1., name="segan_z", **kwargs):
+  def __init__(self, batch_size, mean=0., stddev=1., name="segan_z", **kwargs):
     self.mean = mean,
     self.stddev = stddev
+    self.batch_size = batch_size
     super(Z, self).__init__(name=name, **kwargs)
 
+  def build(self, input_shape):
+    self.z = tf.random.normal(shape=[self.batch_size] + input_shape[1:],
+                              mean=self.mean, stddev=self.stddev, name="z")
+
   def call(self, inputs, training=False):
-    z = tf.keras.backend.random_normal(shape=tf.shape(inputs),
-                                       mean=self.mean, stddev=self.stddev)
-    return tf.keras.layers.Concatenate(axis=3)([z, inputs])
+    return tf.keras.layers.Concatenate(axis=3)([self.z, inputs])
 
 
-def create_generator(g_enc_depths, window_size, kwidth=31, ratio=2, coeff=0.95):
+def create_generator(batch_size, g_enc_depths, window_size, kwidth=31, ratio=2, coeff=0.95):
   g_dec_depths = g_enc_depths.copy()
   g_dec_depths.reverse()
   g_dec_depths = g_dec_depths[1:]
   skips = []
 
   # input_shape = [batch_size, 16384]
-  signal = tf.keras.Input(shape=(window_size,),
+  signal = tf.keras.Input(shape=(window_size,), batch_size=batch_size,
                           name="noisy_input", dtype=tf.float32)
   pre_emph = PreEmph(coeff=coeff, name="segan_g_preemph")(signal)
   c = Reshape1to3("segan_g_reshape_input")(pre_emph)
@@ -38,7 +41,7 @@ def create_generator(g_enc_depths, window_size, kwidth=31, ratio=2, coeff=0.95):
       skips.append(c)
     c = SeganPrelu(name=f"segan_g_downconv_prelu_{layer_idx}")(c)
   # Z
-  output = Z()(c)
+  output = Z(batch_size=batch_size)(c)
   # Decoder
   for layer_idx, layer_depth in enumerate(g_dec_depths):
     output = DeConv(depth=layer_depth,
@@ -56,7 +59,8 @@ def create_generator(g_enc_depths, window_size, kwidth=31, ratio=2, coeff=0.95):
   return tf.keras.Model(inputs=signal, outputs=reshape_output, name="segan_gen")
 
 
+@tf.function
 def generator_loss(y_true, y_pred, l1_lambda, d_fake_logit):
-  l1_loss = l1_lambda * tf.reduce_mean(tf.abs(tf.math.subtract(y_pred, y_true)))
+  l1_loss = l1_lambda * tf.reduce_mean(tf.abs(tf.subtract(y_pred, y_true)))
   g_adv_loss = tf.reduce_mean(tf.math.squared_difference(d_fake_logit, 1.))
   return l1_loss + g_adv_loss

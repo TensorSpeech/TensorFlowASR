@@ -23,13 +23,15 @@ class SEGAN:
     self.window_size = self.configs["window_size"]
     self.stride = self.configs["stride"]
 
-    self.generator = create_generator(g_enc_depths=self.g_enc_depths,
+    self.generator = create_generator(batch_size=self.configs["batch_size"],
+                                      g_enc_depths=self.g_enc_depths,
                                       window_size=self.window_size,
                                       kwidth=self.kwidth, ratio=self.ratio,
                                       coeff=self.coeff)
 
     if mode == "training":
-      self.discriminator = create_discriminator(d_num_fmaps=self.d_num_fmaps,
+      self.discriminator = create_discriminator(batch_size=self.configs["batch_size"],
+                                                d_num_fmaps=self.d_num_fmaps,
                                                 window_size=self.window_size,
                                                 noise_std=self.noise_std,
                                                 kwidth=self.kwidth,
@@ -99,18 +101,22 @@ class SEGAN:
                                                          self.discriminator.trainable_variables))
         return _gen_loss, _disc_loss
 
+    num_batch = None
+
     for epoch in range(initial_epoch, epochs):
       start = time.time()
-      batch_idx = 0
+      batch_idx = 1
 
       for clean_wav, noisy_wav in tf_train_dataset:
         gen_loss, disc_loss = train_step(clean_wav, noisy_wav)
-        print(f"Epoch: {epoch + 1}/{epochs}, batch: {batch_idx}, "
-              f"gen_loss = {gen_loss}, disc_loss = {disc_loss}")
+        print(f"Epoch: {epoch + 1}/{epochs}, batch: {batch_idx}/{num_batch}, "
+              f"gen_loss = {gen_loss}, disc_loss = {disc_loss}", end="\r", flush=True)
         batch_idx += 1
 
-      self.ckpt_manager.save()
+      num_batch = batch_idx
 
+      self.ckpt_manager.save()
+      print(f"Saved checkpoint at epoch {epoch}")
       print(f"Time for epoch {epoch + 1} is {time.time() - start} secs")
 
     if export_dir:
