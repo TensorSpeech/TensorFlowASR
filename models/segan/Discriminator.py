@@ -7,9 +7,9 @@ from models.segan.Ops import DownConv, VirtualBatchNorm, \
 
 def create_discriminator(batch_size, d_num_fmaps, window_size, noise_std=0.,
                          kwidth=31, ratio=2, coeff=0.95):
-  clean_signal = tf.keras.Input(shape=(window_size,), batch_size=batch_size,
+  clean_signal = tf.keras.Input(shape=(window_size,),
                                 name="disc_clean_input", dtype=tf.float32)
-  noisy_signal = tf.keras.Input(shape=(window_size,), batch_size=batch_size,
+  noisy_signal = tf.keras.Input(shape=(window_size,),
                                 name="disc_noisy_input", dtype=tf.float32)
 
   clean_wav = PreEmph(coeff=coeff, name="disc_clean_preemph")(clean_signal)

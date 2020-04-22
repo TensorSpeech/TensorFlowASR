@@ -6,18 +6,15 @@ from models.segan.Ops import DownConv, DeConv, \
 
 
 class Z(tf.keras.layers.Layer):
-  def __init__(self, batch_size, mean=0., stddev=1., name="segan_z", **kwargs):
+  def __init__(self, mean=0., stddev=1., name="segan_z", **kwargs):
     self.mean = mean,
     self.stddev = stddev
-    self.batch_size = batch_size
     super(Z, self).__init__(name=name, **kwargs)
 
-  def build(self, input_shape):
-    self.z = self.add_weight(shape=[self.batch_size] + input_shape[1:], name="z", trainable=False,
-                             initializer=tf.random_normal_initializer(mean=self.mean, stddev=self.stddev))
-
   def call(self, inputs, training=False):
-    return tf.keras.layers.Concatenate(axis=3)([self.z, inputs])
+    z = tf.random.normal(shape=tf.shape(inputs),
+                         name="z", mean=self.mean, stddev=self.stddev)
+    return tf.keras.layers.Concatenate(axis=3)([z, inputs])
 
 
 def create_generator(batch_size, g_enc_depths, window_size, kwidth=31, ratio=2, coeff=0.95):
@@ -27,7 +24,7 @@ def create_generator(batch_size, g_enc_depths, window_size, kwidth=31, ratio=2, 
   skips = []
 
   # input_shape = [batch_size, 16384]
-  signal = tf.keras.Input(shape=(window_size,), batch_size=batch_size,
+  signal = tf.keras.Input(shape=(window_size,),
                           name="noisy_input", dtype=tf.float32)
   pre_emph = PreEmph(coeff=coeff, name="segan_g_preemph")(signal)
   c = Reshape1to3("segan_g_reshape_input")(pre_emph)
@@ -41,7 +38,7 @@ def create_generator(batch_size, g_enc_depths, window_size, kwidth=31, ratio=2, 
       skips.append(c)
     c = SeganPrelu(name=f"segan_g_downconv_prelu_{layer_idx}")(c)
   # Z
-  output = Z(batch_size=batch_size)(c)
+  output = Z()(c)
   # Decoder
   for layer_idx, layer_depth in enumerate(g_dec_depths):
     output = DeConv(depth=layer_depth,
