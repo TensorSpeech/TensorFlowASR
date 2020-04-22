@@ -116,7 +116,7 @@ class SEGAN:
       num_batch = batch_idx
 
       self.ckpt_manager.save()
-      print(f"Saved checkpoint at epoch {epoch}")
+      print(f"Saved checkpoint at epoch {epoch + 1}", flush=True)
       print(f"Time for epoch {epoch + 1} is {time.time() - start} secs")
 
     if export_dir:
