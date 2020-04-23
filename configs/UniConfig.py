@@ -1,8 +1,8 @@
 from __future__ import absolute_import
 
-from models.deepspeech2.DeepSpeech2 import DeepSpeech2RowConv
+from models.deepspeech2.DeepSpeech2 import DeepSpeech2
 
-base_model = DeepSpeech2RowConv()
+base_model = DeepSpeech2(is_bidirectional=False)
 
 streaming_size = 10
 
@@ -24,7 +24,7 @@ learning_rate = 0.0006
 
 min_lr = 0.0
 
-sample_rate = 16384
+sample_rate = 16000
 
 frame_ms = 20
 

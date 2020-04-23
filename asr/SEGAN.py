@@ -120,7 +120,7 @@ class SEGAN:
       print(f"Time for epoch {epoch + 1} is {time.time() - start} secs")
 
     if export_dir:
-      tf.saved_model.save(self.generator, export_dir)
+      self.generator.save(export_dir)
 
   def test(self):
     test_dataset = SeganDataset(clean_data_dir=self.configs["clean_test_data_dir"],
@@ -161,6 +161,21 @@ class SEGAN:
 
     print(f"Time for testing is {time.time() - start} secs")
 
+  def save_from_checkpoint(self, export_dir):
+    if self.ckpt_manager.latest_checkpoint:
+      # restoring the latest checkpoint in checkpoint_path
+      self.checkpoint.restore(self.ckpt_manager.latest_checkpoint)
+    else:
+      raise ValueError("Model is not trained")
+
+    self.generator.save(export_dir)
+
+
+class NoiseFilter:
+  def __init__(self, model_file, window_size=2 ** 14):
+    self.generator = tf.saved_model.load(model_file)
+    self.window_size = window_size
+
   def generate(self, signal):
     slices = slice_signal(signal, self.window_size, stride=1)
 
@@ -171,15 +186,3 @@ class SEGAN:
       return merge_slices(g_wavs)
 
     return gen(tf.convert_to_tensor(slices))
-
-  def save_from_checkpoint(self, export_dir):
-    if self.ckpt_manager.latest_checkpoint:
-      # restoring the latest checkpoint in checkpoint_path
-      self.checkpoint.restore(self.ckpt_manager.latest_checkpoint)
-    else:
-      raise ValueError("Model is not trained")
-
-    tf.saved_model.save(self.generator, export_dir)
-
-  def load_generator(self, export_dir):
-    self.generator = tf.saved_model.load(export_dir)

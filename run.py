@@ -52,5 +52,7 @@ elif args_parser.model == "segan":
     segan.train(export_dir=args_parser.export_file)
   elif args_parser.mode == "test":
     segan.test()
+  elif args_parser.mode == "save_from_ckpt":
+    segan.save_from_checkpoint(args_parser.export_file)
   else:
     raise ValueError("Flag 'mode' must be either 'train' or 'test'")

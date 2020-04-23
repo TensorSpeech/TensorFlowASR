@@ -15,7 +15,7 @@ from data.Dataset import Dataset
 
 
 class SpeechToText:
-  def __init__(self, configs_path):
+  def __init__(self, configs_path, noise_filter=None):
     self.configs = get_asr_config(configs_path)
     self.speech_featurizer = SpeechFeaturizer(
       sample_rate=self.configs["sample_rate"],
@@ -35,6 +35,7 @@ class SpeechToText:
       min_lr=self.configs["min_lr"],
       base_model=self.configs["base_model"],
       streaming_size=self.configs["streaming_size"])
+    self.noise_filter = noise_filter
 
   def train_and_eval(self, model_file=None):
     print("Training and evaluating model ...")
@@ -51,9 +52,12 @@ class SpeechToText:
     eval_dataset = Dataset(
       data_path=self.configs["eval_data_transcript_paths"],
       mode="eval")
+
+    augmentations = []
     if "augmentations" in self.configs.keys():
       augmentations = self.configs["augmentations"]
       augmentations.append(None)
+
     train_dataset = train_dataset(
       speech_featurizer=self.speech_featurizer,
       text_featurizer=self.text_featurizer,
