@@ -12,12 +12,12 @@ class Z(tf.keras.layers.Layer):
     super(Z, self).__init__(name=name, **kwargs)
 
   def call(self, inputs, training=False):
-    z = tf.keras.backend.random_normal(shape=tf.shape(inputs),
-                                       mean=self.mean, stddev=self.stddev)
+    z = tf.random.normal(shape=tf.shape(inputs),
+                         name="z", mean=self.mean, stddev=self.stddev)
     return tf.keras.layers.Concatenate(axis=3)([z, inputs])
 
 
-def create_generator(g_enc_depths, window_size, kwidth=31, ratio=2, coeff=0.95):
+def create_generator(batch_size, g_enc_depths, window_size, kwidth=31, ratio=2, coeff=0.95):
   g_dec_depths = g_enc_depths.copy()
   g_dec_depths.reverse()
   g_dec_depths = g_dec_depths[1:]
@@ -56,7 +56,8 @@ def create_generator(g_enc_depths, window_size, kwidth=31, ratio=2, coeff=0.95):
   return tf.keras.Model(inputs=signal, outputs=reshape_output, name="segan_gen")
 
 
+@tf.function
 def generator_loss(y_true, y_pred, l1_lambda, d_fake_logit):
-  l1_loss = l1_lambda * tf.reduce_mean(tf.abs(tf.math.subtract(y_pred, y_true)))
+  l1_loss = l1_lambda * tf.reduce_mean(tf.abs(tf.subtract(y_pred, y_true)))
   g_adv_loss = tf.reduce_mean(tf.math.squared_difference(d_fake_logit, 1.))
   return l1_loss + g_adv_loss

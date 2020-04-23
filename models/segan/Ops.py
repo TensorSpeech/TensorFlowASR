@@ -53,47 +53,35 @@ class DeConv(tf.keras.layers.Layer):
     return self.layer(inputs, training=training)
 
 
-class VirtualBatchNorm(tf.keras.layers.Layer):
-  def __init__(self, x, name, epsilon=1e-5, **kwargs):
-    super(VirtualBatchNorm, self).__init__(name=name, **kwargs)
+class VirtualBatchNorm:
+  def __init__(self, x, name, epsilon=1e-5):
     assert isinstance(epsilon, float)
-    self.first = False
     self.epsilon = epsilon
-
-  def build(self, input_shape):
-    self.gamma = self.add_weight(
-      shape=[1, 1, 1, input_shape[-1]], name="gamma",
-      initializer=tf.random_normal_initializer(1., 0.02),
-      trainable=True
+    self.name = name
+    self.batch_size = tf.cast(tf.shape(x)[0], tf.float32)
+    self.gamma = tf.Variable(
+      initial_value=tf.random_normal_initializer(1., 0.02)(
+        shape=[x.get_shape().as_list()[-1]]),
+      name="gamma", trainable=True
     )
-    self.beta = self.add_weight(
-      shape=[1, 1, 1, input_shape[-1]], name="beta",
-      initializer=tf.keras.initializers.constant(0.),
-      trainable=True
+    self.beta = tf.Variable(
+      initial_value=tf.constant_initializer(0.)(
+        shape=[x.get_shape().as_list()[-1]]),
+      name="beta", trainable=True
     )
+    mean, var = tf.nn.moments(x, axes=[0, 1, 2], keepdims=False)
+    self.mean = mean
+    self.variance = var
 
-  def call(self, x, training=False):
-    if not self.first:
-      self.mean = tf.reduce_mean(x, [1, 2], keepdims=True)
-      self.mean_sq = tf.reduce_mean(tf.square(x), [1, 2], keepdims=True)
-      self.batch_size = tf.cast(tf.shape(x)[0], dtype=tf.float32)
-
+  def __call__(self, x):
     new_coeff = 1. / (self.batch_size + 1.)
     old_coeff = 1. - new_coeff
-    new_mean = tf.reduce_mean(x, [1, 2], keepdims=True)
-    new_mean_sq = tf.reduce_mean(tf.square(x), [1, 2], keepdims=True)
-    mean = new_coeff * new_mean + old_coeff * self.mean
-    mean_sq = new_coeff * new_mean_sq + old_coeff * self.mean_sq
-    out = self.normalize(x, mean, mean_sq)
-    return out
-
-  def normalize(self, x, mean, mean_sq):
-    std = tf.sqrt(self.epsilon + mean_sq - tf.square(mean))
-    out = x - mean
-    out = out / std
-    out = out * self.gamma
-    out = out + self.beta
-    return out
+    new_mean, new_var = tf.nn.moments(x, axes=[0, 1, 2], keepdims=False)
+    new_mean = new_coeff * new_mean + old_coeff * self.mean
+    new_var = new_coeff * new_var + old_coeff * self.variance
+    return tf.nn.batch_normalization(x, mean=new_mean, variance=new_var,
+                                     offset=self.beta, scale=self.gamma,
+                                     variance_epsilon=self.epsilon)
 
 
 class GaussianNoise(tf.keras.layers.Layer):
@@ -114,18 +102,20 @@ class Reshape1to3(tf.keras.layers.Layer):
   def __init__(self, name="reshape_1_to_3", **kwargs):
     super(Reshape1to3, self).__init__(trainable=False, name=name, **kwargs)
 
-  def call(self, inputs, trainig=False):
+  def call(self, inputs, training=False):
     batch_size = tf.shape(inputs)[0]
-    return tf.reshape(inputs, [batch_size, -1, 1, 1])
+    width = inputs.get_shape().as_list()[1]
+    return tf.reshape(inputs, [batch_size, width, 1, 1])
 
 
 class Reshape3to1(tf.keras.layers.Layer):
   def __init__(self, name="reshape_3_to_1", **kwargs):
     super(Reshape3to1, self).__init__(trainable=False, name=name, **kwargs)
 
-  def call(self, inputs, trainig=False):
+  def call(self, inputs, training=False):
     batch_size = tf.shape(inputs)[0]
-    return tf.reshape(inputs, [batch_size, -1])
+    width = inputs.get_shape().as_list()[1]
+    return tf.reshape(inputs, [batch_size, width])
 
 
 class SeganPrelu(tf.keras.layers.Layer):
