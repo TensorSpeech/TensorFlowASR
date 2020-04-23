@@ -28,8 +28,8 @@ def create_discriminator(batch_size, d_num_fmaps, window_size, noise_std=0.,
                   kwidth=kwidth,
                   pool=ratio,
                   name=f"segan_d_downconv_{block_idx}")(hi)
-    # hi = VirtualBatchNorm(batch_size=batch_size, name=f"segan_d_vbn_{block_idx}")(hi)
-    hi = tf.keras.layers.BatchNormalization(name=f"segan_d_bn_{block_idx}")(hi)
+    hi = VirtualBatchNorm(hi, name=f"segan_d_vbn_{block_idx}")(hi)
+    # hi = tf.keras.layers.BatchNormalization(name=f"segan_d_bn_{block_idx}")(hi)
     hi = tf.keras.layers.LeakyReLU(alpha=0.3, name=f"segan_d_leakyrelu_{block_idx}")(hi)
 
   hi = tf.squeeze(hi, axis=2)

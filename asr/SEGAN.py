@@ -90,16 +90,16 @@ class SEGAN:
 
         _disc_loss = discriminator_loss(d_real_logit, d_fake_logit)
 
-        gradients_of_generator = gen_tape.gradient(_gen_loss,
-                                                   self.generator.trainable_variables)
-        gradients_of_discriminator = disc_tape.gradient(_disc_loss,
-                                                        self.discriminator.trainable_variables)
+      gradients_of_generator = gen_tape.gradient(_gen_loss,
+                                                 self.generator.trainable_variables)
+      gradients_of_discriminator = disc_tape.gradient(_disc_loss,
+                                                      self.discriminator.trainable_variables)
 
-        self.generator_optimizer.apply_gradients(zip(gradients_of_generator,
-                                                     self.generator.trainable_variables))
-        self.discriminator_optimizer.apply_gradients(zip(gradients_of_discriminator,
-                                                         self.discriminator.trainable_variables))
-        return _gen_loss, _disc_loss
+      self.generator_optimizer.apply_gradients(zip(gradients_of_generator,
+                                                   self.generator.trainable_variables))
+      self.discriminator_optimizer.apply_gradients(zip(gradients_of_discriminator,
+                                                       self.discriminator.trainable_variables))
+      return _gen_loss, _disc_loss
 
     num_batch = None
 

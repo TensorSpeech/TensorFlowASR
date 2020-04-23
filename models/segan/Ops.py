@@ -53,56 +53,35 @@ class DeConv(tf.keras.layers.Layer):
     return self.layer(inputs, training=training)
 
 
-class VirtualBatchNorm(tf.keras.layers.Layer):
-  def __init__(self, batch_size, name, epsilon=1e-5, **kwargs):
-    super(VirtualBatchNorm, self).__init__(name=name, **kwargs)
+class VirtualBatchNorm:
+  def __init__(self, x, name, epsilon=1e-5):
     assert isinstance(epsilon, float)
     self.epsilon = epsilon
-    self.batch_size = batch_size
-    self.first = False
-
-  def build(self, input_shape):
-    init = tf.random_normal_initializer()
-    self.gamma = self.add_weight(
-      shape=[input_shape[-1]], name="gamma",
-      initializer=tf.random_normal_initializer(1., 0.02),
-      trainable=True
+    self.name = name
+    self.batch_size = tf.cast(tf.shape(x)[0], tf.float32)
+    self.gamma = tf.Variable(
+      initial_value=tf.random_normal_initializer(1., 0.02)(
+        shape=[x.get_shape().as_list()[-1]]),
+      name="gamma", trainable=True
     )
-    self.beta = self.add_weight(
-      shape=[input_shape[-1]], name="beta",
-      initializer=tf.keras.initializers.constant(0.),
-      trainable=True
+    self.beta = tf.Variable(
+      initial_value=tf.constant_initializer(0.)(
+        shape=[x.get_shape().as_list()[-1]]),
+      name="beta", trainable=True
     )
-    self.mean = tf.Variable(initial_value=init(shape=[1, 1, 1] + [input_shape[-1]]),
-                            name="mean", dtype=tf.float32, trainable=False)
-    self.mean_sq = tf.Variable(initial_value=init(shape=[1, 1, 1] + [input_shape[-1]]),
-                               name="mean_sq", dtype=tf.float32, trainable=False)
-    self.built = True
+    mean, var = tf.nn.moments(x, axes=[0, 1, 2], keepdims=False)
+    self.mean = mean
+    self.variance = var
 
-  def call(self, x, **kwargs):
-    if not self.first:
-      self.mean.assign(tf.reduce_mean(x, [0, 1, 2], keepdims=True))
-      self.mean_sq.assign(tf.reduce_mean(tf.square(x), [0, 1, 2], keepdims=True))
-      self.first = True
-
+  def __call__(self, x):
     new_coeff = 1. / (self.batch_size + 1.)
     old_coeff = 1. - new_coeff
-    new_mean = tf.reduce_mean(x, [1, 2], keepdims=True)
-    new_mean_sq = tf.reduce_mean(tf.square(x), [1, 2], keepdims=True)
-    mean = new_coeff * new_mean + old_coeff * self.mean
-    mean_sq = new_coeff * new_mean_sq + old_coeff * self.mean_sq
-    out = self.normalize(x, mean, mean_sq)
-    return out
-
-  def normalize(self, x, mean, mean_sq):
-    gamma = tf.reshape(self.gamma, [1, 1, 1, -1])
-    beta = tf.reshape(self.beta, [1, 1, 1, -1])
-    std = tf.sqrt(self.epsilon + mean_sq - tf.square(mean))
-    out = x - mean
-    out = out / std
-    out = out * gamma
-    out = out + beta
-    return out
+    new_mean, new_var = tf.nn.moments(x, axes=[0, 1, 2], keepdims=False)
+    new_mean = new_coeff * new_mean + old_coeff * self.mean
+    new_var = new_coeff * new_var + old_coeff * self.variance
+    return tf.nn.batch_normalization(x, mean=new_mean, variance=new_var,
+                                     offset=self.beta, scale=self.gamma,
+                                     variance_epsilon=self.epsilon)
 
 
 class GaussianNoise(tf.keras.layers.Layer):
