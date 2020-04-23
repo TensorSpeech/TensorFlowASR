@@ -10,6 +10,12 @@ ratio = 2
 
 noise_std = 0.
 
+denoise_epoch = 5
+
+noise_decay = 0.9
+
+noise_std_lbound = 0.
+
 l1_lambda = 100.
 
 pre_emph = 0.95
@@ -30,6 +36,6 @@ clean_test_data_dir = "/mnt/Data/ML/SEGAN/"
 
 noisy_test_data_dir = "/mnt/Data/ML/SEGAN/"
 
-checkpoint_dir = "/mnt/Projects/asrk16/trained/segan/checkpoints/"
+checkpoint_dir = "/mnt/Projects/asrk16/trained/segan/ckpts/"
 
 log_dir = "/mnt/Projects/asrk16/trained/segan/logs/"

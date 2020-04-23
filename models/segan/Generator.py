@@ -2,7 +2,7 @@ from __future__ import absolute_import
 
 import tensorflow as tf
 from models.segan.Ops import DownConv, DeConv, \
-  Reshape1to3, Reshape3to1, PreEmph, SeganPrelu
+  Reshape1to3, Reshape3to1, SeganPrelu
 
 
 class Z(tf.keras.layers.Layer):
@@ -17,7 +17,7 @@ class Z(tf.keras.layers.Layer):
     return tf.keras.layers.Concatenate(axis=3)([z, inputs])
 
 
-def create_generator(batch_size, g_enc_depths, window_size, kwidth=31, ratio=2, coeff=0.95):
+def create_generator(g_enc_depths, window_size, kwidth=31, ratio=2, coeff=0.95):
   g_dec_depths = g_enc_depths.copy()
   g_dec_depths.reverse()
   g_dec_depths = g_dec_depths[1:]
@@ -26,8 +26,7 @@ def create_generator(batch_size, g_enc_depths, window_size, kwidth=31, ratio=2, 
   # input_shape = [batch_size, 16384]
   signal = tf.keras.Input(shape=(window_size,),
                           name="noisy_input", dtype=tf.float32)
-  pre_emph = PreEmph(coeff=coeff, name="segan_g_preemph")(signal)
-  c = Reshape1to3("segan_g_reshape_input")(pre_emph)
+  c = Reshape1to3("segan_g_reshape_input")(signal)
   # Encoder
   for layer_idx, layer_depth in enumerate(g_enc_depths):
     c = DownConv(depth=layer_depth,

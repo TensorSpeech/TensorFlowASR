@@ -22,18 +22,16 @@ class SEGAN:
     self.coeff = self.configs["pre_emph"]
     self.window_size = self.configs["window_size"]
     self.stride = self.configs["stride"]
+    self.deactivated_noise = False
 
-    self.generator = create_generator(batch_size=self.configs["batch_size"],
-                                      g_enc_depths=self.g_enc_depths,
+    self.generator = create_generator(g_enc_depths=self.g_enc_depths,
                                       window_size=self.window_size,
                                       kwidth=self.kwidth, ratio=self.ratio,
                                       coeff=self.coeff)
 
     if mode == "training":
-      self.discriminator = create_discriminator(batch_size=self.configs["batch_size"],
-                                                d_num_fmaps=self.d_num_fmaps,
+      self.discriminator = create_discriminator(d_num_fmaps=self.d_num_fmaps,
                                                 window_size=self.window_size,
-                                                noise_std=self.noise_std,
                                                 kwidth=self.kwidth,
                                                 ratio=self.ratio, coeff=self.coeff)
 
@@ -76,11 +74,11 @@ class SEGAN:
 
         d_real_logit = self.discriminator({
           "clean": clean_wavs,
-          "noisy": noisy_wavs
+          "noisy": noisy_wavs,
         }, training=True)
         d_fake_logit = self.discriminator({
           "clean": g_clean_wavs,
-          "noisy": noisy_wavs
+          "noisy": noisy_wavs,
         }, training=True)
 
         _gen_loss = generator_loss(y_true=clean_wavs,
@@ -106,6 +104,12 @@ class SEGAN:
     for epoch in range(initial_epoch, epochs):
       start = time.time()
       batch_idx = 1
+
+      if epoch > self.configs["denoise_epoch"] and self.deactivated_noise == False:
+        self.noise_std = self.configs["noise_decay"] * self.noise_std
+        if self.noise_std < self.configs["noise_std_lbound"]:
+          self.noise_std = 0.
+          self.deactivated_noise = True
 
       for clean_wav, noisy_wav in tf_train_dataset:
         gen_loss, disc_loss = train_step(clean_wav, noisy_wav)

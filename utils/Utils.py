@@ -33,6 +33,9 @@ segan_conf_required = ["batch_size",
                        "kwidth",
                        "ratio",
                        "noise_std",
+                       "denoise_epoch",
+                       "noise_decay",
+                       "noise_std_lbound",
                        "l1_lambda",
                        "pre_emph",
                        "window_size",
@@ -161,10 +164,13 @@ def slice_signal(signal, window_size, stride=0.5):
   for beg_i, end_i in zip(range(0, n_samples, offset),
                           range(window_size, n_samples + offset,
                                 offset)):
+    if end_i - beg_i < window_size:
+      break
     slice_ = signal[beg_i:end_i]
-    if slice_.shape[0] < window_size:
-      slice_ = np.pad(slice_, (0, window_size - slice_.shape[0]), 'constant', constant_values=0.0)
-    slices.append(slice_)
+    # if slice_.shape[0] < window_size:
+    #   slice_ = np.pad(slice_, (0, window_size - slice_.shape[0]), 'constant', constant_values=0.0)
+    if slice_.shape[0] == window_size:
+      slices.append(slice_)
   return np.array(slices, dtype=np.float32)
 
 
