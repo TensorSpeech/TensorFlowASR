@@ -59,4 +59,4 @@ def create_generator(g_enc_depths, window_size, kwidth=31, ratio=2):
 def generator_loss(y_true, y_pred, l1_lambda, d_fake_logit):
   l1_loss = l1_lambda * tf.reduce_mean(tf.abs(tf.subtract(y_pred, y_true)))
   g_adv_loss = tf.reduce_mean(tf.math.squared_difference(d_fake_logit, 1.))
-  return l1_loss + g_adv_loss
+  return l1_loss, g_adv_loss
