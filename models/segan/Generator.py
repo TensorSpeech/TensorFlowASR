@@ -17,7 +17,7 @@ class Z(tf.keras.layers.Layer):
     return tf.keras.layers.Concatenate(axis=3)([z, inputs])
 
 
-def create_generator(g_enc_depths, window_size, kwidth=31, ratio=2, coeff=0.95):
+def create_generator(g_enc_depths, window_size, kwidth=31, ratio=2):
   g_dec_depths = g_enc_depths.copy()
   g_dec_depths.reverse()
   g_dec_depths = g_dec_depths[1:]

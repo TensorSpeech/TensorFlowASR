@@ -26,14 +26,13 @@ class SEGAN:
 
     self.generator = create_generator(g_enc_depths=self.g_enc_depths,
                                       window_size=self.window_size,
-                                      kwidth=self.kwidth, ratio=self.ratio,
-                                      coeff=self.coeff)
+                                      kwidth=self.kwidth, ratio=self.ratio)
 
     if mode == "training":
       self.discriminator = create_discriminator(d_num_fmaps=self.d_num_fmaps,
                                                 window_size=self.window_size,
                                                 kwidth=self.kwidth,
-                                                ratio=self.ratio, coeff=self.coeff)
+                                                ratio=self.ratio)
 
       self.generator_optimizer = tf.keras.optimizers.RMSprop(
         self.configs["g_learning_rate"])
@@ -57,7 +56,7 @@ class SEGAN:
                                  noisy_data_dir=self.configs["noisy_train_data_dir"],
                                  window_size=self.window_size, stride=self.stride)
 
-    tf_train_dataset = train_dataset.create(self.configs["batch_size"])
+    tf_train_dataset = train_dataset.create(self.configs["batch_size"], coeff=self.coeff)
 
     epochs = self.configs["num_epochs"]
 
