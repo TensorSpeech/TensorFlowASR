@@ -38,8 +38,9 @@ class GreedyDecoder(Decoder):
 
   def map_fn(self, splited_logits):
     _d = []
-    for idx, value in enumerate(splited_logits):
-      _d.append(ctc_greedy_decoder(probs_seq=value, vocabulary=self.vocab_array))
+    for value in splited_logits:
+      _d.append(ctc_greedy_decoder(probs_seq=value,
+                                   vocabulary=self.vocab_array))
     return _d
 
   def decode(self, probs, input_length):

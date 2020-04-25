@@ -5,16 +5,17 @@ import os
 import librosa
 import tensorflow as tf
 from utils.Utils import slice_signal
+from featurizers.SpeechFeaturizer import preemphasis
 
 
 class SeganDataset:
-  def __init__(self, clean_data_dir, noisy_data_dir, window_size=2**14, stride=0.5):
+  def __init__(self, clean_data_dir, noisy_data_dir, window_size=2 ** 14, stride=0.5):
     self.clean_data_dir = clean_data_dir
     self.noisy_data_dir = noisy_data_dir
     self.window_size = window_size
     self.stride = stride
 
-  def create(self, batch_size, repeat=1):
+  def create(self, batch_size, coeff=0.97, repeat=1):
     def _gen_data():
       for clean_wav_path in glob.iglob(os.path.join(self.clean_data_dir, "**", "*.wav"), recursive=True):
         name = os.path.basename(clean_wav_path)
@@ -29,7 +30,7 @@ class SeganDataset:
         for clean_slice, noisy_slice in zip(clean_slices, noisy_slices):
           if len(clean_slice) == 0:
             continue
-          yield clean_slice, noisy_slice
+          yield preemphasis(clean_slice, coeff), preemphasis(noisy_slice, coeff)
 
     dataset = tf.data.Dataset.from_generator(
       _gen_data,

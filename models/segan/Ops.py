@@ -3,22 +3,6 @@ from __future__ import absolute_import
 import tensorflow as tf
 
 
-class PreEmph(tf.keras.layers.Layer):
-  def __init__(self, coeff=0.95, name="pre_emph", **kwargs):
-    super(PreEmph, self).__init__(name=name, trainable=False, **kwargs)
-    self.coeff = coeff
-    self.cname = name
-
-  def call(self, inputs, trainig=False):
-    # input_shape = [batch_size, 16384]
-    def map_fn(elem):
-      x0 = tf.reshape(elem[0], [1, ])
-      diff = elem[1:] - self.coeff * elem[:-1]
-      return tf.concat([x0, diff], axis=0)
-
-    return tf.map_fn(map_fn, inputs, name=self.cname)
-
-
 class DownConv(tf.keras.layers.Layer):
   def __init__(self, depth, kwidth=5, pool=2, name="downconv", **kwargs):
     super(DownConv, self).__init__(name=name, **kwargs)
@@ -85,16 +69,14 @@ class VirtualBatchNorm:
 
 
 class GaussianNoise(tf.keras.layers.Layer):
-  def __init__(self, name, std, **kwargs):
+  def __init__(self, name, noise_std, **kwargs):
     super(GaussianNoise, self).__init__(trainable=False, name=name, **kwargs)
-    self.std = std
-    self.cname = name
+    self.noise_std = noise_std
 
   def call(self, inputs, training=False):
-    noise = tf.keras.backend.random_normal(
-      shape=tf.shape(inputs),
-      mean=0.0, stddev=self.std,
-      dtype=tf.float32)
+    noise = tf.keras.backend.random_normal(shape=tf.shape(inputs),
+                                           mean=0.0, stddev=self.noise_std,
+                                           dtype=tf.float32)
     return inputs + noise
 
 
