@@ -60,8 +60,7 @@ def check_key_in_dict(dictionary, keys):
 def preprocess_paths(paths):
   if isinstance(paths, list):
     return list(map(os.path.expanduser, paths))
-  path= os.path.expanduser(paths)
-  return path.replace(" ", "\ ")
+  return os.path.expanduser(paths)
 
 
 def get_asr_config(config_path):
