@@ -20,7 +20,7 @@ class Z(tf.keras.layers.Layer):
 def create_generator(g_enc_depths, window_size, kwidth=31, ratio=2):
   g_dec_depths = g_enc_depths.copy()
   g_dec_depths.reverse()
-  g_dec_depths = g_dec_depths[1:]
+  g_dec_depths = g_dec_depths[1:] + [1]
   skips = []
 
   # input_shape = [batch_size, 16384]
@@ -45,9 +45,9 @@ def create_generator(g_enc_depths, window_size, kwidth=31, ratio=2):
                     dilation=ratio,
                     name=f"segan_g_deconv_{layer_idx}")(output)
     output = SeganPrelu(name=f"segan_g_deconv_prelu_{layer_idx}")(output)
-    _skip = skips[-(layer_idx + 1)]
-    output = tf.keras.layers.Concatenate(axis=3, name=f"concat_skip_{layer_idx}")([output, _skip])
-  output = DeConv(depth=1, kwidth=kwidth, dilation=ratio, name=f"segan_g_deconv_last")(output)
+    if layer_idx < len(g_dec_depths) - 1:
+      _skip = skips[-(layer_idx + 1)]
+      output = tf.keras.layers.Concatenate(axis=3, name=f"concat_skip_{layer_idx}")([output, _skip])
 
   reshape_output = Reshape3to1("segan_g_reshape_output")(output)
   # output_shape = [batch_size, 16384]
