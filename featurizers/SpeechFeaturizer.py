@@ -1,6 +1,7 @@
 from __future__ import absolute_import
 
 import math
+import os
 import numpy as np
 import librosa
 import tensorflow as tf
@@ -160,7 +161,7 @@ class SpeechFeaturizer:
         audio_duration (float): duration of the signal in seconds
     """
     if isinstance(audio_file_path, str):
-      data, sr = librosa.core.load(audio_file_path, sr=None)
+      data, sr = librosa.core.load(os.path.expanduser(audio_file_path), sr=None)
     elif isinstance(audio_file_path, bytes):
       data = self.convert_bytesarray_to_float(audio_file_path,
                                               channels=channels)
