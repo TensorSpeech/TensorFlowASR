@@ -72,5 +72,6 @@ class DeepSpeech2:
                                   use_bias=True)(layer)
     layer = tf.keras.layers.BatchNormalization(name="pre_fc_bn")(layer)
     layer = tf.keras.layers.ReLU(name=f"relu_pre_fc")(layer)
+    layer = tf.keras.layers.Dropout(0.2)(layer)
 
     return layer
