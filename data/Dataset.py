@@ -74,20 +74,10 @@ class Dataset:
               features)
             features = au(features) if au.is_post else features
           else:
-            features = speech_featurizer.compute_speech_features(
-              audio_file)
+            features = speech_featurizer.compute_speech_features(audio_file)
           labels = text_featurizer.compute_label_features(transcript)
-          input_length = tf.convert_to_tensor(
-            features.get_shape().as_list()[0], dtype=tf.int32)
-          label_length = tf.convert_to_tensor(
-            labels.get_shape().as_list()[0], dtype=tf.int32)
-          if input_length < label_length:
-            continue
 
-          yield (
-            features,
-            tf.expand_dims(labels, -1)
-          )
+          yield features, tf.expand_dims(labels, -1)
 
     dataset = tf.data.Dataset.from_generator(
       _gen_data,
