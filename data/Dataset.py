@@ -60,7 +60,7 @@ class Dataset:
   def __create_dataset(self, speech_featurizer, text_featurizer,
                        batch_size, augmentations, repeat=1):
     if not isinstance(augmentations, list) and \
-            not isinstance(augmentations, tuple):
+        not isinstance(augmentations, tuple):
       raise ValueError("augmentation must be a list or a tuple")
     # Dataset properties
     num_feature_bins = speech_featurizer.num_feature_bins
@@ -70,8 +70,7 @@ class Dataset:
         for au in augmentations:
           if au is not None:
             features = audio_file if au.is_post else au(audio_file)
-            features = speech_featurizer.compute_speech_features(
-              features)
+            features = speech_featurizer.compute_speech_features(features)
             features = au(features) if au.is_post else features
           else:
             features = speech_featurizer.compute_speech_features(audio_file)
