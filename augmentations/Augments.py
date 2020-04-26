@@ -1,7 +1,10 @@
 from __future__ import absolute_import
 
+import functools
+import numpy as np
 from augmentations.SpecAugment import time_warping, time_masking, \
   freq_masking
+from augmentations.NoiseAugment import add_white_noise, add_noise_from_sound
 
 
 def no_aug(features):
@@ -35,3 +38,19 @@ class TimeMasking(Augmentation):
 class TimeWarping(Augmentation):
   def __init__(self, **kwargs):
     super().__init__(func=time_warping, is_post=True, **kwargs)
+
+
+class WhiteNoise(Augmentation):
+  def __init__(self, snr=10, **kwargs):
+    self.snr = snr
+    super().__init__(func=functools.partial(add_white_noise(np.ndarray, SNR=self.snr)), is_post=False, **kwargs)
+
+
+class RealWorldNoise(Augmentation):
+  def __init__(self, noise_wavs: list, snr=10, **kwargs):
+    if not noise_wavs or len(noise_wavs) == 0:
+      raise ValueError("List of noise wav files must be defined")
+    self.noise_wavs = noise_wavs
+    self.snr = snr
+    super(RealWorldNoise, self).__init__(func=functools.partial(np.ndarray, noise_wavs=self.noise_wavs, SNR=self.snr),
+                                         is_post=False, **kwargs)
