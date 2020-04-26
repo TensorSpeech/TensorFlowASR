@@ -11,16 +11,18 @@ class Dataset:
 
   def __call__(self, speech_featurizer, text_featurizer=None, batch_size=32,
                repeat=1, augmentations=tuple([None]), sort=False):
-    self.entries = self.__create_entries(sort)
+    entries = self.__create_entries(sort)
     if self.mode == "train":
-      return self.__create_dataset(speech_featurizer=speech_featurizer, text_featurizer=text_featurizer,
+      return self.__create_dataset(entries=entries, speech_featurizer=speech_featurizer,
+                                   text_featurizer=text_featurizer,
                                    batch_size=batch_size, repeat=repeat, augmentations=augmentations)
     if self.mode == "eval" or self.mode == "test":
-      return self.__create_dataset(speech_featurizer=speech_featurizer, text_featurizer=text_featurizer,
+      return self.__create_dataset(entries=entries, speech_featurizer=speech_featurizer,
+                                   text_featurizer=text_featurizer,
                                    batch_size=batch_size, augmentations=[None])
     if self.mode == "infer":
-      return self.__create_dataset(speech_featurizer=speech_featurizer, text_featurizer=None,
-                                   batch_size=batch_size, augmentations=[None])
+      return self.__create_dataset(entries=entries, speech_featurizer=speech_featurizer,
+                                   text_featurizer=None, batch_size=batch_size, augmentations=[None])
     raise ValueError("Mode must be 'train', 'eval' or 'infer'")
 
   def __create_entries(self, sort=False):
@@ -36,7 +38,7 @@ class Dataset:
       lines.sort(key=lambda item: int(item[1]))
     return [tuple(line) for line in lines]
 
-  def __create_dataset(self, speech_featurizer, text_featurizer,
+  def __create_dataset(self, entries, speech_featurizer, text_featurizer,
                        batch_size, augmentations, repeat=1):
     if not isinstance(augmentations, list) and \
         not isinstance(augmentations, tuple):
@@ -45,7 +47,7 @@ class Dataset:
     num_feature_bins = speech_featurizer.num_feature_bins
 
     def _gen_data():
-      for audio_file, _, transcript in self.entries:
+      for audio_file, _, transcript in entries:
         for au in augmentations:
           if au is not None:
             features = audio_file if au.is_post else au(audio_file)
