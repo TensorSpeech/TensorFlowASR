@@ -7,11 +7,11 @@ base_model = DeepSpeech2(is_bidirectional=True)
 streaming_size = None
 
 decoder = {
-  "name": "beamsearch",
+  "name":       "beamsearch",
   "beam_width": 500,
-  "lm_path": "/app/assets/lm.binary",
-  "alpha": 1.0,
-  "beta": 0.5
+  "lm_path":    "/app/assets/lm.binary",
+  "alpha":      1.0,
+  "beta":       0.5
 }
 
 batch_size = 24

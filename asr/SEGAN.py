@@ -9,7 +9,7 @@ from data.SeganDataset import SeganDataset
 
 
 class SEGAN:
-  def __init__(self, config_path, mode="training"):
+  def __init__(self, config_path, training=True):
     self.g_enc_depths = [16, 32, 32, 64, 64, 128, 128, 256, 256, 512, 1024]
     self.d_num_fmaps = [16, 32, 32, 64, 64, 128, 128, 256, 256, 512, 1024]
 
@@ -28,7 +28,7 @@ class SEGAN:
                                       window_size=self.window_size,
                                       kwidth=self.kwidth, ratio=self.ratio)
 
-    if mode == "training":
+    if training:
       self.discriminator = create_discriminator(d_num_fmaps=self.d_num_fmaps,
                                                 window_size=self.window_size,
                                                 kwidth=self.kwidth,
@@ -123,7 +123,7 @@ class SEGAN:
       print(f"Time for epoch {epoch + 1} is {time.time() - start} secs")
 
     if export_dir:
-      self.generator.save(export_dir)
+      self.save(export_dir)
 
   def test(self):
     test_dataset = SeganDataset(clean_data_dir=self.configs["clean_test_data_dir"],
@@ -171,13 +171,10 @@ class SEGAN:
     else:
       raise ValueError("Model is not trained")
 
-    self.generator.save(export_dir)
+    self.save(export_dir)
 
-
-class NoiseFilter:
-  def __init__(self, model_file, window_size=2 ** 14):
-    self.generator = tf.saved_model.load(model_file)
-    self.window_size = window_size
+  def save(self, export_dir):
+    self.generator.save_weights(export_dir)
 
   def generate(self, signal):
     slices = slice_signal(signal, self.window_size, stride=1)
