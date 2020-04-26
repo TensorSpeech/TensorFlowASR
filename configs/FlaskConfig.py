@@ -16,11 +16,12 @@ class FlaskConfig:
 
   # ASR
   MODEL_FILE = os.path.expanduser(os.getenv("MODEL_FILE", ""))
-  STATIC_WAV_FILE = os.path.expanduser(
-    os.getenv("STATIC_WAV_FILE", "/tmp/temp.wav"))
+  STATIC_WAV_FILE = os.path.expanduser(os.getenv("STATIC_WAV_FILE", "/tmp/temp.wav"))
 
-  UNI_CONFIG_PATH = os.path.expanduser(
-    os.getenv("UNI_CONFIG_PATH", "/app/configs/UniConfig.py"))
+  UNI_CONFIG_PATH = os.path.expanduser(os.getenv("UNI_CONFIG_PATH", "/app/configs/UniConfig.py"))
 
-  BI_CONFIG_PATH = os.path.expanduser(
-    os.getenv("BI_CONFIG_PATH", "/app/configs/BiConfig.py"))
+  BI_CONFIG_PATH = os.path.expanduser(os.getenv("BI_CONFIG_PATH", "/app/configs/BiConfig.py"))
+
+  # SEGAN
+  SEGAN_FILE = os.path.expanduser(os.getenv("SEGAN_FILE", ""))
+  SEGAN_CONFIG_PATH = os.path.expanduser(os.getenv("SEGAN_CONFIG_PATH", "/app/configs/SeganConfig.py"))
