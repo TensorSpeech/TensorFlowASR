@@ -8,6 +8,10 @@ import librosa
 import tensorflow as tf
 
 
+def interp(signal: np.ndarray):
+  return np.interp(signal, (np.amin(signal), np.amin(signal)), (-1, 1))
+
+
 def compute_spectrogram_feature(signal, sample_rate, frame_ms, stride_ms, num_feature_bins):
   frame_length = int(sample_rate * (frame_ms / 1000))
   frame_step = int(sample_rate * (stride_ms / 1000))

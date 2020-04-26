@@ -1,7 +1,7 @@
 from __future__ import absolute_import
 
 import tensorflow as tf
-from featurizers.SpeechFeaturizer import read_raw_audio, preemphasis
+from featurizers.SpeechFeaturizer import read_raw_audio, preemphasis, interp
 
 
 class Dataset:
@@ -45,8 +45,9 @@ class Dataset:
       for audio_file, _, transcript in entries:
         for au in augmentations:
           signal = read_raw_audio(audio_file, sample_rate)
+          signal = interp(signal)
           if au is not None:
-            signal = au(signal)
+            signal = au(signal=signal, sample_rate=sample_rate)
           if preemph:
             signal = preemphasis(signal, preemph)
           labels = text_featurizer.compute_label_features(transcript)
