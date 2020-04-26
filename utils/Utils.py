@@ -179,15 +179,15 @@ def merge_slices(slices):
 
 
 @tf.function
-def scalar_summary(name, x):
-  return tf.summary.scalar(name, x)
+def scalar_summary(name, x, **kwargs):
+  return tf.summary.scalar(name, x, **kwargs)
 
 
 @tf.function
-def histogram_summary(name, x):
-  return tf.summary.histogram(name, x)
+def histogram_summary(name, x, **kwargs):
+  return tf.summary.histogram(name, x, **kwargs)
 
 
 @tf.function
-def audio_summary(name, x, samplerate):
-  return tf.summary.audio(name, x, samplerate)
+def audio_summary(name, x, samplerate, **kwargs):
+  return tf.summary.audio(name, x, samplerate, **kwargs)

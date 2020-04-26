@@ -1,10 +1,11 @@
 from __future__ import absolute_import
 
 import time
+import os
 import tensorflow as tf
 from models.segan.Discriminator import create_discriminator, discriminator_loss
 from models.segan.Generator import create_generator, generator_loss
-from utils.Utils import get_segan_config, slice_signal, merge_slices
+from utils.Utils import get_segan_config, slice_signal, merge_slices, scalar_summary
 from data.SeganDataset import SeganDataset
 
 
@@ -38,6 +39,8 @@ class SEGAN:
         self.configs["g_learning_rate"])
       self.discriminator_optimizer = tf.keras.optimizers.RMSprop(
         self.configs["d_learning_rate"])
+
+      self.writer = tf.summary.create_file_writer(os.path.join(self.configs["log_dir"]))
 
       self.checkpoint = tf.train.Checkpoint(
         generator=self.generator,
@@ -102,6 +105,9 @@ class SEGAN:
     for epoch in range(initial_epoch, epochs):
       start = time.time()
       batch_idx = 1
+      g_l1_loss = []
+      g_adv_loss = []
+      d_loss = []
 
       if epoch > self.configs["denoise_epoch"] and self.deactivated_noise == False:
         self.noise_std = self.configs["noise_decay"] * self.noise_std
@@ -111,6 +117,9 @@ class SEGAN:
 
       for clean_wav, noisy_wav in tf_train_dataset:
         gen_l1_loss, gen_adv_loss, disc_loss = train_step(clean_wav, noisy_wav)
+        g_l1_loss.append(gen_l1_loss)
+        g_adv_loss.append(gen_adv_loss)
+        d_loss.append(disc_loss)
         print(f"Epoch: {epoch + 1}/{epochs}, batch: {batch_idx}/{num_batch}, "
               f"gen_l1_loss = {gen_l1_loss}, gen_adv_loss = {gen_adv_loss}, "
               f"disc_loss = {disc_loss}", end="\r", flush=True)
@@ -121,6 +130,12 @@ class SEGAN:
       self.ckpt_manager.save()
       print(f"\nSaved checkpoint at epoch {epoch + 1}", flush=True)
       print(f"Time for epoch {epoch + 1} is {time.time() - start} secs")
+
+      with self.writer.as_default():
+        scalar_summary("g_l1_loss", tf.reduce_mean(g_l1_loss), step=epoch)
+        scalar_summary("g_adv_loss", tf.reduce_mean(g_adv_loss), step=epoch)
+        scalar_summary("d_loss", tf.reduce_mean(d_loss), step=epoch)
+        self.writer.flush()
 
     if export_dir:
       self.save(export_dir)

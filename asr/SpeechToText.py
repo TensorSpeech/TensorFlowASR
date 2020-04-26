@@ -60,7 +60,7 @@ class SpeechToText:
                                             sample_rate=self.configs["sample_rate"],
                                             preemph=self.configs["pre_emph"],
                                             batch_size=self.configs["batch_size"],
-                                            augmentations=augmentations, sort=True)
+                                            augmentations=augmentations, sortagrad=True)
     tf_eval_dataset = eval_dataset(text_featurizer=self.text_featurizer,
                                    sample_rate=self.configs["sample_rate"],
                                    preemph=self.configs["pre_emph"],
