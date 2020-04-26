@@ -217,6 +217,7 @@ class SpeechToText:
           of.write(pred + "\n")
 
   def infer_single(self, signal):
+    signal = tf.expand_dims(signal, axis=0)
     pred = self.predict(signal)
     return pred[0]
 
