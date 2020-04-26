@@ -1,10 +1,9 @@
 from __future__ import absolute_import
 
 from models.deepspeech2.DeepSpeech2 import DeepSpeech2
-from augmentations.Augments import TimeWarping, TimeMasking, \
-  FreqMasking
+from augmentations.Augments import WhiteNoise
 
-base_model = DeepSpeech2(num_conv=2, num_rnn=3, rnn_units=256,
+base_model = DeepSpeech2(num_conv=3, num_rnn=3, rnn_units=256, filters=[16, 32, 64],
                          is_bidirectional=True, kernel_size=(31, 11))
 
 streaming_size = None
@@ -17,11 +16,7 @@ decoder = {
   "beta":       0.5
 }
 
-augmentations = [
-  TimeMasking(num_time_mask=1, time_mask_param=30, p_upperbound=0.2),
-  FreqMasking(num_freq_mask=1, freq_mask_param=10),
-  TimeWarping(time_warp_param=40, direction="right")
-]
+augmentations = [WhiteNoise(snr=10)]
 
 batch_size = 16
 
@@ -29,7 +24,7 @@ num_epochs = 10
 
 vocabulary_file_path = "/mnt/Projects/asrk16/code/data/vocabulary.txt"
 
-learning_rate = 0.001
+learning_rate = 0.0001
 
 min_lr = 0.0
 
@@ -42,6 +37,8 @@ stride_ms = 10
 num_feature_bins = 128
 
 feature_type = "mfcc"
+
+pre_emph = 0.95
 
 train_data_transcript_paths = [
   "/mnt/Data/ML/ASR/Preprocessed/SmallFixed/Train/transcripts.tsv"

@@ -6,6 +6,7 @@ import tensorflow as tf
 import tensorflow_addons as tfa
 
 
+@tf.function
 def freq_masking(spectrogram: tf.Tensor, num_freq_mask: int = 1,
                  freq_mask_param: int = 10) -> tf.Tensor:
   """
@@ -25,6 +26,7 @@ def freq_masking(spectrogram: tf.Tensor, num_freq_mask: int = 1,
   return tf.convert_to_tensor(spectrogram)
 
 
+@tf.function
 def time_masking(spectrogram: tf.Tensor, num_time_mask: int = 1,
                  time_mask_param: int = 50,
                  p_upperbound: float = 1.0) -> tf.Tensor:
@@ -48,6 +50,7 @@ def time_masking(spectrogram: tf.Tensor, num_time_mask: int = 1,
   return tf.convert_to_tensor(spectrogram)
 
 
+@tf.function
 def time_warping(spectrogram: tf.Tensor, time_warp_param: int = 50,
                  direction: str = "right") -> tf.Tensor:
   """

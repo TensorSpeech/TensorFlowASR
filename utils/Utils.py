@@ -19,6 +19,7 @@ asr_conf_required = ["base_model",
                      "stride_ms",
                      "num_feature_bins",
                      "feature_type",
+                     "pre_emph",
                      "streaming_size"]
 
 asr_conf_paths = ["train_data_transcript_paths",
@@ -177,3 +178,18 @@ def slice_signal(signal, window_size, stride=0.5):
 def merge_slices(slices):
   # slices shape = [batch, window_size]
   return tf.keras.backend.flatten(slices)  # return shape = [-1, ]
+
+
+@tf.function
+def scalar_summary(name, x):
+  return tf.summary.scalar(name, x)
+
+
+@tf.function
+def histogram_summary(name, x):
+  return tf.summary.histogram(name, x)
+
+
+@tf.function
+def audio_summary(name, x, samplerate):
+  return tf.summary.audio(name, x, samplerate)
