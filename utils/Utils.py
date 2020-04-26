@@ -148,7 +148,7 @@ def bytes_to_string(array, encoding: str = "utf-8"):
 def get_length(batch_data):
   def map_fn(elem):
     size = tf.shape(elem)
-    return tf.convert_to_tensor(size[0])
+    return tf.convert_to_tensor(size[0], dtype=tf.int32)
 
   return tf.map_fn(map_fn, batch_data, dtype=tf.int32)
 
@@ -177,3 +177,18 @@ def slice_signal(signal, window_size, stride=0.5):
 def merge_slices(slices):
   # slices shape = [batch, window_size]
   return tf.keras.backend.flatten(slices)  # return shape = [-1, ]
+
+
+@tf.function
+def scalar_summary(name, x):
+  return tf.summary.scalar(name, x)
+
+
+@tf.function
+def histogram_summary(name, x):
+  return tf.summary.histogram(name, x)
+
+
+@tf.function
+def audio_summary(name, x, samplerate):
+  return tf.summary.audio(name, x, samplerate)

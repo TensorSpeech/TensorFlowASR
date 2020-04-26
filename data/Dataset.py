@@ -4,38 +4,26 @@ import tensorflow as tf
 
 
 class Dataset:
-  def __init__(self, data_path, mode="train", train_sort=False):
+  def __init__(self, data_path, num_classes, mode="train"):
     self.data_path = data_path
     self.mode = mode
-    self.train_sort = train_sort
+    self.num_classes = num_classes
 
-  def __call__(self, speech_featurizer, text_featurizer=None,
-               batch_size=32, repeat=1,
-               augmentations=tuple([None])):
+  def __call__(self, speech_featurizer, text_featurizer=None, batch_size=32,
+               repeat=1, augmentations=tuple([None]), sort=False):
+    self.entries = self.__create_entries(sort)
     if self.mode == "train":
-      self.entries = self.__create_train_entries()
-      return self.__create_dataset(
-        speech_featurizer=speech_featurizer,
-        text_featurizer=text_featurizer,
-        batch_size=batch_size, repeat=repeat,
-        augmentations=augmentations)
+      return self.__create_dataset(speech_featurizer=speech_featurizer, text_featurizer=text_featurizer,
+                                   batch_size=batch_size, repeat=repeat, augmentations=augmentations)
     if self.mode == "eval" or self.mode == "test":
-      self.entries = self.__create_train_entries()
-      return self.__create_dataset(
-        speech_featurizer=speech_featurizer,
-        text_featurizer=text_featurizer,
-        batch_size=batch_size,
-        augmentations=[None])
+      return self.__create_dataset(speech_featurizer=speech_featurizer, text_featurizer=text_featurizer,
+                                   batch_size=batch_size, augmentations=[None])
     if self.mode == "infer":
-      self.entries = self.__create_infer_entries()
-      return self.__create_dataset(
-        speech_featurizer=speech_featurizer,
-        text_featurizer=None,
-        batch_size=batch_size,
-        augmentations=[None])
+      return self.__create_dataset(speech_featurizer=speech_featurizer, text_featurizer=None,
+                                   batch_size=batch_size, augmentations=[None])
     raise ValueError("Mode must be 'train', 'eval' or 'infer'")
 
-  def __create_train_entries(self):
+  def __create_entries(self, sort=False):
     lines = []
     for file_path in self.data_path:
       with tf.io.gfile.GFile(file_path, "r") as f:
@@ -44,18 +32,9 @@ class Dataset:
         lines += temp_lines[1:]
     # The files is "\t" seperated
     lines = [line.split("\t", 2) for line in lines]
-    # Sort input data by the length of audio sequence
-    if self.train_sort:
+    if sort:
       lines.sort(key=lambda item: int(item[1]))
     return [tuple(line) for line in lines]
-
-  def __create_infer_entries(self):
-    lines = []
-    with tf.io.gfile.GFile(self.data_path, "r") as f:
-      lines += f.read().splitlines()[1:]
-    # The files is "\t" seperated
-    lines = [line.split("\t", 2) for line in lines]
-    return lines
 
   def __create_dataset(self, speech_featurizer, text_featurizer,
                        batch_size, augmentations, repeat=1):
@@ -75,28 +54,42 @@ class Dataset:
           else:
             features = speech_featurizer.compute_speech_features(audio_file)
           labels = text_featurizer.compute_label_features(transcript)
+          input_length = tf.cast(tf.shape(features)[0], tf.int32)
+          label_length = tf.cast(tf.shape(features)[0], tf.int32)
 
-          yield features, tf.expand_dims(labels, -1)
+          yield features, tf.expand_dims(labels, -1), input_length, label_length
 
     dataset = tf.data.Dataset.from_generator(
       _gen_data,
       output_types=(
         tf.float32,
+        tf.int32,
+        tf.int32,
         tf.int32
       ),
       output_shapes=(
         tf.TensorShape([None, num_feature_bins, 1]),
-        tf.TensorShape([None, 1])
+        tf.TensorShape([None, 1]),
+        tf.TensorShape([]),
+        tf.TensorShape([])
       )
     )
     # Repeat and batch the dataset
     dataset = dataset.repeat(repeat)
-    # Padding the features to its max length dimensions
+    # # Padding the features to its max length dimensions
     dataset = dataset.padded_batch(
       batch_size=batch_size,
       padded_shapes=(
         tf.TensorShape([None, num_feature_bins, 1]),
-        tf.TensorShape([None, 1])
+        tf.TensorShape([None, 1]),
+        tf.TensorShape([]),
+        tf.TensorShape([])
+      ),
+      padding_values=(
+        0.,
+        self.num_classes - 1,
+        0,
+        0
       )
     )
     # Prefetch to improve speed of input length

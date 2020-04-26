@@ -1,6 +1,7 @@
 from __future__ import absolute_import
 
 import os
+import time
 import tensorflow as tf
 
 from models.CTCModel import CTCModel
@@ -8,9 +9,7 @@ from decoders.Decoders import create_decoder
 from featurizers.SpeechFeaturizer import SpeechFeaturizer
 from featurizers.TextFeaturizer import TextFeaturizer
 from utils.Utils import get_asr_config, check_key_in_dict, \
-  bytes_to_string, get_length, wer, cer
-from utils.TimeHistory import TimeHistory
-from utils.Checkpoint import Checkpoint
+  bytes_to_string, get_length, wer, cer, scalar_summary
 from data.Dataset import Dataset
 
 
@@ -36,6 +35,7 @@ class SpeechToText:
       base_model=self.configs["base_model"],
       streaming_size=self.configs["streaming_size"])
     self.noise_filter = noise_filter
+    self.writer = None
 
   def train_and_eval(self, model_file=None):
     print("Training and evaluating model ...")
@@ -46,27 +46,27 @@ class SpeechToText:
     check_key_in_dict(dictionary=self.configs,
                       keys=["train_data_transcript_paths",
                             "eval_data_transcript_paths"])
-    train_dataset = Dataset(
-      data_path=self.configs["train_data_transcript_paths"],
-      mode="train", train_sort=True)
-    eval_dataset = Dataset(
-      data_path=self.configs["eval_data_transcript_paths"],
-      mode="eval")
+    train_dataset = Dataset(data_path=self.configs["train_data_transcript_paths"],
+                            num_classes=self.text_featurizer.num_classes, mode="train")
+    eval_dataset = Dataset(data_path=self.configs["eval_data_transcript_paths"],
+                           num_classes=self.text_featurizer.num_classes, mode="eval")
 
     augmentations = []
     if "augmentations" in self.configs.keys():
       augmentations = self.configs["augmentations"]
       augmentations.append(None)
 
-    train_dataset = train_dataset(
-      speech_featurizer=self.speech_featurizer,
-      text_featurizer=self.text_featurizer,
-      batch_size=self.configs["batch_size"],
-      augmentations=augmentations)
-    eval_dataset = eval_dataset(
-      speech_featurizer=self.speech_featurizer,
-      text_featurizer=self.text_featurizer,
-      batch_size=self.configs["batch_size"])
+    tf_train_dataset = train_dataset(speech_featurizer=self.speech_featurizer,
+                                     text_featurizer=self.text_featurizer,
+                                     batch_size=self.configs["batch_size"],
+                                     augmentations=augmentations)
+    tf_train_dataset_sorted = train_dataset(speech_featurizer=self.speech_featurizer,
+                                            text_featurizer=self.text_featurizer,
+                                            batch_size=self.configs["batch_size"],
+                                            augmentations=augmentations, sort=True)
+    tf_eval_dataset = eval_dataset(speech_featurizer=self.speech_featurizer,
+                                   text_featurizer=self.text_featurizer,
+                                   batch_size=self.configs["batch_size"])
 
     self.model.summary()
 
@@ -76,33 +76,67 @@ class SpeechToText:
       # restoring the latest checkpoint in checkpoint_path
       self.ckpt.restore(self.ckpt_manager.latest_checkpoint)
 
-    cp_callback = Checkpoint(ckpt_manager=self.ckpt_manager)
-    callbacks = [cp_callback]
-
     if "log_dir" in self.configs.keys():
-      tb_callback = tf.keras.callbacks.TensorBoard(
-        log_dir=self.configs["log_dir"], histogram_freq=1,
-        update_freq=500, write_images=True)
-      callbacks.append(tb_callback)
-      csv_callback = tf.keras.callbacks.CSVLogger(
-        filename=os.path.join(self.configs["log_dir"], "training.log"),
-        append=True)
-      callbacks.append(csv_callback)
-      time_callback = TimeHistory(os.path.join(self.configs["log_dir"],
-                                               "time.log"))
-      callbacks.append(time_callback)
-      with open(os.path.join(self.configs["log_dir"],
-                             "model.json"), "w") as f:
+      with open(os.path.join(self.configs["log_dir"], "model.json"), "w") as f:
         f.write(self.model.to_json())
+      self.writer = tf.summary.create_file_writer(os.path.join(self.configs["log_dir"], "train"))
 
-    self.model.compile(optimizer=self.model.optimizer,
-                       loss=self.model.loss)
+    @tf.function
+    def train_step(features, y_true, inp_length, lab_length):
+      with tf.GradientTape() as tape:
+        y_pred = self.model(features, training=True)
+        _loss = self.model.loss(y_true=y_true, y_pred=y_pred, input_length=inp_length, label_length=lab_length)
+      gradients = tape.gradient(_loss, self.model.model.trainable_variables)
+      self.model.optimizer.apply_gradients(zip(gradients, self.model.model.trainable_variables))
+      return _loss
 
-    self.model.fit(
-      x=train_dataset, epochs=self.configs["num_epochs"],
-      validation_data=eval_dataset, shuffle="batch",
-      initial_epoch=initial_epoch,
-      callbacks=callbacks)
+    @tf.function
+    def eval_step(features, y_true, inp_length, lab_length):
+      y_pred = self.model(features, training=False)
+      _loss = self.model.loss(y_true=y_true, y_pred=y_pred, input_length=inp_length, label_length=lab_length)
+      return _loss
+
+    epochs = self.configs["num_epochs"]
+
+    for epoch in range(initial_epoch, epochs, 1):
+      if epoch == 0:
+        dataset = tf_train_dataset_sorted
+      else:
+        dataset = tf_train_dataset
+
+      eval_loss = []
+      epoch_train_loss = []
+      batch_idx = 1
+      num_batch = None
+      start = time.time()
+
+      for feature, transcript, input_length, label_length in dataset:
+        train_loss = train_step(feature, transcript, input_length, label_length)
+        epoch_train_loss.append(train_loss)
+        print(f"Epoch: {epoch + 1}/{epochs}, batch: {batch_idx}/{num_batch}, "
+              f"train_loss = {train_loss}", end="\r", flush=True)
+        batch_idx += 1
+        num_batch = batch_idx
+
+      for feature, transcript, input_length, label_length in tf_eval_dataset:
+        _eval_loss = eval_step(feature, transcript, input_length, label_length)
+        eval_loss.append(_eval_loss)
+
+      eval_loss = tf.reduce_mean(eval_loss)
+      epoch_train_loss = tf.reduce_mean(epoch_train_loss)
+      print(f"\nEpoch: {epoch + 1}/{epochs}, eval_loss = {eval_loss}")
+
+      self.ckpt_manager.save()
+      print(f"\nSaved checkpoint at epoch {epoch + 1}")
+      time_epoch = time.time() - start
+      print(f"Time for epoch {epoch + 1} is {time_epoch} secs")
+
+      if self.writer:
+        with self.writer.as_default():
+          scalar_summary("train_loss", epoch_train_loss, step=epoch)
+          scalar_summary("eval_loss", eval_loss, step=epoch)
+          scalar_summary("epoch_time", time_epoch, step=epoch)
+          self.writer.flush()
 
     if model_file:
       self.model.save(model_file)
