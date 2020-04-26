@@ -97,6 +97,7 @@ class SpeechToText:
       return _loss
 
     epochs = self.configs["num_epochs"]
+    num_batch = None
 
     for epoch in range(initial_epoch, epochs, 1):
       if epoch == 0:
@@ -107,7 +108,6 @@ class SpeechToText:
       eval_loss = []
       epoch_train_loss = []
       batch_idx = 1
-      num_batch = None
       start = time.time()
 
       for feature, transcript, input_length, label_length in dataset:
@@ -116,7 +116,8 @@ class SpeechToText:
         print(f"Epoch: {epoch + 1}/{epochs}, batch: {batch_idx}/{num_batch}, "
               f"train_loss = {train_loss}", end="\r", flush=True)
         batch_idx += 1
-        num_batch = batch_idx
+
+      num_batch = batch_idx
 
       for feature, transcript, input_length, label_length in tf_eval_dataset:
         _eval_loss = eval_step(feature, transcript, input_length, label_length)
