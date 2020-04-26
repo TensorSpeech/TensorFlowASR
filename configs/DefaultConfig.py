@@ -37,6 +37,8 @@ num_feature_bins = 128
 
 feature_type = "mfcc"
 
+pre_emph = 0.95
+
 train_data_transcript_paths = [
   "/mnt/Data/ML/ASR/Preprocessed/SmallFixed/Train/transcripts.tsv"
 ]

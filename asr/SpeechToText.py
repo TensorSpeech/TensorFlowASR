@@ -53,14 +53,17 @@ class SpeechToText:
 
     tf_train_dataset = train_dataset(text_featurizer=self.text_featurizer,
                                      sample_rate=self.configs["sample_rate"],
+                                     preemph=self.configs["pre_emph"],
                                      batch_size=self.configs["batch_size"],
                                      augmentations=augmentations)
     tf_train_dataset_sorted = train_dataset(text_featurizer=self.text_featurizer,
                                             sample_rate=self.configs["sample_rate"],
+                                            preemph=self.configs["pre_emph"],
                                             batch_size=self.configs["batch_size"],
                                             augmentations=augmentations, sort=True)
     tf_eval_dataset = eval_dataset(text_featurizer=self.text_featurizer,
                                    sample_rate=self.configs["sample_rate"],
+                                   preemph=self.configs["pre_emph"],
                                    batch_size=self.configs["batch_size"])
 
     self.model.summary()
@@ -147,6 +150,7 @@ class SpeechToText:
     self.load_model(model_file)
     tf_test_dataset = test_dataset(text_featurizer=self.text_featurizer,
                                    sample_rate=self.configs["sample_rate"],
+                                   preemph=self.configs["pre_emph"],
                                    batch_size=self.configs["batch_size"])
 
     def test_step(features, transcripts):
@@ -198,6 +202,7 @@ class SpeechToText:
                                mode="infer")
     tf_infer_dataset = tf_infer_dataset(batch_size=self.configs["batch_size"],
                                         text_featurizer=self.text_featurizer,
+                                        preemph=self.configs["pre_emph"],
                                         sample_rate=self.configs["sample_rate"])
 
     def infer_step(feature):
