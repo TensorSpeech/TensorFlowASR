@@ -78,7 +78,7 @@ def read_raw_audio(audio, sample_rate=16000):
     wave, _ = librosa.load(io.BytesIO(audio), sr=sample_rate)
   else:
     raise ValueError("input audio must be either a path or bytes")
-  return tf.convert_to_tensor(wave, dtype=tf.float32)
+  return wave
 
 
 def normalize_audio_feature(audio_feature):
