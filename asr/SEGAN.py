@@ -191,6 +191,13 @@ class SEGAN:
   def save(self, export_dir):
     self.generator.save_weights(export_dir)
 
+  def load_model(self, export_dir):
+    try:
+      self.generator.load_weights(export_dir)
+    except Exception as e:
+      return f"Model is not trained: {e}"
+    return None
+
   def generate(self, signal):
     slices = slice_signal(signal, self.window_size, stride=1)
 

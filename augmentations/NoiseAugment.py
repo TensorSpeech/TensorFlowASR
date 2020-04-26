@@ -3,7 +3,7 @@ from __future__ import absolute_import
 import math
 import numpy as np
 import random
-from featurizers.SpeechFeaturizer import read_raw_audio, interp
+from featurizers.SpeechFeaturizer import read_raw_audio
 
 
 def add_white_noise(signal: np.ndarray, snr=10, sample_rate=16000):
@@ -22,7 +22,6 @@ def add_white_noise(signal: np.ndarray, snr=10, sample_rate=16000):
 def add_noise_from_sound(signal: np.ndarray, noise_wavs: list, snr=10, sample_rate=16000):
   noise = random.choice(noise_wavs)  # randomly choose a noise from a list of noises
   noise = read_raw_audio(noise, sample_rate)
-  noise = interp(noise)
 
   if len(noise) < len(signal):
     raise ValueError("Noise wav must be longer than speech")

@@ -100,6 +100,8 @@ def normalize_signal(signal):
 
 
 def preemphasis(signal, coeff=0.97):
+  if not coeff or coeff == 0.0:
+    return signal
   return np.append(signal[0], signal[1:] - coeff * signal[:-1])
 
 

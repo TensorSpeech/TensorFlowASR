@@ -3,12 +3,14 @@ from __future__ import absolute_import
 import functools
 from logging import ERROR
 import tensorflow as tf
-from flask import Flask, Blueprint, jsonify, request, make_response
+from flask import Flask, Blueprint, request, make_response
 from flask_socketio import SocketIO
 from flask_cors import CORS
 from configs.FlaskConfig import FlaskConfig
 from asr.SpeechToText import SpeechToText
+from asr.SEGAN import SEGAN
 from utils.Utils import check_key_in_dict
+from featurizers.SpeechFeaturizer import preemphasis, interp, read_raw_audio
 
 tf.get_logger().setLevel(ERROR)
 
@@ -44,61 +46,65 @@ def check_form_request(func):
   return decorated_func
 
 
+segan = SEGAN(config_path=app.config["SEGAN_CONFIG_PATH"], training=False)
+segan_error = segan.load_model(app.config["SEGAN_FILE"])
+
 asr = SpeechToText(configs_path=app.config["BI_CONFIG_PATH"])
-is_asr_loaded = asr.load_model(app.config["MODEL_FILE"])
+asr_error = asr.load_model(app.config["MODEL_FILE"])
 
 asr_streaming = SpeechToText(configs_path=app.config["UNI_CONFIG_PATH"])
-is_asr_streaming_loaded = asr_streaming.load_model(app.config["MODEL_FILE"])
+asr_streaming_error = asr_streaming.load_model(app.config["MODEL_FILE"])
+
+
+def predict(signal, streaming=False):
+  signal = read_raw_audio(signal, asr.configs["sample_rate"])
+  signal = preemphasis(signal, asr.configs["pre_emph"])
+  if not segan_error:
+    signal = segan.generate(signal)
+  if not streaming and not asr_error:
+    return asr.infer_single(signal)
+  if streaming and not asr_streaming_error:
+    return asr_streaming.infer_single(signal)
+  return "Model is not trained"
 
 
 @asr_blueprint.route("/", methods=["GET"])
 def hello():
-  return "Hello world"
+  return "Hello, this is Huy Le Nguyen's ASR APIs"
 
 
 @asr_blueprint.route("/asr", methods=["POST"])
 @check_form_request
 def inference():
-  if is_asr_loaded:
-    return make_response(({"payload": is_asr_loaded}, 200))
   if "payload" not in request.files.keys():
     return make_response((
       {"error": "Missing audio binary file/blob"}, 400))
 
   payload = request.files["payload"].read()
-  sampleRate = int(request.form["sampleRate"])
-  channels = int(request.form["channels"])
-  transcript = asr.infer_single(audio=payload, sample_rate=sampleRate,
-                                channels=channels)
+  transcript = predict(payload)
   return make_response(({"payload": transcript}, 200))
 
 
 @asr_blueprint.route("/asrfile", methods=["POST"])
 def file():
-  if is_asr_loaded:
-    return make_response(({"payload": is_asr_loaded}, 200))
   if "payload" not in request.files.keys():
-    return make_response((
-      {"error": "Missing audio binary file/blob"}, 400))
+    return make_response(({"error": "Missing audio binary file/blob"}, 400))
 
   request.files["payload"].save(app.config["STATIC_WAV_FILE"])
-  transcript = asr.infer_single(audio=app.config["STATIC_WAV_FILE"])
+  transcript = predict(app.config["STATIC_WAV_FILE"])
   return make_response(({"payload": transcript}, 200))
 
 
 @socketio.on("connect", namespace="/asr_streaming")
 def connect():
-  if is_asr_streaming_loaded:
-    return is_asr_streaming_loaded, False
+  if asr_streaming_error:
+    return asr_streaming_error, False
   return "Connected", True
 
 
 @socketio.on("asr_streaming", namespace="/asr_streaming")
-def streaming(content, sample_rate, channels):
-  return asr_streaming.infer_single(audio=content,
-                                    sample_rate=int(sample_rate),
-                                    channels=int(channels),
-                                    streaming=True)
+def asr_streaming(content):
+  return predict(content, streaming=True)
 
 
 app.register_blueprint(asr_blueprint)

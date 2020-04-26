@@ -6,7 +6,6 @@ import tensorflow as tf
 
 from models.CTCModel import CTCModel
 from decoders.Decoders import create_decoder
-from featurizers.SpeechFeaturizer import read_raw_audio
 from featurizers.TextFeaturizer import TextFeaturizer
 from utils.Utils import get_asr_config, check_key_in_dict, \
   bytes_to_string, wer, cer, scalar_summary
@@ -217,8 +216,7 @@ class SpeechToText:
         for pred in predictions:
           of.write(pred + "\n")
 
-  def infer_single(self, audio):
-    signal = read_raw_audio(audio, self.configs["sample_rate"])
+  def infer_single(self, signal):
     pred = self.predict(signal)
     return pred[0]
 
@@ -227,7 +225,7 @@ class SpeechToText:
     try:
       self.model.load_model(model_file)
     except Exception as e:
-      raise ValueError("Model is not trained: ", e)
+      return f"Model is not trained: {e}"
     return None
 
   def load_model_from_weights(self, model_file):
@@ -235,7 +233,7 @@ class SpeechToText:
     try:
       self.model.load_weights(model_file)
     except Exception as e:
-      raise ValueError("Model is not trained: ", e)
+      return f"Model is not trained: {e}"
     return None
 
   def predict(self, signal):

@@ -45,7 +45,6 @@ class Dataset:
       for audio_file, _, transcript in entries:
         for au in augmentations:
           signal = read_raw_audio(audio_file, sample_rate)
-          signal = interp(signal)
           if au is not None:
             signal = au(signal=signal, sample_rate=sample_rate)
           if preemph:
