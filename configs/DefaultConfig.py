@@ -1,8 +1,6 @@
 from __future__ import absolute_import
 
 from models.deepspeech2.DeepSpeech2 import DeepSpeech2
-from augmentations.Augments import TimeWarping, TimeMasking, \
-  FreqMasking
 
 base_model = DeepSpeech2(num_conv=2, num_rnn=3, rnn_units=256,
                          is_bidirectional=True, kernel_size=(31, 11))
@@ -17,11 +15,7 @@ decoder = {
   "beta":       0.5
 }
 
-augmentations = [
-  TimeMasking(num_time_mask=1, time_mask_param=30, p_upperbound=0.2),
-  FreqMasking(num_freq_mask=1, freq_mask_param=10),
-  TimeWarping(time_warp_param=40, direction="right")
-]
+augmentations = []
 
 batch_size = 16
 
@@ -29,7 +23,7 @@ num_epochs = 10
 
 vocabulary_file_path = "/mnt/Projects/asrk16/code/data/vocabulary.txt"
 
-learning_rate = 0.001
+learning_rate = 0.0001
 
 min_lr = 0.0
 

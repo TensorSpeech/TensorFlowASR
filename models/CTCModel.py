@@ -3,7 +3,7 @@ from __future__ import absolute_import
 import tensorflow as tf
 from utils.Utils import mask_nan, get_length
 from utils.Schedules import BoundExponentialDecay
-from featurizers.SpeechFeaturizer import MFCC
+from featurizers.SpeechFeaturizer import SpeechFeaturizer
 
 
 class GetLength(tf.keras.layers.Layer):
@@ -22,8 +22,8 @@ class GetLength(tf.keras.layers.Layer):
 
 
 class CTCModel:
-  def __init__(self, base_model, speech_featurizer, num_classes,
-               learning_rate, min_lr=0.0, streaming_size=None):
+  def __init__(self, base_model, num_classes, sample_rate, frame_ms, stride_ms,
+               num_feature_bins, learning_rate, min_lr=0.0, streaming_size=None):
     self.optimizer = base_model.optimizer(
       learning_rate=BoundExponentialDecay(
         min_lr=min_lr,
@@ -34,30 +34,27 @@ class CTCModel:
     )
     self.num_classes = num_classes
     self.streaming_size = streaming_size
-    self.model = self.create(base_model, speech_featurizer)
+    self.speech_featurizer = SpeechFeaturizer(sample_rate=sample_rate, frame_ms=frame_ms,
+                                              stride_ms=stride_ms, num_feature_bins=num_feature_bins,
+                                              feature_type="mfcc", name="speech_featurizer")
+    self.model = self.create(base_model)
 
   def __call__(self, *args, **kwargs):
     return self.model(*args, **kwargs)
 
-  def create(self, base_model, speech_featurizer):
+  def create(self, base_model):
     if self.streaming_size:
       # Fixed input shape is required for live streaming audio
       signal = tf.keras.layers.Input(batch_shape=(1, self.streaming_size),
                                      dtype=tf.float32,
                                      name="features")
-      features = MFCC(name="mfcc_features", sample_rate=speech_featurizer.sample_rate,
-                      frame_ms=speech_featurizer.frame_ms,
-                      stride_ms=speech_featurizer.stride_ms,
-                      num_feature_bins=speech_featurizer.num_feature_bins)(signal)
+      features = self.speech_featurizer(signal)
       outputs = base_model(features=features, streaming=True)
     else:
       signal = tf.keras.layers.Input(shape=(None,),
                                      dtype=tf.float32,
                                      name="features")
-      features = MFCC(name="mfcc_features", sample_rate=speech_featurizer.sample_rate,
-                      frame_ms=speech_featurizer.frame_ms,
-                      stride_ms=speech_featurizer.stride_ms,
-                      num_feature_bins=speech_featurizer.num_feature_bins)(signal)
+      features = self.speech_featurizer(signal)
       outputs = base_model(features=features, streaming=False)
 
     input_length = GetLength(name="input_length")(features)

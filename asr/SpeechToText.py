@@ -6,30 +6,27 @@ import tensorflow as tf
 
 from models.CTCModel import CTCModel
 from decoders.Decoders import create_decoder
-from featurizers.SpeechFeaturizer import SpeechFeaturizer
+from featurizers.SpeechFeaturizer import read_raw_audio
 from featurizers.TextFeaturizer import TextFeaturizer
 from utils.Utils import get_asr_config, check_key_in_dict, \
-  bytes_to_string, get_length, wer, cer, scalar_summary
+  bytes_to_string, wer, cer, scalar_summary
 from data.Dataset import Dataset
 
 
 class SpeechToText:
   def __init__(self, configs_path, noise_filter=None):
     self.configs = get_asr_config(configs_path)
-    self.speech_featurizer = SpeechFeaturizer(
-      sample_rate=self.configs["sample_rate"],
-      frame_ms=self.configs["frame_ms"],
-      stride_ms=self.configs["stride_ms"],
-      num_feature_bins=self.configs["num_feature_bins"],
-      feature_type=self.configs["feature_type"])
     self.text_featurizer = TextFeaturizer(self.configs["vocabulary_file_path"])
     self.decoder = create_decoder(
       decoder_config=self.configs["decoder"],
       index_to_token=self.text_featurizer.index_to_token,
       vocab_array=self.text_featurizer.vocab_array)
     self.model = CTCModel(
-      speech_featurizer=self.speech_featurizer,
       num_classes=self.text_featurizer.num_classes,
+      sample_rate=self.configs["sample_rate"],
+      frame_ms=self.configs["frame_ms"],
+      stride_ms=self.configs["stride_ms"],
+      num_feature_bins=self.configs["num_feature_bins"],
       learning_rate=self.configs["learning_rate"],
       min_lr=self.configs["min_lr"],
       base_model=self.configs["base_model"],
@@ -46,26 +43,24 @@ class SpeechToText:
     check_key_in_dict(dictionary=self.configs,
                       keys=["train_data_transcript_paths",
                             "eval_data_transcript_paths"])
-    train_dataset = Dataset(data_path=self.configs["train_data_transcript_paths"],
-                            num_classes=self.text_featurizer.num_classes, mode="train")
-    eval_dataset = Dataset(data_path=self.configs["eval_data_transcript_paths"],
-                           num_classes=self.text_featurizer.num_classes, mode="eval")
+    train_dataset = Dataset(data_path=self.configs["train_data_transcript_paths"], mode="train")
+    eval_dataset = Dataset(data_path=self.configs["eval_data_transcript_paths"], mode="eval")
 
     augmentations = []
     if "augmentations" in self.configs.keys():
       augmentations = self.configs["augmentations"]
       augmentations.append(None)
 
-    tf_train_dataset = train_dataset(speech_featurizer=self.speech_featurizer,
-                                     text_featurizer=self.text_featurizer,
+    tf_train_dataset = train_dataset(text_featurizer=self.text_featurizer,
+                                     sample_rate=self.configs["sample_rate"],
                                      batch_size=self.configs["batch_size"],
                                      augmentations=augmentations)
-    tf_train_dataset_sorted = train_dataset(speech_featurizer=self.speech_featurizer,
-                                            text_featurizer=self.text_featurizer,
+    tf_train_dataset_sorted = train_dataset(text_featurizer=self.text_featurizer,
+                                            sample_rate=self.configs["sample_rate"],
                                             batch_size=self.configs["batch_size"],
                                             augmentations=augmentations, sort=True)
-    tf_eval_dataset = eval_dataset(speech_featurizer=self.speech_featurizer,
-                                   text_featurizer=self.text_featurizer,
+    tf_eval_dataset = eval_dataset(text_featurizer=self.text_featurizer,
+                                   sample_rate=self.configs["sample_rate"],
                                    batch_size=self.configs["batch_size"])
 
     self.model.summary()
@@ -150,10 +145,9 @@ class SpeechToText:
       data_path=self.configs["test_data_transcript_paths"],
       mode="test")
     self.load_model(model_file)
-    tf_test_dataset = test_dataset(
-      speech_featurizer=self.speech_featurizer,
-      text_featurizer=self.text_featurizer,
-      batch_size=self.configs["batch_size"])
+    tf_test_dataset = test_dataset(text_featurizer=self.text_featurizer,
+                                   sample_rate=self.configs["sample_rate"],
+                                   batch_size=self.configs["batch_size"])
 
     def test_step(features, transcripts):
       predictions = self.predict(features)
@@ -166,7 +160,8 @@ class SpeechToText:
       b_cer_count = 0.0
 
       for idx, decoded in enumerate(predictions):
-        print(decoded)
+        print(f"Pred: {decoded}")
+        print(f"Groundtruth: {transcripts[idx]}")
         _wer, _wer_count = wer(decode=decoded, target=transcripts[idx])
         _cer, _cer_count = cer(decode=decoded, target=transcripts[idx])
         b_wer += _wer
@@ -174,7 +169,6 @@ class SpeechToText:
         b_wer_count += _wer_count
         b_cer_count += _cer_count
 
-      print(f"batch_wer: {b_wer / b_wer_count}, batch_cer: {b_cer / b_cer_count}")
       return b_wer, b_wer_count, b_cer, b_cer_count
 
     total_wer = 0.0
@@ -182,7 +176,7 @@ class SpeechToText:
     total_cer = 0.0
     cer_count = 0.0
 
-    for feature, label in tf_test_dataset:
+    for feature, label, _ in tf_test_dataset:
       batch_wer, batch_wer_count, batch_cer, batch_cer_count = test_step(feature, label)
       total_wer += batch_wer
       total_cer += batch_cer
@@ -190,6 +184,8 @@ class SpeechToText:
       cer_count += batch_cer_count
 
     results = (total_wer / wer_count, total_cer / cer_count)
+
+    print(f"WER: {results[0]}, CER: {results[-1]}")
 
     with open(output_file_path, "w", encoding="utf-8") as of:
       of.write("WER: " + str(results[0]) + "\n")
@@ -200,9 +196,9 @@ class SpeechToText:
     self.load_model(model_file)
     tf_infer_dataset = Dataset(data_path=input_file_path,
                                mode="infer")
-    tf_infer_dataset = tf_infer_dataset(
-      speech_featurizer=self.speech_featurizer,
-      batch_size=self.configs["batch_size"])
+    tf_infer_dataset = tf_infer_dataset(batch_size=self.configs["batch_size"],
+                                        text_featurizer=self.text_featurizer,
+                                        sample_rate=self.configs["sample_rate"])
 
     def infer_step(feature):
       prediction = self.predict(feature)
@@ -216,24 +212,9 @@ class SpeechToText:
         for pred in predictions:
           of.write(pred + "\n")
 
-  def infer_single(self, audio, sample_rate=None,
-                   channels=None, streaming=False):
-    if sample_rate and channels:
-      features = self.speech_featurizer.compute_speech_features(
-        audio, sr=sample_rate, channels=channels)
-    else:
-      features = self.speech_featurizer.compute_speech_features(audio)
-    features = tf.expand_dims(features, axis=0)
-    if streaming:
-      features = tf.pad(
-        features,
-        [[0, 0],
-         [0, int(self.configs["streaming_size"]) - features.shape[1]],
-         [0, 0],
-         [0, 0]],
-        "CONSTANT")
-    pred = self.predict(features)
-
+  def infer_single(self, audio):
+    signal = read_raw_audio(audio, self.configs["sample_rate"])
+    pred = self.predict(signal)
     return pred[0]
 
   def load_model(self, model_file):
@@ -252,6 +233,6 @@ class SpeechToText:
       raise ValueError("Model is not trained: ", e)
     return None
 
-  def predict(self, features):
-    logits = self.model(features, training=False)
-    return self.decoder.decode(probs=logits, input_length=get_length(logits))
+  def predict(self, signal):
+    logits, logit_length = self.model(signal, training=False)
+    return self.decoder.decode(probs=logits, input_length=logit_length)
