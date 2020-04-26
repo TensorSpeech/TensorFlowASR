@@ -2,11 +2,49 @@ from __future__ import absolute_import
 
 import math
 import os
+import io
 import numpy as np
 import librosa
 import tensorflow as tf
 
 WINDOW_FN = {"hanning": np.hanning, "hamming": np.hamming}
+
+
+class MFCC(tf.keras.layers.Layer):
+  def __init__(self, name, sample_rate, frame_ms, stride_ms, num_feature_bins, **kwargs):
+    self.sample_rate = sample_rate
+    self.num_feature_bins = num_feature_bins
+    self.frame_length = int(self.sample_rate * (frame_ms / 1000))
+    self.frame_step = int(self.sample_rate * (stride_ms / 1000))
+    self.num_fft = 2 ** math.ceil(math.log2(self.frame_length))
+    super(MFCC, self).__init__(name=name, **kwargs)
+
+  def call(self, signal, **kwargs):
+    spectrogram = tf.abs(tf.signal.stft(signal, frame_length=self.frame_length,
+                                        frame_step=self.frame_step, fft_length=self.num_fft))
+    linear_to_weight_matrix = tf.signal.linear_to_mel_weight_matrix(
+      num_mel_bins=self.num_feature_bins,
+      num_spectrogram_bins=spectrogram.shape[-1],
+      sample_rate=self.sample_rate,
+      lower_edge_hertz=80.0, upper_edge_hertz=7600.0
+    )
+    mel_spectrogram = tf.tensordot(spectrogram, linear_to_weight_matrix, 1)
+    mel_spectrogram.set_shape(spectrogram.shape[:-1].concatenate(linear_to_weight_matrix.shape[-1:]))
+    log_mel_spectrogram = tf.math.log(mel_spectrogram + 1e-6)
+    mfcc = tf.signal.mfccs_from_log_mel_spectrograms(log_mel_spectrogram)
+    return tf.expand_dims(mfcc, -1)
+
+  def get_config(self):
+    config = super(MFCC, self).get_config()
+    config.update({'sample_rate':      self.sample_rate,
+                   'num_feature_bins': self.num_feature_bins,
+                   'frame_length':     self.frame_length,
+                   'frame_step':       self.frame_step,
+                   'num_fft':          self.num_fft})
+    return config
+
+  def from_config(self, config):
+    return self(**config)
 
 
 def normalize_audio_feature(audio_feature):
@@ -50,6 +88,7 @@ class SpeechFeaturizer:
     self.feature_type = feature_type
     self.n_window_size = int(self.sample_rate * (self.frame_ms / 1000))
     self.n_window_stride = int(self.sample_rate * (self.stride_ms / 1000))
+    self.num_fft = 2 ** math.ceil(math.log2(self.n_window_size))
 
   def __compute_spectrogram_feature(self, signal):
     """Function to convert raw audio signal to spectrogram using
@@ -93,13 +132,12 @@ class SpeechFeaturizer:
         num_feature_bins]
         audio_duration (float): duration of the signal in seconds
     """
-    num_fft = 2 ** math.ceil(math.log2(self.n_window_size))
 
     signal = preemphasis(signal, coeff=0.97)
     S = np.square(
       np.abs(
         librosa.core.stft(
-          signal, n_fft=num_fft,
+          signal, n_fft=self.num_fft,
           hop_length=self.n_window_stride,
           win_length=self.n_window_size,
           center=True, window=self.window_fn
@@ -119,17 +157,15 @@ class SpeechFeaturizer:
         num_feature_bins]
         audio_duration (float): duration of the signal in seconds
     """
-    n_window_size = int(self.sample_rate * (self.frame_ms / 1000))
-    n_window_stride = int(self.sample_rate * (self.stride_ms / 1000))
-    num_fft = 2 ** math.ceil(math.log2(n_window_size))
+    num_fft = 2 ** math.ceil(math.log2(self.n_window_size))
 
     signal = preemphasis(signal, coeff=0.97)
     S = np.square(
       np.abs(
         librosa.core.stft(
           signal, n_fft=num_fft,
-          hop_length=n_window_stride,
-          win_length=n_window_size,
+          hop_length=self.n_window_stride,
+          win_length=self.n_window_size,
           center=True, window=self.window_fn
         )))
 
@@ -190,3 +226,12 @@ class SpeechFeaturizer:
     # Adding Channel dimmension for conv2D input
     data = np.expand_dims(data, axis=2)
     return tf.convert_to_tensor(data, dtype=tf.float32)
+
+  def read_raw_audio(self, audio):
+    if isinstance(audio, str):
+      wave, _ = librosa.load(os.path.expanduser(audio), sr=self.sample_rate)
+    elif isinstance(audio, bytes):
+      wave, _ = librosa.load(io.BytesIO(audio), sr=self.sample_rate)
+    else:
+      raise ValueError("input audio must be either a path or bytes")
+    return tf.convert_to_tensor(wave, dtype=tf.float32)

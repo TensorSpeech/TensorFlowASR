@@ -28,8 +28,8 @@ class SpeechToText:
       index_to_token=self.text_featurizer.index_to_token,
       vocab_array=self.text_featurizer.vocab_array)
     self.model = CTCModel(
+      speech_featurizer=self.speech_featurizer,
       num_classes=self.text_featurizer.num_classes,
-      num_feature_bins=self.speech_featurizer.num_feature_bins,
       learning_rate=self.configs["learning_rate"],
       min_lr=self.configs["min_lr"],
       base_model=self.configs["base_model"],
@@ -82,17 +82,17 @@ class SpeechToText:
       self.writer = tf.summary.create_file_writer(os.path.join(self.configs["log_dir"], "train"))
 
     @tf.function
-    def train_step(features, y_true, inp_length, lab_length):
+    def train_step(features, y_true, lab_length):
       with tf.GradientTape() as tape:
-        y_pred = self.model(features, training=True)
+        y_pred, inp_length = self.model(features, training=True)
         _loss = self.model.loss(y_true=y_true, y_pred=y_pred, input_length=inp_length, label_length=lab_length)
       gradients = tape.gradient(_loss, self.model.model.trainable_variables)
       self.model.optimizer.apply_gradients(zip(gradients, self.model.model.trainable_variables))
       return _loss
 
     @tf.function
-    def eval_step(features, y_true, inp_length, lab_length):
-      y_pred = self.model(features, training=False)
+    def eval_step(features, y_true, lab_length):
+      y_pred, inp_length = self.model(features, training=False)
       _loss = self.model.loss(y_true=y_true, y_pred=y_pred, input_length=inp_length, label_length=lab_length)
       return _loss
 
@@ -110,8 +110,8 @@ class SpeechToText:
       batch_idx = 1
       start = time.time()
 
-      for feature, transcript, input_length, label_length in dataset:
-        train_loss = train_step(feature, transcript, input_length, label_length)
+      for feature, transcript, label_length in dataset:
+        train_loss = train_step(feature, transcript, label_length)
         epoch_train_loss.append(train_loss)
         print(f"Epoch: {epoch + 1}/{epochs}, batch: {batch_idx}/{num_batch}, "
               f"train_loss = {train_loss}", end="\r", flush=True)
@@ -119,8 +119,8 @@ class SpeechToText:
 
       num_batch = batch_idx
 
-      for feature, transcript, input_length, label_length in tf_eval_dataset:
-        _eval_loss = eval_step(feature, transcript, input_length, label_length)
+      for feature, transcript, label_length in tf_eval_dataset:
+        _eval_loss = eval_step(feature, transcript, label_length)
         eval_loss.append(_eval_loss)
 
       eval_loss = tf.reduce_mean(eval_loss)

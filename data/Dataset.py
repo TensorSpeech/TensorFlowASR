@@ -43,36 +43,31 @@ class Dataset:
     if not isinstance(augmentations, list) and \
         not isinstance(augmentations, tuple):
       raise ValueError("augmentation must be a list or a tuple")
-    # Dataset properties
-    num_feature_bins = speech_featurizer.num_feature_bins
 
     def _gen_data():
       for audio_file, _, transcript in entries:
-        for au in augmentations:
-          if au is not None:
-            features = audio_file if au.is_post else au(audio_file)
-            features = speech_featurizer.compute_speech_features(features)
-            features = au(features) if au.is_post else features
-          else:
-            features = speech_featurizer.compute_speech_features(audio_file)
-          labels = text_featurizer.compute_label_features(transcript)
-          input_length = tf.cast(tf.shape(features)[0], tf.int32)
-          label_length = tf.cast(tf.shape(features)[0], tf.int32)
+        # for au in augmentations:
+        #   if au is not None:
+        #     features = audio_file if au.is_post else au(audio_file)
+        #     features = speech_featurizer.compute_speech_features(features)
+        #     features = au(features) if au.is_post else features
+        #   else:
+        signal = speech_featurizer.read_raw_audio(audio_file)
+        labels = text_featurizer.compute_label_features(transcript)
+        label_length = tf.cast(tf.shape(labels)[0], tf.int32)
 
-          yield features, tf.expand_dims(labels, -1), input_length, label_length
+        yield signal, labels, label_length
 
     dataset = tf.data.Dataset.from_generator(
       _gen_data,
       output_types=(
         tf.float32,
         tf.int32,
-        tf.int32,
         tf.int32
       ),
       output_shapes=(
-        tf.TensorShape([None, num_feature_bins, 1]),
-        tf.TensorShape([None, 1]),
-        tf.TensorShape([]),
+        tf.TensorShape([None]),
+        tf.TensorShape([None]),
         tf.TensorShape([])
       )
     )
@@ -82,15 +77,13 @@ class Dataset:
     dataset = dataset.padded_batch(
       batch_size=batch_size,
       padded_shapes=(
-        tf.TensorShape([None, num_feature_bins, 1]),
-        tf.TensorShape([None, 1]),
-        tf.TensorShape([]),
+        tf.TensorShape([None]),
+        tf.TensorShape([None]),
         tf.TensorShape([])
       ),
       padding_values=(
         0.,
         self.num_classes - 1,
-        0,
         0
       )
     )

@@ -1,12 +1,28 @@
 from __future__ import absolute_import
 
 import tensorflow as tf
-from utils.Utils import get_length, mask_nan
+from utils.Utils import mask_nan, get_length
 from utils.Schedules import BoundExponentialDecay
+from featurizers.SpeechFeaturizer import MFCC
+
+
+class GetLength(tf.keras.layers.Layer):
+  def __init__(self, name, **kwargs):
+    super(GetLength, self).__init__(name=name, trainable=False, **kwargs)
+
+  def call(self, inputs, **kwargs):
+    return get_length(inputs)
+
+  def get_config(self):
+    config = super(GetLength, self).get_config()
+    return config
+
+  def from_config(self, config):
+    return self(**config)
 
 
 class CTCModel:
-  def __init__(self, num_classes, num_feature_bins, base_model,
+  def __init__(self, base_model, speech_featurizer, num_classes,
                learning_rate, min_lr=0.0, streaming_size=None):
     self.optimizer = base_model.optimizer(
       learning_rate=BoundExponentialDecay(
@@ -17,27 +33,34 @@ class CTCModel:
         staircase=True)
     )
     self.num_classes = num_classes
-    self.num_feature_bins = num_feature_bins
     self.streaming_size = streaming_size
-    self.model = self.create(base_model)
+    self.model = self.create(base_model, speech_featurizer)
 
   def __call__(self, *args, **kwargs):
     return self.model(*args, **kwargs)
 
-  def create(self, base_model):
+  def create(self, base_model, speech_featurizer):
     if self.streaming_size:
       # Fixed input shape is required for live streaming audio
-      features = tf.keras.layers.Input(
-        batch_shape=(1, self.streaming_size, self.num_feature_bins, 1),
-        dtype=tf.float32,
-        name="features")
+      signal = tf.keras.layers.Input(batch_shape=(1, self.streaming_size),
+                                     dtype=tf.float32,
+                                     name="features")
+      features = MFCC(name="mfcc_features", sample_rate=speech_featurizer.sample_rate,
+                      frame_ms=speech_featurizer.frame_ms,
+                      stride_ms=speech_featurizer.stride_ms,
+                      num_feature_bins=speech_featurizer.num_feature_bins)(signal)
       outputs = base_model(features=features, streaming=True)
     else:
-      features = tf.keras.layers.Input(
-        shape=(None, self.num_feature_bins, 1),
-        dtype=tf.float32,
-        name="features")
+      signal = tf.keras.layers.Input(shape=(None,),
+                                     dtype=tf.float32,
+                                     name="features")
+      features = MFCC(name="mfcc_features", sample_rate=speech_featurizer.sample_rate,
+                      frame_ms=speech_featurizer.frame_ms,
+                      stride_ms=speech_featurizer.stride_ms,
+                      num_feature_bins=speech_featurizer.num_feature_bins)(signal)
       outputs = base_model(features=features, streaming=False)
+
+    input_length = GetLength(name="input_length")(features)
 
     batch_size = tf.shape(outputs)[0]
     n_hidden = outputs.get_shape().as_list()[-1]
@@ -55,7 +78,7 @@ class CTCModel:
                          [batch_size, -1, self.num_classes],
                          name="logits")
 
-    model = tf.keras.Model(inputs=features, outputs=outputs)
+    model = tf.keras.Model(inputs=signal, outputs=[outputs, input_length])
     return model
 
   # @tf.function
@@ -63,14 +86,14 @@ class CTCModel:
   #   loss = tf.keras.backend.ctc_batch_cost(
   #     y_pred=y_pred,
   #     input_length=tf.expand_dims(input_length, -1),
-  #     y_true=tf.squeeze(y_true, -1),
+  #     y_true=y_true,
   #     label_length=tf.expand_dims(label_length, -1))
   #   return tf.reduce_mean(mask_nan(loss))
 
   @tf.function
   def loss(self, y_true, y_pred, input_length, label_length):
     loss = tf.nn.ctc_loss(
-      labels=tf.cast(tf.squeeze(y_true, -1), tf.int32),
+      labels=tf.cast(y_true, tf.int32),
       logit_length=input_length,
       logits=y_pred,
       label_length=label_length,
