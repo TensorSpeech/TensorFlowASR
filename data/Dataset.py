@@ -10,15 +10,15 @@ class Dataset:
     self.mode = mode
 
   def __call__(self, text_featurizer, sample_rate=16000, preemph=0.95, batch_size=32,
-               repeat=1, augmentations=tuple([None]), sort=False):
-    entries = self.__create_entries(sort)
+               repeat=1, augmentations=tuple([None]), sortagrad=False):
+    entries = self.__create_entries(sortagrad)
     if self.mode == "train":
       return self.__create_dataset(entries=entries, text_featurizer=text_featurizer,
-                                   sample_rate=sample_rate, preemph=preemph,
+                                   sample_rate=sample_rate, preemph=preemph, sort=sortagrad, shuffle=True,
                                    batch_size=batch_size, repeat=repeat, augmentations=augmentations)
     if self.mode in ["eval", "test", "infer"]:
       return self.__create_dataset(entries=entries, text_featurizer=text_featurizer,
-                                   sample_rate=sample_rate, preemph=preemph,
+                                   sample_rate=sample_rate, preemph=preemph, sort=sortagrad, shuffle=False,
                                    batch_size=batch_size, augmentations=[None])
     raise ValueError("Mode must be 'train', 'eval' or 'infer'")
 
@@ -35,8 +35,8 @@ class Dataset:
       lines.sort(key=lambda item: int(item[1]))
     return [tuple(line) for line in lines]
 
-  def __create_dataset(self, entries, text_featurizer, sample_rate,
-                       batch_size, augmentations, repeat=1, preemph=None):
+  def __create_dataset(self, entries, text_featurizer, sample_rate, sort,
+                       batch_size, augmentations, repeat=1, shuffle=True, preemph=None):
     if not isinstance(augmentations, list) and \
         not isinstance(augmentations, tuple):
       raise ValueError("augmentation must be a list or a tuple")
@@ -68,9 +68,10 @@ class Dataset:
         tf.TensorShape([])
       )
     )
-    # Repeat and batch the dataset
-    dataset = dataset.repeat(repeat)
     # # Padding the features to its max length dimensions
+    dataset = dataset.repeat(repeat)
+    if shuffle and not sort:
+      dataset = dataset.shuffle(3, reshuffle_each_iteration=True)  # shuffle elements in batches
     dataset = dataset.padded_batch(
       batch_size=batch_size,
       padded_shapes=(
@@ -84,6 +85,8 @@ class Dataset:
         0
       )
     )
+    if shuffle and sort:
+      dataset = dataset.shuffle(3, reshuffle_each_iteration=True)  # shuffle the sorted batches
     # Prefetch to improve speed of input length
-    dataset = dataset.prefetch(4)
+    dataset = dataset.prefetch(batch_size)
     return dataset

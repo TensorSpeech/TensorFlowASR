@@ -24,9 +24,9 @@ window_size = 2 ** 14
 
 stride = 0.5
 
-g_learning_rate = 0.002
+g_learning_rate = 0.0002
 
-d_learning_rate = 0.002
+d_learning_rate = 0.0002
 
 clean_train_data_dir = "/mnt/Data/ML/SEGAN/clean_trainset_wav_16k"
 

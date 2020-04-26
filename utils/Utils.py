@@ -165,11 +165,9 @@ def slice_signal(signal, window_size, stride=0.5):
   for beg_i, end_i in zip(range(0, n_samples, offset),
                           range(window_size, n_samples + offset,
                                 offset)):
-    if end_i - beg_i < window_size:
-      break
     slice_ = signal[beg_i:end_i]
-    # if slice_.shape[0] < window_size:
-    #   slice_ = np.pad(slice_, (0, window_size - slice_.shape[0]), 'constant', constant_values=0.0)
+    if slice_.shape[0] < window_size:
+      slice_ = np.pad(slice_, (0, window_size - slice_.shape[0]), 'constant', constant_values=0.0)
     if slice_.shape[0] == window_size:
       slices.append(slice_)
   return np.array(slices, dtype=np.float32)
@@ -181,15 +179,15 @@ def merge_slices(slices):
 
 
 @tf.function
-def scalar_summary(name, x):
-  return tf.summary.scalar(name, x)
+def scalar_summary(name, x, **kwargs):
+  return tf.summary.scalar(name, x, **kwargs)
 
 
 @tf.function
-def histogram_summary(name, x):
-  return tf.summary.histogram(name, x)
+def histogram_summary(name, x, **kwargs):
+  return tf.summary.histogram(name, x, **kwargs)
 
 
 @tf.function
-def audio_summary(name, x, samplerate):
-  return tf.summary.audio(name, x, samplerate)
+def audio_summary(name, x, samplerate, **kwargs):
+  return tf.summary.audio(name, x, samplerate, **kwargs)

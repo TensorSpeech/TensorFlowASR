@@ -1,15 +1,16 @@
 from __future__ import absolute_import
 
 import time
+import os
 import tensorflow as tf
 from models.segan.Discriminator import create_discriminator, discriminator_loss
 from models.segan.Generator import create_generator, generator_loss
-from utils.Utils import get_segan_config, slice_signal, merge_slices
+from utils.Utils import get_segan_config, slice_signal, merge_slices, scalar_summary
 from data.SeganDataset import SeganDataset
 
 
 class SEGAN:
-  def __init__(self, config_path, mode="training"):
+  def __init__(self, config_path, training=True):
     self.g_enc_depths = [16, 32, 32, 64, 64, 128, 128, 256, 256, 512, 1024]
     self.d_num_fmaps = [16, 32, 32, 64, 64, 128, 128, 256, 256, 512, 1024]
 
@@ -28,7 +29,7 @@ class SEGAN:
                                       window_size=self.window_size,
                                       kwidth=self.kwidth, ratio=self.ratio)
 
-    if mode == "training":
+    if training:
       self.discriminator = create_discriminator(d_num_fmaps=self.d_num_fmaps,
                                                 window_size=self.window_size,
                                                 kwidth=self.kwidth,
@@ -38,6 +39,8 @@ class SEGAN:
         self.configs["g_learning_rate"])
       self.discriminator_optimizer = tf.keras.optimizers.RMSprop(
         self.configs["d_learning_rate"])
+
+      self.writer = tf.summary.create_file_writer(os.path.join(self.configs["log_dir"]))
 
       self.checkpoint = tf.train.Checkpoint(
         generator=self.generator,
@@ -102,6 +105,9 @@ class SEGAN:
     for epoch in range(initial_epoch, epochs):
       start = time.time()
       batch_idx = 1
+      g_l1_loss = []
+      g_adv_loss = []
+      d_loss = []
 
       if epoch > self.configs["denoise_epoch"] and self.deactivated_noise == False:
         self.noise_std = self.configs["noise_decay"] * self.noise_std
@@ -111,6 +117,9 @@ class SEGAN:
 
       for clean_wav, noisy_wav in tf_train_dataset:
         gen_l1_loss, gen_adv_loss, disc_loss = train_step(clean_wav, noisy_wav)
+        g_l1_loss.append(gen_l1_loss)
+        g_adv_loss.append(gen_adv_loss)
+        d_loss.append(disc_loss)
         print(f"Epoch: {epoch + 1}/{epochs}, batch: {batch_idx}/{num_batch}, "
               f"gen_l1_loss = {gen_l1_loss}, gen_adv_loss = {gen_adv_loss}, "
               f"disc_loss = {disc_loss}", end="\r", flush=True)
@@ -122,8 +131,14 @@ class SEGAN:
       print(f"\nSaved checkpoint at epoch {epoch + 1}", flush=True)
       print(f"Time for epoch {epoch + 1} is {time.time() - start} secs")
 
+      with self.writer.as_default():
+        scalar_summary("g_l1_loss", tf.reduce_mean(g_l1_loss), step=epoch)
+        scalar_summary("g_adv_loss", tf.reduce_mean(g_adv_loss), step=epoch)
+        scalar_summary("d_loss", tf.reduce_mean(d_loss), step=epoch)
+        self.writer.flush()
+
     if export_dir:
-      self.generator.save(export_dir)
+      self.save(export_dir)
 
   def test(self):
     test_dataset = SeganDataset(clean_data_dir=self.configs["clean_test_data_dir"],
@@ -171,13 +186,10 @@ class SEGAN:
     else:
       raise ValueError("Model is not trained")
 
-    self.generator.save(export_dir)
+    self.save(export_dir)
 
-
-class NoiseFilter:
-  def __init__(self, model_file, window_size=2 ** 14):
-    self.generator = tf.saved_model.load(model_file)
-    self.window_size = window_size
+  def save(self, export_dir):
+    self.generator.save_weights(export_dir)
 
   def generate(self, signal):
     slices = slice_signal(signal, self.window_size, stride=1)

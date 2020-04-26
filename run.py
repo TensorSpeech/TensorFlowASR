@@ -44,15 +44,21 @@ if args_parser.model == "asr":
       raise ValueError("Flag 'input_file_path must be set")
     text = asr.infer_single(audio=args_parser.input_file_path)
     print(text)
+  elif args_parser.mode == "save":
+    asr.save_model(args_parser.export_file)
+  elif args_parser.mode == "load":
+    asr.load_model(args_parser.export_file)
   else:
     raise ValueError("Flag 'mode' must be either 'train', 'test' or 'infer'")
 elif args_parser.model == "segan":
-  segan = SEGAN(config_path=args_parser.config, mode="training")
+  segan = SEGAN(config_path=args_parser.config, training=True)
   if args_parser.mode == "train":
     segan.train(export_dir=args_parser.export_file)
   elif args_parser.mode == "test":
     segan.test()
   elif args_parser.mode == "save_from_ckpt":
     segan.save_from_checkpoint(args_parser.export_file)
+  elif args_parser.mode == "save":
+    segan.save(args_parser.export_file)
   else:
     raise ValueError("Flag 'mode' must be either 'train' or 'test'")

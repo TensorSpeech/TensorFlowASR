@@ -45,7 +45,8 @@ class SeganDataset:
     )
     # Repeat and batch the dataset
     dataset = dataset.repeat(repeat)
+    dataset = dataset.shuffle(3, reshuffle_each_iteration=True)
     dataset = dataset.batch(batch_size)
     # Prefetch to improve speed of input length
-    dataset = dataset.prefetch(4)
+    dataset = dataset.prefetch(batch_size)
     return dataset
