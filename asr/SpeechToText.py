@@ -241,3 +241,6 @@ class SpeechToText:
   def predict(self, signal):
     logits, logit_length = self.model(signal, training=False)
     return self.decoder.decode(probs=logits, input_length=logit_length)
+
+  def save_model(self, model_file):
+    self.model.save(model_file)

@@ -44,6 +44,10 @@ if args_parser.model == "asr":
       raise ValueError("Flag 'input_file_path must be set")
     text = asr.infer_single(audio=args_parser.input_file_path)
     print(text)
+  elif args_parser.mode == "save":
+    asr.save_model(args_parser.export_file)
+  elif args_parser.mode == "load":
+    asr.load_model(args_parser.export_file)
   else:
     raise ValueError("Flag 'mode' must be either 'train', 'test' or 'infer'")
 elif args_parser.model == "segan":

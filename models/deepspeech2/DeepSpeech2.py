@@ -7,6 +7,7 @@ from __future__ import absolute_import
 import tensorflow as tf
 from models.deepspeech2.RowConv1D import RowConv1D
 from models.deepspeech2.BNRNNCell import BNLSTMCell
+from tensorflow.keras.layers import LSTMCell
 
 
 class DeepSpeech2:
@@ -49,16 +50,16 @@ class DeepSpeech2:
       if self.is_bidirectional:
         layer = tf.keras.layers.Bidirectional(
           tf.keras.layers.RNN(
-            BNLSTMCell(units=self.rnn_units, dropout=0.2,
-                       activation='tanh', recurrent_activation='sigmoid',
-                       use_bias=True, recurrent_dropout=0.0),
+            LSTMCell(units=self.rnn_units, dropout=0.2,
+                     activation='tanh', recurrent_activation='sigmoid',
+                     use_bias=True, recurrent_dropout=0.0),
             return_sequences=True, unroll=False,
             time_major=True, stateful=False, name=f"bn_bilstm_{i}"))(layer)
       else:
         layer = tf.keras.layers.RNN(
-          BNLSTMCell(units=self.rnn_units, dropout=0.2,
-                     activation='tanh', recurrent_activation='sigmoid',
-                     use_bias=True, recurrent_dropout=0.0),
+          LSTMCell(units=self.rnn_units, dropout=0.2,
+                   activation='tanh', recurrent_activation='sigmoid',
+                   use_bias=True, recurrent_dropout=0.0),
           return_sequences=True, unroll=False,
           time_major=False, stateful=streaming, name=f"bn_lstm_{i}")(layer)
         if self.is_rowconv:
