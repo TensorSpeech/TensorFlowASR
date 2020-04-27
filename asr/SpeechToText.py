@@ -19,6 +19,7 @@ class SpeechToText:
     self.decoder = create_decoder(
       decoder_config=self.configs["decoder"],
       index_to_token=self.text_featurizer.index_to_token,
+      num_classes=self.text_featurizer.num_classes,
       vocab_array=self.text_featurizer.vocab_array)
     self.model = CTCModel(
       num_classes=self.text_featurizer.num_classes,
@@ -154,6 +155,7 @@ class SpeechToText:
 
     def test_step(features, transcripts):
       predictions = self.predict(features)
+      predictions = bytes_to_string(predictions.numpy())
 
       transcripts = self.decoder.convert_to_string(transcripts)
 
@@ -219,7 +221,7 @@ class SpeechToText:
   def infer_single(self, signal):
     signal = tf.expand_dims(signal, axis=0)
     pred = self.predict(signal)
-    return pred[0]
+    return bytes_to_string(pred.numpy())[0]
 
   def load_model(self, model_file):
     tf.compat.v1.set_random_seed(0)
@@ -237,9 +239,10 @@ class SpeechToText:
       return f"Model is not trained: {e}"
     return None
 
+  @tf.function
   def predict(self, signal):
     logits, logit_length = self.model(signal, training=False)
-    return self.decoder.decode(probs=logits, input_length=logit_length)
+    return self.decoder(probs=logits, input_length=logit_length)
 
   def save_model(self, model_file):
     self.model.save(model_file)

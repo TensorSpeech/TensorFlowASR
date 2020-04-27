@@ -10,24 +10,31 @@ from ctc_decoders import ctc_beam_search_decoder_batch, ctc_greedy_decoder
 
 
 class Decoder:
-  def __init__(self, index_to_token, vocab_array=None):
+  def __init__(self, index_to_token, num_classes, vocab_array=None):
     self.index_to_token = index_to_token
     # tensorflow.org/api_docs/python/tf/keras/backend/ctc_decode
     # default blank index is -1
     self.blank_index = -1
     self.num_cpus = multiprocessing.cpu_count()
     self.vocab_array = vocab_array
+    self.num_classes = num_classes
 
   def convert_to_string(self, decoded):
     # Remove blank indices
     def map_cvrt(elem):
-      elem = np.array(elem)
+      elem = elem.numpy()
       elem = elem[elem != self.blank_index]
+      elem = elem[elem != self.num_classes - 1]
       return ''.join([self.index_to_token[i] for i in elem])
 
     # Convert to string
     decoded = tf.map_fn(map_cvrt, decoded, dtype=tf.string)
     return bytes_to_string(decoded.numpy())
+
+  def __call__(self, probs, input_length):
+    decoded = tf.py_function(self.decode, inp=[probs, input_length],
+                             Tout=tf.string)
+    return decoded
 
   def decode(self, probs, input_length):
     pass
@@ -52,7 +59,7 @@ class GreedyDecoder(Decoder):
     # decoded = decoded[0]
     # return self.convert_to_string(decoded)
 
-    undecoded = np.split(probs.numpy(), self.num_cpus)
+    undecoded = np.array_split(probs.numpy(), self.num_cpus)
 
     with multiprocessing.Pool(self.num_cpus) as pool:
       decoded = pool.map(self.map_fn, undecoded)
@@ -63,9 +70,9 @@ class GreedyDecoder(Decoder):
 class BeamSearchDecoder(Decoder):
   """ Decode probs using beam search algorithm """
 
-  def __init__(self, index_to_token, beam_width=1024, lm_path=None,
+  def __init__(self, index_to_token, num_classes, beam_width=1024, lm_path=None,
                alpha=None, beta=None, vocab_array=None):
-    super().__init__(index_to_token, vocab_array)
+    super().__init__(index_to_token, num_classes, vocab_array)
     self.beam_width = beam_width
     self.lm_path = lm_path
     self.alpha = alpha
@@ -90,7 +97,7 @@ class BeamSearchDecoder(Decoder):
       _, text = [v for v in zip(*value)]
       decoded[idx] = text[0]
 
-    return decoded
+    return tf.convert_to_tensor(decoded, tf.string)
 
   # decoded = tf.keras.backend.ctc_decode(y_pred=probs,
   #                                       input_length=input_length,
@@ -103,7 +110,7 @@ class BeamSearchDecoder(Decoder):
   # return self.convert_to_string(decoded)
 
 
-def create_decoder(decoder_config, index_to_token, vocab_array):
+def create_decoder(decoder_config, index_to_token, num_classes, vocab_array):
   check_key_in_dict(decoder_config, keys=["name"])
   if decoder_config["name"] == "beamsearch":
     check_key_in_dict(decoder_config, keys=["beam_width"])
@@ -111,6 +118,7 @@ def create_decoder(decoder_config, index_to_token, vocab_array):
       check_key_in_dict(decoder_config, keys=["alpha", "beta"])
       decoder = BeamSearchDecoder(
         index_to_token=index_to_token,
+        num_classes=num_classes,
         beam_width=decoder_config["beam_width"],
         lm_path=os.path.expanduser(decoder_config["lm_path"]),
         alpha=decoder_config["alpha"],
@@ -118,10 +126,13 @@ def create_decoder(decoder_config, index_to_token, vocab_array):
         vocab_array=vocab_array)
     else:
       decoder = BeamSearchDecoder(index_to_token=index_to_token,
+                                  num_classes=num_classes,
                                   beam_width=decoder_config["beam_width"],
                                   vocab_array=vocab_array)
   elif decoder_config["name"] == "greedy":
-    decoder = GreedyDecoder(index_to_token=index_to_token, vocab_array=vocab_array)
+    decoder = GreedyDecoder(index_to_token=index_to_token,
+                            num_classes=num_classes,
+                            vocab_array=vocab_array)
   else:
     raise ValueError("'decoder' value must be either 'beamsearch',\
                          'beamsearch_lm' or 'greedy'")
