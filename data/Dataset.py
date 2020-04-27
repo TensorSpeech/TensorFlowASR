@@ -87,5 +87,5 @@ class Dataset:
     if shuffle and sort:
       dataset = dataset.shuffle(3, reshuffle_each_iteration=True)  # shuffle the sorted batches
     # Prefetch to improve speed of input length
-    dataset = dataset.prefetch(batch_size)
+    dataset = dataset.prefetch(tf.data.experimental.AUTOTUNE)
     return dataset

@@ -48,5 +48,5 @@ class SeganDataset:
     dataset = dataset.shuffle(3, reshuffle_each_iteration=True)
     dataset = dataset.batch(batch_size)
     # Prefetch to improve speed of input length
-    dataset = dataset.prefetch(batch_size)
+    dataset = dataset.prefetch(tf.data.experimental.AUTOTUNE)
     return dataset
