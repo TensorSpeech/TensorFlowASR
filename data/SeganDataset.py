@@ -18,8 +18,10 @@ class SeganDataset:
   def create(self, batch_size, coeff=0.97, repeat=1):
     def _gen_data():
       for clean_wav_path in glob.iglob(os.path.join(self.clean_data_dir, "**", "*.wav"), recursive=True):
-        name = os.path.basename(clean_wav_path)
-        noisy_wav_path = os.path.join(self.noisy_data_dir, name)
+        clean_split = clean_wav_path.split('/')
+        noisy_split = self.noisy_data_dir.split('/')
+        clean_split = clean_split[len(noisy_split):]
+        noisy_wav_path = os.path.join(noisy_split + clean_split)
 
         clean_wav, clean_sr = librosa.load(clean_wav_path, sr=None)
         noisy_wav, noisy_sr = librosa.load(noisy_wav_path, sr=None)
