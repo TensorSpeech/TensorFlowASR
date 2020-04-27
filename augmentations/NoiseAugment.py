@@ -32,7 +32,7 @@ def get_noise_from_sound(signal: np.ndarray, noise: np.ndarray, snr=10):
 
   # current RMS of noise
   RMS_n_current = math.sqrt(np.mean(noise ** 2))
-  noise = noise * (RMS_n / RMS_n_current)
+  noise = noise * (RMS_n / (RMS_n_current + 1e-6))
 
   return noise
 
@@ -49,7 +49,9 @@ def add_noise(signal: np.ndarray, noises: list, min_snr: int, max_snr: int,
       added_noises.append(get_white_noise(signal, snr))
     else:
       noise = read_raw_audio(noise_type, sample_rate=sample_rate)
-      added_noises.append(get_noise_from_sound(signal, noise, snr))
+      noise = get_noise_from_sound(signal, noise, snr)
+      if noise is not None:
+        added_noises.append(noise)
   for noise in added_noises:
     signal = np.add(signal, noise)
   return signal
