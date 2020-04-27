@@ -22,7 +22,7 @@ class SeganDataset:
         noisy_split = self.noisy_data_dir.split('/')
         clean_split = clean_split[len(noisy_split):]
         noisy_split = noisy_split + clean_split
-        noisy_wav_path = os.path.join(*noisy_split)
+        noisy_wav_path = '/' + os.path.join(*noisy_split)
 
         clean_wav, clean_sr = librosa.load(clean_wav_path, sr=None)
         noisy_wav, noisy_sr = librosa.load(noisy_wav_path, sr=None)
