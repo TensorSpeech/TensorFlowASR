@@ -98,7 +98,10 @@ def normalize_signal(signal):
 def preemphasis(signal, coeff=0.97):
   if not coeff or coeff == 0.0:
     return signal
-  return np.append(signal[0], signal[1:] - coeff * signal[:-1])
+  x0 = tf.reshape(signal[0], [1, ])
+  diff = signal[1:] - coeff * signal[:-1]
+  concat = tf.concat([x0, diff], axis=0)
+  return tf.cast(concat, dtype=tf.float32)
 
 
 def deemphasis(signal, coeff=0.97):
