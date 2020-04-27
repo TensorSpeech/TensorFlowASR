@@ -1,7 +1,7 @@
 from __future__ import absolute_import
 
 import tensorflow as tf
-from featurizers.SpeechFeaturizer import read_raw_audio, preemphasis, interp
+from featurizers.SpeechFeaturizer import read_raw_audio, preemphasis
 
 
 class Dataset:

@@ -1,7 +1,7 @@
 from __future__ import absolute_import
 
 from models.deepspeech2.DeepSpeech2 import DeepSpeech2
-from augmentations.Augments import WhiteNoise
+from augmentations.Augments import Noise
 
 base_model = DeepSpeech2(num_conv=3, num_rnn=3, rnn_units=256, filters=[16, 32, 64],
                          is_bidirectional=True, kernel_size=(31, 11))
@@ -16,7 +16,9 @@ decoder = {
   "beta":       0.5
 }
 
-augmentations = [WhiteNoise(snr=10)]
+augmentations = [Noise(min_snr=3, max_snr=10,
+                       min_noises=1, max_noises=3,
+                       noise_dir="/mnt/Data/ML/ASR/Preprocessed/Noises")]
 
 batch_size = 16
 
