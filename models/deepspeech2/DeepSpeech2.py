@@ -49,19 +49,18 @@ class DeepSpeech2:
     for i in range(self.num_rnn):
       if self.is_bidirectional:
         layer = tf.keras.layers.Bidirectional(
-          tf.keras.layers.RNN(
-            LSTMCell(units=self.rnn_units, dropout=0.2,
-                     activation='tanh', recurrent_activation='sigmoid',
-                     use_bias=True, recurrent_dropout=0.0),
-            return_sequences=True, unroll=False,
-            time_major=True, stateful=False, name=f"bn_bilstm_{i}"))(layer)
+          tf.keras.layers.LSTM(units=self.rnn_units, dropout=0.2,
+                               activation='tanh', recurrent_activation='sigmoid',
+                               use_bias=True, recurrent_dropout=0.0,
+                               return_sequences=True, unroll=False,
+                               time_major=True, stateful=False, name=f"bilstm_{i}"))(layer)
       else:
         layer = tf.keras.layers.RNN(
           LSTMCell(units=self.rnn_units, dropout=0.2,
                    activation='tanh', recurrent_activation='sigmoid',
                    use_bias=True, recurrent_dropout=0.0),
           return_sequences=True, unroll=False,
-          time_major=False, stateful=streaming, name=f"bn_lstm_{i}")(layer)
+          time_major=False, stateful=streaming, name=f"lstm_{i}")(layer)
         if self.is_rowconv:
           layer = RowConv1D(filters=self.rnn_units, future_context=2, name=f"row_conv_{i}")(layer)
 
