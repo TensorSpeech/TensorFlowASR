@@ -1,6 +1,7 @@
 from __future__ import absolute_import
 
 import os
+import sys
 import functools
 import multiprocessing
 import numpy as np
@@ -53,6 +54,8 @@ class Dataset:
   @staticmethod
   def write_tfrecord_file(splitted_entries, text_featurizer, augmentations, sample_rate, preemph):
     shard_path, entries = splitted_entries
+    if os.path.exists(shard_path):
+      return
     with tf.io.TFRecordWriter(shard_path, options='ZLIB') as out:
       for audio_file, au, transcript in entries:
         signal = read_raw_audio(audio_file, sample_rate)
@@ -67,7 +70,8 @@ class Dataset:
 
         example = to_tfrecord(signal, label, label_length)
         out.write(example.SerializeToString())
-        print(f"Processed: {audio_file}", end="\r", flush=True)
+        sys.stdout.write("\033[K")
+        print(f"Processed: {audio_file}", end="\r")
     print(f"\nCreated {shard_path}")
 
   def create_tfrecords(self, text_featurizer, augmentations=tuple([None]),
@@ -81,9 +85,10 @@ class Dataset:
     shards = [get_shard_path(idx) for idx in range(1, self.num_cpus + 1)]
 
     splitted_entries = np.array_split(entries, self.num_cpus)
-    for idx, value in enumerate(zip(shards, splitted_entries)):
-      self.write_tfrecord_file(value, text_featurizer=text_featurizer,
-                               augmentations=augmentations, sample_rate=sample_rate, preemph=preemph)
+    with multiprocessing.Pool(self.num_cpus) as pool:
+      pool.map(functools.partial(self.write_tfrecord_file, text_featurizer=text_featurizer,
+                                 augmentations=augmentations, sample_rate=sample_rate, preemph=preemph),
+               zip(shards, splitted_entries))
 
   @staticmethod
   def entries_map_fn(splitted_lines, augmentations):
