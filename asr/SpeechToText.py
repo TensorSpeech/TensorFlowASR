@@ -40,7 +40,7 @@ class SpeechToText:
     self.ckpt = tf.train.Checkpoint(model=self.model.model,
                                     optimizer=self.model.optimizer)
     self.ckpt_manager = tf.train.CheckpointManager(
-      self.ckpt, self.configs["checkpoint_dir"], max_to_keep=5)
+      self.ckpt, self.configs["checkpoint_dir"], max_to_keep=None)
 
     check_key_in_dict(dictionary=self.configs,
                       keys=["tfrecords_dir", "checkpoint_dir", "augmentations",
