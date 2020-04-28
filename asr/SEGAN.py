@@ -2,6 +2,7 @@ from __future__ import absolute_import
 
 import time
 import os
+import sys
 import tensorflow as tf
 from models.segan.Discriminator import create_discriminator, discriminator_loss
 from models.segan.Generator import create_generator, generator_loss
@@ -120,6 +121,7 @@ class SEGAN:
         g_l1_loss.append(gen_l1_loss)
         g_adv_loss.append(gen_adv_loss)
         d_loss.append(disc_loss)
+        sys.stdout.write("\033[K")
         print(f"Epoch: {epoch + 1}/{epochs}, batch: {batch_idx}/{num_batch}, "
               f"gen_l1_loss = {gen_l1_loss}, gen_adv_loss = {gen_adv_loss}, "
               f"disc_loss = {disc_loss}", end="\r", flush=True)
