@@ -40,17 +40,15 @@ class SpeechToText:
                                     optimizer=self.model.optimizer)
     self.ckpt_manager = tf.train.CheckpointManager(
       self.ckpt, self.configs["checkpoint_dir"], max_to_keep=5)
+
     check_key_in_dict(dictionary=self.configs,
-                      keys=["train_data_transcript_paths",
-                            "eval_data_transcript_paths"])
-    train_dataset = Dataset(data_path=self.configs["train_data_transcript_paths"], mode="train")
-    eval_dataset = Dataset(data_path=self.configs["eval_data_transcript_paths"], mode="eval")
+                      keys=["tfrecords_dir", "checkpoint_dir", "augmentations",
+                            "log_dir", "train_data_transcript_paths"])
+    augmentations = self.configs["augmentations"]
+    augmentations.append(None)
 
-    augmentations = []
-    if "augmentations" in self.configs.keys():
-      augmentations = self.configs["augmentations"]
-      augmentations.append(None)
-
+    train_dataset = Dataset(data_path=self.configs["train_data_transcript_paths"],
+                            tfrecords_dir=self.configs["tfrecords_dir"], mode="train")
     tf_train_dataset = train_dataset(text_featurizer=self.text_featurizer,
                                      sample_rate=self.configs["sample_rate"],
                                      preemph=self.configs["pre_emph"],
@@ -61,10 +59,14 @@ class SpeechToText:
                                             preemph=self.configs["pre_emph"],
                                             batch_size=self.configs["batch_size"],
                                             augmentations=augmentations, sortagrad=True)
-    tf_eval_dataset = eval_dataset(text_featurizer=self.text_featurizer,
-                                   sample_rate=self.configs["sample_rate"],
-                                   preemph=self.configs["pre_emph"],
-                                   batch_size=self.configs["batch_size"])
+
+    if "eval_data_transcript_paths" in self.configs.keys():
+      eval_dataset = Dataset(data_path=self.configs["eval_data_transcript_paths"],
+                             tfrecords_dir=self.configs["tfrecords_dir"], mode="eval")
+      tf_eval_dataset = eval_dataset(text_featurizer=self.text_featurizer,
+                                     sample_rate=self.configs["sample_rate"],
+                                     preemph=self.configs["pre_emph"],
+                                     batch_size=self.configs["batch_size"])
 
     self.model.summary()
 
@@ -143,10 +145,10 @@ class SpeechToText:
   def test(self, model_file, output_file_path):
     print("Testing model ...")
     check_key_in_dict(dictionary=self.configs,
-                      keys=["test_data_transcript_paths"])
-    test_dataset = Dataset(
-      data_path=self.configs["test_data_transcript_paths"],
-      mode="test")
+                      keys=["test_data_transcript_paths", "tfrecords_dir"])
+    test_dataset = Dataset(data_path=self.configs["test_data_transcript_paths"],
+                           tfrecords_dir=self.configs["tfrecords_dir"],
+                           mode="test")
     self.load_model(model_file)
     tf_test_dataset = test_dataset(text_featurizer=self.text_featurizer,
                                    sample_rate=self.configs["sample_rate"],
@@ -198,8 +200,11 @@ class SpeechToText:
 
   def infer(self, input_file_path, model_file, output_file_path):
     print("Infering ...")
+    check_key_in_dict(dictionary=self.configs,
+                      keys=["tfrecords_dir"])
     self.load_model(model_file)
     tf_infer_dataset = Dataset(data_path=input_file_path,
+                               tfrecords_dir=self.configs["tfrecords_dir"],
                                mode="infer")
     tf_infer_dataset = tf_infer_dataset(batch_size=self.configs["batch_size"],
                                         text_featurizer=self.text_featurizer,

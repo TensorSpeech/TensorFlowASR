@@ -27,6 +27,7 @@ asr_conf_paths = ["train_data_transcript_paths",
                   "eval_data_transcript_paths",
                   "vocabulary_file_path",
                   "checkpoint_dir",
+                  "tfrecords_dir",
                   "log_dir"]
 
 segan_conf_required = ["batch_size",
