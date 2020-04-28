@@ -5,6 +5,7 @@ import tensorflow as tf
 from utils.Flags import args_parser
 from asr.SpeechToText import SpeechToText
 from asr.SEGAN import SEGAN
+from featurizers.SpeechFeaturizer import read_raw_audio, preemphasis
 
 tf.get_logger().setLevel(ERROR)
 gpus = tf.config.experimental.list_physical_devices('GPU')
@@ -21,6 +22,7 @@ if gpus:
     print(e)
 
 tf.keras.backend.clear_session()
+tf.compat.v1.set_random_seed(2020)
 
 if args_parser.model == "asr":
   asr = SpeechToText(configs_path=args_parser.config)
@@ -42,7 +44,9 @@ if args_parser.model == "asr":
   elif args_parser.mode == "infer_single":
     if args_parser.input_file_path is None:
       raise ValueError("Flag 'input_file_path must be set")
-    text = asr.infer_single(audio=args_parser.input_file_path)
+    signal = read_raw_audio(args_parser.input_file_path)
+    signal = preemphasis(signal, 0.95)
+    text = asr.infer_single(signal)
     print(text)
   elif args_parser.mode == "save":
     asr.save_model(args_parser.export_file)

@@ -237,7 +237,6 @@ class SpeechToText:
     return bytes_to_string(pred.numpy())[0]
 
   def load_model(self, model_file):
-    tf.compat.v1.set_random_seed(0)
     try:
       self.model.load_model(model_file)
     except Exception as e:
@@ -245,7 +244,6 @@ class SpeechToText:
     return None
 
   def load_model_from_weights(self, model_file):
-    tf.compat.v1.set_random_seed(0)
     try:
       self.model.load_weights(model_file)
     except Exception as e:
