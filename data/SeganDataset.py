@@ -2,10 +2,9 @@ from __future__ import absolute_import
 
 import glob
 import os
-import librosa
 import tensorflow as tf
 from utils.Utils import slice_signal
-from featurizers.SpeechFeaturizer import preemphasis
+from featurizers.SpeechFeaturizer import preemphasis, read_raw_audio
 
 
 class SeganDataset:
@@ -18,12 +17,14 @@ class SeganDataset:
   def create(self, batch_size, coeff=0.97, repeat=1):
     def _gen_data():
       for clean_wav_path in glob.iglob(os.path.join(self.clean_data_dir, "**", "*.wav"), recursive=True):
-        name = os.path.basename(clean_wav_path)
-        noisy_wav_path = os.path.join(self.noisy_data_dir, name)
+        clean_split = clean_wav_path.split('/')
+        noisy_split = self.noisy_data_dir.split('/')
+        clean_split = clean_split[len(noisy_split):]
+        noisy_split = noisy_split + clean_split
+        noisy_wav_path = '/' + os.path.join(*noisy_split)
 
-        clean_wav, clean_sr = librosa.load(clean_wav_path, sr=None)
-        noisy_wav, noisy_sr = librosa.load(noisy_wav_path, sr=None)
-        assert clean_sr == 16000 and noisy_sr == 16000, "sample rate of dataset must be 16k"
+        clean_wav = read_raw_audio(clean_wav_path, sample_rate=16000)
+        noisy_wav = read_raw_audio(noisy_wav_path, sample_rate=16000)
         clean_slices = slice_signal(clean_wav, self.window_size, self.stride)
         noisy_slices = slice_signal(noisy_wav, self.window_size, self.stride)
 

@@ -1,6 +1,7 @@
 from __future__ import absolute_import
 
 import os
+import sys
 import time
 import tensorflow as tf
 
@@ -40,17 +41,15 @@ class SpeechToText:
                                     optimizer=self.model.optimizer)
     self.ckpt_manager = tf.train.CheckpointManager(
       self.ckpt, self.configs["checkpoint_dir"], max_to_keep=5)
+
     check_key_in_dict(dictionary=self.configs,
-                      keys=["train_data_transcript_paths",
-                            "eval_data_transcript_paths"])
-    train_dataset = Dataset(data_path=self.configs["train_data_transcript_paths"], mode="train")
-    eval_dataset = Dataset(data_path=self.configs["eval_data_transcript_paths"], mode="eval")
+                      keys=["tfrecords_dir", "checkpoint_dir", "augmentations",
+                            "log_dir", "train_data_transcript_paths"])
+    augmentations = self.configs["augmentations"]
+    augmentations.append(None)
 
-    augmentations = []
-    if "augmentations" in self.configs.keys():
-      augmentations = self.configs["augmentations"]
-      augmentations.append(None)
-
+    train_dataset = Dataset(data_path=self.configs["train_data_transcript_paths"],
+                            tfrecords_dir=self.configs["tfrecords_dir"], mode="train")
     tf_train_dataset = train_dataset(text_featurizer=self.text_featurizer,
                                      sample_rate=self.configs["sample_rate"],
                                      preemph=self.configs["pre_emph"],
@@ -61,10 +60,16 @@ class SpeechToText:
                                             preemph=self.configs["pre_emph"],
                                             batch_size=self.configs["batch_size"],
                                             augmentations=augmentations, sortagrad=True)
-    tf_eval_dataset = eval_dataset(text_featurizer=self.text_featurizer,
-                                   sample_rate=self.configs["sample_rate"],
-                                   preemph=self.configs["pre_emph"],
-                                   batch_size=self.configs["batch_size"])
+
+    tf_eval_dataset = None
+
+    if "eval_data_transcript_paths" in self.configs.keys():
+      eval_dataset = Dataset(data_path=self.configs["eval_data_transcript_paths"],
+                             tfrecords_dir=self.configs["tfrecords_dir"], mode="eval")
+      tf_eval_dataset = eval_dataset(text_featurizer=self.text_featurizer,
+                                     sample_rate=self.configs["sample_rate"],
+                                     preemph=self.configs["pre_emph"],
+                                     batch_size=self.configs["batch_size"])
 
     self.model.summary()
 
@@ -103,37 +108,42 @@ class SpeechToText:
       else:
         dataset = tf_train_dataset
 
-      eval_loss = []
       epoch_train_loss = []
+      epoch_eval_loss = None
       batch_idx = 1
       start = time.time()
 
       for feature, transcript, label_length in dataset:
         train_loss = train_step(feature, transcript, label_length)
         epoch_train_loss.append(train_loss)
-        tf.print(f"Epoch: {epoch + 1}/{epochs}, batch: {batch_idx}/{num_batch}, "
-                 f"train_loss = {train_loss}", end="\r")
+
+        sys.stdout.write("\033[K")
+        print(f"Epoch: {epoch + 1}/{epochs}, batch: {batch_idx}/{num_batch}, train_loss = {train_loss}", end="\r")
         batch_idx += 1
 
       num_batch = batch_idx
-
-      for feature, transcript, label_length in tf_eval_dataset:
-        _eval_loss = eval_step(feature, transcript, label_length)
-        eval_loss.append(_eval_loss)
-
-      eval_loss = tf.reduce_mean(eval_loss)
       epoch_train_loss = tf.reduce_mean(epoch_train_loss)
-      tf.print(f"\nEpoch: {epoch + 1}/{epochs}, eval_loss = {eval_loss}")
+
+      print(f"\nEpoch: {epoch + 1}/{epochs}, train_loss = {epoch_train_loss}", end="")
+
+      if tf_eval_dataset:
+        eval_loss = []
+        for feature, transcript, label_length in tf_eval_dataset:
+          _eval_loss = eval_step(feature, transcript, label_length)
+          eval_loss.append(_eval_loss)
+        epoch_eval_loss = tf.reduce_mean(eval_loss)
+        print(f", eval_loss = {epoch_eval_loss}")
 
       self.ckpt_manager.save()
-      tf.print(f"\nSaved checkpoint at epoch {epoch + 1}")
+      print(f"\nSaved checkpoint at epoch {epoch + 1}")
       time_epoch = time.time() - start
-      tf.print(f"Time for epoch {epoch + 1} is {time_epoch} secs")
+      print(f"Time for epoch {epoch + 1} is {time_epoch} secs")
 
       if self.writer:
         with self.writer.as_default():
           scalar_summary("train_loss", epoch_train_loss, step=epoch)
-          scalar_summary("eval_loss", eval_loss, step=epoch)
+          if epoch_eval_loss:
+            scalar_summary("eval_loss", epoch_eval_loss, step=epoch)
           scalar_summary("epoch_time", time_epoch, step=epoch)
           self.writer.flush()
 
@@ -143,10 +153,10 @@ class SpeechToText:
   def test(self, model_file, output_file_path):
     print("Testing model ...")
     check_key_in_dict(dictionary=self.configs,
-                      keys=["test_data_transcript_paths"])
-    test_dataset = Dataset(
-      data_path=self.configs["test_data_transcript_paths"],
-      mode="test")
+                      keys=["test_data_transcript_paths", "tfrecords_dir"])
+    test_dataset = Dataset(data_path=self.configs["test_data_transcript_paths"],
+                           tfrecords_dir=self.configs["tfrecords_dir"],
+                           mode="test")
     self.load_model(model_file)
     tf_test_dataset = test_dataset(text_featurizer=self.text_featurizer,
                                    sample_rate=self.configs["sample_rate"],
@@ -198,8 +208,11 @@ class SpeechToText:
 
   def infer(self, input_file_path, model_file, output_file_path):
     print("Infering ...")
+    check_key_in_dict(dictionary=self.configs,
+                      keys=["tfrecords_dir"])
     self.load_model(model_file)
     tf_infer_dataset = Dataset(data_path=input_file_path,
+                               tfrecords_dir=self.configs["tfrecords_dir"],
                                mode="infer")
     tf_infer_dataset = tf_infer_dataset(batch_size=self.configs["batch_size"],
                                         text_featurizer=self.text_featurizer,

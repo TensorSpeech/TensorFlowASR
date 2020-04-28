@@ -16,9 +16,10 @@ decoder = {
   "beta":       0.5
 }
 
-augmentations = [Noise(min_snr=3, max_snr=10,
-                       min_noises=1, max_noises=3,
-                       noise_dir="/mnt/Data/ML/ASR/Preprocessed/Noises")]
+# augmentations = [Noise(min_snr=3, max_snr=10,
+#                        min_noises=1, max_noises=3,
+#                        noise_dir="/mnt/Data/ML/ASR/Preprocessed/Noises")]
+augmentations = []
 
 batch_size = 16
 
@@ -53,6 +54,8 @@ eval_data_transcript_paths = [
 test_data_transcript_paths = [
   "/mnt/Data/ML/ASR/Preprocessed/SmallFixed/Test/transcripts.tsv"
 ]
+
+tfrecords_dir = "/mnt/Data/ML/ASR/Preprocessed/SmallFixed/TFRecords"
 
 checkpoint_dir = "/mnt/Projects/asrk16/trained/med-bilstm/checkpoints/"
 
