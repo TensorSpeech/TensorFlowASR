@@ -23,11 +23,11 @@ def _bytestring_feature(list_of_bytestrings):
   return tf.train.Feature(bytes_list=tf.train.BytesList(value=list_of_bytestrings))
 
 
-def to_tfrecord(audio, labels, labels_length):
+def to_tfrecord(audio, au, transcript):
   feature = {
-    "signal":       _float_feature(audio),
-    "label":        _int64_feature(labels),
-    "label_length": _int64_feature([labels_length])
+    "audio":      _bytestring_feature([audio]),
+    "au":         _int64_feature([au]),
+    "transcript": _bytestring_feature([transcript])
   }
   return tf.train.Example(features=tf.train.Features(feature=feature))
 
@@ -41,41 +41,36 @@ class Dataset:
 
   def __call__(self, text_featurizer, sample_rate=16000, preemph=0.95, batch_size=32,
                repeat=1, augmentations=tuple([None]), sortagrad=False):
-    self.create_tfrecords(text_featurizer, augmentations, sample_rate, preemph, sortagrad)
+    self.create_tfrecords(augmentations, sortagrad)
     if self.mode == "train":
-      return self.get_dataset_from_tfrecords(text_featurizer, batch_size, repeat=repeat,
+      return self.get_dataset_from_tfrecords(text_featurizer, augmentations=augmentations,
+                                             sample_rate=sample_rate, preemph=preemph,
+                                             batch_size=batch_size, repeat=repeat,
                                              sort=sortagrad, shuffle=True)
     elif self.mode in ["eval", "test"]:
-      return self.get_dataset_from_tfrecords(text_featurizer, batch_size, repeat=repeat,
+      return self.get_dataset_from_tfrecords(text_featurizer, augmentations=augmentations,
+                                             sample_rate=sample_rate, preemph=preemph,
+                                             batch_size=batch_size, repeat=repeat,
                                              sort=sortagrad, shuffle=False)
     else:
       raise ValueError(f"Mode must be either 'train', 'eval' or 'test': {self.mode}")
 
   @staticmethod
-  def write_tfrecord_file(splitted_entries, text_featurizer, augmentations, sample_rate, preemph):
+  def write_tfrecord_file(splitted_entries):
     shard_path, entries = splitted_entries
     if os.path.exists(shard_path):
       return
     with tf.io.TFRecordWriter(shard_path, options='ZLIB') as out:
       for audio_file, au, transcript in entries:
-        signal = read_raw_audio(audio_file, sample_rate)
-        if augmentations[int(au)] is not None:
-          signal = augmentations[int(au)](signal=signal, sample_rate=sample_rate)
-        signal = preemphasis(signal, coeff=preemph)
-        label = text_featurizer.compute_label_features(transcript)
-        label_length = tf.cast(tf.shape(label)[0], tf.int64)
-
-        signal = tf.expand_dims(signal, - 1)
-        label = tf.expand_dims(label, - 1)
-
-        example = to_tfrecord(signal, label, label_length)
+        with open(audio_file, "rb") as f:
+          audio = f.read()
+        example = to_tfrecord(audio, int(au), bytes(transcript, "utf-8"))
         out.write(example.SerializeToString())
         sys.stdout.write("\033[K")
         print(f"Processed: {audio_file}", end="\r")
     print(f"\nCreated {shard_path}")
 
-  def create_tfrecords(self, text_featurizer, augmentations=tuple([None]),
-                       sample_rate=16000, preemph=0.95, sortagrad=False):
+  def create_tfrecords(self, augmentations=tuple([None]), sortagrad=False):
     print(f"Creating {self.mode}.tfrecord ...")
     entries = self.create_entries(augmentations, sortagrad)
 
@@ -86,9 +81,7 @@ class Dataset:
 
     splitted_entries = np.array_split(entries, self.num_cpus)
     with multiprocessing.Pool(self.num_cpus) as pool:
-      pool.map(functools.partial(self.write_tfrecord_file, text_featurizer=text_featurizer,
-                                 augmentations=augmentations, sample_rate=sample_rate, preemph=preemph),
-               zip(shards, splitted_entries))
+      pool.map(self.write_tfrecord_file, zip(shards, splitted_entries))
 
   @staticmethod
   def entries_map_fn(splitted_lines, augmentations):
@@ -115,18 +108,32 @@ class Dataset:
       lines = pool.map(functools.partial(self.entries_map_fn, augmentations=augmentations), splitted_lines)
     return np.concatenate(lines)
 
-  def get_dataset_from_tfrecords(self, text_featurizer, batch_size, repeat=1, sort=False, shuffle=True):
+  @staticmethod
+  def preprocess(audio, au, transcript, text_featurizer, augmentations, sample_rate, preemph):
+    signal = read_raw_audio(audio.numpy(), sample_rate)
+    if augmentations[int(au)] is not None:
+      signal = augmentations[int(au)](signal=signal, sample_rate=sample_rate)
+    signal = preemphasis(signal, coeff=preemph)
+    label = text_featurizer.compute_label_features(transcript.numpy().decode("utf-8"))
+    label_length = tf.cast(tf.shape(label)[0], tf.int32)
+    return tf.convert_to_tensor(signal, tf.float32), label, label_length
+
+  def get_dataset_from_tfrecords(self, text_featurizer, augmentations, sample_rate, preemph,
+                                 batch_size, repeat=1, sort=False, shuffle=True):
 
     def parse(record):
       feature_description = {
-        "signal":       tf.io.FixedLenSequenceFeature(1, tf.float32),
-        "label":        tf.io.FixedLenSequenceFeature(1, tf.int64),
-        "label_length": tf.io.FixedLenFeature([], tf.int64)
+        "audio":      tf.io.FixedLenFeature([], tf.string),
+        "au":         tf.io.FixedLenFeature([], tf.int64),
+        "transcript": tf.io.FixedLenFeature([], tf.string)
       }
       example = tf.io.parse_single_example(record, feature_description)
-      return (tf.squeeze(example["signal"], -1),
-              tf.squeeze(tf.cast(example["label"], tf.int32), - 1),
-              tf.cast(example["label_length"], tf.int32))
+      signal, label, label_length = tf.py_function(
+        functools.partial(self.preprocess, text_featurizer=text_featurizer,
+                          augmentations=augmentations, sample_rate=sample_rate, preemph=preemph),
+        inp=[example["audio"], example["au"], example["transcript"]],
+        Tout=(tf.float32, tf.int32, tf.int32))
+      return signal, label, label_length
 
     pattern = os.path.join(self.tfrecord_dir, f"{self.mode}*.tfrecord")
     files_ds = tf.data.Dataset.list_files(pattern)
@@ -138,7 +145,6 @@ class Dataset:
 
     dataset = tf.data.TFRecordDataset(files_ds, compression_type='ZLIB', num_parallel_reads=AUTOTUNE)
     dataset = dataset.map(parse, num_parallel_calls=AUTOTUNE)
-    print(dataset.element_spec)
     # # Padding the features to its max length dimensions
     dataset = dataset.repeat(repeat)
     if shuffle and not sort:
