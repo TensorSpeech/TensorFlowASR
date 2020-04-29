@@ -40,7 +40,7 @@ class SpeechToText:
     self.ckpt = tf.train.Checkpoint(model=self.model.model,
                                     optimizer=self.model.optimizer)
     self.ckpt_manager = tf.train.CheckpointManager(
-      self.ckpt, self.configs["checkpoint_dir"], max_to_keep=5)
+      self.ckpt, self.configs["checkpoint_dir"], max_to_keep=None)
 
     check_key_in_dict(dictionary=self.configs,
                       keys=["tfrecords_dir", "checkpoint_dir", "augmentations",
@@ -237,7 +237,6 @@ class SpeechToText:
     return bytes_to_string(pred.numpy())[0]
 
   def load_model(self, model_file):
-    tf.compat.v1.set_random_seed(0)
     try:
       self.model.load_model(model_file)
     except Exception as e:
@@ -245,7 +244,6 @@ class SpeechToText:
     return None
 
   def load_model_from_weights(self, model_file):
-    tf.compat.v1.set_random_seed(0)
     try:
       self.model.load_weights(model_file)
     except Exception as e:
