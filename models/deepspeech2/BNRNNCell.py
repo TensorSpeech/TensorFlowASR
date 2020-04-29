@@ -10,7 +10,7 @@ def ds2_rnn_batch_norm(x_i, x_f, x_c, x_o, beta=None, gamma=None):
   # Merge into single array of features
   # https://www.tensorflow.org/api_docs/python/tf/nn/moments
   x = tf.concat([x_i, x_f, x_c, x_o], axis=1)
-  mean, variance = tf.nn.moments(x, axes=[0], keepdims=False)
+  mean, variance = tf.nn.moments(x, axes=[0, 1], keepdims=False)
   x = tf.nn.batch_normalization(x=x, mean=mean, variance=variance,
                                 offset=beta, scale=gamma,
                                 variance_epsilon=K.epsilon())

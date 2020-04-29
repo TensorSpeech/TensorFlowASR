@@ -10,9 +10,10 @@ from configs.FlaskConfig import FlaskConfig
 from asr.SpeechToText import SpeechToText
 from asr.SEGAN import SEGAN
 from utils.Utils import check_key_in_dict
-from featurizers.SpeechFeaturizer import preemphasis, interp, read_raw_audio
+from featurizers.SpeechFeaturizer import preemphasis, read_raw_audio
 
 tf.get_logger().setLevel(ERROR)
+tf.compat.v1.set_random_seed(0)
 
 socketio = SocketIO()
 
