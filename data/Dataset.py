@@ -3,6 +3,7 @@ from __future__ import absolute_import
 import os
 import sys
 import functools
+import glob
 import multiprocessing
 import numpy as np
 import tensorflow as tf
@@ -58,8 +59,6 @@ class Dataset:
   @staticmethod
   def write_tfrecord_file(splitted_entries):
     shard_path, entries = splitted_entries
-    if os.path.exists(shard_path):
-      return
     with tf.io.TFRecordWriter(shard_path, options='ZLIB') as out:
       for audio_file, au, transcript in entries:
         with open(audio_file, "rb") as f:
@@ -72,6 +71,8 @@ class Dataset:
 
   def create_tfrecords(self, augmentations=tuple([None]), sortagrad=False):
     print(f"Creating {self.mode}.tfrecord ...")
+    if glob.glob(os.path.join(self.tfrecord_dir, "*.tfrecord")):
+      return
     entries = self.create_entries(augmentations, sortagrad)
 
     def get_shard_path(shard_id):
