@@ -19,6 +19,7 @@ def ds2_rnn_batch_norm(x_i, x_f, x_c, x_o, beta=None, gamma=None):
   return x_i, x_f, x_c, x_o
 
 
+# Frame-wise Batch Norm RNN
 class BNLSTMCell(tf.keras.layers.LSTMCell):
   def __init__(self, *args, **kwargs):
     super().__init__(*args, **kwargs)
