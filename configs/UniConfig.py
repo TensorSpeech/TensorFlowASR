@@ -20,7 +20,7 @@ num_epochs = 20
 
 vocabulary_file_path = "/app/data/vocabulary.txt"
 
-learning_rate = 0.0006
+learning_rate = 0.0002
 
 min_lr = 0.0
 

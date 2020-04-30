@@ -27,7 +27,7 @@ num_epochs = 10
 
 vocabulary_file_path = "/mnt/Projects/asrk16/code/data/vocabulary.txt"
 
-learning_rate = 0.0001
+learning_rate = 0.0002
 
 min_lr = 0.0
 

@@ -6,8 +6,7 @@ from __future__ import absolute_import
 
 import tensorflow as tf
 from models.deepspeech2.RowConv1D import RowConv1D
-from models.deepspeech2.BNRNNCell import BNLSTMCell
-from tensorflow.keras.layers import LSTMCell
+from models.deepspeech2.SequenceBatchNorm import SequenceBatchNorm
 
 
 class DeepSpeech2:
@@ -33,7 +32,7 @@ class DeepSpeech2:
         filters=self.filters[i] if isinstance(self.filters, list) else self.filters,
         kernel_size=self.kernel_size,
         strides=(1, 2), padding="same", name=f"cnn_{i}")(layer)
-      layer = tf.keras.layers.BatchNormalization(name=f"bn_cnn_{i}")(layer)
+      layer = tf.keras.layers.BatchNormalization(axis=-1, name=f"bn_cnn_{i}")(layer)
       layer = tf.keras.layers.ReLU(name=f"relu_cnn_{i}")(layer)
 
     # combine channel dimension to features
@@ -54,13 +53,13 @@ class DeepSpeech2:
                                use_bias=True, recurrent_dropout=0.0,
                                return_sequences=True, unroll=False,
                                time_major=True, stateful=False, name=f"bilstm_{i}"))(layer)
+        layer = SequenceBatchNorm(time_major=True, name=f"sequence_wise_bn_{i}")(layer)
       else:
-        layer = tf.keras.layers.RNN(
-          LSTMCell(units=self.rnn_units, dropout=0.2,
-                   activation='tanh', recurrent_activation='sigmoid',
-                   use_bias=True, recurrent_dropout=0.0),
-          return_sequences=True, unroll=False,
-          time_major=False, stateful=streaming, name=f"lstm_{i}")(layer)
+        layer = tf.keras.layers.LSTM(units=self.rnn_units, activation='tanh',
+                                     recurrent_activation='sigmoid', use_bias=True, recurrent_dropout=0.0,
+                                     return_sequences=True, unroll=False,
+                                     time_major=False, stateful=streaming, name=f"lstm_{i}")(layer)
+        layer = SequenceBatchNorm(time_major=True, name=f"sequence_wise_bn_{i}")(layer)
         if self.is_rowconv:
           layer = RowConv1D(filters=self.rnn_units, future_context=2, name=f"row_conv_{i}")(layer)
 
@@ -68,11 +67,12 @@ class DeepSpeech2:
     if self.is_bidirectional:
       layer = tf.transpose(layer, [1, 0, 2])
 
-    layer = tf.keras.layers.Dense(units=self.pre_fc_units,
-                                  name="pre_fully_connected",
-                                  use_bias=True)(layer)
-    layer = tf.keras.layers.BatchNormalization(name="pre_fc_bn")(layer)
-    layer = tf.keras.layers.ReLU(name=f"relu_pre_fc")(layer)
-    layer = tf.keras.layers.Dropout(0.2)(layer)
+    if self.pre_fc_units > 0:
+      layer = tf.keras.layers.Dense(units=self.pre_fc_units,
+                                    name="pre_fully_connected",
+                                    use_bias=True)(layer)
+      layer = tf.keras.layers.BatchNormalization(name="pre_fc_bn")(layer)
+      layer = tf.keras.layers.ReLU(name=f"relu_pre_fc")(layer)
+      layer = tf.keras.layers.Dropout(0.2)(layer)
 
     return layer
