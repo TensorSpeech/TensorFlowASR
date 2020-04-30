@@ -117,8 +117,8 @@ class SpeechToText:
         train_loss = train_step(feature, transcript, label_length)
         epoch_train_loss.append(train_loss)
 
-        #sys.stdout.write("\033[K")
-        tf.print(f"Epoch: {epoch + 1}/{epochs}, batch: {batch_idx}/{num_batch}, train_loss = {train_loss}", end="\n")
+        sys.stdout.write("\033[K")
+        tf.print(f"Epoch: {epoch + 1}/{epochs}, batch: {batch_idx}/{num_batch}, train_loss = {train_loss}", end="\r")
         batch_idx += 1
 
       num_batch = batch_idx

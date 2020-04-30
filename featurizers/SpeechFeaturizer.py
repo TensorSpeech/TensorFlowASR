@@ -78,7 +78,7 @@ def read_raw_audio(audio, sample_rate=16000):
   elif isinstance(audio, bytes):
     wave, sr = sf.read(io.BytesIO(audio))
     if sr != sample_rate:
-      wave = librosa.resample(wave, sr, sample_rate, scale=True)
+      wave = librosa.resample(wave, sr, sample_rate)
   else:
     raise ValueError("input audio must be either a path or bytes")
   return wave
