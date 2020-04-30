@@ -117,14 +117,14 @@ class SpeechToText:
         train_loss = train_step(feature, transcript, label_length)
         epoch_train_loss.append(train_loss)
 
-        sys.stdout.write("\033[K")
-        print(f"Epoch: {epoch + 1}/{epochs}, batch: {batch_idx}/{num_batch}, train_loss = {train_loss}", end="\r")
+        #sys.stdout.write("\033[K")
+        tf.print(f"Epoch: {epoch + 1}/{epochs}, batch: {batch_idx}/{num_batch}, train_loss = {train_loss}", end="\n")
         batch_idx += 1
 
       num_batch = batch_idx
       epoch_train_loss = tf.reduce_mean(epoch_train_loss)
 
-      print(f"\nEpoch: {epoch + 1}/{epochs}, train_loss = {epoch_train_loss}", end="")
+      tf.print(f"\nEpoch: {epoch + 1}/{epochs}, train_loss = {epoch_train_loss}", end="")
 
       if tf_eval_dataset:
         eval_loss = []
@@ -132,12 +132,12 @@ class SpeechToText:
           _eval_loss = eval_step(feature, transcript, label_length)
           eval_loss.append(_eval_loss)
         epoch_eval_loss = tf.reduce_mean(eval_loss)
-        print(f", eval_loss = {epoch_eval_loss}")
+        tf.print(f", eval_loss = {epoch_eval_loss}")
 
       self.ckpt_manager.save()
-      print(f"\nSaved checkpoint at epoch {epoch + 1}")
+      tf.print(f"\nSaved checkpoint at epoch {epoch + 1}")
       time_epoch = time.time() - start
-      print(f"Time for epoch {epoch + 1} is {time_epoch} secs")
+      tf.print(f"Time for epoch {epoch + 1} is {time_epoch} secs")
 
       if self.writer:
         with self.writer.as_default():
