@@ -46,14 +46,11 @@ class CTCModel:
     if self.streaming_size:
       # Fixed input shape is required for live streaming audio
       signal = tf.keras.layers.Input(batch_shape=(1, self.streaming_size),
-                                     dtype=tf.float32,
-                                     name="features")
+                                     dtype=tf.float32, name="features")
       features = self.speech_featurizer(signal)
       outputs = base_model(features=features, streaming=True)
     else:
-      signal = tf.keras.layers.Input(shape=(None,),
-                                     dtype=tf.float32,
-                                     name="features")
+      signal = tf.keras.layers.Input(shape=(None,), dtype=tf.float32, name="features")
       features = self.speech_featurizer(signal)
       outputs = base_model(features=features, streaming=False)
 
@@ -78,25 +75,25 @@ class CTCModel:
     model = tf.keras.Model(inputs=signal, outputs=[outputs, input_length])
     return model
 
-  @tf.function
-  def loss(self, y_true, y_pred, input_length, label_length):
-    loss = tf.keras.backend.ctc_batch_cost(
-      y_pred=y_pred,
-      input_length=tf.expand_dims(input_length, -1),
-      y_true=tf.cast(y_true, tf.int32),
-      label_length=tf.expand_dims(label_length, -1))
-    return tf.reduce_mean(mask_nan(loss))
-
   # @tf.function
   # def loss(self, y_true, y_pred, input_length, label_length):
-  #   loss = tf.nn.ctc_loss(
-  #     labels=tf.cast(y_true, tf.int32),
-  #     logit_length=input_length,
-  #     logits=y_pred,
-  #     label_length=label_length,
-  #     logits_time_major=False,
-  #     blank_index=self.num_classes - 1)
+  #   loss = tf.keras.backend.ctc_batch_cost(
+  #     y_pred=y_pred,
+  #     input_length=tf.expand_dims(input_length, -1),
+  #     y_true=tf.cast(y_true, tf.int32),
+  #     label_length=tf.expand_dims(label_length, -1))
   #   return tf.reduce_mean(mask_nan(loss))
+
+  @tf.function
+  def loss(self, y_true, y_pred, input_length, label_length):
+    loss = tf.nn.ctc_loss(
+      labels=tf.cast(y_true, tf.int32),
+      logit_length=input_length,
+      logits=y_pred,
+      label_length=label_length,
+      logits_time_major=False,
+      blank_index=self.num_classes - 1)
+    return tf.reduce_mean(mask_nan(loss))
 
   def predict(self, *args, **kwargs):
     return self.model.predict(*args, **kwargs)
