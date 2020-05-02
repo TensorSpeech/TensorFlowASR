@@ -5,6 +5,7 @@ import os
 import io
 import numpy as np
 import librosa
+import soundfile as sf
 import tensorflow as tf
 
 
@@ -75,7 +76,9 @@ def read_raw_audio(audio, sample_rate=16000):
   if isinstance(audio, str):
     wave, _ = librosa.load(os.path.expanduser(audio), sr=sample_rate)
   elif isinstance(audio, bytes):
-    wave, _ = librosa.load(io.BytesIO(audio), sr=sample_rate)
+    wave, sr = sf.read(io.BytesIO(audio))
+    if sr != sample_rate:
+      wave = librosa.resample(wave, sr, sample_rate)
   else:
     raise ValueError("input audio must be either a path or bytes")
   return wave
