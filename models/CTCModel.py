@@ -24,14 +24,7 @@ class GetLength(tf.keras.layers.Layer):
 class CTCModel:
   def __init__(self, base_model, num_classes, sample_rate, frame_ms, stride_ms,
                num_feature_bins, learning_rate, min_lr=0.0, streaming_size=None):
-    self.optimizer = base_model.optimizer(
-      learning_rate=BoundExponentialDecay(
-        min_lr=min_lr,
-        initial_learning_rate=learning_rate,
-        decay_steps=5000,
-        decay_rate=0.9,
-        staircase=True)
-    )
+    self.optimizer = base_model.optimizer(learning_rate=learning_rate)
     self.num_classes = num_classes
     self.streaming_size = streaming_size
     self.speech_featurizer = SpeechFeaturizer(sample_rate=sample_rate, frame_ms=frame_ms,
