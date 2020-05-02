@@ -23,7 +23,11 @@ if gpus:
     print(e)
 
 tf.keras.backend.clear_session()
-tf.compat.v1.set_random_seed(2020)
+
+if args_parser.mode == "train":
+  tf.compat.v1.set_random_seed(2020)
+else:
+  tf.compat.v1.set_random_seed(0)
 
 if args_parser.model == "asr":
   asr = SpeechToText(configs_path=args_parser.config)

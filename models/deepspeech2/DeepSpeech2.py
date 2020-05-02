@@ -11,7 +11,7 @@ from models.deepspeech2.SequenceBatchNorm import SequenceBatchNorm
 
 class DeepSpeech2:
   def __init__(self, num_conv=3, num_rnn=3, rnn_units=128,
-               filters=32, kernel_size=(31, 11),
+               filters=(32, 32, 32), kernel_size=(31, 11),
                is_bidirectional=False, is_rowconv=False, pre_fc_units=1024):
     self.optimizer = tf.keras.optimizers.Adam
     self.num_conv = num_conv
@@ -24,8 +24,6 @@ class DeepSpeech2:
     self.pre_fc_units = pre_fc_units
 
   def __call__(self, features, streaming=False):
-    if streaming:
-      raise ValueError("This model cannot be used in streaming mode")
     layer = features
     for i in range(self.num_conv):
       layer = tf.keras.layers.Conv2D(
@@ -52,14 +50,15 @@ class DeepSpeech2:
                                activation='tanh', recurrent_activation='sigmoid',
                                use_bias=True, recurrent_dropout=0.0,
                                return_sequences=True, unroll=False,
-                               time_major=True, stateful=False, name=f"bilstm_{i}"))(layer)
+                               time_major=True, stateful=False, name=f"blstm_{i}"))(layer)
         layer = SequenceBatchNorm(time_major=True, name=f"sequence_wise_bn_{i}")(layer)
       else:
-        layer = tf.keras.layers.LSTM(units=self.rnn_units, activation='tanh',
-                                     recurrent_activation='sigmoid', use_bias=True, recurrent_dropout=0.0,
+        layer = tf.keras.layers.LSTM(units=self.rnn_units, dropout=0.2,
+                                     activation='tanh', recurrent_activation='sigmoid',
+                                     use_bias=True, recurrent_dropout=0.0,
                                      return_sequences=True, unroll=False,
                                      time_major=False, stateful=streaming, name=f"lstm_{i}")(layer)
-        layer = SequenceBatchNorm(time_major=True, name=f"sequence_wise_bn_{i}")(layer)
+        layer = SequenceBatchNorm(time_major=False, name=f"sequence_wise_bn_{i}")(layer)
         if self.is_rowconv:
           layer = RowConv1D(filters=self.rnn_units, future_context=2, name=f"row_conv_{i}")(layer)
 
