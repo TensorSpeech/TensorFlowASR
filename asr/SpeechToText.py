@@ -10,6 +10,7 @@ from decoders.Decoders import create_decoder
 from featurizers.TextFeaturizer import TextFeaturizer
 from utils.Utils import get_asr_config, check_key_in_dict, \
   bytes_to_string, wer, cer, scalar_summary
+from featurizers.SpeechFeaturizer import compute_mfcc_feature
 from data.Dataset import Dataset
 
 
@@ -142,12 +143,11 @@ class SpeechToText:
                            mode="test")
     self.load_model(model_file)
     tf_test_dataset = test_dataset(text_featurizer=self.text_featurizer,
-                                   sample_rate=self.configs["sample_rate"],
-                                   preemph=self.configs["pre_emph"],
+                                   speech_conf=self.configs["speech_conf"],
                                    batch_size=self.configs["batch_size"])
 
-    def test_step(features, transcripts):
-      predictions = self.predict(features)
+    def test_step(features, inp_length, transcripts):
+      predictions = self.predict(features, inp_length)
       predictions = bytes_to_string(predictions.numpy())
 
       transcripts = self.decoder.convert_to_string(transcripts)
@@ -174,8 +174,8 @@ class SpeechToText:
     total_cer = 0.0
     cer_count = 0.0
 
-    for feature, label, _ in tf_test_dataset:
-      batch_wer, batch_wer_count, batch_cer, batch_cer_count = test_step(feature, label)
+    for feature, input_length, label, _ in tf_test_dataset:
+      batch_wer, batch_wer_count, batch_cer, batch_cer_count = test_step(feature, input_length, label)
       total_wer += batch_wer
       total_cer += batch_cer
       wer_count += batch_wer_count
@@ -199,15 +199,14 @@ class SpeechToText:
                                mode="infer")
     tf_infer_dataset = tf_infer_dataset(batch_size=self.configs["batch_size"],
                                         text_featurizer=self.text_featurizer,
-                                        preemph=self.configs["pre_emph"],
-                                        sample_rate=self.configs["sample_rate"])
+                                        speech_conf=self.configs["speech_conf"])
 
-    def infer_step(feature):
-      prediction = self.predict(feature)
+    def infer_step(feature, input_length):
+      prediction = self.predict(feature, input_length)
       return bytes_to_string(prediction.numpy())
 
-    for features in tf_infer_dataset:
-      predictions = infer_step(features)
+    for features, inp_length in tf_infer_dataset:
+      predictions = infer_step(features, inp_length)
 
       with open(output_file_path, "a", encoding="utf-8") as of:
         of.write("Predictions\n")
@@ -215,8 +214,10 @@ class SpeechToText:
           of.write(pred + "\n")
 
   def infer_single(self, signal):
-    signal = tf.expand_dims(signal, axis=0)
-    pred = self.predict(signal)
+    features = compute_mfcc_feature(signal, **self.configs["speech_conf"])
+    features = tf.expand_dims(features, axis=-1)
+    input_length = tf.cast(tf.shape(features)[0], tf.int32)
+    pred = self.predict(tf.expand_dims(features, 0), tf.expand_dims(input_length, 0))
     return bytes_to_string(pred.numpy())[0]
 
   def load_model(self, model_file):
@@ -234,9 +235,9 @@ class SpeechToText:
     return None
 
   @tf.function
-  def predict(self, signal):
-    logits, logit_length = self.model(signal, training=False)
-    return self.decoder(probs=logits, input_length=logit_length)
+  def predict(self, feature, input_length):
+    logits = self.model(feature, training=False)
+    return self.decoder(probs=logits, input_length=input_length)
 
   def save_model(self, model_file):
     self.model.save(model_file)
