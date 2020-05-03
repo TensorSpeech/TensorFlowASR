@@ -39,7 +39,6 @@ def compute_mfcc_feature(signal, sample_rate, frame_ms, stride_ms, num_feature_b
   frame_step = int(sample_rate * (stride_ms / 1000))
   num_fft = 2 ** math.ceil(math.log2(frame_length))
 
-  signal = preemphasis(signal, coeff=0.97)
   S = np.square(
     np.abs(
       librosa.core.stft(
@@ -57,7 +56,6 @@ def compute_logfbank_feature(signal, sample_rate, frame_ms, stride_ms, num_featu
   frame_step = int(sample_rate * (stride_ms / 1000))
   num_fft = 2 ** math.ceil(math.log2(frame_length))
 
-  signal = preemphasis(signal, coeff=0.97)
   S = np.square(
     np.abs(
       librosa.core.stft(

@@ -25,23 +25,20 @@ batch_size = 16
 
 num_epochs = 10
 
-vocabulary_file_path = "/mnt/Projects/asrk16/code/data/vocabulary.txt"
+vocabulary_file_path = "/mnt/Projects/asrk16/vnasr/data/vocabulary.txt"
 
 learning_rate = 0.0002
 
 min_lr = 0.0
 
-sample_rate = 16000
-
-frame_ms = 20
-
-stride_ms = 10
-
-num_feature_bins = 128
-
-feature_type = "mfcc"
-
-pre_emph = 0.95
+speech_conf = {
+  "sample_rate":      16000,
+  "frame_ms":         20,
+  "stride_ms":        20,
+  "num_feature_bins": 128,
+  "feature_type":     "mfcc",
+  "pre_emph":         0.95
+}
 
 train_data_transcript_paths = [
   "/mnt/Data/ML/ASR/Preprocessed/SmallFixed/Train/transcripts.tsv"

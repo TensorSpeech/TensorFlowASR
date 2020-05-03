@@ -17,21 +17,16 @@ class SpeechToText:
   def __init__(self, configs_path, noise_filter=None):
     self.configs = get_asr_config(configs_path)
     self.text_featurizer = TextFeaturizer(self.configs["vocabulary_file_path"])
-    self.decoder = create_decoder(
-      decoder_config=self.configs["decoder"],
-      index_to_token=self.text_featurizer.index_to_token,
-      num_classes=self.text_featurizer.num_classes,
-      vocab_array=self.text_featurizer.vocab_array)
-    self.model = CTCModel(
-      num_classes=self.text_featurizer.num_classes,
-      sample_rate=self.configs["sample_rate"],
-      frame_ms=self.configs["frame_ms"],
-      stride_ms=self.configs["stride_ms"],
-      num_feature_bins=self.configs["num_feature_bins"],
-      learning_rate=self.configs["learning_rate"],
-      min_lr=self.configs["min_lr"],
-      base_model=self.configs["base_model"],
-      streaming_size=self.configs["streaming_size"])
+    self.decoder = create_decoder(decoder_config=self.configs["decoder"],
+                                  index_to_token=self.text_featurizer.index_to_token,
+                                  num_classes=self.text_featurizer.num_classes,
+                                  vocab_array=self.text_featurizer.vocab_array)
+    self.model = CTCModel(num_classes=self.text_featurizer.num_classes,
+                          learning_rate=self.configs["learning_rate"],
+                          min_lr=self.configs["min_lr"],
+                          base_model=self.configs["base_model"],
+                          streaming_size=self.configs["streaming_size"],
+                          num_feature_bins=self.configs["speech_conf"]["num_feature_bins"])
     self.noise_filter = noise_filter
     self.writer = None
 
@@ -51,8 +46,7 @@ class SpeechToText:
     train_dataset = Dataset(data_path=self.configs["train_data_transcript_paths"],
                             tfrecords_dir=self.configs["tfrecords_dir"], mode="train")
     tf_train_dataset = train_dataset(text_featurizer=self.text_featurizer,
-                                     sample_rate=self.configs["sample_rate"],
-                                     preemph=self.configs["pre_emph"],
+                                     speech_conf=self.configs["speech_conf"],
                                      batch_size=self.configs["batch_size"],
                                      augmentations=augmentations)
 
@@ -62,8 +56,7 @@ class SpeechToText:
       eval_dataset = Dataset(data_path=self.configs["eval_data_transcript_paths"],
                              tfrecords_dir=self.configs["tfrecords_dir"], mode="eval")
       tf_eval_dataset = eval_dataset(text_featurizer=self.text_featurizer,
-                                     sample_rate=self.configs["sample_rate"],
-                                     preemph=self.configs["pre_emph"],
+                                     speech_conf=self.configs["speech_conf"],
                                      batch_size=self.configs["batch_size"])
 
     self.model.summary()
@@ -80,17 +73,17 @@ class SpeechToText:
       self.writer = tf.summary.create_file_writer(os.path.join(self.configs["log_dir"], "train"))
 
     @tf.function
-    def train_step(features, y_true, lab_length):
+    def train_step(features, inp_length, y_true, lab_length):
       with tf.GradientTape() as tape:
-        y_pred, inp_length = self.model(features, training=True)
+        y_pred = self.model(features, training=True)
         _loss = self.model.loss(y_true=y_true, y_pred=y_pred, input_length=inp_length, label_length=lab_length)
       gradients = tape.gradient(_loss, self.model.model.trainable_variables)
       self.model.optimizer.apply_gradients(zip(gradients, self.model.model.trainable_variables))
       return _loss
 
     @tf.function
-    def eval_step(features, y_true, lab_length):
-      y_pred, inp_length = self.model(features, training=False)
+    def eval_step(features, inp_length, y_true, lab_length):
+      y_pred = self.model(features, training=False)
       _loss = self.model.loss(y_true=y_true, y_pred=y_pred, input_length=inp_length, label_length=lab_length)
       return _loss
 
@@ -103,8 +96,8 @@ class SpeechToText:
       batch_idx = 1
       start = time.time()
 
-      for feature, transcript, label_length in tf_train_dataset:
-        train_loss = train_step(feature, transcript, label_length)
+      for feature, input_length, transcript, label_length in tf_train_dataset:
+        train_loss = train_step(feature, input_length, transcript, label_length)
         epoch_train_loss.append(train_loss)
 
         sys.stdout.write("\033[K")
