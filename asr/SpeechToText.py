@@ -55,11 +55,6 @@ class SpeechToText:
                                      preemph=self.configs["pre_emph"],
                                      batch_size=self.configs["batch_size"],
                                      augmentations=augmentations)
-    tf_train_dataset_sorted = train_dataset(text_featurizer=self.text_featurizer,
-                                            sample_rate=self.configs["sample_rate"],
-                                            preemph=self.configs["pre_emph"],
-                                            batch_size=self.configs["batch_size"],
-                                            augmentations=augmentations, sortagrad=True)
 
     tf_eval_dataset = None
 
@@ -103,17 +98,12 @@ class SpeechToText:
     num_batch = None
 
     for epoch in range(initial_epoch, epochs, 1):
-      if epoch == 0:
-        dataset = tf_train_dataset_sorted
-      else:
-        dataset = tf_train_dataset
-
       epoch_train_loss = []
       epoch_eval_loss = None
       batch_idx = 1
       start = time.time()
 
-      for feature, transcript, label_length in dataset:
+      for feature, transcript, label_length in tf_train_dataset:
         train_loss = train_step(feature, transcript, label_length)
         epoch_train_loss.append(train_loss)
 

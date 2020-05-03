@@ -149,7 +149,7 @@ class Dataset:
     # # Padding the features to its max length dimensions
     dataset = dataset.repeat(repeat)
     if shuffle and not sort:
-      dataset = dataset.shuffle(100, reshuffle_each_iteration=True)  # shuffle elements in batches
+      dataset = dataset.shuffle(batch_size, reshuffle_each_iteration=True)  # shuffle elements in batches
     dataset = dataset.padded_batch(
       batch_size=batch_size,
       padded_shapes=(
@@ -164,7 +164,7 @@ class Dataset:
       )
     )
     if shuffle and sort:
-      dataset = dataset.shuffle(100, reshuffle_each_iteration=False)  # shuffle the sorted batches
+      dataset = dataset.shuffle(batch_size, reshuffle_each_iteration=False)  # shuffle the sorted batches
     # Prefetch to improve speed of input length
     dataset = dataset.prefetch(AUTOTUNE)
     return dataset

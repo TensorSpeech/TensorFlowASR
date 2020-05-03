@@ -49,14 +49,14 @@ class DeepSpeech2:
           tf.keras.layers.LSTM(units=self.rnn_units, dropout=0.2,
                                activation='tanh', recurrent_activation='sigmoid',
                                use_bias=True, recurrent_dropout=0.0,
-                               return_sequences=True, unroll=False,
+                               return_sequences=True, unroll=False, implementation=1,
                                time_major=True, stateful=False, name=f"blstm_{i}"))(layer)
         layer = SequenceBatchNorm(time_major=True, name=f"sequence_wise_bn_{i}")(layer)
       else:
         layer = tf.keras.layers.LSTM(units=self.rnn_units, dropout=0.2,
                                      activation='tanh', recurrent_activation='sigmoid',
                                      use_bias=True, recurrent_dropout=0.0,
-                                     return_sequences=True, unroll=False,
+                                     return_sequences=True, unroll=False, implementation=1,
                                      time_major=False, stateful=streaming, name=f"lstm_{i}")(layer)
         layer = SequenceBatchNorm(time_major=False, name=f"sequence_wise_bn_{i}")(layer)
         if self.is_rowconv:
