@@ -26,7 +26,7 @@ class CTCModel:
                num_feature_bins, learning_rate, min_lr=0.0, streaming_size=None):
     self.optimizer = base_model.optimizer(
       BoundExponentialDecay(
-        learning_rate=learning_rate,
+        initial_learning_rate=learning_rate,
         min_lr=min_lr,
         decay_steps=5000,
         decay_rate=0.9,
