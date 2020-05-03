@@ -164,7 +164,7 @@ class Dataset:
       )
     )
     if shuffle and sort:
-      dataset = dataset.shuffle(100, reshuffle_each_iteration=True)  # shuffle the sorted batches
+      dataset = dataset.shuffle(100, reshuffle_each_iteration=False)  # shuffle the sorted batches
     # Prefetch to improve speed of input length
     dataset = dataset.prefetch(AUTOTUNE)
     return dataset
