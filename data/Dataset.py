@@ -71,7 +71,7 @@ class Dataset:
 
   def create_tfrecords(self, augmentations=tuple([None]), sortagrad=False):
     print(f"Creating {self.mode}.tfrecord ...")
-    if glob.glob(os.path.join(self.tfrecord_dir, "*.tfrecord")):
+    if glob.glob(os.path.join(self.tfrecord_dir, f"{self.mode}*.tfrecord")):
       return
     entries = self.create_entries(augmentations, sortagrad)
 
