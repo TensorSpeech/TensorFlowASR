@@ -146,7 +146,7 @@ class SpeechToText:
     test_dataset = Dataset(data_path=self.configs["test_data_transcript_paths"],
                            tfrecords_dir=self.configs["tfrecords_dir"],
                            mode="test")
-    #self.load_model(model_file)
+    self.load_model(model_file)
     tf_test_dataset = test_dataset(text_featurizer=self.text_featurizer,
                                    speech_conf=self.configs["speech_conf"],
                                    batch_size=self.configs["batch_size"])
