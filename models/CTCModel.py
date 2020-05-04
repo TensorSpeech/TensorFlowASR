@@ -3,7 +3,6 @@ from __future__ import absolute_import
 import tensorflow as tf
 from utils.Utils import mask_nan, get_length
 from utils.Schedules import BoundExponentialDecay
-from featurizers.SpeechFeaturizer import SpeechFeaturizer
 
 
 class GetLength(tf.keras.layers.Layer):
@@ -45,12 +44,12 @@ class CTCModel:
   def create(self, base_model, num_feature_bins):
     if self.streaming_size:
       # Fixed input shape is required for live streaming audio
-      features = tf.keras.layers.Input(batch_shape=(1, self.streaming_size, num_feature_bins, 1),
+      features = tf.keras.layers.Input(batch_shape=(1, self.streaming_size, num_feature_bins * 3, 1),
                                        dtype=tf.float32, name="features")
       # features = self.speech_featurizer(signal)
       outputs = base_model(features=features, streaming=True)
     else:
-      features = tf.keras.layers.Input(shape=(None, num_feature_bins, 1),
+      features = tf.keras.layers.Input(shape=(None, num_feature_bins * 3, 1),
                                        dtype=tf.float32, name="features")
       # features = self.speech_featurizer(signal)
       outputs = base_model(features=features, streaming=False)

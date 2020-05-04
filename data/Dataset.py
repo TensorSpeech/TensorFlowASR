@@ -119,7 +119,7 @@ class Dataset:
       features = compute_mfcc_feature(signal, speech_conf["sample_rate"], speech_conf["frame_ms"],
                                       speech_conf["stride_ms"], speech_conf["num_feature_bins"])
     else:
-      raise ValueError("Mfcc")
+      raise ValueError("Feature must be mfcc")
     label = text_featurizer.compute_label_features(transcript.numpy().decode("utf-8"))
     label_length = tf.cast(tf.shape(label)[0], tf.int32)
     features = tf.convert_to_tensor(features, tf.float32)
@@ -160,7 +160,7 @@ class Dataset:
     dataset = dataset.padded_batch(
       batch_size=batch_size,
       padded_shapes=(
-        tf.TensorShape([None, speech_conf["num_feature_bins"], 1]),
+        tf.TensorShape([None, speech_conf["num_feature_bins"] * 3, 1]),
         tf.TensorShape([]),
         tf.TensorShape([None]),
         tf.TensorShape([])

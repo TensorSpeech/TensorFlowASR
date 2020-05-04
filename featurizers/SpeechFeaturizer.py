@@ -46,9 +46,12 @@ def compute_mfcc_feature(signal, sample_rate, frame_ms, stride_ms, num_feature_b
         win_length=frame_step, center=True
       )))
 
-  return librosa.feature.mfcc(sr=sample_rate, S=S,
+  mfcc = librosa.feature.mfcc(sr=sample_rate, S=S,
                               n_mfcc=num_feature_bins,
-                              n_mels=2 * num_feature_bins).T
+                              n_mels=2 * num_feature_bins)
+  mfcc_delta = librosa.feature.delta(mfcc)
+  mfcc_delta2 = librosa.feature.delta(mfcc, order=2)
+  return np.concatenate([mfcc, mfcc_delta, mfcc_delta2], axis=0).T
 
 
 def compute_logfbank_feature(signal, sample_rate, frame_ms, stride_ms, num_feature_bins):
