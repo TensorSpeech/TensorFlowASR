@@ -20,17 +20,24 @@ class GetLength(tf.keras.layers.Layer):
     return self(**config)
 
 
-def create_ctc_model(base_model, num_classes, num_feature_bins,
+def create_ctc_model(base_model, num_classes, speech_conf,
                      learning_rate, min_lr=0.0, streaming_size=None):
   if streaming_size:
     # Fixed input shape is required for live streaming audio
-    features = tf.keras.layers.Input(batch_shape=(1, streaming_size, num_feature_bins * 3, 1),
+    if speech_conf["is_delta"]:
+      input_shape = (1, streaming_size, speech_conf["num_feature_bins"] * 3, 1)
+    else:
+      input_shape = (1, streaming_size, speech_conf["num_feature_bins"], 1)
+    features = tf.keras.layers.Input(batch_shape=input_shape,
                                      dtype=tf.float32, name="features")
     # features = self.speech_featurizer(signal)
     outputs = base_model(features=features, streaming=True)
   else:
-    features = tf.keras.layers.Input(shape=(None, num_feature_bins * 3, 1),
-                                     dtype=tf.float32, name="features")
+    if speech_conf["is_delta"]:
+      input_shape = (None, speech_conf["num_feature_bins"] * 3, 1)
+    else:
+      input_shape = (None, speech_conf["num_feature_bins"], 1)
+    features = tf.keras.layers.Input(shape=input_shape, dtype=tf.float32, name="features")
     # features = self.speech_featurizer(signal)
     outputs = base_model(features=features, streaming=False)
 

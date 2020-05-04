@@ -28,7 +28,7 @@ class SpeechToText:
       min_lr=self.configs["min_lr"],
       base_model=self.configs["base_model"],
       streaming_size=self.configs["streaming_size"],
-      num_feature_bins=self.configs["speech_conf"]["num_feature_bins"])
+      speech_conf=self.configs["speech_conf"])
     self.noise_filter = noise_filter
     self.writer = None
 
@@ -171,7 +171,9 @@ class SpeechToText:
     test_dataset = Dataset(data_path=self.configs["test_data_transcript_paths"],
                            tfrecords_dir=self.configs["tfrecords_dir"],
                            mode="test")
-    self.load_model(model_file)
+    msg = self.load_model(model_file)
+    if msg:
+      raise Exception(msg)
     tf_test_dataset = test_dataset(text_featurizer=self.text_featurizer,
                                    speech_conf=self.configs["speech_conf"],
                                    batch_size=self.configs["batch_size"])
@@ -223,7 +225,9 @@ class SpeechToText:
     print("Infering ...")
     check_key_in_dict(dictionary=self.configs,
                       keys=["tfrecords_dir"])
-    self.load_model(model_file)
+    msg = self.load_model(model_file)
+    if msg:
+      raise Exception(msg)
     tf_infer_dataset = Dataset(data_path=input_file_path,
                                tfrecords_dir=self.configs["tfrecords_dir"],
                                mode="infer")
@@ -252,7 +256,7 @@ class SpeechToText:
 
   def load_model(self, model_file):
     try:
-      self.model = tf.keras.models.load_model(model_file)
+      self.model = tf.saved_model.load(model_file)
     except Exception as e:
       return f"Model is not trained: {e}"
     return None

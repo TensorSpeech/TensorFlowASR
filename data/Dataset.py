@@ -116,8 +116,7 @@ class Dataset:
       signal = augmentations[int(au)](signal=signal, sample_rate=speech_conf["sample_rate"])
     signal = preemphasis(signal, coeff=speech_conf["pre_emph"])
     if speech_conf["feature_type"] == "mfcc":
-      features = compute_mfcc_feature(signal, speech_conf["sample_rate"], speech_conf["frame_ms"],
-                                      speech_conf["stride_ms"], speech_conf["num_feature_bins"])
+      features = compute_mfcc_feature(signal, speech_conf)
     else:
       raise ValueError("Feature must be mfcc")
     label = text_featurizer.compute_label_features(transcript.numpy().decode("utf-8"))
@@ -157,10 +156,14 @@ class Dataset:
     dataset = dataset.repeat(repeat)
     if shuffle and not sort:
       dataset = dataset.shuffle(batch_size, reshuffle_each_iteration=True)  # shuffle elements in batches
+    if speech_conf["is_delta"]:
+      padded_shape_features = tf.TensorShape([None, speech_conf["num_feature_bins"] * 3, 1])
+    else:
+      padded_shape_features = tf.TensorShape([None, speech_conf["num_feature_bins"], 1])
     dataset = dataset.padded_batch(
       batch_size=batch_size,
       padded_shapes=(
-        tf.TensorShape([None, speech_conf["num_feature_bins"] * 3, 1]),
+        padded_shape_features,
         tf.TensorShape([]),
         tf.TensorShape([None]),
         tf.TensorShape([])
