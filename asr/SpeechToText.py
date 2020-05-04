@@ -252,7 +252,7 @@ class SpeechToText:
 
   def load_model(self, model_file):
     try:
-      self.model.load_model(model_file)
+      self.model = tf.keras.models.load_model(model_file)
     except Exception as e:
       return f"Model is not trained: {e}"
     return None
