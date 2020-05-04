@@ -172,18 +172,3 @@ def slice_signal(signal, window_size, stride=0.5):
 def merge_slices(slices):
   # slices shape = [batch, window_size]
   return tf.keras.backend.flatten(slices)  # return shape = [-1, ]
-
-
-@tf.function
-def scalar_summary(name, x, **kwargs):
-  return tf.summary.scalar(name, x, **kwargs)
-
-
-@tf.function
-def histogram_summary(name, x, **kwargs):
-  return tf.summary.histogram(name, x, **kwargs)
-
-
-@tf.function
-def audio_summary(name, x, samplerate, **kwargs):
-  return tf.summary.audio(name, x, samplerate, **kwargs)

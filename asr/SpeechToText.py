@@ -8,8 +8,7 @@ import tensorflow as tf
 from models.CTCModel import create_ctc_model, ctc_loss, ctc_loss_keras
 from decoders.Decoders import create_decoder
 from featurizers.TextFeaturizer import TextFeaturizer
-from utils.Utils import get_asr_config, check_key_in_dict, \
-  bytes_to_string, wer, cer, scalar_summary
+from utils.Utils import get_asr_config, check_key_in_dict, bytes_to_string, wer, cer
 from featurizers.SpeechFeaturizer import compute_mfcc_feature
 from utils.Checkpoint import Checkpoint
 from data.Dataset import Dataset
@@ -121,14 +120,14 @@ class SpeechToText:
       batch_idx = 1
       start = time.time()
 
-      for step, (feature, input_length, transcript, label_length) in enumerate(tf_train_dataset):
+      for step, (feature, input_length, transcript, label_length) in tf_train_dataset.enumerate(start=1):
         train_loss = train_step(feature, input_length, transcript, label_length)
         sys.stdout.write("\033[K")
         print(f"\rEpoch: {epoch + 1}/{epochs}, batch: {batch_idx}/{num_batch}, train_loss = {train_loss}", end="")
         batch_idx += 1
         if self.writer:
           with self.writer.as_default():
-            scalar_summary("train_loss", train_loss, step=step)
+            tf.summary.scalar("train_loss", train_loss, step=(epoch * epochs + step))
             self.writer.flush()
 
       num_batch = batch_idx
@@ -157,9 +156,9 @@ class SpeechToText:
       if self.writer:
         with self.writer.as_default():
           if epoch_eval_loss and epoch_eval_wer:
-            scalar_summary("eval_loss", epoch_eval_loss, step=epoch)
-            scalar_summary("eval_wer", epoch_eval_wer, step=epoch)
-          scalar_summary("epoch_time", time_epoch, step=epoch)
+            tf.summary.scalar("eval_loss", epoch_eval_loss, step=epoch)
+            tf.summary.scalar("eval_wer", epoch_eval_wer, step=epoch)
+          tf.summary.scalar("epoch_time", time_epoch, step=epoch)
           self.writer.flush()
 
     if model_file:
