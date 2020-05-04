@@ -135,16 +135,17 @@ class SpeechToText:
 
       if tf_eval_dataset:
         print("Validating ... ", end="")
-        eval_loss = []
+        eval_loss_count = 0
+        epoch_eval_loss = 0.0
         total_wer = 0.0
         wer_count = 0.0
         for feature, input_length, transcript, label_length in tf_eval_dataset:
           _eval_loss, _wer, _wer_count = eval_step(feature, input_length, transcript, label_length)
-          eval_loss.append(_eval_loss)
+          epoch_eval_loss += _eval_loss
+          eval_loss_count += 1
           total_wer += _wer
           wer_count += _wer_count
-        epoch_eval_loss = tf.reduce_mean(eval_loss)
-        del eval_loss
+        epoch_eval_loss = epoch_eval_loss / eval_loss_count
         epoch_eval_wer = total_wer / wer_count
         print(f"val_loss = {epoch_eval_loss}, wer = {epoch_eval_wer}")
 
