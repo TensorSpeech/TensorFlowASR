@@ -63,8 +63,8 @@ class CTCModel:
 
     # Fully connected layer
     outputs = tf.keras.layers.Dense(units=self.num_classes,
-                                    activation='softmax',
-                                    name="fully_connected_softmax",
+                                    activation='linear',
+                                    name="fully_connected",
                                     use_bias=True)(outputs)
 
     outputs = tf.reshape(outputs,
