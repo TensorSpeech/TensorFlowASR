@@ -165,7 +165,7 @@ class Dataset:
     # # Padding the features to its max length dimensions
     dataset = dataset.repeat(repeat)
     if shuffle and not sort:
-      dataset = dataset.shuffle(batch_size, reshuffle_each_iteration=True)  # shuffle elements in batches
+      dataset = dataset.shuffle(batch_size, reshuffle_each_iteration=False)  # shuffle elements in batches
     if speech_conf["is_delta"]:
       padded_shape_features = tf.TensorShape([None, speech_conf["num_feature_bins"] * 3, 1])
     else:
@@ -221,7 +221,7 @@ class Dataset:
     # # Padding the features to its max length dimensions
     dataset = dataset.repeat(repeat)
     if shuffle and not sort:
-      dataset = dataset.shuffle(batch_size, reshuffle_each_iteration=True)  # shuffle elements in batches
+      dataset = dataset.shuffle(batch_size, reshuffle_each_iteration=False)  # shuffle elements in batches
     if speech_conf["is_delta"]:
       padded_shape_features = tf.TensorShape([None, speech_conf["num_feature_bins"] * 3, 1])
     else:
