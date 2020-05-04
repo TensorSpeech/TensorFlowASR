@@ -51,7 +51,7 @@ def create_ctc_model(base_model, num_classes, num_feature_bins,
                        name="logits")
 
   model = tf.keras.Model(inputs=features, outputs=outputs)
-  optimizer = base_model.optimizer(learning_rate=learning_rate)
+  optimizer = base_model.optimizer(learning_rate=learning_rate, momentum=0.99, nesterov=True)
   return model, optimizer
 
 
