@@ -3,7 +3,7 @@ from __future__ import absolute_import
 from models.deepspeech2.DeepSpeech2 import DeepSpeech2
 from augmentations.Augments import Noise
 
-base_model = DeepSpeech2(num_conv=3, num_rnn=3, rnn_units=256, filters=[16, 32, 64],
+base_model = DeepSpeech2(num_conv=3, num_rnn=3, rnn_units=256, filters=(16, 32, 64),
                          is_bidirectional=True, kernel_size=(31, 11))
 
 streaming_size = None

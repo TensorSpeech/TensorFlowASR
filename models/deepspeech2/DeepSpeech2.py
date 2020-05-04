@@ -28,7 +28,7 @@ class DeepSpeech2:
     layer = features
     for i in range(self.num_conv):
       layer = tf.keras.layers.Conv2D(
-        filters=self.filters[i] if isinstance(self.filters, list) else self.filters,
+        filters=self.filters[i] if isinstance(self.filters, tuple) else self.filters,
         kernel_size=self.kernel_size,
         strides=self.strides, padding="same", name=f"cnn_{i}")(layer)
       layer = tf.keras.layers.BatchNormalization(axis=-1, name=f"bn_cnn_{i}")(layer)
