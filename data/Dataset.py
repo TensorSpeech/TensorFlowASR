@@ -66,7 +66,7 @@ class Dataset:
         example = to_tfrecord(audio, int(au), bytes(transcript, "utf-8"))
         out.write(example.SerializeToString())
         sys.stdout.write("\033[K")
-        print(f"Processed: {audio_file}", end="\r")
+        print(f"\rProcessed: {audio_file}", end="")
     print(f"\nCreated {shard_path}")
 
   def create_tfrecords(self, augmentations=tuple([None]), sortagrad=False):
