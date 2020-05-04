@@ -49,7 +49,7 @@ def create_ctc_model(base_model, num_classes, speech_conf,
 
   # Fully connected layer
   outputs = tf.keras.layers.Dense(units=num_classes,
-                                  activation='linear',
+                                  activation='softmax',
                                   name="fully_connected",
                                   use_bias=True)(outputs)
 
@@ -83,13 +83,11 @@ def ctc_loss(y_true, y_pred, input_length, label_length, num_classes):
 
 
 @tf.function
-def ctc_loss_keras(y_true, y_pred, num_classes):
+def ctc_loss_keras(y_true, y_pred):
   label_length = get_length(y_true)
   input_length = get_length(y_pred)
-  return tf.nn.ctc_loss(
-    labels=tf.cast(y_true, tf.int32),
-    logit_length=input_length,
-    logits=y_pred,
-    label_length=label_length,
-    logits_time_major=False,
-    blank_index=num_classes - 1)
+  return tf.keras.backend.ctc_batch_cost(
+    y_pred=y_pred,
+    input_length=tf.expand_dims(input_length, -1),
+    y_true=tf.cast(y_true, tf.int32),
+    label_length=tf.expand_dims(label_length, -1))
