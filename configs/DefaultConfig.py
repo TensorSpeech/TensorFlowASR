@@ -34,8 +34,8 @@ min_lr = 0.0
 speech_conf = {
   "sample_rate":      16000,
   "frame_ms":         20,
-  "stride_ms":        20,
-  "num_feature_bins": 128,
+  "stride_ms":        10,
+  "num_feature_bins": 12,
   "feature_type":     "mfcc",
   "pre_emph":         0.95
 }

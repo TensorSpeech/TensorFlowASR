@@ -11,9 +11,9 @@ from models.deepspeech2.SequenceBatchNorm import SequenceBatchNorm
 
 class DeepSpeech2:
   def __init__(self, num_conv=3, num_rnn=3, rnn_units=128,
-               filters=(32, 32, 32), kernel_size=(31, 11),
+               filters=(32, 32, 32), kernel_size=(31, 11), strides=(1, 2),
                is_bidirectional=False, is_rowconv=False, pre_fc_units=1024):
-    self.optimizer = tf.keras.optimizers.Adam
+    self.optimizer = tf.keras.optimizers.SGD
     self.num_conv = num_conv
     self.num_rnn = num_rnn
     self.rnn_units = rnn_units
@@ -22,6 +22,7 @@ class DeepSpeech2:
     self.is_bidirectional = is_bidirectional
     self.is_rowconv = is_rowconv
     self.pre_fc_units = pre_fc_units
+    self.strides = strides
 
   def __call__(self, features, streaming=False):
     layer = features
@@ -29,7 +30,7 @@ class DeepSpeech2:
       layer = tf.keras.layers.Conv2D(
         filters=self.filters[i] if isinstance(self.filters, list) else self.filters,
         kernel_size=self.kernel_size,
-        strides=(1, 2), padding="same", name=f"cnn_{i}")(layer)
+        strides=self.strides, padding="same", name=f"cnn_{i}")(layer)
       layer = tf.keras.layers.BatchNormalization(axis=-1, name=f"bn_cnn_{i}")(layer)
       layer = tf.keras.layers.ReLU(name=f"relu_cnn_{i}")(layer)
 
@@ -68,10 +69,10 @@ class DeepSpeech2:
 
     if self.pre_fc_units > 0:
       layer = tf.keras.layers.Dense(units=self.pre_fc_units,
-                                    name="pre_fully_connected",
+                                    name="hidden_fc",
                                     use_bias=True)(layer)
-      layer = tf.keras.layers.BatchNormalization(name="pre_fc_bn")(layer)
-      layer = tf.keras.layers.ReLU(name=f"relu_pre_fc")(layer)
-      layer = tf.keras.layers.Dropout(0.2)(layer)
+      layer = tf.keras.layers.BatchNormalization(name="hidden_fc_bn")(layer)
+      layer = tf.keras.layers.ReLU(name="hidden_fc_relu")(layer)
+      layer = tf.keras.layers.Dropout(0.2, name="hidden_fc_dropout")(layer)
 
     return layer

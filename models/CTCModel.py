@@ -3,7 +3,6 @@ from __future__ import absolute_import
 import tensorflow as tf
 from utils.Utils import mask_nan, get_length
 from utils.Schedules import BoundExponentialDecay
-from featurizers.SpeechFeaturizer import SpeechFeaturizer
 
 
 class GetLength(tf.keras.layers.Layer):
@@ -21,99 +20,56 @@ class GetLength(tf.keras.layers.Layer):
     return self(**config)
 
 
-class CTCModel:
-  def __init__(self, base_model, num_classes, num_feature_bins,
-               learning_rate, min_lr=0.0, streaming_size=None):
-    self.optimizer = base_model.optimizer(
-      BoundExponentialDecay(
-        initial_learning_rate=learning_rate,
-        min_lr=min_lr,
-        decay_steps=5000,
-        decay_rate=0.9,
-        staircase=True)
-    )
-    self.num_classes = num_classes
-    self.streaming_size = streaming_size
-    # self.speech_featurizer = SpeechFeaturizer(sample_rate=sample_rate, frame_ms=frame_ms,
-    #                                           stride_ms=stride_ms, num_feature_bins=num_feature_bins,
-    #                                           feature_type="mfcc", name="speech_featurizer")
-    self.model = self.create(base_model, num_feature_bins)
+def create_ctc_model(base_model, num_classes, num_feature_bins,
+                     learning_rate, min_lr=0.0, streaming_size=None):
+  if streaming_size:
+    # Fixed input shape is required for live streaming audio
+    features = tf.keras.layers.Input(batch_shape=(1, streaming_size, num_feature_bins * 3, 1),
+                                     dtype=tf.float32, name="features")
+    # features = self.speech_featurizer(signal)
+    outputs = base_model(features=features, streaming=True)
+  else:
+    features = tf.keras.layers.Input(shape=(None, num_feature_bins * 3, 1),
+                                     dtype=tf.float32, name="features")
+    # features = self.speech_featurizer(signal)
+    outputs = base_model(features=features, streaming=False)
 
-  def __call__(self, *args, **kwargs):
-    return self.model(*args, **kwargs)
+  batch_size = tf.shape(outputs)[0]
+  n_hidden = outputs.get_shape().as_list()[-1]
+  # reshape from [B, T, A] --> [B*T, A].
+  # Output shape: [n_steps * batch_size, n_hidden]
+  outputs = tf.reshape(outputs, [-1, n_hidden])
 
-  def create(self, base_model, num_feature_bins):
-    if self.streaming_size:
-      # Fixed input shape is required for live streaming audio
-      features = tf.keras.layers.Input(batch_shape=(1, self.streaming_size, num_feature_bins, 1),
-                                       dtype=tf.float32, name="features")
-      # features = self.speech_featurizer(signal)
-      outputs = base_model(features=features, streaming=True)
-    else:
-      features = tf.keras.layers.Input(shape=(None, num_feature_bins, 1),
-                                       dtype=tf.float32, name="features")
-      # features = self.speech_featurizer(signal)
-      outputs = base_model(features=features, streaming=False)
+  # Fully connected layer
+  outputs = tf.keras.layers.Dense(units=num_classes,
+                                  activation='linear',
+                                  name="fully_connected",
+                                  use_bias=True)(outputs)
 
-    batch_size = tf.shape(outputs)[0]
-    n_hidden = outputs.get_shape().as_list()[-1]
-    # reshape from [B, T, A] --> [B*T, A].
-    # Output shape: [n_steps * batch_size, n_hidden]
-    outputs = tf.reshape(outputs, [-1, n_hidden])
+  outputs = tf.reshape(outputs,
+                       [batch_size, -1, num_classes],
+                       name="logits")
 
-    # Fully connected layer
-    outputs = tf.keras.layers.Dense(units=self.num_classes,
-                                    activation='linear',
-                                    name="fully_connected",
-                                    use_bias=True)(outputs)
+  model = tf.keras.Model(inputs=features, outputs=outputs)
+  optimizer = base_model.optimizer(learning_rate=learning_rate, momentum=0.99, nesterov=True)
+  return model, optimizer
 
-    outputs = tf.reshape(outputs,
-                         [batch_size, -1, self.num_classes],
-                         name="logits")
 
-    model = tf.keras.Model(inputs=features, outputs=outputs)
-    return model
+# @tf.function
+# def loss(self, y_true, y_pred, input_length, label_length):
+#   loss = tf.keras.backend.ctc_batch_cost(
+#     y_pred=y_pred,
+#     input_length=tf.expand_dims(input_length, -1),
+#     y_true=tf.cast(y_true, tf.int32),
+#     label_length=tf.expand_dims(label_length, -1))
+#   return tf.reduce_mean(mask_nan(loss))
 
-  # @tf.function
-  # def loss(self, y_true, y_pred, input_length, label_length):
-  #   loss = tf.keras.backend.ctc_batch_cost(
-  #     y_pred=y_pred,
-  #     input_length=tf.expand_dims(input_length, -1),
-  #     y_true=tf.cast(y_true, tf.int32),
-  #     label_length=tf.expand_dims(label_length, -1))
-  #   return tf.reduce_mean(mask_nan(loss))
-
-  @tf.function
-  def loss(self, y_true, y_pred, input_length, label_length):
-    loss = tf.nn.ctc_loss(
-      labels=tf.cast(y_true, tf.int32),
-      logit_length=input_length,
-      logits=y_pred,
-      label_length=label_length,
-      logits_time_major=False,
-      blank_index=self.num_classes - 1)
-    return tf.reduce_mean(mask_nan(loss))
-
-  def predict(self, *args, **kwargs):
-    return self.model.predict(*args, **kwargs)
-
-  def compile(self, *args, **kwargs):
-    return self.model.compile(*args, **kwargs)
-
-  def fit(self, *args, **kwargs):
-    return self.model.fit(*args, **kwargs)
-
-  def load_model(self, model_file):
-    self.model = tf.saved_model.load(model_file)
-
-  def load_weights(self, model_file):
-    self.model.load_weights(model_file)
-
-  def summary(self, *args, **kwargs):
-    return self.model.summary(*args, **kwargs)
-
-  def to_json(self):
-    return self.model.to_json()
-
-  def save(self, model_file):
-    return self.model.save(model_file)
+@tf.function
+def ctc_loss(y_true, y_pred, input_length, label_length, num_classes):
+  return tf.reduce_mean(tf.nn.ctc_loss(
+    labels=tf.cast(y_true, tf.int32),
+    logit_length=input_length,
+    logits=y_pred,
+    label_length=label_length,
+    logits_time_major=False,
+    blank_index=num_classes - 1))

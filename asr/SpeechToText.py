@@ -5,7 +5,7 @@ import sys
 import time
 import tensorflow as tf
 
-from models.CTCModel import CTCModel
+from models.CTCModel import create_ctc_model, ctc_loss
 from decoders.Decoders import create_decoder
 from featurizers.TextFeaturizer import TextFeaturizer
 from utils.Utils import get_asr_config, check_key_in_dict, \
@@ -22,19 +22,20 @@ class SpeechToText:
                                   index_to_token=self.text_featurizer.index_to_token,
                                   num_classes=self.text_featurizer.num_classes,
                                   vocab_array=self.text_featurizer.vocab_array)
-    self.model = CTCModel(num_classes=self.text_featurizer.num_classes,
-                          learning_rate=self.configs["learning_rate"],
-                          min_lr=self.configs["min_lr"],
-                          base_model=self.configs["base_model"],
-                          streaming_size=self.configs["streaming_size"],
-                          num_feature_bins=self.configs["speech_conf"]["num_feature_bins"])
+    self.model, self.optimizer = create_ctc_model(
+      num_classes=self.text_featurizer.num_classes,
+      learning_rate=self.configs["learning_rate"],
+      min_lr=self.configs["min_lr"],
+      base_model=self.configs["base_model"],
+      streaming_size=self.configs["streaming_size"],
+      num_feature_bins=self.configs["speech_conf"]["num_feature_bins"])
     self.noise_filter = noise_filter
     self.writer = None
 
   def train_and_eval(self, model_file=None):
     print("Training and evaluating model ...")
-    self.ckpt = tf.train.Checkpoint(model=self.model.model,
-                                    optimizer=self.model.optimizer)
+    self.ckpt = tf.train.Checkpoint(model=self.model,
+                                    optimizer=self.optimizer)
     self.ckpt_manager = tf.train.CheckpointManager(
       self.ckpt, self.configs["checkpoint_dir"], max_to_keep=None)
 
@@ -77,15 +78,19 @@ class SpeechToText:
     def train_step(features, inp_length, y_true, lab_length):
       with tf.GradientTape() as tape:
         y_pred = self.model(features, training=True)
-        _loss = self.model.loss(y_true=y_true, y_pred=y_pred, input_length=inp_length, label_length=lab_length)
-      gradients = tape.gradient(_loss, self.model.model.trainable_variables)
-      self.model.optimizer.apply_gradients(zip(gradients, self.model.model.trainable_variables))
+        _loss = ctc_loss(y_true=y_true, y_pred=y_pred,
+                         input_length=inp_length, label_length=lab_length,
+                         num_classes=self.text_featurizer.num_classes)
+      gradients = tape.gradient(_loss, self.model.trainable_variables)
+      self.optimizer.apply_gradients(zip(gradients, self.model.trainable_variables))
       return _loss
 
     @tf.function
     def eval_step(features, inp_length, y_true, lab_length):
       y_pred = self.model(features, training=False)
-      _loss = self.model.loss(y_true=y_true, y_pred=y_pred, input_length=inp_length, label_length=lab_length)
+      _loss = ctc_loss(y_true=y_true, y_pred=y_pred,
+                       input_length=inp_length, label_length=lab_length,
+                       num_classes=self.text_featurizer.num_classes)
       return _loss
 
     epochs = self.configs["num_epochs"]
