@@ -4,7 +4,7 @@ from models.deepspeech2.DeepSpeech2 import DeepSpeech2
 from augmentations.Augments import Noise
 
 base_model = DeepSpeech2(num_conv=3, num_rnn=3, rnn_units=256, filters=(16, 32, 64),
-                         is_bidirectional=True, kernel_size=(31, 11))
+                         learning_rate=0.0002, is_bidirectional=True, kernel_size=(31, 11))
 
 streaming_size = None
 
@@ -21,17 +21,13 @@ decoder = {
 #                        noise_dir="/mnt/Data/ML/ASR/Preprocessed/Noises")]
 augmentations = []
 
-batch_size = 16
+batch_size = 8
 
 num_epochs = 10
 
 vocabulary_file_path = "/mnt/Projects/asrk16/vnasr/data/vocabulary.txt"
 
-learning_rate = 0.0002
-
-min_lr = 0.0
-
-last_activation = 'softmax'
+last_activation = 'linear'
 
 speech_conf = {
   "sample_rate":      16000,

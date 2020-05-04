@@ -10,10 +10,10 @@ from models.deepspeech2.SequenceBatchNorm import SequenceBatchNorm
 
 
 class DeepSpeech2:
-  def __init__(self, num_conv=3, num_rnn=3, rnn_units=128,
+  def __init__(self, num_conv=3, num_rnn=3, rnn_units=128, learning_rate=0.0002,
                filters=(32, 32, 32), kernel_size=(31, 11), strides=(1, 2),
                is_bidirectional=False, is_rowconv=False, pre_fc_units=1024):
-    self.optimizer = tf.keras.optimizers.SGD
+    self.optimizer = tf.keras.optimizers.SGD(lr=learning_rate, momentum=0.99, nesterov=True)
     self.num_conv = num_conv
     self.num_rnn = num_rnn
     self.rnn_units = rnn_units
