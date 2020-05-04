@@ -85,13 +85,30 @@ class SpeechToText:
       self.optimizer.apply_gradients(zip(gradients, self.model.trainable_variables))
       return _loss
 
-    @tf.function
     def eval_step(features, inp_length, y_true, lab_length):
-      y_pred = self.model(features, training=False)
-      _loss = ctc_loss(y_true=y_true, y_pred=y_pred,
-                       input_length=inp_length, label_length=lab_length,
-                       num_classes=self.text_featurizer.num_classes)
-      return _loss
+      @tf.function
+      def sub_eval_step():
+        y_pred = self.model(features, training=False)
+        _loss = ctc_loss(y_true=y_true, y_pred=y_pred,
+                         input_length=inp_length, label_length=lab_length,
+                         num_classes=self.text_featurizer.num_classes)
+        _pred = self.decoder(probs=y_pred, input_length=inp_length)
+        return _loss, _pred
+
+      _val_loss, _eval_pred = sub_eval_step()
+      predictions = bytes_to_string(_eval_pred.numpy())
+      transcripts = self.decoder.convert_to_string(y_true)
+
+      b_wer = 0.0
+      b_wer_count = 0.0
+
+      for idx, decoded in enumerate(predictions):
+        _wer, _wer_count = wer(decode=decoded, target=transcripts[idx])
+        _cer, _cer_count = cer(decode=decoded, target=transcripts[idx])
+        b_wer += _wer
+        b_wer_count += _wer_count
+
+      return _val_loss, b_wer, b_wer_count
 
     epochs = self.configs["num_epochs"]
     num_batch = None
@@ -99,6 +116,7 @@ class SpeechToText:
     for epoch in range(initial_epoch, epochs, 1):
       epoch_train_loss = []
       epoch_eval_loss = None
+      epoch_eval_wer = None
       batch_idx = 1
       start = time.time()
 
@@ -113,15 +131,21 @@ class SpeechToText:
       num_batch = batch_idx
       epoch_train_loss = tf.reduce_mean(epoch_train_loss)
 
-      tf.print(f"\nEpoch: {epoch + 1}/{epochs}, train_loss = {epoch_train_loss}", end="")
+      tf.print(f"\nEpoch: {epoch + 1}/{epochs}, train_loss = {epoch_train_loss}")
 
       if tf_eval_dataset:
+        tf.print("Validating ... ", end="")
         eval_loss = []
-        for feature, transcript, label_length in tf_eval_dataset:
-          _eval_loss = eval_step(feature, transcript, label_length)
+        total_wer = 0.0
+        wer_count = 0.0
+        for feature, input_length, transcript, label_length in tf_eval_dataset:
+          _eval_loss, _wer, _wer_count = eval_step(feature, input_length, transcript, label_length)
           eval_loss.append(_eval_loss)
+          total_wer += _wer
+          wer_count += _wer_count
         epoch_eval_loss = tf.reduce_mean(eval_loss)
-        tf.print(f", eval_loss = {epoch_eval_loss}")
+        epoch_eval_wer = total_wer / wer_count
+        tf.print(f"val_loss = {epoch_eval_loss}, wer = {epoch_eval_wer}")
 
       self.ckpt_manager.save()
       tf.print(f"\nSaved checkpoint at epoch {epoch + 1}")
@@ -131,8 +155,9 @@ class SpeechToText:
       if self.writer:
         with self.writer.as_default():
           scalar_summary("train_loss", epoch_train_loss, step=epoch)
-          if epoch_eval_loss:
+          if epoch_eval_loss and epoch_eval_wer:
             scalar_summary("eval_loss", epoch_eval_loss, step=epoch)
+            scalar_summary("eval_wer", epoch_eval_wer, step=epoch)
           scalar_summary("epoch_time", time_epoch, step=epoch)
           self.writer.flush()
 
