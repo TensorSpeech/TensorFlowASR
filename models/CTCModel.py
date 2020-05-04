@@ -86,10 +86,10 @@ def ctc_loss(y_true, y_pred, input_length, label_length, num_classes):
 def ctc_loss_keras(y_true, y_pred, num_classes):
   label_length = get_length(y_true)
   input_length = get_length(y_pred)
-  return tf.reduce_mean(tf.nn.ctc_loss(
+  return tf.nn.ctc_loss(
     labels=tf.cast(y_true, tf.int32),
     logit_length=input_length,
     logits=y_pred,
     label_length=label_length,
     logits_time_major=False,
-    blank_index=num_classes - 1))
+    blank_index=num_classes - 1)
