@@ -37,7 +37,8 @@ speech_conf = {
   "stride_ms":        10,
   "num_feature_bins": 12,
   "feature_type":     "mfcc",
-  "pre_emph":         0.95
+  "pre_emph":         0.95,
+  "is_delta":         True
 }
 
 train_data_transcript_paths = [

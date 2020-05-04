@@ -48,11 +48,21 @@ class Dataset:
                                              speech_conf=speech_conf,
                                              batch_size=batch_size, repeat=repeat,
                                              sort=sortagrad, shuffle=True)
+    elif self.mode == "train_keras":
+      return self.get_dataset_from_tfrecords_keras(text_featurizer, augmentations=augmentations,
+                                                   speech_conf=speech_conf,
+                                                   batch_size=batch_size, repeat=repeat,
+                                                   sort=sortagrad, shuffle=True)
     elif self.mode in ["eval", "test"]:
-      return self.get_dataset_from_tfrecords(text_featurizer, augmentations=augmentations,
+      return self.get_dataset_from_tfrecords(text_featurizer, augmentations=[None],
                                              speech_conf=speech_conf,
-                                             batch_size=batch_size, repeat=repeat,
-                                             sort=sortagrad, shuffle=False)
+                                             batch_size=batch_size, repeat=1,
+                                             sort=False, shuffle=False)
+    elif self.mode == "eval_keras":
+      return self.get_dataset_from_tfrecords_keras(text_featurizer, augmentations=[None],
+                                                   speech_conf=speech_conf,
+                                                   batch_size=batch_size, repeat=1,
+                                                   sort=False, shuffle=False)
     else:
       raise ValueError(f"Mode must be either 'train', 'eval' or 'test': {self.mode}")
 
@@ -173,6 +183,58 @@ class Dataset:
         0,
         text_featurizer.num_classes - 1,
         0
+      )
+    )
+    if shuffle and sort:
+      dataset = dataset.shuffle(batch_size, reshuffle_each_iteration=False)  # shuffle the sorted batches
+    # Prefetch to improve speed of input length
+    dataset = dataset.prefetch(AUTOTUNE)
+    return dataset
+
+  def get_dataset_from_tfrecords_keras(self, text_featurizer, augmentations, speech_conf,
+                                       batch_size, repeat=1, sort=False, shuffle=True):
+
+    def parse(record):
+      feature_description = {
+        "audio":      tf.io.FixedLenFeature([], tf.string),
+        "au":         tf.io.FixedLenFeature([], tf.int64),
+        "transcript": tf.io.FixedLenFeature([], tf.string)
+      }
+      example = tf.io.parse_single_example(record, feature_description)
+      features, input_length, label, label_length = tf.py_function(
+        functools.partial(self.preprocess, text_featurizer=text_featurizer,
+                          speech_conf=speech_conf, augmentations=augmentations),
+        inp=[example["audio"], example["au"], example["transcript"]],
+        Tout=(tf.float32, tf.int32, tf.int32, tf.int32))
+      return features, label
+
+    pattern = os.path.join(self.tfrecord_dir, f"{self.mode}*.tfrecord")
+    files_ds = tf.data.Dataset.list_files(pattern)
+
+    # Disregard data order in favor of reading speed
+    ignore_order = tf.data.Options()
+    ignore_order.experimental_deterministic = False
+    files_ds = files_ds.with_options(ignore_order)
+
+    dataset = tf.data.TFRecordDataset(files_ds, compression_type='ZLIB', num_parallel_reads=AUTOTUNE)
+    dataset = dataset.map(parse, num_parallel_calls=AUTOTUNE)
+    # # Padding the features to its max length dimensions
+    dataset = dataset.repeat(repeat)
+    if shuffle and not sort:
+      dataset = dataset.shuffle(batch_size, reshuffle_each_iteration=True)  # shuffle elements in batches
+    if speech_conf["is_delta"]:
+      padded_shape_features = tf.TensorShape([None, speech_conf["num_feature_bins"] * 3, 1])
+    else:
+      padded_shape_features = tf.TensorShape([None, speech_conf["num_feature_bins"], 1])
+    dataset = dataset.padded_batch(
+      batch_size=batch_size,
+      padded_shapes=(
+        padded_shape_features,
+        tf.TensorShape([None]),
+      ),
+      padding_values=(
+        0.,
+        text_featurizer.num_classes - 1,
       )
     )
     if shuffle and sort:
