@@ -2,7 +2,6 @@ from __future__ import absolute_import
 
 import os
 import sys
-import functools
 import time
 import tensorflow as tf
 
@@ -199,8 +198,10 @@ class SpeechToText:
       # restoring the latest checkpoint in checkpoint_path
       self.ckpt.restore(self.ckpt_manager.latest_checkpoint)
 
-    self.model.compile(optimizer=self.optimizer,
-                       loss=functools.partial(ctc_loss_keras, num_classes=self.text_featurizer.num_classes))
+    def keras_loss(y_true, y_pred):
+      return ctc_loss_keras(y_true, y_pred, num_classes=self.text_featurizer.num_classes)
+
+    self.model.compile(optimizer=self.optimizer, loss=keras_loss)
 
     cp_callback = Checkpoint(self.ckpt_manager)
 

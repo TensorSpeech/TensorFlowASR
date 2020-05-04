@@ -55,6 +55,6 @@ test_data_transcript_paths = [
 
 tfrecords_dir = "/mnt/Data/ML/ASR/Preprocessed/SmallFixed/TFRecords"
 
-checkpoint_dir = "/mnt/Projects/asrk16/trained/med-bilstm/checkpoints/"
+checkpoint_dir = "/mnt/Projects/asrk16/trained/med-bilstm/ckpts/"
 
 log_dir = "/mnt/Projects/asrk16/trained/med-bilstm/tensorboard/"
