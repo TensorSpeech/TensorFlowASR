@@ -12,8 +12,7 @@ asr_conf_required = ["base_model",
                      "batch_size",
                      "num_epochs",
                      "vocabulary_file_path",
-                     "learning_rate",
-                     "min_lr",
+                     "last_activation",
                      "speech_conf",
                      "streaming_size"]
 
@@ -173,16 +172,5 @@ def merge_slices(slices):
   return tf.keras.backend.flatten(slices)  # return shape = [-1, ]
 
 
-@tf.function
 def scalar_summary(name, x, **kwargs):
   return tf.summary.scalar(name, x, **kwargs)
-
-
-@tf.function
-def histogram_summary(name, x, **kwargs):
-  return tf.summary.histogram(name, x, **kwargs)
-
-
-@tf.function
-def audio_summary(name, x, samplerate, **kwargs):
-  return tf.summary.audio(name, x, samplerate, **kwargs)

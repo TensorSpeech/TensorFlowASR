@@ -31,8 +31,9 @@ class Decoder:
     decoded = tf.map_fn(map_cvrt, decoded, dtype=tf.string)
     return bytes_to_string(decoded.numpy())
 
-  def __call__(self, probs, input_length):
-    probs = tf.nn.softmax(probs)
+  def __call__(self, probs, input_length, last_activation="linear"):
+    if last_activation == "linear":
+      probs = tf.nn.softmax(probs)
     decoded = tf.py_function(self.decode, inp=[probs, input_length],
                              Tout=tf.string)
     return decoded

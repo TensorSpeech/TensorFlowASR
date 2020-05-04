@@ -48,8 +48,7 @@ class Dataset:
       if self.is_keras:
         return self.get_dataset_from_tfrecords_keras(text_featurizer, augmentations=augmentations,
                                                      speech_conf=speech_conf,
-                                                     batch_size=batch_size, repeat=repeat,
-                                                     sort=sortagrad, shuffle=True)
+                                                     batch_size=batch_size, repeat=repeat)
       return self.get_dataset_from_tfrecords(text_featurizer, augmentations=augmentations,
                                              speech_conf=speech_conf,
                                              batch_size=batch_size, repeat=repeat,
@@ -58,8 +57,7 @@ class Dataset:
       if self.is_keras:
         return self.get_dataset_from_tfrecords_keras(text_featurizer, augmentations=[None],
                                                      speech_conf=speech_conf,
-                                                     batch_size=batch_size, repeat=1,
-                                                     sort=False, shuffle=True)
+                                                     batch_size=batch_size, repeat=1)
       return self.get_dataset_from_tfrecords(text_featurizer, augmentations=[None],
                                              speech_conf=speech_conf,
                                              batch_size=batch_size, repeat=1,
@@ -169,6 +167,8 @@ class Dataset:
       padded_shape_features = tf.TensorShape([None, speech_conf["num_feature_bins"] * 3, 1])
     else:
       padded_shape_features = tf.TensorShape([None, speech_conf["num_feature_bins"], 1])
+    if shuffle and not sort:
+      dataset = dataset.shuffle(batch_size)
     dataset = dataset.padded_batch(
       batch_size=batch_size,
       padded_shapes=(
@@ -184,12 +184,15 @@ class Dataset:
         0
       )
     )
+    if shuffle and sort:
+      dataset = dataset.shuffle(batch_size)
     # Prefetch to improve speed of input length
     dataset = dataset.prefetch(AUTOTUNE)
+    dataset = dataset.cache("/tmp/asr.binary")
     return dataset
 
-  def get_dataset_from_tfrecords_keras(self, text_featurizer, augmentations, speech_conf,
-                                       batch_size, repeat=1, sort=False, shuffle=True):
+  def get_dataset_from_tfrecords_keras(self, text_featurizer, augmentations,
+                                       speech_conf, batch_size, repeat=1):
 
     def parse(record):
       feature_description = {

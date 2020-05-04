@@ -1,15 +1,15 @@
 from __future__ import absolute_import
 
 import os
+import gc
 import sys
 import time
 import tensorflow as tf
 
-from models.CTCModel import create_ctc_model, ctc_loss, ctc_loss_keras
+from models.CTCModel import create_ctc_model, ctc_loss, ctc_loss_1, ctc_loss_keras, ctc_loss_keras_2
 from decoders.Decoders import create_decoder
 from featurizers.TextFeaturizer import TextFeaturizer
-from utils.Utils import get_asr_config, check_key_in_dict, \
-  bytes_to_string, wer, cer, scalar_summary
+from utils.Utils import get_asr_config, check_key_in_dict, bytes_to_string, wer, cer
 from featurizers.SpeechFeaturizer import compute_mfcc_feature
 from utils.Checkpoint import Checkpoint
 from data.Dataset import Dataset
@@ -23,13 +23,11 @@ class SpeechToText:
                                   index_to_token=self.text_featurizer.index_to_token,
                                   num_classes=self.text_featurizer.num_classes,
                                   vocab_array=self.text_featurizer.vocab_array)
-    self.model, self.optimizer = create_ctc_model(
-      num_classes=self.text_featurizer.num_classes,
-      learning_rate=self.configs["learning_rate"],
-      min_lr=self.configs["min_lr"],
-      base_model=self.configs["base_model"],
-      streaming_size=self.configs["streaming_size"],
-      speech_conf=self.configs["speech_conf"])
+    self.model, self.optimizer = create_ctc_model(num_classes=self.text_featurizer.num_classes,
+                                                  last_activation=self.configs["last_activation"],
+                                                  base_model=self.configs["base_model"],
+                                                  streaming_size=self.configs["streaming_size"],
+                                                  speech_conf=self.configs["speech_conf"])
     self.noise_filter = noise_filter
     self.writer = None
 
@@ -75,13 +73,18 @@ class SpeechToText:
         f.write(self.model.to_json())
       self.writer = tf.summary.create_file_writer(os.path.join(self.configs["log_dir"], "train"))
 
+    if self.configs["last_activation"] == "linear":
+      loss = ctc_loss
+    else:
+      loss = ctc_loss_1
+
     @tf.function
     def train_step(features, inp_length, y_true, lab_length):
       with tf.GradientTape() as tape:
         y_pred = self.model(features, training=True)
-        _loss = ctc_loss(y_true=y_true, y_pred=y_pred,
-                         input_length=inp_length, label_length=lab_length,
-                         num_classes=self.text_featurizer.num_classes)
+        _loss = loss(y_true=y_true, y_pred=y_pred,
+                     input_length=inp_length, label_length=lab_length,
+                     num_classes=self.text_featurizer.num_classes)
       gradients = tape.gradient(_loss, self.model.trainable_variables)
       self.optimizer.apply_gradients(zip(gradients, self.model.trainable_variables))
       return _loss
@@ -90,10 +93,11 @@ class SpeechToText:
       @tf.function
       def sub_eval_step():
         y_pred = self.model(features, training=False)
-        _loss = ctc_loss(y_true=y_true, y_pred=y_pred,
+        _loss = loss(y_true=y_true, y_pred=y_pred,
                          input_length=inp_length, label_length=lab_length,
                          num_classes=self.text_featurizer.num_classes)
-        _pred = self.decoder(probs=y_pred, input_length=inp_length)
+        _pred = self.decoder(probs=y_pred, input_length=inp_length,
+                             last_activation=self.configs["last_activation"])
         return _loss, _pred
 
       _val_loss, _eval_pred = sub_eval_step()
@@ -120,15 +124,15 @@ class SpeechToText:
       batch_idx = 1
       start = time.time()
 
-      for step, (feature, input_length, transcript, label_length) in enumerate(tf_train_dataset):
+      for step, [feature, input_length, transcript, label_length] in tf_train_dataset.enumerate(start=1):
         train_loss = train_step(feature, input_length, transcript, label_length)
         sys.stdout.write("\033[K")
         print(f"\rEpoch: {epoch + 1}/{epochs}, batch: {batch_idx}/{num_batch}, train_loss = {train_loss}", end="")
         batch_idx += 1
         if self.writer:
           with self.writer.as_default():
-            scalar_summary("train_loss", train_loss, step=step)
-            self.writer.flush()
+            tf.summary.scalar("train_loss", train_loss, step=(epoch * epochs + step))
+        gc.collect()
 
       num_batch = batch_idx
 
@@ -156,10 +160,9 @@ class SpeechToText:
       if self.writer:
         with self.writer.as_default():
           if epoch_eval_loss and epoch_eval_wer:
-            scalar_summary("eval_loss", epoch_eval_loss, step=epoch)
-            scalar_summary("eval_wer", epoch_eval_wer, step=epoch)
-          scalar_summary("epoch_time", time_epoch, step=epoch)
-          self.writer.flush()
+            tf.summary.scalar("eval_loss", epoch_eval_loss, step=epoch)
+            tf.summary.scalar("eval_wer", epoch_eval_wer, step=epoch)
+          tf.summary.scalar("epoch_time", time_epoch, step=epoch)
 
     if model_file:
       self.model.save(model_file)
@@ -198,7 +201,13 @@ class SpeechToText:
       # restoring the latest checkpoint in checkpoint_path
       self.ckpt.restore(self.ckpt_manager.latest_checkpoint)
 
-    self.model.compile(optimizer=self.optimizer, loss=ctc_loss_keras)
+    if self.configs["last_activation"] == "linear":
+      def keras_loss(y_true, y_pred):
+        return ctc_loss_keras_2(y_true, y_pred, num_classes=self.text_featurizer.num_classes)
+
+      self.model.compile(optimizer=self.optimizer, loss=keras_loss)
+    else:
+      self.model.compile(optimizer=self.optimizer, loss=ctc_loss_keras)
 
     cp_callback = Checkpoint(self.ckpt_manager)
 
@@ -316,7 +325,8 @@ class SpeechToText:
   @tf.function
   def predict(self, feature, input_length):
     logits = self.model(feature, training=False)
-    return self.decoder(probs=logits, input_length=input_length)
+    return self.decoder(probs=logits, input_length=input_length,
+                        last_activation=self.configs["last_activation"])
 
   def save_model(self, model_file):
     self.model.save(model_file)

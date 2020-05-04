@@ -1,8 +1,7 @@
 from __future__ import absolute_import
 
 import tensorflow as tf
-from utils.Utils import mask_nan, get_length
-from utils.Schedules import BoundExponentialDecay
+from utils.Utils import get_length
 
 
 class GetLength(tf.keras.layers.Layer):
@@ -21,7 +20,7 @@ class GetLength(tf.keras.layers.Layer):
 
 
 def create_ctc_model(base_model, num_classes, speech_conf,
-                     learning_rate, min_lr=0.0, streaming_size=None):
+                     last_activation='linear', streaming_size=None):
   if streaming_size:
     # Fixed input shape is required for live streaming audio
     if speech_conf["is_delta"]:
@@ -49,7 +48,7 @@ def create_ctc_model(base_model, num_classes, speech_conf,
 
   # Fully connected layer
   outputs = tf.keras.layers.Dense(units=num_classes,
-                                  activation='softmax',
+                                  activation=last_activation,
                                   name="fully_connected",
                                   use_bias=True)(outputs)
 
@@ -58,18 +57,18 @@ def create_ctc_model(base_model, num_classes, speech_conf,
                        name="logits")
 
   model = tf.keras.Model(inputs=features, outputs=outputs)
-  optimizer = base_model.optimizer(learning_rate=learning_rate, momentum=0.99, nesterov=True)
-  return model, optimizer
+  return model, base_model.optimizer
 
 
-# @tf.function
-# def loss(self, y_true, y_pred, input_length, label_length):
-#   loss = tf.keras.backend.ctc_batch_cost(
-#     y_pred=y_pred,
-#     input_length=tf.expand_dims(input_length, -1),
-#     y_true=tf.cast(y_true, tf.int32),
-#     label_length=tf.expand_dims(label_length, -1))
-#   return tf.reduce_mean(mask_nan(loss))
+@tf.function
+def ctc_loss_1(y_true, y_pred, input_length, label_length, num_classes):
+  loss = tf.keras.backend.ctc_batch_cost(
+    y_pred=y_pred,
+    input_length=tf.expand_dims(input_length, -1),
+    y_true=tf.cast(y_true, tf.int32),
+    label_length=tf.expand_dims(label_length, -1))
+  return tf.reduce_mean(loss)
+
 
 @tf.function
 def ctc_loss(y_true, y_pred, input_length, label_length, num_classes):
@@ -91,3 +90,16 @@ def ctc_loss_keras(y_true, y_pred):
     input_length=tf.expand_dims(input_length, -1),
     y_true=tf.cast(y_true, tf.int32),
     label_length=tf.expand_dims(label_length, -1))
+
+
+@tf.function
+def ctc_loss_keras_2(y_true, y_pred, num_classes):
+  label_length = get_length(y_true)
+  input_length = get_length(y_pred)
+  return tf.reduce_mean(tf.nn.ctc_loss(
+    labels=tf.cast(y_true, tf.int32),
+    logit_length=input_length,
+    logits=y_pred,
+    label_length=label_length,
+    logits_time_major=False,
+    blank_index=num_classes - 1))
