@@ -178,14 +178,14 @@ class SpeechToText:
     augmentations.append(None)
 
     train_dataset = Dataset(data_path=self.configs["train_data_transcript_paths"],
-                            tfrecords_dir=self.configs["tfrecords_dir"], mode="train_keras")
+                            tfrecords_dir=self.configs["tfrecords_dir"], mode="train", is_keras=True)
     tf_train_dataset = train_dataset(text_featurizer=self.text_featurizer,
                                      speech_conf=self.configs["speech_conf"],
                                      batch_size=self.configs["batch_size"],
                                      augmentations=augmentations)
 
     eval_dataset = Dataset(data_path=self.configs["eval_data_transcript_paths"],
-                           tfrecords_dir=self.configs["tfrecords_dir"], mode="eval_keras")
+                           tfrecords_dir=self.configs["tfrecords_dir"], mode="eval", is_keras=True)
     tf_eval_dataset = eval_dataset(text_featurizer=self.text_featurizer,
                                    speech_conf=self.configs["speech_conf"],
                                    batch_size=self.configs["batch_size"])
