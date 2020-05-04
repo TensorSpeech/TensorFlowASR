@@ -178,14 +178,14 @@ class SpeechToText:
     augmentations.append(None)
 
     train_dataset = Dataset(data_path=self.configs["train_data_transcript_paths"],
-                            tfrecords_dir=self.configs["tfrecords_dir"], mode="train_keras")
+                            tfrecords_dir=self.configs["tfrecords_dir"], mode="train", is_keras=True)
     tf_train_dataset = train_dataset(text_featurizer=self.text_featurizer,
                                      speech_conf=self.configs["speech_conf"],
                                      batch_size=self.configs["batch_size"],
                                      augmentations=augmentations)
 
     eval_dataset = Dataset(data_path=self.configs["eval_data_transcript_paths"],
-                           tfrecords_dir=self.configs["tfrecords_dir"], mode="eval_keras")
+                           tfrecords_dir=self.configs["tfrecords_dir"], mode="eval", is_keras=True)
     tf_eval_dataset = eval_dataset(text_featurizer=self.text_featurizer,
                                    speech_conf=self.configs["speech_conf"],
                                    batch_size=self.configs["batch_size"])
@@ -198,10 +198,7 @@ class SpeechToText:
       # restoring the latest checkpoint in checkpoint_path
       self.ckpt.restore(self.ckpt_manager.latest_checkpoint)
 
-    def keras_loss(y_true, y_pred):
-      return ctc_loss_keras(y_true, y_pred, num_classes=self.text_featurizer.num_classes)
-
-    self.model.compile(optimizer=self.optimizer, loss=keras_loss)
+    self.model.compile(optimizer=self.optimizer, loss=ctc_loss_keras)
 
     cp_callback = Checkpoint(self.ckpt_manager)
 

@@ -34,35 +34,36 @@ def to_tfrecord(audio, au, transcript):
 
 
 class Dataset:
-  def __init__(self, data_path, tfrecords_dir, mode="train"):
+  def __init__(self, data_path, tfrecords_dir, mode="train", is_keras=False):
     self.data_path = data_path
     self.tfrecord_dir = tfrecords_dir
     self.mode = mode
     self.num_cpus = multiprocessing.cpu_count()
+    self.is_keras = is_keras
 
   def __call__(self, text_featurizer, speech_conf, batch_size=32,
                repeat=1, augmentations=tuple([None]), sortagrad=False):
     self.create_tfrecords(augmentations, sortagrad)
     if self.mode == "train":
+      if self.is_keras:
+        return self.get_dataset_from_tfrecords_keras(text_featurizer, augmentations=augmentations,
+                                                     speech_conf=speech_conf,
+                                                     batch_size=batch_size, repeat=repeat,
+                                                     sort=sortagrad, shuffle=True)
       return self.get_dataset_from_tfrecords(text_featurizer, augmentations=augmentations,
                                              speech_conf=speech_conf,
                                              batch_size=batch_size, repeat=repeat,
                                              sort=sortagrad, shuffle=True)
-    elif self.mode == "train_keras":
-      return self.get_dataset_from_tfrecords_keras(text_featurizer, augmentations=augmentations,
-                                                   speech_conf=speech_conf,
-                                                   batch_size=batch_size, repeat=repeat,
-                                                   sort=sortagrad, shuffle=True)
     elif self.mode in ["eval", "test"]:
+      if self.is_keras:
+        return self.get_dataset_from_tfrecords_keras(text_featurizer, augmentations=[None],
+                                                     speech_conf=speech_conf,
+                                                     batch_size=batch_size, repeat=1,
+                                                     sort=False, shuffle=True)
       return self.get_dataset_from_tfrecords(text_featurizer, augmentations=[None],
                                              speech_conf=speech_conf,
                                              batch_size=batch_size, repeat=1,
                                              sort=False, shuffle=False)
-    elif self.mode == "eval_keras":
-      return self.get_dataset_from_tfrecords_keras(text_featurizer, augmentations=[None],
-                                                   speech_conf=speech_conf,
-                                                   batch_size=batch_size, repeat=1,
-                                                   sort=False, shuffle=False)
     else:
       raise ValueError(f"Mode must be either 'train', 'eval' or 'test': {self.mode}")
 
@@ -164,8 +165,6 @@ class Dataset:
     dataset = dataset.map(parse, num_parallel_calls=AUTOTUNE)
     # # Padding the features to its max length dimensions
     dataset = dataset.repeat(repeat)
-    if shuffle and not sort:
-      dataset = dataset.shuffle(batch_size, reshuffle_each_iteration=True)  # shuffle elements in batches
     if speech_conf["is_delta"]:
       padded_shape_features = tf.TensorShape([None, speech_conf["num_feature_bins"] * 3, 1])
     else:
@@ -185,8 +184,6 @@ class Dataset:
         0
       )
     )
-    if shuffle and sort:
-      dataset = dataset.shuffle(batch_size, reshuffle_each_iteration=False)  # shuffle the sorted batches
     # Prefetch to improve speed of input length
     dataset = dataset.prefetch(AUTOTUNE)
     return dataset
@@ -220,8 +217,6 @@ class Dataset:
     dataset = dataset.map(parse, num_parallel_calls=AUTOTUNE)
     # # Padding the features to its max length dimensions
     dataset = dataset.repeat(repeat)
-    if shuffle and not sort:
-      dataset = dataset.shuffle(batch_size, reshuffle_each_iteration=True)  # shuffle elements in batches
     if speech_conf["is_delta"]:
       padded_shape_features = tf.TensorShape([None, speech_conf["num_feature_bins"] * 3, 1])
     else:
@@ -237,8 +232,6 @@ class Dataset:
         text_featurizer.num_classes - 1,
       )
     )
-    if shuffle and sort:
-      dataset = dataset.shuffle(batch_size, reshuffle_each_iteration=False)  # shuffle the sorted batches
     # Prefetch to improve speed of input length
     dataset = dataset.prefetch(AUTOTUNE)
     return dataset
