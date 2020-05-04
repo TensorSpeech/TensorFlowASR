@@ -5,12 +5,13 @@ import sys
 import time
 import tensorflow as tf
 
-from models.CTCModel import create_ctc_model, ctc_loss
+from models.CTCModel import create_ctc_model, ctc_loss, ctc_loss_keras
 from decoders.Decoders import create_decoder
 from featurizers.TextFeaturizer import TextFeaturizer
 from utils.Utils import get_asr_config, check_key_in_dict, \
   bytes_to_string, wer, cer, scalar_summary
 from featurizers.SpeechFeaturizer import compute_mfcc_feature
+from utils.Checkpoint import Checkpoint
 from data.Dataset import Dataset
 
 
@@ -28,7 +29,7 @@ class SpeechToText:
       min_lr=self.configs["min_lr"],
       base_model=self.configs["base_model"],
       streaming_size=self.configs["streaming_size"],
-      num_feature_bins=self.configs["speech_conf"]["num_feature_bins"])
+      speech_conf=self.configs["speech_conf"])
     self.noise_filter = noise_filter
     self.writer = None
 
@@ -114,47 +115,46 @@ class SpeechToText:
     num_batch = None
 
     for epoch in range(initial_epoch, epochs, 1):
-      epoch_train_loss = []
       epoch_eval_loss = None
       epoch_eval_wer = None
       batch_idx = 1
       start = time.time()
 
-      for feature, input_length, transcript, label_length in tf_train_dataset:
+      for step, (feature, input_length, transcript, label_length) in enumerate(tf_train_dataset):
         train_loss = train_step(feature, input_length, transcript, label_length)
-        epoch_train_loss.append(train_loss)
-
         sys.stdout.write("\033[K")
-        tf.print(f"\rEpoch: {epoch + 1}/{epochs}, batch: {batch_idx}/{num_batch}, train_loss = {train_loss}", end="")
+        print(f"\rEpoch: {epoch + 1}/{epochs}, batch: {batch_idx}/{num_batch}, train_loss = {train_loss}", end="")
         batch_idx += 1
+        if self.writer:
+          with self.writer.as_default():
+            scalar_summary("train_loss", train_loss, step=step)
+            self.writer.flush()
 
       num_batch = batch_idx
-      epoch_train_loss = tf.reduce_mean(epoch_train_loss)
-
-      tf.print(f"\nEpoch: {epoch + 1}/{epochs}, train_loss = {epoch_train_loss}")
 
       if tf_eval_dataset:
-        tf.print("Validating ... ", end="")
-        eval_loss = []
+        print("Validating ... ", end="")
+        eval_loss_count = 0
+        epoch_eval_loss = 0.0
         total_wer = 0.0
         wer_count = 0.0
         for feature, input_length, transcript, label_length in tf_eval_dataset:
           _eval_loss, _wer, _wer_count = eval_step(feature, input_length, transcript, label_length)
-          eval_loss.append(_eval_loss)
+          epoch_eval_loss += _eval_loss
+          eval_loss_count += 1
           total_wer += _wer
           wer_count += _wer_count
-        epoch_eval_loss = tf.reduce_mean(eval_loss)
+        epoch_eval_loss = epoch_eval_loss / eval_loss_count
         epoch_eval_wer = total_wer / wer_count
-        tf.print(f"val_loss = {epoch_eval_loss}, wer = {epoch_eval_wer}")
+        print(f"val_loss = {epoch_eval_loss}, wer = {epoch_eval_wer}")
 
       self.ckpt_manager.save()
-      tf.print(f"\nSaved checkpoint at epoch {epoch + 1}")
+      print(f"\nSaved checkpoint at epoch {epoch + 1}")
       time_epoch = time.time() - start
       tf.print(f"Time for epoch {epoch + 1} is {time_epoch} secs")
 
       if self.writer:
         with self.writer.as_default():
-          scalar_summary("train_loss", epoch_train_loss, step=epoch)
           if epoch_eval_loss and epoch_eval_wer:
             scalar_summary("eval_loss", epoch_eval_loss, step=epoch)
             scalar_summary("eval_wer", epoch_eval_wer, step=epoch)
@@ -164,6 +164,54 @@ class SpeechToText:
     if model_file:
       self.model.save(model_file)
 
+  def keras_train_and_eval(self, model_file=None):
+    print("Training and evaluating model ...")
+    self.ckpt = tf.train.Checkpoint(model=self.model,
+                                    optimizer=self.optimizer)
+    self.ckpt_manager = tf.train.CheckpointManager(
+      self.ckpt, self.configs["checkpoint_dir"], max_to_keep=None)
+
+    check_key_in_dict(dictionary=self.configs,
+                      keys=["tfrecords_dir", "checkpoint_dir", "augmentations",
+                            "log_dir", "train_data_transcript_paths", "eval_data_transcript_paths"])
+    augmentations = self.configs["augmentations"]
+    augmentations.append(None)
+
+    train_dataset = Dataset(data_path=self.configs["train_data_transcript_paths"],
+                            tfrecords_dir=self.configs["tfrecords_dir"], mode="train_keras")
+    tf_train_dataset = train_dataset(text_featurizer=self.text_featurizer,
+                                     speech_conf=self.configs["speech_conf"],
+                                     batch_size=self.configs["batch_size"],
+                                     augmentations=augmentations)
+
+    eval_dataset = Dataset(data_path=self.configs["eval_data_transcript_paths"],
+                           tfrecords_dir=self.configs["tfrecords_dir"], mode="eval_keras")
+    tf_eval_dataset = eval_dataset(text_featurizer=self.text_featurizer,
+                                   speech_conf=self.configs["speech_conf"],
+                                   batch_size=self.configs["batch_size"])
+
+    self.model.summary()
+
+    initial_epoch = 0
+    if self.ckpt_manager.latest_checkpoint:
+      initial_epoch = int(self.ckpt_manager.latest_checkpoint.split('-')[-1])
+      # restoring the latest checkpoint in checkpoint_path
+      self.ckpt.restore(self.ckpt_manager.latest_checkpoint)
+
+    def keras_loss(y_true, y_pred):
+      return ctc_loss_keras(y_true, y_pred, num_classes=self.text_featurizer.num_classes)
+
+    self.model.compile(optimizer=self.optimizer, loss=keras_loss)
+
+    cp_callback = Checkpoint(self.ckpt_manager)
+
+    self.model.fit(x=tf_train_dataset, epochs=self.configs["num_epochs"],
+                   validation_data=tf_eval_dataset, shuffle="batch",
+                   initial_epoch=initial_epoch, callbacks=[cp_callback])
+
+    if model_file:
+      self.save_model(model_file)
+
   def test(self, model_file, output_file_path):
     print("Testing model ...")
     check_key_in_dict(dictionary=self.configs,
@@ -171,7 +219,9 @@ class SpeechToText:
     test_dataset = Dataset(data_path=self.configs["test_data_transcript_paths"],
                            tfrecords_dir=self.configs["tfrecords_dir"],
                            mode="test")
-    self.load_model(model_file)
+    msg = self.load_model(model_file)
+    if msg:
+      raise Exception(msg)
     tf_test_dataset = test_dataset(text_featurizer=self.text_featurizer,
                                    speech_conf=self.configs["speech_conf"],
                                    batch_size=self.configs["batch_size"])
@@ -223,7 +273,9 @@ class SpeechToText:
     print("Infering ...")
     check_key_in_dict(dictionary=self.configs,
                       keys=["tfrecords_dir"])
-    self.load_model(model_file)
+    msg = self.load_model(model_file)
+    if msg:
+      raise Exception(msg)
     tf_infer_dataset = Dataset(data_path=input_file_path,
                                tfrecords_dir=self.configs["tfrecords_dir"],
                                mode="infer")
@@ -252,7 +304,7 @@ class SpeechToText:
 
   def load_model(self, model_file):
     try:
-      self.model.load_model(model_file)
+      self.model = tf.saved_model.load(model_file)
     except Exception as e:
       return f"Model is not trained: {e}"
     return None

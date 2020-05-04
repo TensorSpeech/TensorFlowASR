@@ -24,7 +24,7 @@ if gpus:
 
 tf.keras.backend.clear_session()
 
-if args_parser.mode == "train":
+if args_parser.mode in ["train", "train_keras"]:
   tf.compat.v1.set_random_seed(2020)
 else:
   tf.compat.v1.set_random_seed(0)
@@ -33,6 +33,8 @@ if args_parser.model == "asr":
   asr = SpeechToText(configs_path=args_parser.config)
   if args_parser.mode == "train":
     asr.train_and_eval(model_file=args_parser.export_file)
+  elif args_parser.mode == "train_keras":
+    asr.keras_train_and_eval(model_file=args_parser.export_file)
   elif args_parser.mode == "test":
     if args_parser.output_file_path is None:
       raise ValueError("Flag 'output_file_path' must be set")

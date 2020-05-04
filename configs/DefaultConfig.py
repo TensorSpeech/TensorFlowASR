@@ -3,7 +3,7 @@ from __future__ import absolute_import
 from models.deepspeech2.DeepSpeech2 import DeepSpeech2
 from augmentations.Augments import Noise
 
-base_model = DeepSpeech2(num_conv=3, num_rnn=3, rnn_units=256, filters=[16, 32, 64],
+base_model = DeepSpeech2(num_conv=3, num_rnn=3, rnn_units=256, filters=(16, 32, 64),
                          is_bidirectional=True, kernel_size=(31, 11))
 
 streaming_size = None
@@ -37,7 +37,8 @@ speech_conf = {
   "stride_ms":        10,
   "num_feature_bins": 12,
   "feature_type":     "mfcc",
-  "pre_emph":         0.95
+  "pre_emph":         0.95,
+  "is_delta":         True
 }
 
 train_data_transcript_paths = [
@@ -54,6 +55,6 @@ test_data_transcript_paths = [
 
 tfrecords_dir = "/mnt/Data/ML/ASR/Preprocessed/SmallFixed/TFRecords"
 
-checkpoint_dir = "/mnt/Projects/asrk16/trained/med-bilstm/checkpoints/"
+checkpoint_dir = "/mnt/Projects/asrk16/trained/med-bilstm/ckpts/"
 
 log_dir = "/mnt/Projects/asrk16/trained/med-bilstm/tensorboard/"
