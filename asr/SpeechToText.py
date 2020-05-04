@@ -12,6 +12,7 @@ from featurizers.TextFeaturizer import TextFeaturizer
 from utils.Utils import get_asr_config, check_key_in_dict, bytes_to_string, wer, cer
 from featurizers.SpeechFeaturizer import compute_mfcc_feature
 from utils.Checkpoint import Checkpoint
+from utils.TimeHistory import TimeHistory
 from data.Dataset import Dataset
 
 
@@ -94,8 +95,8 @@ class SpeechToText:
       def sub_eval_step():
         y_pred = self.model(features, training=False)
         _loss = loss(y_true=y_true, y_pred=y_pred,
-                         input_length=inp_length, label_length=lab_length,
-                         num_classes=self.text_featurizer.num_classes)
+                     input_length=inp_length, label_length=lab_length,
+                     num_classes=self.text_featurizer.num_classes)
         _pred = self.decoder(probs=y_pred, input_length=inp_length,
                              last_activation=self.configs["last_activation"])
         return _loss, _pred
@@ -209,11 +210,15 @@ class SpeechToText:
     else:
       self.model.compile(optimizer=self.optimizer, loss=ctc_loss_keras)
 
-    cp_callback = Checkpoint(self.ckpt_manager)
+    callback = [Checkpoint(self.ckpt_manager)]
+    if "log_dir" in self.configs.keys():
+      with open(os.path.join(self.configs["log_dir"], "model.json"), "w") as f:
+        f.write(self.model.to_json())
+      callback.append(TimeHistory(os.path.join(self.configs["log_dir"], "time.txt")))
 
     self.model.fit(x=tf_train_dataset, epochs=self.configs["num_epochs"],
                    validation_data=tf_eval_dataset, shuffle="batch",
-                   initial_epoch=initial_epoch, callbacks=[cp_callback])
+                   initial_epoch=initial_epoch, callbacks=callback)
 
     if model_file:
       self.save_model(model_file)
