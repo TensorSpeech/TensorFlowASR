@@ -7,7 +7,7 @@ import glob
 import multiprocessing
 import numpy as np
 import tensorflow as tf
-from featurizers.SpeechFeaturizer import read_raw_audio, preemphasis
+from featurizers.SpeechFeaturizer import read_raw_audio, preemphasis, compute_mfcc_feature
 
 AUTOTUNE = tf.data.experimental.AUTOTUNE
 
@@ -40,17 +40,17 @@ class Dataset:
     self.mode = mode
     self.num_cpus = multiprocessing.cpu_count()
 
-  def __call__(self, text_featurizer, sample_rate=16000, preemph=0.95, batch_size=32,
+  def __call__(self, text_featurizer, speech_conf, batch_size=32,
                repeat=1, augmentations=tuple([None]), sortagrad=False):
     self.create_tfrecords(augmentations, sortagrad)
     if self.mode == "train":
       return self.get_dataset_from_tfrecords(text_featurizer, augmentations=augmentations,
-                                             sample_rate=sample_rate, preemph=preemph,
+                                             speech_conf=speech_conf,
                                              batch_size=batch_size, repeat=repeat,
                                              sort=sortagrad, shuffle=True)
     elif self.mode in ["eval", "test"]:
       return self.get_dataset_from_tfrecords(text_featurizer, augmentations=augmentations,
-                                             sample_rate=sample_rate, preemph=preemph,
+                                             speech_conf=speech_conf,
                                              batch_size=batch_size, repeat=repeat,
                                              sort=sortagrad, shuffle=False)
     else:
@@ -71,7 +71,7 @@ class Dataset:
 
   def create_tfrecords(self, augmentations=tuple([None]), sortagrad=False):
     print(f"Creating {self.mode}.tfrecord ...")
-    if glob.glob(os.path.join(self.tfrecord_dir, "*.tfrecord")):
+    if glob.glob(os.path.join(self.tfrecord_dir, f"{self.mode}*.tfrecord")):
       return
     entries = self.create_entries(augmentations, sortagrad)
 
@@ -110,16 +110,23 @@ class Dataset:
     return np.concatenate(lines)
 
   @staticmethod
-  def preprocess(audio, au, transcript, text_featurizer, augmentations, sample_rate, preemph):
-    signal = read_raw_audio(audio.numpy(), sample_rate)
+  def preprocess(audio, au, transcript, speech_conf, text_featurizer, augmentations):
+    signal = read_raw_audio(audio.numpy(), speech_conf["sample_rate"])
     if augmentations[int(au)] is not None:
-      signal = augmentations[int(au)](signal=signal, sample_rate=sample_rate)
-    signal = preemphasis(signal, coeff=preemph)
+      signal = augmentations[int(au)](signal=signal, sample_rate=speech_conf["sample_rate"])
+    signal = preemphasis(signal, coeff=speech_conf["pre_emph"])
+    if speech_conf["feature_type"] == "mfcc":
+      features = compute_mfcc_feature(signal, speech_conf["sample_rate"], speech_conf["frame_ms"],
+                                      speech_conf["stride_ms"], speech_conf["num_feature_bins"])
+    else:
+      raise ValueError("Mfcc")
     label = text_featurizer.compute_label_features(transcript.numpy().decode("utf-8"))
     label_length = tf.cast(tf.shape(label)[0], tf.int32)
-    return tf.convert_to_tensor(signal, tf.float32), label, label_length
+    features = tf.convert_to_tensor(features, tf.float32)
+    input_length = tf.cast(tf.shape(features)[0], tf.int32)
+    return tf.expand_dims(features, -1), input_length, label, label_length
 
-  def get_dataset_from_tfrecords(self, text_featurizer, augmentations, sample_rate, preemph,
+  def get_dataset_from_tfrecords(self, text_featurizer, augmentations, speech_conf,
                                  batch_size, repeat=1, sort=False, shuffle=True):
 
     def parse(record):
@@ -129,12 +136,12 @@ class Dataset:
         "transcript": tf.io.FixedLenFeature([], tf.string)
       }
       example = tf.io.parse_single_example(record, feature_description)
-      signal, label, label_length = tf.py_function(
+      features, input_length, label, label_length = tf.py_function(
         functools.partial(self.preprocess, text_featurizer=text_featurizer,
-                          augmentations=augmentations, sample_rate=sample_rate, preemph=preemph),
+                          speech_conf=speech_conf, augmentations=augmentations),
         inp=[example["audio"], example["au"], example["transcript"]],
-        Tout=(tf.float32, tf.int32, tf.int32))
-      return signal, label, label_length
+        Tout=(tf.float32, tf.int32, tf.int32, tf.int32))
+      return features, input_length, label, label_length
 
     pattern = os.path.join(self.tfrecord_dir, f"{self.mode}*.tfrecord")
     files_ds = tf.data.Dataset.list_files(pattern)
@@ -149,22 +156,24 @@ class Dataset:
     # # Padding the features to its max length dimensions
     dataset = dataset.repeat(repeat)
     if shuffle and not sort:
-      dataset = dataset.shuffle(100, reshuffle_each_iteration=True)  # shuffle elements in batches
+      dataset = dataset.shuffle(batch_size, reshuffle_each_iteration=True)  # shuffle elements in batches
     dataset = dataset.padded_batch(
       batch_size=batch_size,
       padded_shapes=(
-        tf.TensorShape([None]),
+        tf.TensorShape([None, speech_conf["num_feature_bins"], 1]),
+        tf.TensorShape([]),
         tf.TensorShape([None]),
         tf.TensorShape([])
       ),
       padding_values=(
         0.,
+        0,
         text_featurizer.num_classes - 1,
         0
       )
     )
     if shuffle and sort:
-      dataset = dataset.shuffle(100, reshuffle_each_iteration=True)  # shuffle the sorted batches
+      dataset = dataset.shuffle(batch_size, reshuffle_each_iteration=False)  # shuffle the sorted batches
     # Prefetch to improve speed of input length
     dataset = dataset.prefetch(AUTOTUNE)
     return dataset

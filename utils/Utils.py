@@ -14,12 +14,7 @@ asr_conf_required = ["base_model",
                      "vocabulary_file_path",
                      "learning_rate",
                      "min_lr",
-                     "sample_rate",
-                     "frame_ms",
-                     "stride_ms",
-                     "num_feature_bins",
-                     "feature_type",
-                     "pre_emph",
+                     "speech_conf",
                      "streaming_size"]
 
 asr_conf_paths = ["train_data_transcript_paths",
