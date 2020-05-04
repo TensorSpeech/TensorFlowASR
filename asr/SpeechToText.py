@@ -26,6 +26,7 @@ class SpeechToText:
     self.model, self.optimizer = create_ctc_model(
       num_classes=self.text_featurizer.num_classes,
       learning_rate=self.configs["learning_rate"],
+      last_activation=self.configs["last_activation"],
       min_lr=self.configs["min_lr"],
       base_model=self.configs["base_model"],
       streaming_size=self.configs["streaming_size"],

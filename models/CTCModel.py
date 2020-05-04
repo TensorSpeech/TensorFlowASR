@@ -20,8 +20,8 @@ class GetLength(tf.keras.layers.Layer):
     return self(**config)
 
 
-def create_ctc_model(base_model, num_classes, speech_conf,
-                     learning_rate, min_lr=0.0, streaming_size=None):
+def create_ctc_model(base_model, num_classes, speech_conf, learning_rate,
+                     last_activation='linear', min_lr=0.0, streaming_size=None):
   if streaming_size:
     # Fixed input shape is required for live streaming audio
     if speech_conf["is_delta"]:
@@ -49,7 +49,7 @@ def create_ctc_model(base_model, num_classes, speech_conf,
 
   # Fully connected layer
   outputs = tf.keras.layers.Dense(units=num_classes,
-                                  activation='softmax',
+                                  activation=last_activation,
                                   name="fully_connected",
                                   use_bias=True)(outputs)
 

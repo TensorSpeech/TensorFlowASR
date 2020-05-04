@@ -31,6 +31,8 @@ learning_rate = 0.0002
 
 min_lr = 0.0
 
+last_activation = 'softmax'
+
 speech_conf = {
   "sample_rate":      16000,
   "frame_ms":         20,

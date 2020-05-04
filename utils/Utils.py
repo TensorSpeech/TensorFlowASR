@@ -14,6 +14,7 @@ asr_conf_required = ["base_model",
                      "vocabulary_file_path",
                      "learning_rate",
                      "min_lr",
+                     "last_activation",
                      "speech_conf",
                      "streaming_size"]
 
