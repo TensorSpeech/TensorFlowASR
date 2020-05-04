@@ -82,6 +82,7 @@ def ctc_loss(y_true, y_pred, input_length, label_length, num_classes):
     blank_index=num_classes - 1))
 
 
+@tf.function
 def ctc_loss_keras(y_true, y_pred, num_classes):
   label_length = get_length(y_true)
   input_length = get_length(y_pred)
