@@ -337,6 +337,7 @@ class SpeechToText:
     self.model.save(model_file)
 
   def save_from_checkpoint(self, model_file):
+    self._create_checkpoints()
     if not self.ckpt_manager.latest_checkpoint:
       raise ValueError("No checkpoint to save from")
     self.ckpt.restore(self.ckpt_manager.latest_checkpoint)
