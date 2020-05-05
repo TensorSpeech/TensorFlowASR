@@ -30,13 +30,15 @@ vocabulary_file_path = "/mnt/Projects/asrk16/vnasr/data/vocabulary.txt"
 last_activation = 'linear'
 
 speech_conf = {
-  "sample_rate":      16000,
-  "frame_ms":         20,
-  "stride_ms":        10,
-  "num_feature_bins": 12,
-  "feature_type":     "mfcc",
-  "pre_emph":         0.95,
-  "is_delta":         True
+  "sample_rate":       16000,
+  "frame_ms":          20,
+  "stride_ms":         10,
+  "num_feature_bins":  12,
+  "feature_type":      "mfcc",
+  "pre_emph":          0.95,
+  "is_delta":          True,
+  "normalize_signal":  True,
+  "normalize_feature": False
 }
 
 train_data_transcript_paths = [
