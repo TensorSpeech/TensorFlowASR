@@ -9,7 +9,12 @@ import soundfile as sf
 import tensorflow as tf
 
 
-def compute_spectrogram_feature(signal, sample_rate, frame_ms, stride_ms, num_feature_bins):
+def compute_spectrogram_feature(signal, speech_conf):
+  frame_ms = speech_conf["frame_ms"]
+  stride_ms = speech_conf["stride_ms"]
+  num_feature_bins = speech_conf["num_feature_bins"]
+  sample_rate = speech_conf["sample_rate"]
+
   frame_length = int(sample_rate * (frame_ms / 1000))
   frame_step = int(sample_rate * (stride_ms / 1000))
 
@@ -63,7 +68,12 @@ def compute_mfcc_feature(signal, speech_conf):
   return mfcc.T
 
 
-def compute_logfbank_feature(signal, sample_rate, frame_ms, stride_ms, num_feature_bins):
+def compute_logfbank_feature(signal, speech_conf):
+  frame_ms = speech_conf["frame_ms"]
+  stride_ms = speech_conf["stride_ms"]
+  num_feature_bins = speech_conf["num_feature_bins"]
+  sample_rate = speech_conf["sample_rate"]
+
   frame_length = int(sample_rate * (frame_ms / 1000))
   frame_step = int(sample_rate * (stride_ms / 1000))
   num_fft = 2 ** math.ceil(math.log2(frame_length))

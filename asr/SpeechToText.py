@@ -32,12 +32,15 @@ class SpeechToText:
     self.noise_filter = noise_filter
     self.writer = None
 
-  def train_and_eval(self, model_file=None):
-    print("Training and evaluating model ...")
+  def _create_checkpoints(self):
     self.ckpt = tf.train.Checkpoint(model=self.model,
                                     optimizer=self.optimizer)
     self.ckpt_manager = tf.train.CheckpointManager(
       self.ckpt, self.configs["checkpoint_dir"], max_to_keep=None)
+
+  def train_and_eval(self, model_file=None):
+    print("Training and evaluating model ...")
+    self._create_checkpoints()
 
     check_key_in_dict(dictionary=self.configs,
                       keys=["tfrecords_dir", "checkpoint_dir", "augmentations",
@@ -170,10 +173,7 @@ class SpeechToText:
 
   def keras_train_and_eval(self, model_file=None):
     print("Training and evaluating model ...")
-    self.ckpt = tf.train.Checkpoint(model=self.model,
-                                    optimizer=self.optimizer)
-    self.ckpt_manager = tf.train.CheckpointManager(
-      self.ckpt, self.configs["checkpoint_dir"], max_to_keep=None)
+    self._create_checkpoints()
 
     check_key_in_dict(dictionary=self.configs,
                       keys=["tfrecords_dir", "checkpoint_dir", "augmentations",
@@ -335,3 +335,10 @@ class SpeechToText:
 
   def save_model(self, model_file):
     self.model.save(model_file)
+
+  def save_from_checkpoint(self, model_file):
+    self._create_checkpoints()
+    if not self.ckpt_manager.latest_checkpoint:
+      raise ValueError("No checkpoint to save from")
+    self.ckpt.restore(self.ckpt_manager.latest_checkpoint)
+    self.save_model(model_file)

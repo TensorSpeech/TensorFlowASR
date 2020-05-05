@@ -7,7 +7,8 @@ import glob
 import multiprocessing
 import numpy as np
 import tensorflow as tf
-from featurizers.SpeechFeaturizer import read_raw_audio, preemphasis, compute_mfcc_feature
+from featurizers.SpeechFeaturizer import read_raw_audio, preemphasis, compute_mfcc_feature, \
+  normalize_audio_feature, normalize_signal, compute_logfbank_feature, compute_spectrogram_feature
 
 AUTOTUNE = tf.data.experimental.AUTOTUNE
 
@@ -123,11 +124,19 @@ class Dataset:
     signal = read_raw_audio(audio.numpy(), speech_conf["sample_rate"])
     if augmentations[int(au)] is not None:
       signal = augmentations[int(au)](signal=signal, sample_rate=speech_conf["sample_rate"])
+    if speech_conf["normalize_signal"]:
+      signal = normalize_signal(signal)
     signal = preemphasis(signal, coeff=speech_conf["pre_emph"])
     if speech_conf["feature_type"] == "mfcc":
       features = compute_mfcc_feature(signal, speech_conf)
+    elif speech_conf["feature_type"] == "logfbank":
+      features = compute_logfbank_feature(signal, speech_conf)
+    elif speech_conf["feature_type"] == "spectrogram":
+      features = compute_spectrogram_feature(signal, speech_conf)
     else:
-      raise ValueError("Feature must be mfcc")
+      raise ValueError("'feature_type' must be mfcc, logfbank or spectrogram")
+    if speech_conf["normalize_feature"]:
+      features = normalize_audio_feature(features)
     label = text_featurizer.compute_label_features(transcript.numpy().decode("utf-8"))
     label_length = tf.cast(tf.shape(label)[0], tf.int32)
     features = tf.convert_to_tensor(features, tf.float32)

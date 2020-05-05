@@ -4,7 +4,7 @@ from models.deepspeech2.DeepSpeech2 import DeepSpeech2
 from augmentations.Augments import Noise
 
 base_model = DeepSpeech2(num_conv=3, num_rnn=3, rnn_units=256, filters=(16, 32, 64),
-                         learning_rate=0.0002, is_bidirectional=True, kernel_size=(31, 11))
+                         is_bidirectional=True, kernel_size=(31, 11))
 
 streaming_size = None
 
@@ -30,13 +30,15 @@ vocabulary_file_path = "/mnt/Projects/asrk16/vnasr/data/vocabulary.txt"
 last_activation = 'linear'
 
 speech_conf = {
-  "sample_rate":      16000,
-  "frame_ms":         20,
-  "stride_ms":        10,
-  "num_feature_bins": 12,
-  "feature_type":     "mfcc",
-  "pre_emph":         0.95,
-  "is_delta":         True
+  "sample_rate":       16000,
+  "frame_ms":          20,
+  "stride_ms":         10,
+  "num_feature_bins":  12,
+  "feature_type":      "mfcc",
+  "pre_emph":          0.95,
+  "is_delta":          True,
+  "normalize_signal":  True,
+  "normalize_feature": False
 }
 
 train_data_transcript_paths = [

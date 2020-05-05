@@ -59,6 +59,8 @@ if args_parser.model == "asr":
     asr.save_model(args_parser.export_file)
   elif args_parser.mode == "load":
     asr.load_model(args_parser.export_file)
+  elif args_parser.mode == "save_from_checkpoint":
+    asr.save_from_checkpoint(args_parser.export_file)
   else:
     raise ValueError("Flag 'mode' must be either 'train', 'test' or 'infer'")
 elif args_parser.model == "segan":
