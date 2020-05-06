@@ -6,7 +6,8 @@ import sys
 import time
 import tensorflow as tf
 
-from models.CTCModel import create_ctc_model, ctc_loss, ctc_loss_1, ctc_loss_keras, ctc_loss_keras_2
+from models.CTCModel import create_ctc_model, ctc_loss, ctc_loss_1, \
+  ctc_loss_keras, ctc_loss_keras_2, create_ctc_train_model
 from decoders.Decoders import create_decoder
 from featurizers.TextFeaturizer import TextFeaturizer
 from utils.Utils import get_asr_config, check_key_in_dict, bytes_to_string, wer, cer
@@ -32,15 +33,15 @@ class SpeechToText:
     self.noise_filter = noise_filter
     self.writer = None
 
-  def _create_checkpoints(self):
-    self.ckpt = tf.train.Checkpoint(model=self.model,
+  def _create_checkpoints(self, model):
+    self.ckpt = tf.train.Checkpoint(model=model,
                                     optimizer=self.optimizer)
     self.ckpt_manager = tf.train.CheckpointManager(
       self.ckpt, self.configs["checkpoint_dir"], max_to_keep=None)
 
   def train_and_eval(self, model_file=None):
     print("Training and evaluating model ...")
-    self._create_checkpoints()
+    self._create_checkpoints(self.model)
 
     check_key_in_dict(dictionary=self.configs,
                       keys=["tfrecords_dir", "checkpoint_dir", "augmentations",
@@ -173,7 +174,6 @@ class SpeechToText:
 
   def keras_train_and_eval(self, model_file=None):
     print("Training and evaluating model ...")
-    self._create_checkpoints()
 
     check_key_in_dict(dictionary=self.configs,
                       keys=["tfrecords_dir", "checkpoint_dir", "augmentations",
@@ -194,7 +194,11 @@ class SpeechToText:
                                    speech_conf=self.configs["speech_conf"],
                                    batch_size=self.configs["batch_size"])
 
-    self.model.summary()
+    train_model = create_ctc_train_model(self.model, last_activation=self.configs["last_activation"],
+                                         num_classes=self.text_featurizer.num_classes)
+    self._create_checkpoints(train_model)
+
+    train_model.summary()
 
     initial_epoch = 0
     if self.ckpt_manager.latest_checkpoint:
@@ -202,13 +206,7 @@ class SpeechToText:
       # restoring the latest checkpoint in checkpoint_path
       self.ckpt.restore(self.ckpt_manager.latest_checkpoint)
 
-    if self.configs["last_activation"] == "linear":
-      def keras_loss(y_true, y_pred):
-        return ctc_loss_keras_2(y_true, y_pred, num_classes=self.text_featurizer.num_classes)
-
-      self.model.compile(optimizer=self.optimizer, loss=keras_loss)
-    else:
-      self.model.compile(optimizer=self.optimizer, loss=ctc_loss_keras)
+    train_model.compile(optimizer=self.optimizer, loss={"ctc_loss": lambda y_true, y_pred: y_pred})
 
     callback = [Checkpoint(self.ckpt_manager)]
     if "log_dir" in self.configs.keys():
@@ -216,9 +214,9 @@ class SpeechToText:
         f.write(self.model.to_json())
       callback.append(TimeHistory(os.path.join(self.configs["log_dir"], "time.txt")))
 
-    self.model.fit(x=tf_train_dataset, epochs=self.configs["num_epochs"],
-                   validation_data=tf_eval_dataset, shuffle="batch",
-                   initial_epoch=initial_epoch, callbacks=callback)
+    train_model.fit(x=tf_train_dataset, epochs=self.configs["num_epochs"],
+                    validation_data=tf_eval_dataset, shuffle="batch",
+                    initial_epoch=initial_epoch, callbacks=callback)
 
     if model_file:
       self.save_model(model_file)
@@ -336,8 +334,17 @@ class SpeechToText:
   def save_model(self, model_file):
     self.model.save(model_file)
 
+  def save_from_checkpoint_keras(self, model_file):
+    train_model = create_ctc_train_model(self.model, last_activation=self.configs["last_activation"],
+                                         num_classes=self.text_featurizer.num_classes)
+    self._create_checkpoints(train_model)
+    if len(self.ckpt_manager.checkpoints) <= 0:
+      raise ValueError("No checkpoint to save from")
+    self.ckpt.restore(self.ckpt_manager.latest_checkpoint)
+    self.save_model(model_file)
+
   def save_from_checkpoint(self, model_file):
-    self._create_checkpoints()
+    self._create_checkpoints(self.model)
     if len(self.ckpt_manager.checkpoints) <= 0:
       raise ValueError("No checkpoint to save from")
     self.ckpt.restore(self.ckpt_manager.latest_checkpoint)
