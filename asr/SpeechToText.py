@@ -6,8 +6,7 @@ import sys
 import time
 import tensorflow as tf
 
-from models.CTCModel import create_ctc_model, ctc_loss, ctc_loss_1, \
-  ctc_loss_keras, ctc_loss_keras_2, create_ctc_train_model
+from models.CTCModel import create_ctc_model, ctc_loss, ctc_loss_1, create_ctc_train_model
 from decoders.Decoders import create_decoder
 from featurizers.TextFeaturizer import TextFeaturizer
 from utils.Utils import get_asr_config, check_key_in_dict, bytes_to_string, wer, cer
@@ -198,7 +197,7 @@ class SpeechToText:
                                          num_classes=self.text_featurizer.num_classes)
     self._create_checkpoints(train_model)
 
-    train_model.summary()
+    self.model.summary()
 
     initial_epoch = 0
     if self.ckpt_manager.latest_checkpoint:
