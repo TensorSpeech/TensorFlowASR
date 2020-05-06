@@ -197,7 +197,6 @@ class Dataset:
       dataset = dataset.shuffle(batch_size)
     # Prefetch to improve speed of input length
     dataset = dataset.prefetch(AUTOTUNE)
-    dataset = dataset.cache("/tmp/asr.binary")
     return dataset
 
   def get_dataset_from_tfrecords_keras(self, text_featurizer, augmentations,
@@ -215,7 +214,7 @@ class Dataset:
                           speech_conf=speech_conf, augmentations=augmentations),
         inp=[example["audio"], example["au"], example["transcript"]],
         Tout=(tf.float32, tf.int32, tf.int32, tf.int32))
-      return features, label
+      return (features, input_length, label, label_length), -1
 
     pattern = os.path.join(self.tfrecord_dir, f"{self.mode}*.tfrecord")
     files_ds = tf.data.Dataset.list_files(pattern)
@@ -236,12 +235,12 @@ class Dataset:
     dataset = dataset.padded_batch(
       batch_size=batch_size,
       padded_shapes=(
-        padded_shape_features,
-        tf.TensorShape([None]),
+        (padded_shape_features, tf.TensorShape([]), tf.TensorShape([None]), tf.TensorShape([])),
+        tf.TensorShape([])
       ),
       padding_values=(
-        0.,
-        text_featurizer.num_classes - 1,
+        (0., 0, text_featurizer.num_classes - 1, 0),
+        0,
       )
     )
     # Prefetch to improve speed of input length

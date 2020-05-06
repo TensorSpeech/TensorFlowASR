@@ -6,7 +6,7 @@ import sys
 import time
 import tensorflow as tf
 
-from models.CTCModel import create_ctc_model, ctc_loss, ctc_loss_1, ctc_loss_keras, ctc_loss_keras_2
+from models.CTCModel import create_ctc_model, ctc_loss, ctc_loss_1, create_ctc_train_model
 from decoders.Decoders import create_decoder
 from featurizers.TextFeaturizer import TextFeaturizer
 from utils.Utils import get_asr_config, check_key_in_dict, bytes_to_string, wer, cer
@@ -32,15 +32,70 @@ class SpeechToText:
     self.noise_filter = noise_filter
     self.writer = None
 
-  def _create_checkpoints(self):
-    self.ckpt = tf.train.Checkpoint(model=self.model,
+  def _create_checkpoints(self, model):
+    self.ckpt = tf.train.Checkpoint(model=model,
                                     optimizer=self.optimizer)
     self.ckpt_manager = tf.train.CheckpointManager(
       self.ckpt, self.configs["checkpoint_dir"], max_to_keep=None)
 
+  @tf.function
+  def train(self, model, dataset, optimizer, loss, num_classes, epoch, num_epochs):
+    for step, [features, input_length, label, label_length] in dataset.enumerate(start=1):
+      start = time.time()
+      with tf.GradientTape() as tape:
+        y_pred = self.model(features, training=True)
+        train_loss = loss(y_true=label, y_pred=y_pred,
+                          input_length=input_length, label_length=label_length,
+                          num_classes=num_classes)
+      gradients = tape.gradient(train_loss, model.trainable_variables)
+      optimizer.apply_gradients(zip(gradients, model.trainable_variables))
+
+      sys.stdout.write("\033[K")
+      tf.print("\rEpoch: ", epoch, "/", num_epochs, ", step: ", step,
+               ", duration: ", int(time.time() - start), "s",
+               ", train_loss = ", train_loss,
+               sep="", end="", output_stream=sys.stdout)
+
+      if self.writer:
+        with self.writer.as_default():
+          tf.summary.scalar("train_loss", train_loss, step=(epoch * num_epochs + step))
+      gc.collect()
+
+  def validate(self, model, decoder, dataset, loss, num_classes, last_activation):
+    eval_loss_count = 0
+    epoch_eval_loss = 0.0
+    total_wer = 0.0
+    wer_count = 0.0
+
+    @tf.function
+    def val_step(features, inp_length, y_true, lab_length):
+      y_pred = model(features, training=False)
+      _loss = loss(y_true=y_true, y_pred=y_pred,
+                   input_length=inp_length, label_length=lab_length,
+                   num_classes=num_classes)
+      _pred = decoder(probs=y_pred, input_length=inp_length, last_activation=last_activation)
+      return _loss, _pred
+
+    for feature, input_length, transcript, label_length in dataset:
+      _val_loss, _eval_pred = val_step(feature, input_length, transcript, label_length)
+      predictions = bytes_to_string(_eval_pred.numpy())
+      transcripts = self.decoder.convert_to_string(transcript)
+
+      for idx, decoded in enumerate(predictions):
+        _wer, _wer_count = wer(decode=decoded, target=transcripts[idx])
+        total_wer += _wer
+        wer_count += _wer_count
+
+      epoch_eval_loss += _val_loss
+      eval_loss_count += 1
+
+    epoch_eval_loss = epoch_eval_loss / eval_loss_count
+    epoch_eval_wer = total_wer / wer_count
+    return epoch_eval_loss, epoch_eval_wer
+
   def train_and_eval(self, model_file=None):
     print("Training and evaluating model ...")
-    self._create_checkpoints()
+    self._create_checkpoints(self.model)
 
     check_key_in_dict(dictionary=self.configs,
                       keys=["tfrecords_dir", "checkpoint_dir", "augmentations",
@@ -82,84 +137,30 @@ class SpeechToText:
     else:
       loss = ctc_loss_1
 
-    @tf.function
-    def train_step(features, inp_length, y_true, lab_length):
-      with tf.GradientTape() as tape:
-        y_pred = self.model(features, training=True)
-        _loss = loss(y_true=y_true, y_pred=y_pred,
-                     input_length=inp_length, label_length=lab_length,
-                     num_classes=self.text_featurizer.num_classes)
-      gradients = tape.gradient(_loss, self.model.trainable_variables)
-      self.optimizer.apply_gradients(zip(gradients, self.model.trainable_variables))
-      return _loss
-
-    def eval_step(features, inp_length, y_true, lab_length):
-      @tf.function
-      def sub_eval_step():
-        y_pred = self.model(features, training=False)
-        _loss = loss(y_true=y_true, y_pred=y_pred,
-                     input_length=inp_length, label_length=lab_length,
-                     num_classes=self.text_featurizer.num_classes)
-        _pred = self.decoder(probs=y_pred, input_length=inp_length,
-                             last_activation=self.configs["last_activation"])
-        return _loss, _pred
-
-      _val_loss, _eval_pred = sub_eval_step()
-      predictions = bytes_to_string(_eval_pred.numpy())
-      transcripts = self.decoder.convert_to_string(y_true)
-
-      b_wer = 0.0
-      b_wer_count = 0.0
-
-      for idx, decoded in enumerate(predictions):
-        _wer, _wer_count = wer(decode=decoded, target=transcripts[idx])
-        _cer, _cer_count = cer(decode=decoded, target=transcripts[idx])
-        b_wer += _wer
-        b_wer_count += _wer_count
-
-      return _val_loss, b_wer, b_wer_count
-
     epochs = self.configs["num_epochs"]
-    num_batch = None
 
     for epoch in range(initial_epoch, epochs, 1):
       epoch_eval_loss = None
       epoch_eval_wer = None
-      batch_idx = 1
       start = time.time()
 
-      for step, [feature, input_length, transcript, label_length] in tf_train_dataset.enumerate(start=1):
-        train_loss = train_step(feature, input_length, transcript, label_length)
-        sys.stdout.write("\033[K")
-        print(f"\rEpoch: {epoch + 1}/{epochs}, batch: {batch_idx}/{num_batch}, train_loss = {train_loss}", end="")
-        batch_idx += 1
-        if self.writer:
-          with self.writer.as_default():
-            tf.summary.scalar("train_loss", train_loss, step=(epoch * epochs + step))
-        gc.collect()
+      self.train(self.model, tf_train_dataset, self.optimizer, loss,
+                 self.text_featurizer.num_classes, epoch, epochs)
 
-      num_batch = batch_idx
+      print(f"\nEnd training on epoch = {epoch}")
 
       if tf_eval_dataset:
         print("Validating ... ", end="")
-        eval_loss_count = 0
-        epoch_eval_loss = 0.0
-        total_wer = 0.0
-        wer_count = 0.0
-        for feature, input_length, transcript, label_length in tf_eval_dataset:
-          _eval_loss, _wer, _wer_count = eval_step(feature, input_length, transcript, label_length)
-          epoch_eval_loss += _eval_loss
-          eval_loss_count += 1
-          total_wer += _wer
-          wer_count += _wer_count
-        epoch_eval_loss = epoch_eval_loss / eval_loss_count
-        epoch_eval_wer = total_wer / wer_count
-        print(f"val_loss = {epoch_eval_loss}, wer = {epoch_eval_wer}")
+        epoch_eval_loss, epoch_eval_wer = self.validate(
+          self.model, self.decoder, tf_eval_dataset, loss,
+          self.text_featurizer.num_classes, self.configs["last_activation"]
+        )
+        print(f"val_loss = {epoch_eval_loss}, val_wer = {epoch_eval_wer}")
 
       self.ckpt_manager.save()
-      print(f"\nSaved checkpoint at epoch {epoch + 1}")
+      print(f"Saved checkpoint at epoch {epoch + 1}")
       time_epoch = time.time() - start
-      tf.print(f"Time for epoch {epoch + 1} is {time_epoch} secs")
+      print(f"Time for epoch {epoch + 1} is {time_epoch} secs")
 
       if self.writer:
         with self.writer.as_default():
@@ -173,7 +174,6 @@ class SpeechToText:
 
   def keras_train_and_eval(self, model_file=None):
     print("Training and evaluating model ...")
-    self._create_checkpoints()
 
     check_key_in_dict(dictionary=self.configs,
                       keys=["tfrecords_dir", "checkpoint_dir", "augmentations",
@@ -194,6 +194,10 @@ class SpeechToText:
                                    speech_conf=self.configs["speech_conf"],
                                    batch_size=self.configs["batch_size"])
 
+    train_model = create_ctc_train_model(self.model, last_activation=self.configs["last_activation"],
+                                         num_classes=self.text_featurizer.num_classes)
+    self._create_checkpoints(train_model)
+
     self.model.summary()
 
     initial_epoch = 0
@@ -202,13 +206,7 @@ class SpeechToText:
       # restoring the latest checkpoint in checkpoint_path
       self.ckpt.restore(self.ckpt_manager.latest_checkpoint)
 
-    if self.configs["last_activation"] == "linear":
-      def keras_loss(y_true, y_pred):
-        return ctc_loss_keras_2(y_true, y_pred, num_classes=self.text_featurizer.num_classes)
-
-      self.model.compile(optimizer=self.optimizer, loss=keras_loss)
-    else:
-      self.model.compile(optimizer=self.optimizer, loss=ctc_loss_keras)
+    train_model.compile(optimizer=self.optimizer, loss={"ctc_loss": lambda y_true, y_pred: y_pred})
 
     callback = [Checkpoint(self.ckpt_manager)]
     if "log_dir" in self.configs.keys():
@@ -216,9 +214,9 @@ class SpeechToText:
         f.write(self.model.to_json())
       callback.append(TimeHistory(os.path.join(self.configs["log_dir"], "time.txt")))
 
-    self.model.fit(x=tf_train_dataset, epochs=self.configs["num_epochs"],
-                   validation_data=tf_eval_dataset, shuffle="batch",
-                   initial_epoch=initial_epoch, callbacks=callback)
+    train_model.fit(x=tf_train_dataset, epochs=self.configs["num_epochs"],
+                    validation_data=tf_eval_dataset, shuffle="batch",
+                    initial_epoch=initial_epoch, callbacks=callback)
 
     if model_file:
       self.save_model(model_file)
@@ -336,9 +334,18 @@ class SpeechToText:
   def save_model(self, model_file):
     self.model.save(model_file)
 
+  def save_from_checkpoint_keras(self, model_file):
+    train_model = create_ctc_train_model(self.model, last_activation=self.configs["last_activation"],
+                                         num_classes=self.text_featurizer.num_classes)
+    self._create_checkpoints(train_model)
+    if len(self.ckpt_manager.checkpoints) <= 0:
+      raise ValueError("No checkpoint to save from")
+    self.ckpt.restore(self.ckpt_manager.latest_checkpoint)
+    self.save_model(model_file)
+
   def save_from_checkpoint(self, model_file):
-    self._create_checkpoints()
-    if not self.ckpt_manager.latest_checkpoint:
+    self._create_checkpoints(self.model)
+    if len(self.ckpt_manager.checkpoints) <= 0:
       raise ValueError("No checkpoint to save from")
     self.ckpt.restore(self.ckpt_manager.latest_checkpoint)
     self.save_model(model_file)
