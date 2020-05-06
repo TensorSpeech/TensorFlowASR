@@ -197,7 +197,6 @@ class Dataset:
       dataset = dataset.shuffle(batch_size)
     # Prefetch to improve speed of input length
     dataset = dataset.prefetch(AUTOTUNE)
-    dataset = dataset.cache("/tmp/asr.binary")
     return dataset
 
   def get_dataset_from_tfrecords_keras(self, text_featurizer, augmentations,

@@ -81,12 +81,12 @@ def create_ctc_train_model(ctc_model, last_activation, num_classes, name="ctc_tr
 
 @tf.function
 def ctc_loss_1(y_true, y_pred, input_length, label_length, num_classes):
-  loss = tf.keras.backend.ctc_batch_cost(
+  return tf.reduce_mean(tf.keras.backend.ctc_batch_cost(
     y_pred=y_pred,
     input_length=tf.expand_dims(input_length, -1),
     y_true=tf.cast(y_true, tf.int32),
-    label_length=tf.expand_dims(label_length, -1))
-  return tf.reduce_mean(loss)
+    label_length=tf.expand_dims(label_length, -1)
+  ))
 
 
 @tf.function
@@ -97,7 +97,8 @@ def ctc_loss(y_true, y_pred, input_length, label_length, num_classes):
     logits=y_pred,
     label_length=label_length,
     logits_time_major=False,
-    blank_index=num_classes - 1))
+    blank_index=num_classes - 1
+  ))
 
 
 @tf.function
