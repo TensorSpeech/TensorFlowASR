@@ -10,7 +10,7 @@ from models.CTCModel import create_ctc_model, ctc_loss, ctc_loss_1, create_ctc_t
 from decoders.Decoders import create_decoder
 from featurizers.TextFeaturizer import TextFeaturizer
 from utils.Utils import get_asr_config, check_key_in_dict, bytes_to_string, wer, cer
-from featurizers.SpeechFeaturizer import compute_mfcc_feature, speech_feature_extraction
+from featurizers.SpeechFeaturizer import speech_feature_extraction
 from utils.Checkpoint import Checkpoint
 from utils.TimeHistory import TimeHistory
 from data.Dataset import Dataset
@@ -365,7 +365,8 @@ class SpeechToText:
 
   def load_model(self, model_file):
     try:
-      self.model = tf.saved_model.load(model_file)
+      self.model = tf.keras.models.load_model(model_file)
+      print(self.model.summary())
     except Exception as e:
       return f"Model is not trained: {e}"
     return None

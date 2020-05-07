@@ -32,8 +32,7 @@ class DeepSpeech2:
         filters=self.filters[i] if isinstance(self.filters, tuple) else self.filters,
         kernel_size=self.kernel_size,
         strides=self.strides, padding="same", name=f"cnn_{i}")(layer)
-      layer = tf.keras.layers.BatchNormalization(axis=-1, name=f"bn_cnn_{i}")(layer)
-      layer = tf.keras.layers.ReLU(name=f"relu_cnn_{i}")(layer)
+      layer = tf.keras.layers.ReLU(max_value=20, name=f"relu_cnn_{i}")(layer)
 
     # combine channel dimension to features
     batch_size = tf.shape(layer)[0]
@@ -51,14 +50,14 @@ class DeepSpeech2:
           tf.keras.layers.LSTM(units=self.rnn_units, dropout=0.2,
                                activation='tanh', recurrent_activation='sigmoid',
                                use_bias=True, recurrent_dropout=0.0,
-                               return_sequences=True, unroll=False, implementation=1,
+                               return_sequences=True, unroll=False, implementation=2,
                                time_major=True, stateful=False, name=f"blstm_{i}"))(layer)
         layer = SequenceBatchNorm(time_major=True, name=f"sequence_wise_bn_{i}")(layer)
       else:
         layer = tf.keras.layers.LSTM(units=self.rnn_units, dropout=0.2,
                                      activation='tanh', recurrent_activation='sigmoid',
                                      use_bias=True, recurrent_dropout=0.0,
-                                     return_sequences=True, unroll=False, implementation=1,
+                                     return_sequences=True, unroll=False, implementation=2,
                                      time_major=False, stateful=streaming, name=f"lstm_{i}")(layer)
         layer = SequenceBatchNorm(time_major=False, name=f"sequence_wise_bn_{i}")(layer)
         if self.is_rowconv:
