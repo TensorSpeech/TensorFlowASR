@@ -10,12 +10,11 @@ from models.deepspeech2.SequenceBatchNorm import SequenceBatchNorm
 
 
 class DeepSpeech2:
-  def __init__(self, num_conv=3, num_rnn=3, rnn_units=128,
-               filters=(32, 32, 32), kernel_size=(31, 11), strides=(1, 2),
+  def __init__(self, num_rnn=5, rnn_units=256, filters=(32, 32, 96),
+               kernel_size=((11, 41), (11, 21), (11, 21)), strides=((2, 2), (1, 2), (1, 2)),
                optimizer=tf.keras.optimizers.SGD(lr=0.0002, momentum=0.99, nesterov=True),
                is_bidirectional=False, is_rowconv=False, pre_fc_units=1024):
     self.optimizer = optimizer
-    self.num_conv = num_conv
     self.num_rnn = num_rnn
     self.rnn_units = rnn_units
     self.filters = filters
@@ -24,20 +23,19 @@ class DeepSpeech2:
     self.is_rowconv = is_rowconv
     self.pre_fc_units = pre_fc_units
     self.strides = strides
+    if len(strides) != len(filters) != len(kernel_size):
+      raise ValueError("Strides must equal Filters")
 
   def __call__(self, features, streaming=False):
     layer = tf.expand_dims(features, -1)
-    for i in range(self.num_conv):
-      layer = tf.keras.layers.Conv2D(
-        filters=self.filters[i] if isinstance(self.filters, tuple) else self.filters,
-        kernel_size=self.kernel_size,
-        strides=self.strides, padding="same", name=f"cnn_{i}")(layer)
+    for i, fil in enumerate(self.filters):
+      layer = tf.keras.layers.Conv2D(filters=fil, kernel_size=self.kernel_size[i],
+                                     strides=self.strides[i], padding="same", name=f"cnn_{i}")(layer)
       layer = tf.keras.layers.ReLU(max_value=20, name=f"relu_cnn_{i}")(layer)
 
-    # combine channel dimension to features
     batch_size = tf.shape(layer)[0]
-    feat_size, channel = layer.get_shape().as_list()[2:]
-    layer = tf.reshape(layer, [batch_size, -1, feat_size * channel])
+    channels, num_filters = layer.get_shape().as_list()[2:]
+    layer = tf.reshape(layer, [batch_size, -1, channels * num_filters])
 
     # Convert to time_major only for bi_directional
     if self.is_bidirectional:
