@@ -9,6 +9,26 @@ import soundfile as sf
 import tensorflow as tf
 
 
+def speech_feature_extraction(signal, speech_conf):
+  if speech_conf["normalize_signal"]:
+    signal = normalize_signal(signal)
+  signal = preemphasis(signal, speech_conf["pre_emph"])
+
+  if speech_conf["feature_type"] == "mfcc":
+    features = compute_mfcc_feature(signal, speech_conf)
+  elif speech_conf["feature_type"] == "logfbank":
+    features = compute_mfcc_feature(signal, speech_conf)
+  elif speech_conf["feature_type"] == "spectrogram":
+    features = compute_spectrogram_feature(signal, speech_conf)
+  else:
+    raise ValueError("feature_type must be either 'mfcc', 'logfbank' or 'spectrogram'")
+ 
+  if speech_conf["normalize_feature"]:
+    features = normalize_audio_feature(features)
+
+  return features
+
+
 def compute_spectrogram_feature(signal, speech_conf):
   frame_ms = speech_conf["frame_ms"]
   stride_ms = speech_conf["stride_ms"]

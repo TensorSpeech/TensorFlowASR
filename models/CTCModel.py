@@ -40,21 +40,11 @@ def create_ctc_model(base_model, num_classes, speech_conf,
     # features = self.speech_featurizer(signal)
     outputs = base_model(features=features, streaming=False)
 
-  batch_size = tf.shape(outputs)[0]
-  n_hidden = outputs.get_shape().as_list()[-1]
-  # reshape from [B, T, A] --> [B*T, A].
-  # Output shape: [n_steps * batch_size, n_hidden]
-  outputs = tf.reshape(outputs, [-1, n_hidden])
-
   # Fully connected layer
   outputs = tf.keras.layers.Dense(units=num_classes,
                                   activation=last_activation,
                                   name="fully_connected",
                                   use_bias=True)(outputs)
-
-  outputs = tf.reshape(outputs,
-                       [batch_size, -1, num_classes],
-                       name="logits")
 
   model = tf.keras.Model(inputs=features, outputs=outputs, name=name)
   return model, base_model.optimizer

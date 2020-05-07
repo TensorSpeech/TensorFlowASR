@@ -31,6 +31,11 @@ class Decoder:
     decoded = tf.map_fn(map_cvrt, decoded, dtype=tf.string)
     return bytes_to_string(decoded.numpy())
 
+  def convert_to_string_single(self, decoded: np.ndarray):
+    decoded = decoded[decoded != self.blank_index]
+    decoded = decoded[decoded != self.num_classes - 1]
+    return ''.join([self.index_to_token[i] for i in decoded])
+
   def __call__(self, probs, input_length, last_activation="linear"):
     if last_activation == "linear":
       probs = tf.nn.softmax(probs)

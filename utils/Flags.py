@@ -10,7 +10,6 @@ _CONF_FILE = os.path.join(current_path,
 
 parser = argparse.ArgumentParser(description="ASR Commands")
 
-
 parser.add_argument("--model", type=str, default="asr",
                     help="asr or segan")
 
@@ -26,7 +25,13 @@ parser.add_argument("--input_file_path", "-i", type=str, default=None,
 parser.add_argument("--export_file", "-e", type=str, default=None,
                     help="Path to the model file to be exported")
 
+parser.add_argument("--segan_weights", type=str, default=None,
+                    help="Path to saved weights of segan")
+
 parser.add_argument("--output_file_path", "-o", type=str, default=None,
                     help="Path to output file")
+
+parser.add_argument("--ckpt_index", type=int, default=-1,
+                    help="Checkpoint index")
 
 args_parser = parser.parse_args()

@@ -10,7 +10,7 @@ from models.CTCModel import create_ctc_model, ctc_loss, ctc_loss_1, create_ctc_t
 from decoders.Decoders import create_decoder
 from featurizers.TextFeaturizer import TextFeaturizer
 from utils.Utils import get_asr_config, check_key_in_dict, bytes_to_string, wer, cer
-from featurizers.SpeechFeaturizer import compute_mfcc_feature
+from featurizers.SpeechFeaturizer import speech_feature_extraction
 from utils.Checkpoint import Checkpoint
 from utils.TimeHistory import TimeHistory
 from data.Dataset import Dataset
@@ -213,6 +213,7 @@ class SpeechToText:
       with open(os.path.join(self.configs["log_dir"], "model.json"), "w") as f:
         f.write(self.model.to_json())
       callback.append(TimeHistory(os.path.join(self.configs["log_dir"], "time.txt")))
+      callback.append(tf.keras.callbacks.TensorBoard(log_dir=self.configs["log_dir"]))
 
     train_model.fit(x=tf_train_dataset, epochs=self.configs["num_epochs"],
                     validation_data=tf_eval_dataset, shuffle="batch",
@@ -231,6 +232,7 @@ class SpeechToText:
     msg = self.load_model(model_file)
     if msg:
       raise Exception(msg)
+
     tf_test_dataset = test_dataset(text_featurizer=self.text_featurizer,
                                    speech_conf=self.configs["speech_conf"],
                                    batch_size=self.configs["batch_size"])
@@ -278,6 +280,54 @@ class SpeechToText:
       of.write("WER: " + str(results[0]) + "\n")
       of.write("CER: " + str(results[-1]) + "\n")
 
+  def test_with_noise_filter(self, model_file, output_file_path):
+    print("Testing model ...")
+    if not self.noise_filter:
+      raise ValueError("noise_filter must be defined")
+
+    check_key_in_dict(dictionary=self.configs,
+                      keys=["test_data_transcript_paths", "tfrecords_dir"])
+    test_dataset = Dataset(data_path=self.configs["test_data_transcript_paths"],
+                           tfrecords_dir=self.configs["tfrecords_dir"],
+                           mode="test")
+    msg = self.load_model(model_file)
+    if msg:
+      raise Exception(msg)
+
+    tf_test_dataset = test_dataset(text_featurizer=self.text_featurizer,
+                                   speech_conf=self.configs["speech_conf"],
+                                   batch_size=1, feature_extraction=False)
+
+    def test_step(signal, label):
+      prediction = self.infer_single(signal)
+      label = self.decoder.convert_to_string_single(label)
+
+      print(f"Pred: {prediction}")
+      print(f"Groundtruth: {label}")
+      _wer, _wer_count = wer(decode=prediction, target=label)
+      _cer, _cer_count = cer(decode=prediction, target=label)
+      return _wer, _wer_count, _cer, _cer_count
+
+    total_wer = 0.0
+    wer_count = 0.0
+    total_cer = 0.0
+    cer_count = 0.0
+
+    for signal, label in tf_test_dataset.as_numpy_iterator():
+      batch_wer, batch_wer_count, batch_cer, batch_cer_count = test_step(signal, label)
+      total_wer += batch_wer
+      total_cer += batch_cer
+      wer_count += batch_wer_count
+      cer_count += batch_cer_count
+
+    results = (total_wer / wer_count, total_cer / cer_count)
+
+    print(f"WER: {results[0]}, CER: {results[-1]}")
+
+    with open(output_file_path, "w", encoding="utf-8") as of:
+      of.write("WER: " + str(results[0]) + "\n")
+      of.write("CER: " + str(results[-1]) + "\n")
+
   def infer(self, input_file_path, model_file, output_file_path):
     print("Infering ...")
     check_key_in_dict(dictionary=self.configs,
@@ -305,7 +355,9 @@ class SpeechToText:
           of.write(pred + "\n")
 
   def infer_single(self, signal):
-    features = compute_mfcc_feature(signal, **self.configs["speech_conf"])
+    if self.noise_filter:
+      signal = self.noise_filter.generate(signal)
+    features = speech_feature_extraction(signal, self.configs["speech_conf"])
     features = tf.expand_dims(features, axis=-1)
     input_length = tf.cast(tf.shape(features)[0], tf.int32)
     pred = self.predict(tf.expand_dims(features, 0), tf.expand_dims(input_length, 0))
@@ -313,7 +365,8 @@ class SpeechToText:
 
   def load_model(self, model_file):
     try:
-      self.model = tf.saved_model.load(model_file)
+      self.model = tf.keras.models.load_model(model_file)
+      print(self.model.summary())
     except Exception as e:
       return f"Model is not trained: {e}"
     return None
@@ -334,18 +387,19 @@ class SpeechToText:
   def save_model(self, model_file):
     self.model.save(model_file)
 
-  def save_from_checkpoint_keras(self, model_file):
-    train_model = create_ctc_train_model(self.model, last_activation=self.configs["last_activation"],
-                                         num_classes=self.text_featurizer.num_classes)
+  def save_from_checkpoint(self, model_file, idx, is_builtin=False):
+    if is_builtin:
+      train_model = create_ctc_train_model(
+        self.model, last_activation=self.configs["last_activation"],
+        num_classes=self.text_featurizer.num_classes
+      )
+    else:
+      train_model = self.model
     self._create_checkpoints(train_model)
     if len(self.ckpt_manager.checkpoints) <= 0:
       raise ValueError("No checkpoint to save from")
-    self.ckpt.restore(self.ckpt_manager.latest_checkpoint)
-    self.save_model(model_file)
-
-  def save_from_checkpoint(self, model_file):
-    self._create_checkpoints(self.model)
-    if len(self.ckpt_manager.checkpoints) <= 0:
-      raise ValueError("No checkpoint to save from")
-    self.ckpt.restore(self.ckpt_manager.latest_checkpoint)
+    if idx == -1:
+      self.ckpt.restore(self.ckpt_manager.latest_checkpoint)
+    else:
+      self.ckpt.restore(self.ckpt_manager.checkpoints[idx])
     self.save_model(model_file)
