@@ -7,6 +7,7 @@ import tensorflow as tf
 from models.segan.Discriminator import create_discriminator, discriminator_loss
 from models.segan.Generator import create_generator, generator_loss
 from utils.Utils import get_segan_config, slice_signal, merge_slices, scalar_summary
+from featurizers.SpeechFeaturizer import deemphasis, preemphasis
 from data.SeganDataset import SeganDataset
 
 
@@ -201,6 +202,7 @@ class SEGAN:
     return None
 
   def generate(self, signal):
+    signal = preemphasis(signal, self.configs["pre_emph"])
     slices = slice_signal(signal, self.window_size, stride=1)
 
     @tf.function
@@ -209,4 +211,5 @@ class SEGAN:
       g_wavs = self.generator(sliced_signal, training=False)
       return merge_slices(g_wavs)
 
-    return gen(tf.convert_to_tensor(slices)).numpy()
+    signal = gen(tf.convert_to_tensor(slices)).numpy()
+    return deemphasis(signal, self.configs["pre_emph"])

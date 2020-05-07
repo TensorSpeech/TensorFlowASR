@@ -10,7 +10,7 @@ from models.CTCModel import create_ctc_model, ctc_loss, ctc_loss_1, create_ctc_t
 from decoders.Decoders import create_decoder
 from featurizers.TextFeaturizer import TextFeaturizer
 from utils.Utils import get_asr_config, check_key_in_dict, bytes_to_string, wer, cer
-from featurizers.SpeechFeaturizer import compute_mfcc_feature
+from featurizers.SpeechFeaturizer import compute_mfcc_feature, preemphasis, normalize_signal, normalize_audio_feature
 from utils.Checkpoint import Checkpoint
 from utils.TimeHistory import TimeHistory
 from data.Dataset import Dataset
@@ -357,7 +357,14 @@ class SpeechToText:
   def infer_single(self, signal):
     if self.noise_filter:
       signal = self.noise_filter.generate(signal)
+
+    if self.configs["speech_conf"]["normalize_signal"]:
+      signal = normalize_signal(signal)
+    signal = preemphasis(signal, self.configs["speech_conf"]["pre_emph"])
     features = compute_mfcc_feature(signal, self.configs["speech_conf"])
+    if self.configs["speech_conf"]["normalize_feature"]:
+      features = normalize_audio_feature(features)
+
     features = tf.expand_dims(features, axis=-1)
     input_length = tf.cast(tf.shape(features)[0], tf.int32)
     pred = self.predict(tf.expand_dims(features, 0), tf.expand_dims(input_length, 0))
