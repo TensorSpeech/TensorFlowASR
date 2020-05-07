@@ -209,4 +209,4 @@ class SEGAN:
       g_wavs = self.generator(sliced_signal, training=False)
       return merge_slices(g_wavs)
 
-    return gen(tf.convert_to_tensor(slices))
+    return gen(tf.convert_to_tensor(slices)).numpy()

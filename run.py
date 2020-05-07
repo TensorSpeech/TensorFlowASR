@@ -60,9 +60,13 @@ if args_parser.model == "asr":
   elif args_parser.mode == "load":
     asr.load_model(args_parser.export_file)
   elif args_parser.mode == "save_from_checkpoint":
-    asr.save_from_checkpoint(args_parser.export_file)
+    if args_parser.export_file is None:
+      raise ValueError("Flag 'export_file' must be set")
+    asr.save_from_checkpoint(args_parser.export_file, args_parser.ckpt_index)
   elif args_parser.mode == "save_from_checkpoint_keras":
-    asr.save_from_checkpoint_keras(args_parser.export_file)
+    if args_parser.export_file is None:
+      raise ValueError("Flag 'export_file' must be set")
+    asr.save_from_checkpoint(args_parser.export_file, args_parser.ckpt_index, is_builtin=True)
   else:
     raise ValueError("Flag 'mode' must be either 'train', 'test' or 'infer'")
 elif args_parser.model == "segan":
@@ -85,3 +89,13 @@ elif args_parser.model == "segan":
       librosa.output.write_wav(args_parser.output_file_path, clean_signal, 16000)
   else:
     raise ValueError("Flag 'mode' must be either 'train' or 'test'")
+elif args_parser.model == "combine":
+  segan = SEGAN(config_path=None, training=False)
+  segan.load_model(args_parser.segan_weights)
+  asr = SpeechToText(configs_path=args_parser.config, noise_filter=segan)
+  if args_parser.mode != "test":
+    raise ValueError("Only mode 'test' is available for this model")
+  if args_parser.output_file_path is None:
+    raise ValueError("Flag 'output_file_path' must be set")
+  asr.test_with_noise_filter(model_file=args_parser.export_file,
+                             output_file_path=args_parser.output_file_path)
