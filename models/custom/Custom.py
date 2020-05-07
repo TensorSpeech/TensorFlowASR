@@ -17,7 +17,7 @@ class Custom:
       raise ValueError("Last filter must equal to last dense")
 
   def __call__(self, features, streaming=False):
-    h = tf.squeeze(features, axis=-1)
+    h = features
     x = h
     for i, fil in enumerate(self.filters):
       h = tf.keras.layers.Conv1D(filters=fil, kernel_size=self.kernel_size,

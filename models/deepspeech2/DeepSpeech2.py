@@ -26,7 +26,7 @@ class DeepSpeech2:
     self.strides = strides
 
   def __call__(self, features, streaming=False):
-    layer = features
+    layer = tf.expand_dims(features, -1)
     for i in range(self.num_conv):
       layer = tf.keras.layers.Conv2D(
         filters=self.filters[i] if isinstance(self.filters, tuple) else self.filters,
