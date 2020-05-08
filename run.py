@@ -6,7 +6,7 @@ import tensorflow as tf
 from utils.Flags import args_parser
 from asr.SpeechToText import SpeechToText
 from asr.SEGAN import SEGAN
-from featurizers.SpeechFeaturizer import read_raw_audio, preemphasis
+from featurizers.SpeechFeaturizer import read_raw_audio, preemphasis, deemphasis
 
 tf.get_logger().setLevel(ERROR)
 gpus = tf.config.experimental.list_physical_devices('GPU')
@@ -80,12 +80,11 @@ elif args_parser.model == "segan":
   elif args_parser.mode == "save":
     segan.save(args_parser.export_file)
   elif args_parser.mode == "infer":
-    segan.load_model(args_parser.export_file)
+    msg = segan.load_model(args_parser.export_file)
+    assert msg is None
     if args_parser.input_file_path and args_parser.output_file_path:
       signal = read_raw_audio(args_parser.input_file_path, 16000)
-      signal = preemphasis(signal, 0.95)
       clean_signal = segan.generate(signal)
-      clean_signal = clean_signal.numpy()
       librosa.output.write_wav(args_parser.output_file_path, clean_signal, 16000)
   else:
     raise ValueError("Flag 'mode' must be either 'train' or 'test'")
