@@ -31,11 +31,12 @@ class DeepSpeech2:
     for i, fil in enumerate(self.filters):
       layer = tf.keras.layers.Conv2D(filters=fil, kernel_size=self.kernel_size[i],
                                      strides=self.strides[i], padding="same", name=f"cnn_{i}")(layer)
-      layer = tf.keras.layers.ReLU(max_value=20, name=f"relu_cnn_{i}")(layer)
+      layer = tf.keras.layers.BatchNormalization(name=f"bn_cnn_{i}")(layer)
+      layer = tf.keras.layers.ReLU(name=f"relu_cnn_{i}")(layer)
 
     batch_size = tf.shape(layer)[0]
-    channels, num_filters = layer.get_shape().as_list()[2:]
-    layer = tf.reshape(layer, [batch_size, -1, channels * num_filters])
+    f, c = layer.get_shape().as_list()[2:]
+    layer = tf.reshape(layer, [batch_size, -1, f * c])
 
     # Convert to time_major only for bi_directional
     if self.is_bidirectional:

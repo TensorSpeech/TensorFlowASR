@@ -22,7 +22,7 @@ def speech_feature_extraction(signal, speech_conf):
     features = compute_spectrogram_feature(signal, speech_conf)
   else:
     raise ValueError("feature_type must be either 'mfcc', 'logfbank' or 'spectrogram'")
- 
+
   if speech_conf["normalize_feature"]:
     features = normalize_audio_feature(features)
 
@@ -54,7 +54,8 @@ def compute_spectrogram_feature(signal, speech_conf):
       be <= (sample_rate * window_size // 2 + 1)"
 
   # cut high frequency part, keep num_feature_bins features
-  features = features[:, :num_feature_bins]
+  if num_feature_bins is not None:
+    features = features[:, :num_feature_bins]
 
   return features
 
@@ -63,6 +64,7 @@ def compute_mfcc_feature(signal, speech_conf):
   frame_ms = speech_conf["frame_ms"]
   stride_ms = speech_conf["stride_ms"]
   num_feature_bins = speech_conf["num_feature_bins"]
+  assert num_feature_bins is not None
   sample_rate = speech_conf["sample_rate"]
   is_delta = speech_conf["is_delta"]
 
@@ -92,6 +94,7 @@ def compute_logfbank_feature(signal, speech_conf):
   frame_ms = speech_conf["frame_ms"]
   stride_ms = speech_conf["stride_ms"]
   num_feature_bins = speech_conf["num_feature_bins"]
+  assert num_feature_bins is not None
   sample_rate = speech_conf["sample_rate"]
 
   frame_length = int(sample_rate * (frame_ms / 1000))
