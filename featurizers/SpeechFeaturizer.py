@@ -17,7 +17,7 @@ def speech_feature_extraction(signal, speech_conf):
   if speech_conf["feature_type"] == "mfcc":
     features = compute_mfcc_feature(signal, speech_conf)
   elif speech_conf["feature_type"] == "logfbank":
-    features = compute_mfcc_feature(signal, speech_conf)
+    features = compute_logfbank_feature(signal, speech_conf)
   elif speech_conf["feature_type"] == "spectrogram":
     features = compute_spectrogram_feature(signal, speech_conf)
   else:
@@ -37,25 +37,20 @@ def compute_spectrogram_feature(signal, speech_conf):
 
   frame_length = int(sample_rate * (frame_ms / 1000))
   frame_step = int(sample_rate * (stride_ms / 1000))
+  num_fft = 2 ** math.ceil(math.log2(frame_length))
 
-  powspec = np.square(
-    np.abs(
-      librosa.core.stft(
-        signal, n_fft=frame_length, hop_length=frame_step,
-        win_length=frame_length, center=True
-      )))
+  powspec = np.abs(librosa.core.stft(signal, n_fft=num_fft, hop_length=frame_step,
+                                     win_length=frame_length, center=True))
 
   # remove small bins
-  powspec[powspec <= 1e-30] = 1e-30
-  features = 10 * np.log10(powspec.T)
+  features = 20 * np.log10(powspec.T)
 
   assert num_feature_bins <= frame_length // 2 + 1, \
     "num_features for spectrogram should \
       be <= (sample_rate * window_size // 2 + 1)"
 
   # cut high frequency part, keep num_feature_bins features
-  if num_feature_bins is not None:
-    features = features[:, :num_feature_bins]
+  features = features[:, :num_feature_bins]
 
   return features
 
@@ -64,7 +59,6 @@ def compute_mfcc_feature(signal, speech_conf):
   frame_ms = speech_conf["frame_ms"]
   stride_ms = speech_conf["stride_ms"]
   num_feature_bins = speech_conf["num_feature_bins"]
-  assert num_feature_bins is not None
   sample_rate = speech_conf["sample_rate"]
   is_delta = speech_conf["is_delta"]
 
@@ -75,13 +69,16 @@ def compute_mfcc_feature(signal, speech_conf):
   S = np.square(
     np.abs(
       librosa.core.stft(
-        signal, n_fft=num_fft, hop_length=frame_length,
-        win_length=frame_step, center=True
+        signal, n_fft=num_fft, hop_length=frame_step,
+        win_length=frame_length, center=True
       )))
 
-  mfcc = librosa.feature.mfcc(sr=sample_rate, S=S,
-                              n_mfcc=num_feature_bins,
-                              n_mels=2 * num_feature_bins)
+  mel_basis = librosa.filters.mel(sample_rate, num_fft,
+                                  n_mels=2 * num_feature_bins,
+                                  fmin=0, fmax=int(sample_rate / 2))
+
+  mfcc = librosa.feature.mfcc(sr=sample_rate, S=librosa.core.power_to_db(np.dot(mel_basis, S) + 1e-20),
+                              n_mfcc=num_feature_bins)
 
   if is_delta:
     mfcc_delta = librosa.feature.delta(mfcc)
@@ -94,19 +91,14 @@ def compute_logfbank_feature(signal, speech_conf):
   frame_ms = speech_conf["frame_ms"]
   stride_ms = speech_conf["stride_ms"]
   num_feature_bins = speech_conf["num_feature_bins"]
-  assert num_feature_bins is not None
   sample_rate = speech_conf["sample_rate"]
 
   frame_length = int(sample_rate * (frame_ms / 1000))
   frame_step = int(sample_rate * (stride_ms / 1000))
   num_fft = 2 ** math.ceil(math.log2(frame_length))
 
-  S = np.square(
-    np.abs(
-      librosa.core.stft(
-        signal, n_fft=num_fft, hop_length=frame_length,
-        win_length=frame_step, center=True
-      )))
+  S = np.square(np.abs(librosa.core.stft(signal, n_fft=num_fft, hop_length=frame_step,
+                                         win_length=frame_length, center=True)))
 
   mel_basis = librosa.filters.mel(sample_rate, num_fft,
                                   n_mels=num_feature_bins,

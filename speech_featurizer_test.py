@@ -1,25 +1,37 @@
 from __future__ import absolute_import
 
-from featurizers.SpeechFeaturizer import SpeechFeaturizer
+from featurizers.SpeechFeaturizer import read_raw_audio, speech_feature_extraction
 
 import sys
-import io
-import librosa
+import matplotlib.pyplot as plt
 
 
 def main(argv):
-    speech_file = argv[1]
-    sf = SpeechFeaturizer(sample_rate=16000, frame_ms=20, stride_ms=10, num_feature_bins=128)
-    ft = sf.tf_read_raw_audio(speech_file)
-    print(ft, len(ft))
-    with open(speech_file, "rb") as f:
-        b = f.read()
-    ft1 = sf.tf_read_raw_audio(b)
-    print(ft1)
-    ft2 = sf.convert_bytesarray_to_float(b, channels=1)
-    print(ft2, len(ft2))
-    print(librosa.load(io.BytesIO(b), sr=16000))
+  speech_file = argv[1]
+  feature_type = argv[2]
+  speech_conf = {
+    "sample_rate":       16000,
+    "frame_ms":          25,
+    "stride_ms":         10,
+    "feature_type":      feature_type,
+    "pre_emph":          0,
+    "normalize_signal":  True,
+    "normalize_feature": False,
+    "num_feature_bins":  128,
+    "is_delta":          False
+  }
+  signal = read_raw_audio(speech_file, speech_conf["sample_rate"])
+  ft = speech_feature_extraction(signal, speech_conf).T
+
+  plt.figure(figsize=(15, 5))
+  plt.plot(1, 1, 1)
+  plt.imshow(ft, origin="lower")
+  plt.title(feature_type)
+  plt.colorbar()
+  plt.tight_layout()
+  plt.savefig(argv[3])
+  plt.show()
 
 
 if __name__ == "__main__":
-    main(sys.argv)
+  main(sys.argv)
