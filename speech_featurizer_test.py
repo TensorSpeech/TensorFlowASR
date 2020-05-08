@@ -14,7 +14,7 @@ def main(argv):
     "frame_ms":          25,
     "stride_ms":         10,
     "feature_type":      feature_type,
-    "pre_emph":          0,
+    "pre_emph":          0.97,
     "normalize_signal":  True,
     "normalize_feature": False,
     "num_feature_bins":  128,
