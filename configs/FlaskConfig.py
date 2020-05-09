@@ -18,9 +18,9 @@ class FlaskConfig:
   MODEL_FILE = os.path.expanduser(os.getenv("MODEL_FILE", "/app/trained/deepspeech2/bilstm"))
   STATIC_WAV_FILE = os.path.expanduser(os.getenv("STATIC_WAV_FILE", "/tmp/temp.wav"))
 
-  UNI_CONFIG_PATH = os.path.expanduser(os.getenv("UNI_CONFIG_PATH", "/app/configs/UniConfig.py"))
+  UNI_CONFIG_PATH = os.path.expanduser(os.getenv("UNI_CONFIG_PATH", ""))
 
-  BI_CONFIG_PATH = os.path.expanduser(os.getenv("BI_CONFIG_PATH", "/app/configs/BiConfig.py"))
+  BI_CONFIG_PATH = os.path.expanduser(os.getenv("BI_CONFIG_PATH", ""))
 
   # SEGAN
   SEGAN_FILE = os.path.expanduser(os.getenv("SEGAN_FILE", "/app/trained/segan/trained"))

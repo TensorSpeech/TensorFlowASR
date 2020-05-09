@@ -50,22 +50,23 @@ def check_form_request(func):
 segan = SEGAN(config_path=app.config["SEGAN_CONFIG_PATH"], training=False)
 segan_error = segan.load_model(app.config["SEGAN_FILE"])
 
-asr = SpeechToText(configs_path=app.config["BI_CONFIG_PATH"])
+if segan_error:
+  segan = None
+
+asr = SpeechToText(configs_path=app.config["BI_CONFIG_PATH"], noise_filter=segan)
 asr_error = asr.load_model(app.config["MODEL_FILE"])
 
-asr_streaming = SpeechToText(configs_path=app.config["UNI_CONFIG_PATH"])
-asr_streaming_error = asr_streaming.load_model(app.config["MODEL_FILE"])
+
+# asr_streaming = SpeechToText(configs_path=app.config["UNI_CONFIG_PATH"])
+# asr_streaming_error = asr_streaming.load_model(app.config["MODEL_FILE"])
 
 
 def predict(signal, streaming=False):
   signal = read_raw_audio(signal, asr.configs["sample_rate"])
-  signal = preemphasis(signal, asr.configs["pre_emph"])
-  if not segan_error:
-    signal = segan.generate(signal)
   if not streaming and not asr_error:
     return asr.infer_single(signal)
-  if streaming and not asr_streaming_error:
-    return asr_streaming.infer_single(signal)
+  # if streaming and not asr_streaming_error:
+  #   return asr_streaming.infer_single(signal)
   return "Model is not trained"
 
 
@@ -96,16 +97,16 @@ def file():
   return make_response(({"payload": transcript}, 200))
 
 
-@socketio.on("connect", namespace="/asr_streaming")
-def connect():
-  if asr_streaming_error:
-    return asr_streaming_error, False
-  return "Connected", True
-
-
-@socketio.on("asr_streaming", namespace="/asr_streaming")
-def asr_streaming(content):
-  return predict(content, streaming=True)
+# @socketio.on("connect", namespace="/asr_streaming")
+# def connect():
+#   if asr_streaming_error:
+#     return asr_streaming_error, False
+#   return "Connected", True
+#
+#
+# @socketio.on("asr_streaming", namespace="/asr_streaming")
+# def asr_streaming(content):
+#   return predict(content, streaming=True)
 
 
 app.register_blueprint(asr_blueprint)
