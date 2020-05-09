@@ -189,7 +189,7 @@ class SpeechToText:
                                      augmentations=augmentations)
 
     tf_eval_dataset = None
-    if self.configs["eval_data_transcript_paths"]:
+    if len(self.configs["eval_data_transcript_paths"]) > 0:
       eval_dataset = Dataset(data_path=self.configs["eval_data_transcript_paths"],
                              tfrecords_dir=self.configs["tfrecords_dir"], mode="eval", is_keras=True)
       tf_eval_dataset = eval_dataset(text_featurizer=self.text_featurizer,
