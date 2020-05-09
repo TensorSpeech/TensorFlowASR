@@ -120,10 +120,7 @@ class Dataset:
     if sort:
       lines.sort(key=lambda item: int(item[1]))
     lines = np.array(lines)
-    splitted_lines = np.array_split(lines, self.num_cpus)
-    with multiprocessing.Pool(self.num_cpus) as pool:
-      lines = pool.map(functools.partial(self.entries_map_fn, augmentations=augmentations), splitted_lines)
-    return np.concatenate(lines)
+    return self.entries_map_fn(lines, augmentations)
 
   @staticmethod
   def preprocess(audio, au, transcript, speech_conf, text_featurizer, augmentations):
