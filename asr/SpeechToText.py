@@ -229,7 +229,7 @@ class SpeechToText:
     test_dataset = Dataset(data_path=self.configs["test_data_transcript_paths"],
                            tfrecords_dir=self.configs["tfrecords_dir"],
                            mode="test")
-    msg = self.load_model(model_file)
+    msg = self.load_saved_model(model_file)
     if msg:
       raise Exception(msg)
 
@@ -257,6 +257,8 @@ class SpeechToText:
         b_cer += _cer
         b_wer_count += _wer_count
         b_cer_count += _cer_count
+
+      gc.collect()
 
       return b_wer, b_wer_count, b_cer, b_cer_count
 
@@ -290,7 +292,7 @@ class SpeechToText:
     test_dataset = Dataset(data_path=self.configs["test_data_transcript_paths"],
                            tfrecords_dir=self.configs["tfrecords_dir"],
                            mode="test")
-    msg = self.load_model(model_file)
+    msg = self.load_saved_model(model_file)
     if msg:
       raise Exception(msg)
 
@@ -306,6 +308,9 @@ class SpeechToText:
       print(f"Groundtruth: {label}")
       _wer, _wer_count = wer(decode=prediction, target=label)
       _cer, _cer_count = cer(decode=prediction, target=label)
+
+      gc.collect()
+
       return _wer, _wer_count, _cer, _cer_count
 
     total_wer = 0.0
@@ -358,7 +363,6 @@ class SpeechToText:
     if self.noise_filter:
       signal = self.noise_filter.generate(signal)
     features = speech_feature_extraction(signal, self.configs["speech_conf"])
-    features = tf.expand_dims(features, axis=-1)
     input_length = tf.cast(tf.shape(features)[0], tf.int32)
     pred = self.predict(tf.expand_dims(features, 0), tf.expand_dims(input_length, 0))
     return bytes_to_string(pred.numpy())[0]
@@ -367,6 +371,13 @@ class SpeechToText:
     try:
       self.model = tf.keras.models.load_model(model_file)
       print(self.model.summary())
+    except Exception as e:
+      return f"Model is not trained: {e}"
+    return None
+
+  def load_saved_model(self, model_file):
+    try:
+      self.model = tf.saved_model.load(model_file)
     except Exception as e:
       return f"Model is not trained: {e}"
     return None
