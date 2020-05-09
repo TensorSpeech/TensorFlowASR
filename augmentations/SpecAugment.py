@@ -6,9 +6,8 @@ import tensorflow as tf
 import tensorflow_addons as tfa
 
 
-@tf.function
-def freq_masking(spectrogram: tf.Tensor, num_freq_mask: int = 1,
-                 freq_mask_param: int = 10) -> tf.Tensor:
+def freq_masking(spectrogram: np.ndarray, num_freq_mask: int = 1,
+                 freq_mask_param: int = 10) -> np.ndarray:
   """
   Masking the frequency channels (make features on some channel 0)
   :param spectrogram: shape (time_steps, num_feature_bins, 1)
@@ -18,18 +17,16 @@ def freq_masking(spectrogram: tf.Tensor, num_freq_mask: int = 1,
   """
   assert 0 <= freq_mask_param <= spectrogram.shape[1], \
     "0 <= freq_mask_param <= num_feature_bins"
-  spectrogram = spectrogram.numpy()  # convert to numpy to use index
   for _ in range(num_freq_mask):
     freq = np.random.randint(0, freq_mask_param)
     freq0 = np.random.randint(0, spectrogram.shape[1] - freq)
     spectrogram[:, freq0:freq0 + freq] = 0  # masking
-  return tf.convert_to_tensor(spectrogram)
+  return spectrogram
 
 
-@tf.function
-def time_masking(spectrogram: tf.Tensor, num_time_mask: int = 1,
+def time_masking(spectrogram: np.ndarray, num_time_mask: int = 1,
                  time_mask_param: int = 50,
-                 p_upperbound: float = 1.0) -> tf.Tensor:
+                 p_upperbound: float = 1.0) -> np.ndarray:
   """
   Masking the time steps (make features on some time steps 0)
   :param spectrogram: shape (time_steps, num_feature_bins, 1)
@@ -40,14 +37,13 @@ def time_masking(spectrogram: tf.Tensor, num_time_mask: int = 1,
   :return: a tensor that's applied time masking
   """
   assert 0.0 <= p_upperbound <= 1.0, "0.0 <= p_upperbound <= 1.0"
-  spectrogram = spectrogram.numpy()  # convert to numpy to use index
   for _ in range(num_time_mask):
     time = np.random.randint(0, time_mask_param)
     if time > p_upperbound * spectrogram.shape[0]:
       time = int(p_upperbound * spectrogram.shape[0])
     time0 = np.random.randint(0, spectrogram.shape[0] - time)
     spectrogram[time0:time0 + time, :] = 0
-  return tf.convert_to_tensor(spectrogram)
+  return spectrogram
 
 
 @tf.function

@@ -3,6 +3,8 @@ from __future__ import absolute_import
 import functools
 import os
 import glob
+import librosa
+import random
 from augmentations.SpecAugment import time_warping, time_masking, \
   freq_masking
 from augmentations.NoiseAugment import add_noise
@@ -53,3 +55,14 @@ class Noise(Augmentation):
       add_noise, min_snr=self.min_snr,
       max_snr=self.max_snr, min_noises=self.min_noises,
       max_noises=self.max_noises, noises=self.noises), is_post=False, **kwargs)
+
+
+class TimeStretch(Augmentation):
+  def __init__(self, min_ratio: float = 1.0, max_ratio: float = 1.0, **kwargs):
+    self.min_ratio = min_ratio
+    self.max_ratio = max_ratio
+    super().__init__(func=self.func, is_post=False, **kwargs)
+
+  def func(self, signal, **kwargs):
+    rate = random.uniform(self.min_ratio, self.max_ratio)
+    return librosa.effects.time_stretch(signal, rate)
