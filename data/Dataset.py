@@ -37,27 +37,32 @@ class Dataset:
   def __init__(self, data_path, tfrecords_dir, mode="train", is_keras=False):
     self.data_path = data_path
     self.tfrecord_dir = tfrecords_dir
+    if not os.path.exists(tfrecords_dir):
+      os.makedirs(tfrecords_dir)
     self.mode = mode
     self.num_cpus = multiprocessing.cpu_count()
     self.is_keras = is_keras
 
   def __call__(self, text_featurizer, speech_conf, batch_size=32, repeat=1,
                augmentations=tuple([None]), sortagrad=False, feature_extraction=True):
-    self.create_tfrecords(augmentations, sortagrad)
     if self.mode == "train":
+      self.create_tfrecords(augmentations, True)
       if self.is_keras:
         return self.get_dataset_from_tfrecords_keras(text_featurizer, augmentations=augmentations,
                                                      speech_conf=speech_conf,
-                                                     batch_size=batch_size, repeat=repeat)
+                                                     batch_size=batch_size, repeat=repeat,
+                                                     sort=sortagrad, shuffle=True)
       return self.get_dataset_from_tfrecords(text_featurizer, augmentations=augmentations,
                                              speech_conf=speech_conf,
                                              batch_size=batch_size, repeat=repeat,
                                              sort=sortagrad, shuffle=True)
     elif self.mode in ["eval", "test"]:
+      self.create_tfrecords([None], False)
       if self.is_keras:
         return self.get_dataset_from_tfrecords_keras(text_featurizer, augmentations=[None],
                                                      speech_conf=speech_conf,
-                                                     batch_size=batch_size, repeat=1)
+                                                     batch_size=batch_size, repeat=1,
+                                                     sort=False, shuffle=False)
       if feature_extraction:
         return self.get_dataset_from_tfrecords(text_featurizer, augmentations=[None],
                                                speech_conf=speech_conf,
@@ -108,7 +113,7 @@ class Dataset:
         results.append([path, idx, transcript])
     return np.array(results)
 
-  def create_entries(self, augmentations, sort=False):
+  def create_entries(self, augmentations, sort=False):  # Sort on entries, shuffle on dataset creation
     lines = []
     for file_path in self.data_path:
       with tf.io.gfile.GFile(file_path, "r") as f:
@@ -167,12 +172,6 @@ class Dataset:
 
     pattern = os.path.join(self.tfrecord_dir, f"{self.mode}*.tfrecord")
     files_ds = tf.data.Dataset.list_files(pattern)
-
-    # Disregard data order in favor of reading speed
-    ignore_order = tf.data.Options()
-    ignore_order.experimental_deterministic = False
-    files_ds = files_ds.with_options(ignore_order)
-
     dataset = tf.data.TFRecordDataset(files_ds, compression_type='ZLIB', num_parallel_reads=AUTOTUNE)
     dataset = dataset.map(parse, num_parallel_calls=AUTOTUNE)
     # # Padding the features to its max length dimensions
@@ -205,7 +204,7 @@ class Dataset:
     return dataset
 
   def get_dataset_from_tfrecords_keras(self, text_featurizer, augmentations,
-                                       speech_conf, batch_size, repeat=1):
+                                       speech_conf, batch_size, repeat=1, shuffle=True, sort=False):
 
     def parse(record):
       feature_description = {
@@ -223,16 +222,12 @@ class Dataset:
 
     pattern = os.path.join(self.tfrecord_dir, f"{self.mode}*.tfrecord")
     files_ds = tf.data.Dataset.list_files(pattern)
-
-    # Disregard data order in favor of reading speed
-    ignore_order = tf.data.Options()
-    ignore_order.experimental_deterministic = False
-    files_ds = files_ds.with_options(ignore_order)
-
     dataset = tf.data.TFRecordDataset(files_ds, compression_type='ZLIB', num_parallel_reads=AUTOTUNE)
     dataset = dataset.map(parse, num_parallel_calls=AUTOTUNE)
     # # Padding the features to its max length dimensions
     dataset = dataset.repeat(repeat)
+    if shuffle and not sort:
+      dataset = dataset.shuffle(batch_size)
     if speech_conf["is_delta"]:
       padded_shape_features = tf.TensorShape([None, speech_conf["num_feature_bins"] * 3])
     else:
@@ -248,6 +243,8 @@ class Dataset:
         0,
       )
     )
+    if shuffle and sort:
+      dataset = dataset.shuffle(batch_size)
     # Prefetch to improve speed of input length
     dataset = dataset.prefetch(AUTOTUNE)
     return dataset

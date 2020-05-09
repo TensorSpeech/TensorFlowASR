@@ -33,6 +33,11 @@ class TextFeaturizer:
   def compute_label_features(self, text):
     # Convert string to a list of integers
     tokens = list(text.strip().lower())
+    new_tokens = []
+    for tok in tokens:
+      if tok not in ":,\".;<>/\\!~-?+=[]{}()`":
+        new_tokens.append(tok)
+    tokens = new_tokens
     feats = [self.token_to_index[token] for token in tokens]
     return tf.convert_to_tensor(feats, dtype=tf.int32)
 
