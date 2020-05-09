@@ -120,17 +120,20 @@ class Dataset:
     if sort:
       lines.sort(key=lambda item: int(item[1]))
     lines = np.array(lines)
-    splitted_lines = np.array_split(lines, self.num_cpus)
-    with multiprocessing.Pool(self.num_cpus) as pool:
-      lines = pool.map(functools.partial(self.entries_map_fn, augmentations=augmentations), splitted_lines)
-    return np.concatenate(lines)
+    return self.entries_map_fn(lines, augmentations)
 
   @staticmethod
   def preprocess(audio, au, transcript, speech_conf, text_featurizer, augmentations):
     signal = read_raw_audio(audio.numpy(), speech_conf["sample_rate"])
-    if augmentations[int(au)] is not None:
-      signal = augmentations[int(au)](signal=signal, sample_rate=speech_conf["sample_rate"])
+    augment = augmentations[int(au)]
+    if augment is not None and not augment.is_post:
+      signal = augment(signal=signal, sample_rate=speech_conf["sample_rate"])
+
     features = speech_feature_extraction(signal, speech_conf)
+
+    if augment is not None and augment.is_post:
+      features = augment(features)
+
     label = text_featurizer.compute_label_features(transcript.numpy().decode("utf-8"))
     label_length = tf.cast(tf.shape(label)[0], tf.int32)
     features = tf.convert_to_tensor(features, tf.float32)

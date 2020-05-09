@@ -16,7 +16,7 @@ def main(argv):
     "feature_type":      feature_type,
     "pre_emph":          0.97,
     "normalize_signal":  True,
-    "normalize_feature": False,
+    "normalize_feature": True,
     "num_feature_bins":  128,
     "is_delta":          False
   }
