@@ -41,15 +41,15 @@ speech_conf = {
 }
 
 train_data_transcript_paths = [
-  "/mnt/Data/ML/ASR/Preprocessed/SmallFixed/Train/transcripts.tsv"
+  # "/mnt/Data/ML/ASR/Preprocessed/SmallFixed/Train/transcripts.tsv"
 ]
 
 eval_data_transcript_paths = [
-  "/mnt/Data/ML/ASR/Preprocessed/SmallFixed/Dev/transcripts.tsv"
+  # "/mnt/Data/ML/ASR/Preprocessed/SmallFixed/Dev/transcripts.tsv"
 ]
 
 test_data_transcript_paths = [
-  "/mnt/Data/ML/ASR/Preprocessed/SmallFixed/Test/transcripts.tsv"
+  # "/mnt/Data/ML/ASR/Preprocessed/SmallFixed/Test/transcripts.tsv"
 ]
 
 tfrecords_dir = "/mnt/Data/ML/ASR/Preprocessed/SmallFixed/TFRecords"
