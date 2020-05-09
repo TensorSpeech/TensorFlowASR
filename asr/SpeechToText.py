@@ -177,7 +177,7 @@ class SpeechToText:
 
     check_key_in_dict(dictionary=self.configs,
                       keys=["tfrecords_dir", "checkpoint_dir", "augmentations",
-                            "log_dir", "train_data_transcript_paths", "eval_data_transcript_paths"])
+                            "log_dir", "train_data_transcript_paths"])
     augmentations = self.configs["augmentations"]
     augmentations.append(None)
 
@@ -188,11 +188,13 @@ class SpeechToText:
                                      batch_size=self.configs["batch_size"],
                                      augmentations=augmentations)
 
-    eval_dataset = Dataset(data_path=self.configs["eval_data_transcript_paths"],
-                           tfrecords_dir=self.configs["tfrecords_dir"], mode="eval", is_keras=True)
-    tf_eval_dataset = eval_dataset(text_featurizer=self.text_featurizer,
-                                   speech_conf=self.configs["speech_conf"],
-                                   batch_size=self.configs["batch_size"])
+    tf_eval_dataset = None
+    if "eval_data_transcript_paths" in self.configs.keys():
+      eval_dataset = Dataset(data_path=self.configs["eval_data_transcript_paths"],
+                             tfrecords_dir=self.configs["tfrecords_dir"], mode="eval", is_keras=True)
+      tf_eval_dataset = eval_dataset(text_featurizer=self.text_featurizer,
+                                     speech_conf=self.configs["speech_conf"],
+                                     batch_size=self.configs["batch_size"])
 
     train_model = create_ctc_train_model(self.model, last_activation=self.configs["last_activation"],
                                          num_classes=self.text_featurizer.num_classes)
@@ -215,9 +217,13 @@ class SpeechToText:
       callback.append(TimeHistory(os.path.join(self.configs["log_dir"], "time.txt")))
       callback.append(tf.keras.callbacks.TensorBoard(log_dir=self.configs["log_dir"]))
 
-    train_model.fit(x=tf_train_dataset, epochs=self.configs["num_epochs"],
-                    validation_data=tf_eval_dataset, shuffle="batch",
-                    initial_epoch=initial_epoch, callbacks=callback)
+    if tf_eval_dataset is not None:
+      train_model.fit(x=tf_train_dataset, epochs=self.configs["num_epochs"],
+                      validation_data=tf_eval_dataset, shuffle="batch",
+                      initial_epoch=initial_epoch, callbacks=callback)
+    else:
+      train_model.fit(x=tf_train_dataset, epochs=self.configs["num_epochs"], shuffle="batch",
+                      initial_epoch=initial_epoch, callbacks=callback)
 
     if model_file:
       self.save_model(model_file)
