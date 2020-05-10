@@ -38,8 +38,7 @@ def check_form_request(func):
   @functools.wraps(func)
   def decorated_func(*args, **kwargs):
     try:
-      check_key_in_dict(dictionary=request.form,
-                        keys=["sampleRate", "channels"])
+      check_key_in_dict(dictionary=request.files, keys=["payload"])
     except ValueError as e:
       return make_response(({"payload": str(e)}, 400))
     return func(*args, **kwargs)
@@ -62,7 +61,7 @@ asr_error = asr.load_model(app.config["MODEL_FILE"])
 
 
 def predict(signal, streaming=False):
-  signal = read_raw_audio(signal, asr.configs["sample_rate"])
+  signal = read_raw_audio(signal, asr.configs["speech_conf"]["sample_rate"])
   if not streaming and not asr_error:
     return asr.infer_single(signal)
   # if streaming and not asr_streaming_error:
@@ -78,10 +77,6 @@ def hello():
 @asr_blueprint.route("/asr", methods=["POST"])
 @check_form_request
 def inference():
-  if "payload" not in request.files.keys():
-    return make_response((
-      {"error": "Missing audio binary file/blob"}, 400))
-
   payload = request.files["payload"].read()
   transcript = predict(payload)
   return make_response(({"payload": transcript}, 200))
@@ -89,9 +84,6 @@ def inference():
 
 @asr_blueprint.route("/asrfile", methods=["POST"])
 def file():
-  if "payload" not in request.files.keys():
-    return make_response(({"error": "Missing audio binary file/blob"}, 400))
-
   request.files["payload"].save(app.config["STATIC_WAV_FILE"])
   transcript = predict(app.config["STATIC_WAV_FILE"])
   return make_response(({"payload": transcript}, 200))
