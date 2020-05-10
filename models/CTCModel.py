@@ -41,10 +41,9 @@ def create_ctc_model(base_model, num_classes, speech_conf,
     outputs = base_model(features=features, streaming=False)
 
   # Fully connected layer
-  outputs = tf.keras.layers.Dense(units=num_classes,
-                                  activation=last_activation,
-                                  name="fully_connected",
-                                  use_bias=True)(outputs)
+  outputs = tf.keras.layers.TimeDistributed(
+    tf.keras.layers.Dense(units=num_classes, activation=last_activation,
+                          use_bias=True), name="fully_connected")(outputs)
 
   model = tf.keras.Model(inputs=features, outputs=outputs, name=name)
   return model, base_model.optimizer
@@ -55,7 +54,7 @@ def create_ctc_train_model(ctc_model, last_activation, num_classes, name="ctc_tr
   label_length = tf.keras.Input(shape=(), dtype=tf.int32, name="label_length")
   label = tf.keras.Input(shape=(None,), dtype=tf.int32, name="label")
 
-  if last_activation == "linear":
+  if last_activation != "softmax":
     ctc_loss = tf.keras.layers.Lambda(
       ctc_loss_keras_2, arguments={"num_classes": num_classes},
       output_shape=(1,), name="ctc_loss")([ctc_model.outputs[0], input_length, label, label_length])

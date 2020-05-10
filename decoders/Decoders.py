@@ -37,7 +37,7 @@ class Decoder:
     return ''.join([self.index_to_token[i] for i in decoded])
 
   def __call__(self, probs, input_length, last_activation="linear"):
-    if last_activation == "linear":
+    if last_activation != "softmax":
       probs = tf.nn.softmax(probs)
     decoded = tf.py_function(self.decode, inp=[probs, input_length],
                              Tout=tf.string)

@@ -4,13 +4,14 @@ to use cuDNN-LSTM
 """
 from __future__ import absolute_import
 
+import numpy as np
 import tensorflow as tf
 from models.deepspeech2.RowConv1D import RowConv1D
 from models.deepspeech2.SequenceBatchNorm import SequenceBatchNorm
 
 
 class DeepSpeech2:
-  def __init__(self, num_rnn=5, rnn_units=256, filters=(32, 32, 96),
+  def __init__(self, conv_type=2, num_rnn=5, rnn_units=256, filters=(32, 32, 96),
                kernel_size=((11, 41), (11, 21), (11, 21)), strides=((2, 2), (1, 2), (1, 2)),
                optimizer=tf.keras.optimizers.SGD(lr=0.0002, momentum=0.99, nesterov=True),
                is_bidirectional=False, is_rowconv=False, pre_fc_units=1024):
@@ -23,20 +24,40 @@ class DeepSpeech2:
     self.is_rowconv = is_rowconv
     self.pre_fc_units = pre_fc_units
     self.strides = strides
-    if len(strides) != len(filters) != len(kernel_size):
-      raise ValueError("Strides must equal Filters")
+    self.conv_type = conv_type
+    assert len(strides) == len(filters) == len(kernel_size)
+    assert conv_type in [1, 2]
+
+  @staticmethod
+  def clipped_relu(x):
+    return tf.keras.activations.relu(x, max_value=20)
+
+  @staticmethod
+  def merge_filter_to_channel(x):
+    batch_size = tf.shape(x)[0]
+    f, c = x.get_shape().as_list()[2:]
+    return tf.reshape(x, [batch_size, -1, f * c])
 
   def __call__(self, features, streaming=False):
-    layer = tf.expand_dims(features, -1)
-    for i, fil in enumerate(self.filters):
-      layer = tf.keras.layers.Conv2D(filters=fil, kernel_size=self.kernel_size[i],
-                                     strides=self.strides[i], padding="same", name=f"cnn_{i}")(layer)
-      layer = tf.keras.layers.BatchNormalization(name=f"bn_cnn_{i}")(layer)
-      layer = tf.keras.layers.ReLU(name=f"relu_cnn_{i}")(layer)
+    layer = tf.keras.layers.BatchNormalization()(features)
+    if self.conv_type == 2:
+      layer = tf.expand_dims(layer, -1)
+      conv = tf.keras.layers.Conv2D
+    else:
+      conv = tf.keras.layers.Conv1D
+      ker_shape = np.shape(self.kernel_size)
+      stride_shape = np.shape(self.strides)
+      assert len(ker_shape) == 1 and len(stride_shape) == 1
 
-    batch_size = tf.shape(layer)[0]
-    f, c = layer.get_shape().as_list()[2:]
-    layer = tf.reshape(layer, [batch_size, -1, f * c])
+    for i, fil in enumerate(self.filters):
+      layer = conv(filters=fil, kernel_size=self.kernel_size[i],
+                   strides=self.strides[i], padding="same",
+                   activation=self.clipped_relu, name=f"cnn_{i}")(layer)
+
+    layer = tf.keras.layers.BatchNormalization()(layer)
+
+    if self.conv_type == 2:
+      layer = self.merge_filter_to_channel(layer)
 
     # Convert to time_major only for bi_directional
     if self.is_bidirectional:
@@ -67,11 +88,9 @@ class DeepSpeech2:
       layer = tf.transpose(layer, [1, 0, 2])
 
     if self.pre_fc_units > 0:
-      layer = tf.keras.layers.Dense(units=self.pre_fc_units,
-                                    name="hidden_fc",
-                                    use_bias=True)(layer)
-      layer = tf.keras.layers.BatchNormalization(name="hidden_fc_bn")(layer)
-      layer = tf.keras.layers.ReLU(name="hidden_fc_relu")(layer)
-      layer = tf.keras.layers.Dropout(0.2, name="hidden_fc_dropout")(layer)
+      layer = tf.keras.layers.TimeDistributed(
+        tf.keras.layers.Dense(units=self.pre_fc_units, activation=self.clipped_relu,
+                              use_bias=True), name="hidden_fc")(layer)
+      layer = tf.keras.layers.BatchNormalization()(layer)
 
     return layer
