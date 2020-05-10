@@ -61,7 +61,7 @@ asr_error = asr.load_model(app.config["MODEL_FILE"])
 
 
 def predict(signal, streaming=False):
-  signal = read_raw_audio(signal, asr.configs["sample_rate"])
+  signal = read_raw_audio(signal, asr.configs["speech_conf"]["sample_rate"])
   if not streaming and not asr_error:
     return asr.infer_single(signal)
   # if streaming and not asr_streaming_error:
