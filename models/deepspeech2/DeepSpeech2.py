@@ -31,17 +31,13 @@ class DeepSpeech2:
     assert rnn_type in ["lstm", "gru", "rnn"]
 
   @staticmethod
-  def clipped_relu(x):
-    return tf.keras.activations.relu(x, max_value=20)
-
-  @staticmethod
   def merge_filter_to_channel(x):
     batch_size = tf.shape(x)[0]
     f, c = x.get_shape().as_list()[2:]
     return tf.reshape(x, [batch_size, -1, f * c])
 
   def __call__(self, features, streaming=False):
-    layer = tf.keras.layers.BatchNormalization()(features)
+    layer = features
     if self.conv_type == 2:
       layer = tf.expand_dims(layer, -1)
       conv = tf.keras.layers.Conv2D
@@ -54,9 +50,9 @@ class DeepSpeech2:
     for i, fil in enumerate(self.filters):
       layer = conv(filters=fil, kernel_size=self.kernel_size[i],
                    strides=self.strides[i], padding="same",
-                   activation=self.clipped_relu, name=f"cnn_{i}")(layer)
-
-    layer = tf.keras.layers.BatchNormalization()(layer)
+                   activation=None, name=f"cnn_{i}")(layer)
+      layer = tf.keras.layers.BatchNormalization(name=f"cnn_bn_{i}")(layer)
+      layer = tf.keras.layers.ReLU(max_value=20, name=f"cnn_relu_{i}")(layer)
 
     if self.conv_type == 2:
       layer = self.merge_filter_to_channel(layer)
@@ -95,8 +91,9 @@ class DeepSpeech2:
 
     if self.pre_fc_units > 0:
       layer = tf.keras.layers.TimeDistributed(
-        tf.keras.layers.Dense(units=self.pre_fc_units, activation=self.clipped_relu,
+        tf.keras.layers.Dense(units=self.pre_fc_units, activation=None,
                               use_bias=True), name="hidden_fc")(layer)
-      layer = tf.keras.layers.BatchNormalization()(layer)
+      layer = tf.keras.layers.BatchNormalization(name="hidden_fc_bn")(layer)
+      layer = tf.keras.layers.ReLU(max_value=20, name="hidden_fc_relu")(layer)
 
     return layer
