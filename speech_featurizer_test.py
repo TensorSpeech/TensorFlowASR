@@ -17,8 +17,9 @@ def main(argv):
     "pre_emph":          0.97,
     "normalize_signal":  True,
     "normalize_feature": True,
-    "num_feature_bins":  128,
-    "is_delta":          False
+    "num_feature_bins":  12,
+    "is_delta":          True,
+    "pitch":             40
   }
   signal = read_raw_audio(speech_file, speech_conf["sample_rate"])
   ft = speech_feature_extraction(signal, speech_conf).T

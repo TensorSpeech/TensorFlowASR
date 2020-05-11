@@ -3,7 +3,9 @@ from __future__ import absolute_import
 from models.deepspeech2.DeepSpeech2 import DeepSpeech2
 from augmentations.Augments import Noise
 
-base_model = DeepSpeech2(num_rnn=3, rnn_units=256, filters=(32, 32, 96), is_bidirectional=True)
+base_model = DeepSpeech2(conv_type=1, rnn_type="gru", num_rnn=7, rnn_units=256,
+                         kernel_size=(5, 5, 5), strides=(2, 1, 1), pre_fc_units=0,
+                         filters=(32, 32, 96), is_bidirectional=True)
 
 streaming_size = None
 
@@ -26,34 +28,35 @@ num_epochs = 10
 
 vocabulary_file_path = "/mnt/Projects/asrk16/vnasr/data/vocabulary.txt"
 
-last_activation = 'linear'
+last_activation = 'relu'
 
 speech_conf = {
   "sample_rate":       16000,
-  "frame_ms":          20,
+  "frame_ms":          25,
   "stride_ms":         10,
   "num_feature_bins":  12,
   "feature_type":      "mfcc",
-  "pre_emph":          0.95,
+  "pre_emph":          0.97,
   "is_delta":          True,
   "normalize_signal":  True,
-  "normalize_feature": False
+  "normalize_feature": True,
+  "pitch":             True
 }
 
 train_data_transcript_paths = [
-  "/mnt/Data/ML/ASR/Preprocessed/SmallFixed/Train/transcripts.tsv"
+  "/mnt/Data/ML/ASR/Preprocessed/Large/Train/transcripts.tsv"
 ]
 
 eval_data_transcript_paths = [
-  "/mnt/Data/ML/ASR/Preprocessed/SmallFixed/Dev/transcripts.tsv"
+  "/mnt/Data/ML/ASR/Preprocessed/Large/Dev/transcripts.tsv"
 ]
 
 test_data_transcript_paths = [
-  "/mnt/Data/ML/ASR/Preprocessed/SmallFixed/Test/transcripts.tsv"
+  "/mnt/Data/ML/ASR/Preprocessed/Large/Test/transcripts.tsv"
 ]
 
-tfrecords_dir = "/mnt/Data/ML/ASR/Preprocessed/SmallFixed/TFRecords"
+tfrecords_dir = "/mnt/Data/ML/ASR/Preprocessed/Large/TFRecords"
 
-checkpoint_dir = "/mnt/Projects/asrk16/trained/med-bilstm/ckpts/"
+checkpoint_dir = "/mnt/Projects/asrk16/trained/large/ckpts/"
 
-log_dir = "/mnt/Projects/asrk16/trained/med-bilstm/tensorboard/"
+log_dir = "/mnt/Projects/asrk16/trained/large/logs/"

@@ -11,7 +11,7 @@ from models.deepspeech2.SequenceBatchNorm import SequenceBatchNorm
 
 
 class DeepSpeech2:
-  def __init__(self, conv_type=2, num_rnn=5, rnn_units=256, filters=(32, 32, 96),
+  def __init__(self, conv_type=2, rnn_type="gru", num_rnn=5, rnn_units=256, filters=(32, 32, 96),
                kernel_size=((11, 41), (11, 21), (11, 21)), strides=((2, 2), (1, 2), (1, 2)),
                optimizer=tf.keras.optimizers.SGD(lr=0.0002, momentum=0.99, nesterov=True),
                is_bidirectional=False, is_rowconv=False, pre_fc_units=1024):
@@ -25,8 +25,10 @@ class DeepSpeech2:
     self.pre_fc_units = pre_fc_units
     self.strides = strides
     self.conv_type = conv_type
+    self.rnn_type = rnn_type
     assert len(strides) == len(filters) == len(kernel_size)
     assert conv_type in [1, 2]
+    assert rnn_type in ["lstm", "gru", "rnn"]
 
   @staticmethod
   def clipped_relu(x):
@@ -63,22 +65,26 @@ class DeepSpeech2:
     if self.is_bidirectional:
       layer = tf.transpose(layer, [1, 0, 2])
 
+    if self.rnn_type == "rnn":
+      rnn_cell = tf.keras.layers.SimpleRNNCell(self.rnn_units, activation="tanh",
+                                               use_bias=True, dropout=0.2)
+    elif self.rnn_type == "lstm":
+      rnn_cell = tf.keras.layers.LSTMCell(self.rnn_units, activation="tanh", use_bias=True,
+                                          recurrent_activation="sigmoid", dropout=0.2)
+    else:
+      rnn_cell = tf.keras.layers.GRUCell(self.rnn_units, activation="tanh", use_bias=True,
+                                         recurrent_activation="sigmoid", dropout=0.2)
+
     # RNN layers
     for i in range(self.num_rnn):
       if self.is_bidirectional:
         layer = tf.keras.layers.Bidirectional(
-          tf.keras.layers.GRU(units=self.rnn_units, dropout=0.2,
-                              activation='tanh', recurrent_activation='sigmoid',
-                              use_bias=True, recurrent_dropout=0.0,
-                              return_sequences=True, unroll=False, implementation=2,
-                              time_major=True, stateful=False, name=f"blstm_{i}"))(layer)
+          tf.keras.layers.RNN(rnn_cell, return_sequences=True, unroll=False,
+                              time_major=True, stateful=False), name=f"b{self.rnn_type}_{i}")(layer)
         layer = SequenceBatchNorm(time_major=True, name=f"sequence_wise_bn_{i}")(layer)
       else:
-        layer = tf.keras.layers.GRU(units=self.rnn_units, dropout=0.2,
-                                    activation='tanh', recurrent_activation='sigmoid',
-                                    use_bias=True, recurrent_dropout=0.0,
-                                    return_sequences=True, unroll=False, implementation=2,
-                                    time_major=False, stateful=streaming, name=f"lstm_{i}")(layer)
+        tf.keras.layers.RNN(rnn_cell, return_sequences=True, unroll=False,
+                            time_major=False, stateful=False, name=f"{self.rnn_type}_{i}")(layer)
         layer = SequenceBatchNorm(time_major=False, name=f"sequence_wise_bn_{i}")(layer)
         if self.is_rowconv:
           layer = RowConv1D(filters=self.rnn_units, future_context=2, name=f"row_conv_{i}")(layer)
