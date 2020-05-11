@@ -109,19 +109,24 @@ class SpeechToText:
 
     train_dataset = Dataset(data_path=self.configs["train_data_transcript_paths"],
                             tfrecords_dir=self.configs["tfrecords_dir"], mode="train")
-    tf_train_dataset = train_dataset(text_featurizer=self.text_featurizer,
-                                     speech_conf=self.configs["speech_conf"],
-                                     batch_size=self.configs["batch_size"],
-                                     augmentations=augmentations)
+    tf_train_dataset = train_dataset.get_dataset_from_generator(
+      text_featurizer=self.text_featurizer,
+      speech_conf=self.configs["speech_conf"],
+      batch_size=self.configs["batch_size"],
+      augmentations=augmentations
+    )
 
     tf_eval_dataset = None
 
     if "eval_data_transcript_paths" in self.configs.keys():
       eval_dataset = Dataset(data_path=self.configs["eval_data_transcript_paths"],
                              tfrecords_dir=self.configs["tfrecords_dir"], mode="eval")
-      tf_eval_dataset = eval_dataset(text_featurizer=self.text_featurizer,
-                                     speech_conf=self.configs["speech_conf"],
-                                     batch_size=self.configs["batch_size"])
+      tf_eval_dataset = eval_dataset.get_dataset_from_generator(
+        text_featurizer=self.text_featurizer,
+        speech_conf=self.configs["speech_conf"],
+        batch_size=self.configs["batch_size"],
+        augmentations=[None]
+      )
 
     self.model.summary()
 
@@ -138,7 +143,7 @@ class SpeechToText:
         f.write(self.model.to_json())
       self.writer = tf.summary.create_file_writer(os.path.join(self.configs["log_dir"], "train"))
 
-    if self.configs["last_activation"] == "linear":
+    if self.configs["last_activation"] != "softmax":
       loss = ctc_loss
     else:
       loss = ctc_loss_1

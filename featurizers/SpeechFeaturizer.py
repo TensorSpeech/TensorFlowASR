@@ -9,6 +9,18 @@ import soundfile as sf
 import tensorflow as tf
 
 
+def compute_feature_dim(speech_conf):
+  if speech_conf["is_delta"]:
+    feature_dim = speech_conf["num_feature_bins"] * 3
+  else:
+    feature_dim = speech_conf["num_feature_bins"]
+
+  if speech_conf["pitch"]:
+    feature_dim += int(speech_conf["sample_rate"] * speech_conf["frame_ms"] / 1000) // 2 + 1
+ 
+  return feature_dim
+
+
 def speech_feature_extraction(signal, speech_conf):
   if speech_conf["normalize_signal"]:
     signal = normalize_signal(signal)
@@ -26,7 +38,28 @@ def speech_feature_extraction(signal, speech_conf):
   if speech_conf["normalize_feature"]:
     features = normalize_audio_feature(features)
 
+  if speech_conf["pitch"] > 0:
+    pitches = compute_pitch_feature(signal, speech_conf)
+    if speech_conf["normalize_feature"]:
+      pitches = normalize_audio_feature(pitches)
+    features = np.concatenate([features, pitches], axis=1)
+
   return features
+
+
+def compute_pitch_feature(signal, speech_conf):
+  frame_ms = speech_conf["frame_ms"]
+  stride_ms = speech_conf["stride_ms"]
+  sample_rate = speech_conf["sample_rate"]
+
+  frame_length = int(sample_rate * (frame_ms / 1000))
+  frame_step = int(sample_rate * (stride_ms / 1000))
+  # num_fft = 2 ** math.ceil(math.log2(frame_length))
+
+  pitches, _ = librosa.core.piptrack(y=signal, sr=sample_rate,
+                                     n_fft=frame_length, hop_length=frame_step,
+                                     fmin=0, fmax=int(sample_rate / 2), win_length=frame_length, center=True)
+  return pitches.T
 
 
 def compute_spectrogram_feature(signal, speech_conf):
@@ -37,9 +70,8 @@ def compute_spectrogram_feature(signal, speech_conf):
 
   frame_length = int(sample_rate * (frame_ms / 1000))
   frame_step = int(sample_rate * (stride_ms / 1000))
-  num_fft = 2 ** math.ceil(math.log2(frame_length))
 
-  powspec = np.abs(librosa.core.stft(signal, n_fft=num_fft, hop_length=frame_step,
+  powspec = np.abs(librosa.core.stft(signal, n_fft=frame_length, hop_length=frame_step,
                                      win_length=frame_length, center=True))
 
   # remove small bins
@@ -64,16 +96,15 @@ def compute_mfcc_feature(signal, speech_conf):
 
   frame_length = int(sample_rate * (frame_ms / 1000))
   frame_step = int(sample_rate * (stride_ms / 1000))
-  num_fft = 2 ** math.ceil(math.log2(frame_length))
 
   S = np.square(
     np.abs(
       librosa.core.stft(
-        signal, n_fft=num_fft, hop_length=frame_step,
+        signal, n_fft=frame_length, hop_length=frame_step,
         win_length=frame_length, center=True
       )))
 
-  mel_basis = librosa.filters.mel(sample_rate, num_fft,
+  mel_basis = librosa.filters.mel(sample_rate, frame_length,
                                   n_mels=2 * num_feature_bins,
                                   fmin=0, fmax=int(sample_rate / 2))
 
@@ -95,12 +126,11 @@ def compute_logfbank_feature(signal, speech_conf):
 
   frame_length = int(sample_rate * (frame_ms / 1000))
   frame_step = int(sample_rate * (stride_ms / 1000))
-  num_fft = 2 ** math.ceil(math.log2(frame_length))
 
-  S = np.square(np.abs(librosa.core.stft(signal, n_fft=num_fft, hop_length=frame_step,
+  S = np.square(np.abs(librosa.core.stft(signal, n_fft=frame_length, hop_length=frame_step,
                                          win_length=frame_length, center=True)))
 
-  mel_basis = librosa.filters.mel(sample_rate, num_fft,
+  mel_basis = librosa.filters.mel(sample_rate, frame_length,
                                   n_mels=num_feature_bins,
                                   fmin=0, fmax=int(sample_rate / 2))
 
@@ -122,7 +152,7 @@ def read_raw_audio(audio, sample_rate=16000):
 def normalize_audio_feature(audio_feature):
   """ Mean and variance normalization """
   mean = np.mean(audio_feature, axis=0)
-  std_dev = np.std(audio_feature, axis=0)
+  std_dev = np.std(audio_feature, axis=0) + 1e-6
   normalized = (audio_feature - mean) / std_dev
   return normalized
 

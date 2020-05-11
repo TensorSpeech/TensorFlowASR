@@ -7,7 +7,7 @@ import glob
 import multiprocessing
 import numpy as np
 import tensorflow as tf
-from featurizers.SpeechFeaturizer import read_raw_audio, speech_feature_extraction
+from featurizers.SpeechFeaturizer import read_raw_audio, speech_feature_extraction, compute_feature_dim
 
 AUTOTUNE = tf.data.experimental.AUTOTUNE
 
@@ -176,16 +176,13 @@ class Dataset:
     dataset = dataset.map(parse, num_parallel_calls=AUTOTUNE)
     # # Padding the features to its max length dimensions
     dataset = dataset.repeat(repeat)
-    if speech_conf["is_delta"]:
-      padded_shape_features = tf.TensorShape([None, speech_conf["num_feature_bins"] * 3])
-    else:
-      padded_shape_features = tf.TensorShape([None, speech_conf["num_feature_bins"]])
+    feature_dim = compute_feature_dim(speech_conf)
     if shuffle and not sort:
       dataset = dataset.shuffle(batch_size)
     dataset = dataset.padded_batch(
       batch_size=batch_size,
       padded_shapes=(
-        padded_shape_features,
+        tf.TensorShape([None, feature_dim]),
         tf.TensorShape([]),
         tf.TensorShape([None]),
         tf.TensorShape([])
@@ -228,14 +225,11 @@ class Dataset:
     dataset = dataset.repeat(repeat)
     if shuffle and not sort:
       dataset = dataset.shuffle(batch_size)
-    if speech_conf["is_delta"]:
-      padded_shape_features = tf.TensorShape([None, speech_conf["num_feature_bins"] * 3])
-    else:
-      padded_shape_features = tf.TensorShape([None, speech_conf["num_feature_bins"]])
+    feature_dim = compute_feature_dim(speech_conf)
     dataset = dataset.padded_batch(
       batch_size=batch_size,
       padded_shapes=(
-        (padded_shape_features, tf.TensorShape([]), tf.TensorShape([None]), tf.TensorShape([])),
+        (tf.TensorShape([None, feature_dim]), tf.TensorShape([]), tf.TensorShape([None]), tf.TensorShape([])),
         tf.TensorShape([])
       ),
       padding_values=(
@@ -291,6 +285,52 @@ class Dataset:
           text_featurizer.num_classes - 1,
         )
       )
+    if shuffle and sort:
+      dataset = dataset.shuffle(batch_size)
+    # Prefetch to improve speed of input length
+    dataset = dataset.prefetch(AUTOTUNE)
+    return dataset
+
+  def get_dataset_from_generator(self, text_featurizer, augmentations,
+                                 speech_conf, batch_size, repeat=1, shuffle=True, sort=False):
+    entries = self.create_entries(augmentations, sort)
+
+    def gen():
+      for audio_path, au, transcript in entries:
+        signal = read_raw_audio(audio_path, speech_conf["sample_rate"])
+
+        augment = augmentations[int(au)]
+        if augment is not None and not augment.is_post:
+          signal = augment(signal=signal, sample_rate=speech_conf["sample_rate"])
+
+        features = speech_feature_extraction(signal, speech_conf)
+
+        if augment is not None and augment.is_post:
+          features = augment(features)
+
+        label = text_featurizer.compute_label_features(transcript)
+        label_length = tf.cast(tf.shape(label)[0], tf.int32)
+        features = tf.convert_to_tensor(features, tf.float32)
+        input_length = tf.cast(tf.shape(features)[0], tf.int32)
+        yield features, input_length, label, label_length
+
+    feature_dim = compute_feature_dim(speech_conf)
+
+    dataset = tf.data.Dataset.from_generator(
+      gen,
+      output_types=(tf.float32, tf.int32, tf.int32, tf.int32),
+      output_shapes=(tf.TensorShape([None, feature_dim]), tf.TensorShape([]),
+                     tf.TensorShape([None]), tf.TensorShape([]))
+    )
+    dataset = dataset.repeat(repeat)
+    if shuffle and not sort:
+      dataset = dataset.shuffle(batch_size)
+    dataset = dataset.padded_batch(
+      batch_size=batch_size,
+      padded_shapes=(tf.TensorShape([None, feature_dim]), tf.TensorShape([]),
+                     tf.TensorShape([None]), tf.TensorShape([])),
+      padding_values=(0., 0, text_featurizer.num_classes - 1, 0)
+    )
     if shuffle and sort:
       dataset = dataset.shuffle(batch_size)
     # Prefetch to improve speed of input length
