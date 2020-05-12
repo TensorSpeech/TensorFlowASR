@@ -10,6 +10,7 @@ import tensorflow as tf
 from featurizers.SpeechFeaturizer import read_raw_audio, speech_feature_extraction, compute_feature_dim
 
 AUTOTUNE = tf.data.experimental.AUTOTUNE
+TFRECORD_SHARDS = 16
 
 
 def _float_feature(list_of_floats):
@@ -40,7 +41,6 @@ class Dataset:
     if not os.path.exists(tfrecords_dir):
       os.makedirs(tfrecords_dir)
     self.mode = mode
-    self.num_cpus = multiprocessing.cpu_count()
     self.is_keras = is_keras
 
   def __call__(self, text_featurizer, speech_conf, batch_size=32, repeat=1,
@@ -99,10 +99,10 @@ class Dataset:
     def get_shard_path(shard_id):
       return os.path.join(self.tfrecord_dir, f"{self.mode}_{shard_id}.tfrecord")
 
-    shards = [get_shard_path(idx) for idx in range(1, self.num_cpus + 1)]
+    shards = [get_shard_path(idx) for idx in range(1, TFRECORD_SHARDS + 1)]
 
-    splitted_entries = np.array_split(entries, self.num_cpus)
-    with multiprocessing.Pool(self.num_cpus) as pool:
+    splitted_entries = np.array_split(entries, TFRECORD_SHARDS)
+    with multiprocessing.Pool(TFRECORD_SHARDS) as pool:
       pool.map(self.write_tfrecord_file, zip(shards, splitted_entries))
 
   @staticmethod
@@ -172,6 +172,12 @@ class Dataset:
 
     pattern = os.path.join(self.tfrecord_dir, f"{self.mode}*.tfrecord")
     files_ds = tf.data.Dataset.list_files(pattern)
+
+    # Disregard data order in favor of reading speed
+    ignore_order = tf.data.Options()
+    ignore_order.experimental_deterministic = False
+    files_ds = files_ds.with_options(ignore_order)
+
     dataset = tf.data.TFRecordDataset(files_ds, compression_type='ZLIB', num_parallel_reads=AUTOTUNE)
     dataset = dataset.map(parse, num_parallel_calls=AUTOTUNE)
     # # Padding the features to its max length dimensions
@@ -219,6 +225,12 @@ class Dataset:
 
     pattern = os.path.join(self.tfrecord_dir, f"{self.mode}*.tfrecord")
     files_ds = tf.data.Dataset.list_files(pattern)
+
+    # Disregard data order in favor of reading speed
+    ignore_order = tf.data.Options()
+    ignore_order.experimental_deterministic = False
+    files_ds = files_ds.with_options(ignore_order)
+
     dataset = tf.data.TFRecordDataset(files_ds, compression_type='ZLIB', num_parallel_reads=AUTOTUNE)
     dataset = dataset.map(parse, num_parallel_calls=AUTOTUNE)
     # # Padding the features to its max length dimensions
