@@ -90,8 +90,9 @@ class DeepSpeech2:
       layer = tf.transpose(layer, [1, 0, 2])
 
     if self.pre_fc_units > 0:
-      layer = tf.keras.layers.Dense(units=self.pre_fc_units, activation=None,
-                                    use_bias=True, name="hidden_fc")(layer)
+      layer = tf.keras.layers.TimeDistributed(
+        tf.keras.layers.Dense(units=self.pre_fc_units, activation=None,
+                              use_bias=True), name="hidden_fc")(layer)
       layer = tf.keras.layers.BatchNormalization(name="hidden_fc_bn")(layer)
       layer = tf.keras.layers.ReLU(max_value=20, name="hidden_fc_relu")(layer)
 

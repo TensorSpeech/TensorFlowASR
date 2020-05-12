@@ -118,7 +118,7 @@ class SpeechToText:
 
     tf_eval_dataset = None
 
-    if "eval_data_transcript_paths" in self.configs.keys():
+    if self.configs["eval_data_transcript_paths"]:
       eval_dataset = Dataset(data_path=self.configs["eval_data_transcript_paths"],
                              tfrecords_dir=self.configs["tfrecords_dir"], mode="eval")
       tf_eval_dataset = eval_dataset.get_dataset_from_generator(
