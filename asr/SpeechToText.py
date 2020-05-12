@@ -160,6 +160,9 @@ class SpeechToText:
 
       print(f"\nEnd training on epoch = {epoch}")
 
+      self.ckpt_manager.save()
+      print(f"Saved checkpoint at epoch {epoch + 1}")
+
       if tf_eval_dataset:
         print("Validating ... ", end="")
         epoch_eval_loss, epoch_eval_wer = self.validate(
@@ -168,8 +171,6 @@ class SpeechToText:
         )
         print(f"val_loss = {epoch_eval_loss}, val_wer = {epoch_eval_wer}")
 
-      self.ckpt_manager.save()
-      print(f"Saved checkpoint at epoch {epoch + 1}")
       time_epoch = time.time() - start
       print(f"Time for epoch {epoch + 1} is {time_epoch} secs")
 
