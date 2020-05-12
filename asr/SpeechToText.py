@@ -199,10 +199,10 @@ class SpeechToText:
                                      speech_conf=self.configs["speech_conf"],
                                      batch_size=self.configs["batch_size"],
                                      augmentations=augmentations)
-    tf_train_dataset_sortagrad = train_dataset(text_featurizer=self.text_featurizer,
-                                               speech_conf=self.configs["speech_conf"],
-                                               batch_size=self.configs["batch_size"],
-                                               augmentations=augmentations, sortagrad=True)
+    # tf_train_dataset_sortagrad = train_dataset(text_featurizer=self.text_featurizer,
+    #                                            speech_conf=self.configs["speech_conf"],
+    #                                            batch_size=self.configs["batch_size"],
+    #                                            augmentations=augmentations, sortagrad=True)
 
     tf_eval_dataset = None
     if self.configs["eval_data_transcript_paths"]:
@@ -236,20 +236,20 @@ class SpeechToText:
       callback.append(tf.keras.callbacks.TensorBoard(log_dir=self.configs["log_dir"]))
 
     if tf_eval_dataset is not None:
-      if initial_epoch == 0:
-        train_model.fit(x=tf_train_dataset_sortagrad, epochs=1,
-                        validation_data=tf_eval_dataset, shuffle="batch",
-                        initial_epoch=initial_epoch, callbacks=callback)
-        initial_epoch = 1
+      # if initial_epoch == 0:
+      #   train_model.fit(x=tf_train_dataset_sortagrad, epochs=1,
+      #                   validation_data=tf_eval_dataset, shuffle="batch",
+      #                   initial_epoch=initial_epoch, callbacks=callback)
+      #   initial_epoch = 1
 
       train_model.fit(x=tf_train_dataset, epochs=self.configs["num_epochs"],
                       validation_data=tf_eval_dataset, shuffle="batch",
                       initial_epoch=initial_epoch, callbacks=callback)
     else:
-      if initial_epoch == 0:
-        train_model.fit(x=tf_train_dataset_sortagrad, epochs=1, shuffle="batch",
-                        initial_epoch=initial_epoch, callbacks=callback)
-        initial_epoch = 1
+      # if initial_epoch == 0:
+      #   train_model.fit(x=tf_train_dataset_sortagrad, epochs=1, shuffle="batch",
+      #                   initial_epoch=initial_epoch, callbacks=callback)
+      #   initial_epoch = 1
 
       train_model.fit(x=tf_train_dataset, epochs=self.configs["num_epochs"], shuffle="batch",
                       initial_epoch=initial_epoch, callbacks=callback)
