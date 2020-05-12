@@ -10,11 +10,11 @@ base_model = DeepSpeech2(conv_type=1, rnn_type="gru", num_rnn=7, rnn_units=256,
 streaming_size = None
 
 decoder = {
-  "name":       "beamsearch",
+  "name": "beamsearch",
   "beam_width": 500,
-  "lm_path":    "/mnt/Data/ML/NLP/vntc_5gram_probing.binary",
-  "alpha":      1.0,
-  "beta":       0.5
+  "lm_path": "/mnt/Data/ML/NLP/vntc_5gram_probing.binary",
+  "alpha": 1.0,
+  "beta": 0.5
 }
 
 # augmentations = [Noise(min_snr=3, max_snr=10,
@@ -31,16 +31,16 @@ vocabulary_file_path = "/mnt/Projects/asrk16/vnasr/data/vocabulary.txt"
 last_activation = 'relu'
 
 speech_conf = {
-  "sample_rate":       16000,
-  "frame_ms":          25,
-  "stride_ms":         10,
-  "num_feature_bins":  12,
-  "feature_type":      "mfcc",
-  "pre_emph":          0.97,
-  "is_delta":          True,
-  "normalize_signal":  True,
+  "sample_rate": 16000,
+  "frame_ms": 25,
+  "stride_ms": 10,
+  "num_feature_bins": 40,
+  "feature_type": "mfcc",
+  "pre_emph": 0.97,
+  "delta": True,
+  "normalize_signal": True,
   "normalize_feature": True,
-  "pitch":             True
+  "pitch": True
 }
 
 train_data_transcript_paths = [

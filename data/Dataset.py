@@ -26,8 +26,8 @@ def _bytestring_feature(list_of_bytestrings):
 
 def to_tfrecord(audio, au, transcript):
   feature = {
-    "audio":      _bytestring_feature([audio]),
-    "au":         _int64_feature([au]),
+    "audio": _bytestring_feature([audio]),
+    "au": _int64_feature([au]),
     "transcript": _bytestring_feature([transcript])
   }
   return tf.train.Example(features=tf.train.Features(feature=feature))
@@ -158,8 +158,8 @@ class Dataset:
 
     def parse(record):
       feature_description = {
-        "audio":      tf.io.FixedLenFeature([], tf.string),
-        "au":         tf.io.FixedLenFeature([], tf.int64),
+        "audio": tf.io.FixedLenFeature([], tf.string),
+        "au": tf.io.FixedLenFeature([], tf.int64),
         "transcript": tf.io.FixedLenFeature([], tf.string)
       }
       example = tf.io.parse_single_example(record, feature_description)
@@ -176,13 +176,13 @@ class Dataset:
     dataset = dataset.map(parse, num_parallel_calls=AUTOTUNE)
     # # Padding the features to its max length dimensions
     dataset = dataset.repeat(repeat)
-    feature_dim = compute_feature_dim(speech_conf)
+    feature_dim, channel_dim = compute_feature_dim(speech_conf)
     if shuffle and not sort:
       dataset = dataset.shuffle(batch_size)
     dataset = dataset.padded_batch(
       batch_size=batch_size,
       padded_shapes=(
-        tf.TensorShape([None, feature_dim]),
+        tf.TensorShape([None, feature_dim, channel_dim]),
         tf.TensorShape([]),
         tf.TensorShape([None]),
         tf.TensorShape([])
@@ -205,8 +205,8 @@ class Dataset:
 
     def parse(record):
       feature_description = {
-        "audio":      tf.io.FixedLenFeature([], tf.string),
-        "au":         tf.io.FixedLenFeature([], tf.int64),
+        "audio": tf.io.FixedLenFeature([], tf.string),
+        "au": tf.io.FixedLenFeature([], tf.int64),
         "transcript": tf.io.FixedLenFeature([], tf.string)
       }
       example = tf.io.parse_single_example(record, feature_description)
@@ -225,11 +225,11 @@ class Dataset:
     dataset = dataset.repeat(repeat)
     if shuffle and not sort:
       dataset = dataset.shuffle(batch_size)
-    feature_dim = compute_feature_dim(speech_conf)
+    feature_dim, channel_dim = compute_feature_dim(speech_conf)
     dataset = dataset.padded_batch(
       batch_size=batch_size,
       padded_shapes=(
-        (tf.TensorShape([None, feature_dim]), tf.TensorShape([]), tf.TensorShape([None]), tf.TensorShape([])),
+        (tf.TensorShape([None, feature_dim, channel_dim]), tf.TensorShape([]), tf.TensorShape([None]), tf.TensorShape([])),
         tf.TensorShape([])
       ),
       padding_values=(
@@ -247,8 +247,8 @@ class Dataset:
                                                        batch_size, repeat=1, sort=False, shuffle=True):
     def parse(record):
       feature_description = {
-        "audio":      tf.io.FixedLenFeature([], tf.string),
-        "au":         tf.io.FixedLenFeature([], tf.int64),
+        "audio": tf.io.FixedLenFeature([], tf.string),
+        "au": tf.io.FixedLenFeature([], tf.int64),
         "transcript": tf.io.FixedLenFeature([], tf.string)
       }
       example = tf.io.parse_single_example(record, feature_description)
@@ -314,12 +314,12 @@ class Dataset:
         input_length = tf.cast(tf.shape(features)[0], tf.int32)
         yield features, input_length, label, label_length
 
-    feature_dim = compute_feature_dim(speech_conf)
+    feature_dim, channel_dim = compute_feature_dim(speech_conf)
 
     dataset = tf.data.Dataset.from_generator(
       gen,
       output_types=(tf.float32, tf.int32, tf.int32, tf.int32),
-      output_shapes=(tf.TensorShape([None, feature_dim]), tf.TensorShape([]),
+      output_shapes=(tf.TensorShape([None, feature_dim, channel_dim]), tf.TensorShape([]),
                      tf.TensorShape([None]), tf.TensorShape([]))
     )
     dataset = dataset.repeat(repeat)
@@ -327,7 +327,7 @@ class Dataset:
       dataset = dataset.shuffle(batch_size)
     dataset = dataset.padded_batch(
       batch_size=batch_size,
-      padded_shapes=(tf.TensorShape([None, feature_dim]), tf.TensorShape([]),
+      padded_shapes=(tf.TensorShape([None, feature_dim, channel_dim]), tf.TensorShape([]),
                      tf.TensorShape([None]), tf.TensorShape([])),
       padding_values=(0., 0, text_featurizer.num_classes - 1, 0)
     )

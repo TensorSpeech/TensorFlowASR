@@ -14,7 +14,7 @@ class DeepSpeech2:
   def __init__(self, conv_type=2, rnn_type="gru", num_rnn=5, rnn_units=256, filters=(32, 32, 96),
                kernel_size=((11, 41), (11, 21), (11, 21)), strides=((2, 2), (1, 2), (1, 2)),
                optimizer=tf.keras.optimizers.SGD(lr=0.0002, momentum=0.99, nesterov=True),
-               is_bidirectional=False, is_rowconv=False, pre_fc_units=1024):
+               is_bidirectional=False, is_rowconv=False, pre_fc_units=1024, dropout=0.2):
     self.optimizer = optimizer
     self.num_rnn = num_rnn
     self.rnn_units = rnn_units
@@ -26,13 +26,11 @@ class DeepSpeech2:
     self.strides = strides
     self.conv_type = conv_type
     self.rnn_type = rnn_type
+    self.dropout = dropout
     assert len(strides) == len(filters) == len(kernel_size)
     assert conv_type in [1, 2]
     assert rnn_type in ["lstm", "gru", "rnn"]
-
-  @staticmethod
-  def clipped_relu(x):
-    return tf.keras.activations.relu(x, max_value=20)
+    assert dropout >= 0.0
 
   @staticmethod
   def merge_filter_to_channel(x):
@@ -41,22 +39,22 @@ class DeepSpeech2:
     return tf.reshape(x, [batch_size, -1, f * c])
 
   def __call__(self, features, streaming=False):
-    layer = tf.keras.layers.BatchNormalization()(features)
+    layer = features
     if self.conv_type == 2:
-      layer = tf.expand_dims(layer, -1)
       conv = tf.keras.layers.Conv2D
     else:
+      layer = self.merge_filter_to_channel(layer)
       conv = tf.keras.layers.Conv1D
       ker_shape = np.shape(self.kernel_size)
       stride_shape = np.shape(self.strides)
       assert len(ker_shape) == 1 and len(stride_shape) == 1
 
     for i, fil in enumerate(self.filters):
-      layer = conv(filters=fil, kernel_size=self.kernel_size[i],
-                   strides=self.strides[i], padding="same",
-                   activation=self.clipped_relu, name=f"cnn_{i}")(layer)
-
-    layer = tf.keras.layers.BatchNormalization()(layer)
+      layer = conv(filters=fil, kernel_size=self.kernel_size[i], strides=self.strides[i],
+                   padding="same", activation=None, name=f"cnn_{i}")(layer)
+      layer = tf.keras.layers.BatchNormalization(name=f"cnn_bn_{i}")(layer)
+      layer = tf.keras.layers.ReLU(name=f"cnn_relu_{i}")(layer)
+      layer = tf.keras.layers.Dropout(self.dropout, name=f"cnn_dropout_{i}")(layer)
 
     if self.conv_type == 2:
       layer = self.merge_filter_to_channel(layer)
@@ -67,13 +65,13 @@ class DeepSpeech2:
 
     if self.rnn_type == "rnn":
       rnn_cell = tf.keras.layers.SimpleRNNCell(self.rnn_units, activation="tanh",
-                                               use_bias=True, dropout=0.2)
+                                               use_bias=True, dropout=self.dropout)
     elif self.rnn_type == "lstm":
       rnn_cell = tf.keras.layers.LSTMCell(self.rnn_units, activation="tanh", use_bias=True,
-                                          recurrent_activation="sigmoid", dropout=0.2)
+                                          recurrent_activation="sigmoid", dropout=self.dropout)
     else:
       rnn_cell = tf.keras.layers.GRUCell(self.rnn_units, activation="tanh", use_bias=True,
-                                         recurrent_activation="sigmoid", dropout=0.2)
+                                         recurrent_activation="sigmoid", dropout=self.dropout)
 
     # RNN layers
     for i in range(self.num_rnn):
@@ -95,8 +93,10 @@ class DeepSpeech2:
 
     if self.pre_fc_units > 0:
       layer = tf.keras.layers.TimeDistributed(
-        tf.keras.layers.Dense(units=self.pre_fc_units, activation=self.clipped_relu,
+        tf.keras.layers.Dense(units=self.pre_fc_units, activation=None,
                               use_bias=True), name="hidden_fc")(layer)
-      layer = tf.keras.layers.BatchNormalization()(layer)
+      layer = tf.keras.layers.BatchNormalization(name="hidden_fc_bn")(layer)
+      layer = tf.keras.layers.ReLU(name="hidden_fc_relu")(layer)
+      layer = tf.keras.layers.Dropout(self.dropout, name="hidden_fc_dropout")(layer)
 
     return layer
