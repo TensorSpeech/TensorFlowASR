@@ -39,18 +39,17 @@ class DeepSpeech2:
   def __call__(self, features, streaming=False):
     layer = features
     if self.conv_type == 2:
-      layer = tf.expand_dims(layer, -1)
       conv = tf.keras.layers.Conv2D
     else:
+      layer = self.merge_filter_to_channel(layer)
       conv = tf.keras.layers.Conv1D
       ker_shape = np.shape(self.kernel_size)
       stride_shape = np.shape(self.strides)
       assert len(ker_shape) == 1 and len(stride_shape) == 1
 
     for i, fil in enumerate(self.filters):
-      layer = conv(filters=fil, kernel_size=self.kernel_size[i],
-                   strides=self.strides[i], padding="same",
-                   activation=None, name=f"cnn_{i}")(layer)
+      layer = conv(filters=fil, kernel_size=self.kernel_size[i], strides=self.strides[i],
+                   padding="same", activation=None, name=f"cnn_{i}")(layer)
       layer = tf.keras.layers.BatchNormalization(name=f"cnn_bn_{i}")(layer)
       layer = tf.keras.layers.ReLU(max_value=20, name=f"cnn_relu_{i}")(layer)
 
