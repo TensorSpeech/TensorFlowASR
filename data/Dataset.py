@@ -326,6 +326,11 @@ class Dataset:
       output_types=(tf.string, tf.int32, tf.string),
       output_shapes=(tf.TensorShape([]), tf.TensorShape([]), tf.TensorShape([]))
     )
+
+    option = tf.data.Options()
+    option.experimental_deterministic = False
+    dataset = dataset.with_options(option)
+
     dataset = dataset.map(parse, num_parallel_calls=AUTOTUNE)
     dataset = dataset.repeat(repeat)
     if shuffle and not sort:
