@@ -184,7 +184,7 @@ class Dataset:
     dataset = dataset.repeat(repeat)
     feature_dim, channel_dim = compute_feature_dim(speech_conf)
     if shuffle and not sort:
-      dataset = dataset.shuffle(batch_size)
+      dataset = dataset.shuffle(128)
     dataset = dataset.padded_batch(
       batch_size=batch_size,
       padded_shapes=(
@@ -201,7 +201,7 @@ class Dataset:
       )
     )
     if shuffle and sort:
-      dataset = dataset.shuffle(batch_size)
+      dataset = dataset.shuffle(128)
     # Prefetch to improve speed of input length
     dataset = dataset.prefetch(AUTOTUNE)
     return dataset
@@ -284,7 +284,7 @@ class Dataset:
     # # Padding the features to its max length dimensions
     dataset = dataset.repeat(repeat)
     if shuffle and not sort:
-      dataset = dataset.shuffle(batch_size)
+      dataset = dataset.shuffle(128)
     if batch_size > 1:
       dataset = dataset.padded_batch(
         batch_size=batch_size,
@@ -298,7 +298,7 @@ class Dataset:
         )
       )
     if shuffle and sort:
-      dataset = dataset.shuffle(batch_size)
+      dataset = dataset.shuffle(128)
     # Prefetch to improve speed of input length
     dataset = dataset.prefetch(AUTOTUNE)
     return dataset
@@ -309,34 +309,27 @@ class Dataset:
 
     def gen():
       for audio_path, au, transcript in entries:
-        signal = read_raw_audio(audio_path, speech_conf["sample_rate"])
+        with open(audio_path, "rb") as f:
+          signal = f.read()
+        yield signal, int(au), bytes(transcript, "utf-8")
 
-        augment = augmentations[int(au)]
-        if augment is not None and not augment.is_post:
-          signal = augment(signal=signal, sample_rate=speech_conf["sample_rate"])
-
-        features = speech_feature_extraction(signal, speech_conf)
-
-        if augment is not None and augment.is_post:
-          features = augment(features)
-
-        label = text_featurizer.compute_label_features(transcript)
-        label_length = tf.cast(tf.shape(label)[0], tf.int32)
-        features = tf.convert_to_tensor(features, tf.float32)
-        input_length = tf.cast(tf.shape(features)[0], tf.int32)
-        yield features, input_length, label, label_length
+    def parse(signal, au, transcript):
+      return tf.py_function(functools.partial(self.preprocess, text_featurizer=text_featurizer,
+                                              speech_conf=speech_conf, augmentations=augmentations),
+                            inp=[signal, au, transcript],
+                            Tout=(tf.float32, tf.int32, tf.int32, tf.int32))
 
     feature_dim, channel_dim = compute_feature_dim(speech_conf)
 
     dataset = tf.data.Dataset.from_generator(
       gen,
-      output_types=(tf.float32, tf.int32, tf.int32, tf.int32),
-      output_shapes=(tf.TensorShape([None, feature_dim, channel_dim]), tf.TensorShape([]),
-                     tf.TensorShape([None]), tf.TensorShape([]))
+      output_types=(tf.string, tf.int32, tf.string),
+      output_shapes=(tf.TensorShape([]), tf.TensorShape([]), tf.TensorShape([]))
     )
+    dataset = dataset.map(parse, num_parallel_calls=AUTOTUNE)
     dataset = dataset.repeat(repeat)
     if shuffle and not sort:
-      dataset = dataset.shuffle(batch_size)
+      dataset = dataset.shuffle(128)
     dataset = dataset.padded_batch(
       batch_size=batch_size,
       padded_shapes=(tf.TensorShape([None, feature_dim, channel_dim]), tf.TensorShape([]),
@@ -344,7 +337,7 @@ class Dataset:
       padding_values=(0., 0, text_featurizer.num_classes - 1, 0)
     )
     if shuffle and sort:
-      dataset = dataset.shuffle(batch_size)
+      dataset = dataset.shuffle(128)
     # Prefetch to improve speed of input length
     dataset = dataset.prefetch(AUTOTUNE)
     return dataset

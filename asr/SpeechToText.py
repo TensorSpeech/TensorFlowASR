@@ -60,7 +60,7 @@ class SpeechToText:
                ", train_loss = ", train_loss,
                sep="", end="", output_stream=sys.stdout)
 
-      if self.writer:
+      if self.writer and (epoch * num_epochs + step) % 500 == 0:
         with self.writer.as_default():
           tf.summary.scalar("train_loss", train_loss, step=(epoch * num_epochs + step))
       gc.collect()
@@ -73,11 +73,17 @@ class SpeechToText:
 
     @tf.function
     def val_step(features, inp_length, y_true, lab_length):
+      start = time.time()
       y_pred = model(features, training=False)
       _loss = loss(y_true=y_true, y_pred=y_pred,
                    input_length=inp_length, label_length=lab_length,
                    num_classes=num_classes)
       _pred = decoder(probs=y_pred, input_length=inp_length, last_activation=last_activation)
+
+      sys.stdout.write("\033[K")
+      tf.print("\rVal_duration: ", int(time.time() - start), "s",
+               ", val_loss = ", _loss, sep="", end="", output_stream=sys.stdout)
+
       return _loss, _pred
 
     for feature, input_length, transcript, label_length in dataset:
@@ -164,12 +170,12 @@ class SpeechToText:
       print(f"Saved checkpoint at epoch {epoch + 1}")
 
       if tf_eval_dataset:
-        print("Validating ... ", end="")
+        print("Validating ... ")
         epoch_eval_loss, epoch_eval_wer = self.validate(
           self.model, self.decoder, tf_eval_dataset, loss,
           self.text_featurizer.num_classes, self.configs["last_activation"]
         )
-        print(f"val_loss = {epoch_eval_loss}, val_wer = {epoch_eval_wer}")
+        print(f"Average_val_loss = {epoch_eval_loss}, val_wer = {epoch_eval_wer}")
 
       time_epoch = time.time() - start
       print(f"Time for epoch {epoch + 1} is {time_epoch} secs")
@@ -182,7 +188,7 @@ class SpeechToText:
           tf.summary.scalar("epoch_time", time_epoch, step=epoch)
 
     if model_file:
-      self.model.save(model_file)
+      self.save_model(model_file)
 
   def keras_train_and_eval(self, model_file=None):
     print("Training and evaluating model ...")
@@ -199,10 +205,10 @@ class SpeechToText:
                                      speech_conf=self.configs["speech_conf"],
                                      batch_size=self.configs["batch_size"],
                                      augmentations=augmentations)
-    tf_train_dataset_sortagrad = train_dataset(text_featurizer=self.text_featurizer,
-                                               speech_conf=self.configs["speech_conf"],
-                                               batch_size=self.configs["batch_size"],
-                                               augmentations=augmentations, sortagrad=True)
+    # tf_train_dataset_sortagrad = train_dataset(text_featurizer=self.text_featurizer,
+    #                                            speech_conf=self.configs["speech_conf"],
+    #                                            batch_size=self.configs["batch_size"],
+    #                                            augmentations=augmentations, sortagrad=True)
 
     tf_eval_dataset = None
     if self.configs["eval_data_transcript_paths"]:
@@ -236,20 +242,20 @@ class SpeechToText:
       callback.append(tf.keras.callbacks.TensorBoard(log_dir=self.configs["log_dir"]))
 
     if tf_eval_dataset is not None:
-      if initial_epoch == 0:
-        train_model.fit(x=tf_train_dataset_sortagrad, epochs=1,
-                        validation_data=tf_eval_dataset, shuffle="batch",
-                        initial_epoch=initial_epoch, callbacks=callback)
-        initial_epoch = 1
+      # if initial_epoch == 0:
+      #   train_model.fit(x=tf_train_dataset_sortagrad, epochs=1,
+      #                   validation_data=tf_eval_dataset, shuffle="batch",
+      #                   initial_epoch=initial_epoch, callbacks=callback)
+      #   initial_epoch = 1
 
       train_model.fit(x=tf_train_dataset, epochs=self.configs["num_epochs"],
                       validation_data=tf_eval_dataset, shuffle="batch",
                       initial_epoch=initial_epoch, callbacks=callback)
     else:
-      if initial_epoch == 0:
-        train_model.fit(x=tf_train_dataset_sortagrad, epochs=1, shuffle="batch",
-                        initial_epoch=initial_epoch, callbacks=callback)
-        initial_epoch = 1
+      # if initial_epoch == 0:
+      #   train_model.fit(x=tf_train_dataset_sortagrad, epochs=1, shuffle="batch",
+      #                   initial_epoch=initial_epoch, callbacks=callback)
+      #   initial_epoch = 1
 
       train_model.fit(x=tf_train_dataset, epochs=self.configs["num_epochs"], shuffle="batch",
                       initial_epoch=initial_epoch, callbacks=callback)
@@ -431,6 +437,7 @@ class SpeechToText:
                         last_activation=self.configs["last_activation"])
 
   def save_model(self, model_file):
+    print("Saving whole ASR model ...")
     self.model.save(model_file)
 
   def save_from_checkpoint(self, model_file, idx, is_builtin=False):

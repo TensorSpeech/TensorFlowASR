@@ -30,7 +30,8 @@ def create_ctc_model(base_model, num_classes, speech_conf,
     # features = self.speech_featurizer(signal)
     outputs = base_model(features=features, streaming=True)
   else:
-    features = tf.keras.layers.Input(shape=(None, feature_dim, channel_dim), dtype=tf.float32, name="features")
+    features = tf.keras.layers.Input(shape=(None, feature_dim, channel_dim),
+                                     dtype=tf.float32, name="features")
     # features = self.speech_featurizer(signal)
     outputs = base_model(features=features, streaming=False)
 
