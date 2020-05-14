@@ -60,7 +60,10 @@ def preprocess_paths(paths):
 
 
 def get_asr_config(config_path):
-  conf_dict = runpy.run_path(config_path)
+  if config_path is None:
+    conf_dict = vars(DefaultConfig)
+  else:
+    conf_dict = runpy.run_path(config_path)
   check_key_in_dict(dictionary=conf_dict, keys=asr_conf_required)
   # fill missing default optional values
   default_dict = vars(DefaultConfig)

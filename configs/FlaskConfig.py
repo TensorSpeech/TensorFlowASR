@@ -11,7 +11,7 @@ class FlaskConfig:
   Set flask config vars from .env file
   """
   # General
-  FLASK_APP = os.getenv("FLASK_APP", "api.py")
+  FLASK_APP = os.getenv("FLASK_APP", "run_api.py")
   SECRET_KEY = "this is a secret key muahahahahahaha"
 
   # ASR
