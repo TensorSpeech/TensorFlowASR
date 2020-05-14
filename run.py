@@ -1,12 +1,11 @@
 from __future__ import absolute_import
 
-import librosa
+import argparse
 from logging import ERROR
 import tensorflow as tf
-from utils.Flags import args_parser
 from asr.SpeechToText import SpeechToText
 from asr.SEGAN import SEGAN
-from featurizers.SpeechFeaturizer import read_raw_audio, preemphasis, deemphasis
+from featurizers.SpeechFeaturizer import read_raw_audio
 
 tf.get_logger().setLevel(ERROR)
 gpus = tf.config.experimental.list_physical_devices('GPU')
@@ -24,77 +23,54 @@ if gpus:
 
 tf.keras.backend.clear_session()
 
-if args_parser.mode in ["train", "train_keras"]:
-  tf.compat.v1.set_random_seed(2020)
-else:
-  tf.compat.v1.set_random_seed(0)
+parser = argparse.ArgumentParser(description="Script to run both SEGAN and ASR")
 
-if args_parser.model == "asr":
-  asr = SpeechToText(configs_path=args_parser.config)
-  if args_parser.mode == "train":
-    asr.train_and_eval(model_file=args_parser.export_file)
-  elif args_parser.mode == "train_keras":
-    asr.keras_train_and_eval(model_file=args_parser.export_file)
-  elif args_parser.mode == "test":
-    if args_parser.output_file_path is None:
-      raise ValueError("Flag 'output_file_path' must be set")
-    asr.test(model_file=args_parser.export_file,
-             output_file_path=args_parser.output_file_path)
-  elif args_parser.mode == "infer":
-    if args_parser.output_file_path is None:
-      raise ValueError("Flag 'output_file_path' must be set")
-    if args_parser.input_file_path is None:
-      raise ValueError("Flag 'input_file_path' must be set")
-    asr.infer(model_file=args_parser.export_file,
-              input_file_path=args_parser.input_file_path,
-              output_file_path=args_parser.output_file_path)
-  elif args_parser.mode == "infer_single":
-    if args_parser.input_file_path is None:
-      raise ValueError("Flag 'input_file_path' must be set")
-    signal = read_raw_audio(args_parser.input_file_path)
-    signal = preemphasis(signal, 0.95)
-    text = asr.infer_single(signal)
-    print(text)
-  elif args_parser.mode == "save":
-    asr.save_model(args_parser.export_file)
-  elif args_parser.mode == "load":
-    asr.load_model(args_parser.export_file)
-  elif args_parser.mode == "save_from_checkpoint":
-    if args_parser.export_file is None:
-      raise ValueError("Flag 'export_file' must be set")
-    asr.save_from_checkpoint(args_parser.export_file, args_parser.ckpt_index)
-  elif args_parser.mode == "save_from_checkpoint_keras":
-    if args_parser.export_file is None:
-      raise ValueError("Flag 'export_file' must be set")
-    asr.save_from_checkpoint(args_parser.export_file, args_parser.ckpt_index, is_builtin=True)
-  else:
-    raise ValueError("Flag 'mode' must be either 'train', 'test' or 'infer'")
-elif args_parser.model == "segan":
-  segan = SEGAN(config_path=args_parser.config, training=True)
-  if args_parser.mode == "train":
-    segan.train(export_dir=args_parser.export_file)
-  elif args_parser.mode == "test":
-    segan.test()
-  elif args_parser.mode == "save_from_ckpt":
-    segan.save_from_checkpoint(args_parser.export_file)
-  elif args_parser.mode == "save":
-    segan.save(args_parser.export_file)
-  elif args_parser.mode == "infer":
-    msg = segan.load_model(args_parser.export_file)
-    assert msg is None
-    if args_parser.input_file_path and args_parser.output_file_path:
-      signal = read_raw_audio(args_parser.input_file_path, 16000)
-      clean_signal = segan.generate(signal)
-      librosa.output.write_wav(args_parser.output_file_path, clean_signal, 16000)
-  else:
-    raise ValueError("Flag 'mode' must be either 'train' or 'test'")
-elif args_parser.model == "combine":
-  segan = SEGAN(config_path=None, training=False)
-  segan.load_model(args_parser.segan_weights)
-  asr = SpeechToText(configs_path=args_parser.config, noise_filter=segan)
-  if args_parser.mode != "test":
-    raise ValueError("Only mode 'test' is available for this model")
-  if args_parser.output_file_path is None:
-    raise ValueError("Flag 'output_file_path' must be set")
-  asr.test_with_noise_filter(model_file=args_parser.export_file,
-                             output_file_path=args_parser.output_file_path)
+parser.add_argument("--mode", "-m", type=str, default="test",
+                    help="Mode for training, testing or infering")
+
+parser.add_argument("--segan_config", "-s", type=str, default=None,
+                    help="The file path of segan configuration file")
+
+parser.add_argument("--asr_config", "-a", type=str, default=None,
+                    help="The file path of asr configuration file")
+
+parser.add_argument("--input_file_path", "-i", type=str, default=None,
+                    help="Path to input file")
+
+parser.add_argument("--output_file_path", "-o", type=str, default=None,
+                    help="Path to output file")
+
+parser.add_argument("--saved_segan", type=str, default=None,
+                    help="Path to the saved segan weights")
+
+parser.add_argument("--saved_asr", type=str, default=None,
+                    help="Path to the saved asr model")
+
+
+args = parser.parse_args()
+
+def main():
+  assert args.mode in ["test", "infer_single"]
+
+  tf.random.set_seed(0)
+
+  segan = SEGAN(config_path=args.segan_config, training=False)
+  segan.load_model(args.saved_segan)
+
+  asr = SpeechToText(configs_path=args.asr_config, noise_filter=segan)
+
+  if args.mode == "test":
+    assert args.ouput_file_path
+    asr.test_with_noise_filter(model_file=args.saved_asr,
+                               output_file_path=args.output_file_path)
+
+  elif args.mode == "infer_single":
+    assert args.input_file_path
+    asr.load_model(args.saved_asr)
+    signal = read_raw_audio(args.input_file_path, 16000)
+    pred = asr.infer_single(signal)
+    print(pred)
+
+
+if __name__ == "__main__":
+  main()

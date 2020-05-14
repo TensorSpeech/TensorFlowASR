@@ -51,18 +51,9 @@ There're 2 training methods for the ASR:
 
 Example config file can be found in directory ```configs```.
 
-Run the following commands to install dependencies and run project:
-
 ```bash
-pip install tensorflow-gpu==2.2.0
-pip install -r requirements.txt
-python run.py --mode=train ...
-```
-
-Run the following command to see the flags:
-
-```bash
-python run.py --help
+chmod a+x setup.sh && chown $USER:$USER setup.sh && ./setup.sh # Install dependencies
+python $SCRIPT --help # Where $SCRIPT is one of the run_*.py files, --help to see the flags
 ```
 
 ## References
