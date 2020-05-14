@@ -1,6 +1,6 @@
 .git
 .idea
 .vscode
-prepare_segan_data.sh
 .env.example
 .session.vim
+__pycache__
