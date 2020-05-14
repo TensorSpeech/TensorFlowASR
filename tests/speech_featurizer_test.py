@@ -1,32 +1,38 @@
-from __future__ import absolute_import
+from __future__ import absolute_import, print_function
 
-from featurizers.SpeechFeaturizer import read_raw_audio, speech_feature_extraction
-
+import os.path as o
 import sys
+sys.path.append(o.abspath(o.join(o.dirname(sys.modules[__name__].__file__), "..")))
+import numpy as np
 import matplotlib.pyplot as plt
+from featurizers.SpeechFeaturizer import read_raw_audio, speech_feature_extraction
 
 
 def main(argv):
   speech_file = argv[1]
   feature_type = argv[2]
   speech_conf = {
-    "sample_rate":       16000,
-    "frame_ms":          25,
-    "stride_ms":         10,
-    "feature_type":      feature_type,
-    "pre_emph":          0.97,
-    "normalize_signal":  True,
+    "sample_rate": 16384,
+    "frame_ms": 20,
+    "stride_ms": 10,
+    "feature_type": feature_type,
+    "pre_emph": 0.97,
+    "normalize_signal": True,
     "normalize_feature": True,
-    "num_feature_bins":  12,
-    "is_delta":          True,
-    "pitch":             40
+    "norm_per_feature": False,
+    "num_feature_bins": 12,
+    "delta": False,
+    "delta_delta": False,
+    "pitch": False
   }
   signal = read_raw_audio(speech_file, speech_conf["sample_rate"])
-  ft = speech_feature_extraction(signal, speech_conf).T
+  ft = speech_feature_extraction(signal, speech_conf)
+  f, c = np.shape(ft)[1:]
+  ft = np.reshape(ft, [-1, f*c])
 
   plt.figure(figsize=(15, 5))
   plt.plot(1, 1, 1)
-  plt.imshow(ft, origin="lower")
+  plt.imshow(ft.T, origin="lower")
   plt.title(feature_type)
   plt.colorbar()
   plt.tight_layout()

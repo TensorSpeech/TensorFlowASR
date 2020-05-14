@@ -1,4 +1,4 @@
-FROM python:3.7.7
+FROM tensorflow/tensorflow:latest
 
 WORKDIR /app
 
@@ -6,8 +6,7 @@ COPY . /app
 COPY .env.production /app/.env
 
 RUN apt update && apt upgrade -y
-RUN apt install libsndfile1 ffmpeg gcc g++ -y sox libboost-all-dev swig git
-RUN pip install tensorflow==2.2.0
+RUN apt install -y wget cmake make libsndfile1 ffmpeg gcc g++ sox libboost-all-dev swig git
 RUN /app/setup.sh
 
 EXPOSE 5000

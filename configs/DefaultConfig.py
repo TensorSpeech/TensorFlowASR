@@ -38,8 +38,10 @@ speech_conf = {
   "feature_type": "mfcc",
   "pre_emph": 0.97,
   "delta": True,
+  "delta_delta": True,
   "normalize_signal": True,
   "normalize_feature": True,
+  "norm_per_feature": False,
   "pitch": True
 }
 

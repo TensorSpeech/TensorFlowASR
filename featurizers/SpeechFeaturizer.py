@@ -36,19 +36,25 @@ def speech_feature_extraction(signal, speech_conf):
   else:
     raise ValueError("feature_type must be either 'mfcc', 'logfbank' or 'spectrogram'")
 
+  original_features = np.copy(features)
+
   if speech_conf["normalize_feature"]:
-    features = normalize_audio_feature(features)
+    features = normalize_audio_feature(features, per_feature=speech_conf["norm_per_feature"])
 
   features = np.expand_dims(features, axis=-1)
 
   if speech_conf["delta"]:
-    delta = librosa.feature.delta(np.squeeze(features, axis=-1).T).T
+    delta = librosa.feature.delta(original_features.T).T
     features = np.concatenate([features, np.expand_dims(delta, axis=-1)], axis=-1)
+
+  if speech_conf["delta_delta"]:
+    delta_delta = librosa.feature.delta(original_features.T, order=2).T
+    features = np.concatenate([features, np.expand_dims(delta_delta, axis=-1)], axis=-1)
 
   if speech_conf["pitch"] > 0:
     pitches = compute_pitch_feature(signal, speech_conf)
     if speech_conf["normalize_feature"]:
-      pitches = normalize_audio_feature(pitches)
+      pitches = normalize_audio_feature(pitches, per_feature=speech_conf["norm_per_feature"])
     features = np.concatenate([features, np.expand_dims(pitches, axis=-1)], axis=-1)
 
   return features
@@ -158,10 +164,11 @@ def read_raw_audio(audio, sample_rate=16000):
   return wave
 
 
-def normalize_audio_feature(audio_feature):
+def normalize_audio_feature(audio_feature, per_feature=False):
   """ Mean and variance normalization """
-  mean = np.mean(audio_feature, axis=0)
-  std_dev = np.std(audio_feature, axis=0) + 1e-6
+  axis = 0 if per_feature else None
+  mean = np.mean(audio_feature, axis=axis)
+  std_dev = np.std(audio_feature, axis=axis) + 1e-6
   normalized = (audio_feature - mean) / std_dev
   return normalized
 
