@@ -124,7 +124,7 @@ def compute_mfcc_feature(signal, speech_conf):
       )))
 
   mel_basis = librosa.filters.mel(sample_rate, frame_length,
-                                  n_mels=2 * num_feature_bins,
+                                  n_mels=128,
                                   fmin=0, fmax=int(sample_rate / 2))
 
   mfcc = librosa.feature.mfcc(sr=sample_rate, S=librosa.core.power_to_db(np.dot(mel_basis, S) + 1e-20),
