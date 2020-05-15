@@ -16,6 +16,9 @@ def compute_feature_dim(speech_conf):
   if speech_conf["delta"]:
     channel_dim += 1
 
+  if speech_conf["delta_delta"]:
+    channel_dim += 1
+
   if speech_conf["pitch"]:
     channel_dim += 1
 
