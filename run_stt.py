@@ -1,6 +1,8 @@
 from __future__ import absolute_import
 
+import os
 import argparse
+import pathlib
 from logging import ERROR
 import tensorflow as tf
 from asr.SpeechToText import SpeechToText
@@ -46,7 +48,8 @@ parser.add_argument("--ckpt_index", type=int, default=-1,
 args = parser.parse_args()
 
 def main():
-  assert args.mode in ["train", "train_keras", "test", "infer", "infer_single", "create_tfrecords",
+  assert args.mode in ["train", "train_keras", "test", "infer", "infer_single",
+                       "create_tfrecords", "convert_to_tflite",
                        "save", "save_from_checkpoint", "save_from_checkpoint_builtin"]
 
   if args.mode in ["train", "train_keras"]:
@@ -103,6 +106,18 @@ def main():
     if eval_data:
       eval_dataset = Dataset(eval_data, tfrecords_dir, mode="eval")
       eval_dataset.create_tfrecords(augmentations=[None])
+
+  elif args.mode == "convert_to_tflite":
+    assert args.export_file and args.output_file_path
+    converter = tf.lite.TFLiteConverter.from_saved_model(saved_model_dir=args.export_file)
+    converter.optimizations = [tf.lite.Optimize.DEFAULT]
+    tflite_model = converter.convert()
+
+    tflite_model_dir = pathlib.Path(os.path.dirname(args.output_file_path))
+    tflite_model_dir.mkdir(exist_ok=True, parents=True)
+
+    tflite_model_file = tflite_model_dir/f"{os.path.basename(args.output_file_path)}"
+    tflite_model_file.write_bytes(tflite_model)
 
 
 if __name__ == "__main__":
