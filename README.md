@@ -16,11 +16,12 @@ Collected from many sources:
 
 **Speech features** are extracted from the **Signal** with ```sample_rate```, ```frame_ms```, ```stride_ms``` and ```num_feature_bins```.
 
-Speech features has the shape ```(batch, time, num_feature_bins, channels)``` and it contains from 1-3 channels:
+Speech features has the shape ```(batch, time, num_feature_bins, channels)``` and it contains from 1-4 channels:
 
 1. Spectrogram, Log Mel Spectrogram (log filter banks) or MFCCs
 2. Delta features: ```librosa.feature.delta``` from the features extracted on channel 1.
-3. Pitch features: ```librosa.core.piptrack``` from the signal
+3. Delta deltas features: ```librosa.feature.delta``` with ```order=2``` from the features extracted on channel 1.
+4. Pitch features: ```librosa.core.piptrack``` from the signal
 
 ### Text Features
 
@@ -28,11 +29,13 @@ Speech features has the shape ```(batch, time, num_feature_bins, channels)``` an
 
 ## Models
 
-There're 2 main models in this repo: CTCModel and SEGAN
+There're 3 main models in this repo: CTCModel, SEGAN and RNNTransducer
 
 **CTCModel** uses DeepSpeech2 as the base model. You can write your custom model instead of DeepSpeech2, make sure that the input matches the speech features and output is in the shape ```(batch, time, some_dim)```.
 
 **SEGAN** was created exactly as the segan repo in the references and tested.
+
+**RNNTransducer** is on development.
 
 ## Training
 
