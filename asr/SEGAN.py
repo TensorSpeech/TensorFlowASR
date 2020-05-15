@@ -213,3 +213,34 @@ class SEGAN:
 
     signal = gen(tf.convert_to_tensor(slices)).numpy()
     return deemphasis(signal, self.configs["pre_emph"])
+
+  def load_interpreter(self, export_dir):
+    try:
+      self.load_model(export_dir)
+      converter = tf.lite.TFLiteConverter.from_keras_model(self.generator)
+      converter.optimizations = [tf.lite.Optimize.DEFAULT]
+      converter.experimental_new_converter = True
+      supported_ops = [tf.lite.OpsSet.TFLITE_BUILTINS]
+      supported_ops += [tf.lite.OpsSet.SELECT_TF_OPS]
+      converter.target_spec.supported_ops = supported_ops
+      tflite_model = converter.convert()
+      self.generator = tf.lite.Interpreter(model_content=tflite_model)
+      self.generator.allocate_tensors()
+    except Exception as e:
+      return f"Model is not trained: {e}"
+    return None
+
+  def generate_interpreter(self, signal):
+    signal = preemphasis(signal, self.configs["pre_emph"])
+    slices = slice_signal(signal, self.window_size, stride=1)
+    slices = tf.reshape(slices, [-1, self.window_size])
+
+    input_index = self.generator.get_input_details()[0]["index"]
+    output_index = self.generator.get_output_details()[0]["index"]
+
+    self.generator.set_tensor(input_index, slices)
+    self.generator.invoke()
+
+    pred = self.generator.get_tensor(output_index)
+    pred = merge_slices(pred)
+    return deemphasis(pred.numpy(), self.configs["pre_emph"])
