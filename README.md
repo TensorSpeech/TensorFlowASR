@@ -6,9 +6,9 @@ VASR and SEGAN Implementation in Tensorflow Keras.
 
 Collected from many sources:
 
-1. Vivos: 15hrs
-2. InfoRe: 25hrs Single Person
-3. VLSP: ~415hrs
+1. Vivos: 15hrs from [ailab.hcmus.edu.vn/vivos](https://ailab.hcmus.edu.vn/vivos)
+2. InfoRe: 25hrs Single Person + ~415hrs from [facebook](https://www.facebook.com/groups/j2team.community/permalink/1010834009248719/)
+3. VLSP: ~415hrs (the same as InfoRe 415hrs)
 
 ## Featurizers
 
@@ -31,7 +31,7 @@ Speech features has the shape ```(batch, time, num_feature_bins, channels)``` an
 
 There're 3 main models in this repo: CTCModel, SEGAN and RNNTransducer
 
-**CTCModel** uses DeepSpeech2 as the base model. You can write your custom model instead of DeepSpeech2, make sure that the input matches the speech features and output is in the shape ```(batch, time, some_dim)```.
+**CTCModel** uses DeepSpeech2 as the base model. You can write your custom model instead of DeepSpeech2, make sure that the input matches the speech features and output is in the shape ```(batch, time, num_classes)```.
 
 **SEGAN** was created exactly as the segan repo in the references and tested.
 
