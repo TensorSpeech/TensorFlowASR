@@ -31,16 +31,19 @@ class SeganDataset:
         # noisy_wav_path = '/' + os.path.join(*noisy_split)
 
         clean_wav = read_raw_audio(clean_wav_path, sample_rate=sample_rate)
-        # noisy_wav = read_raw_audio(noisy_wav_path, sample_rate=16000)
-        noisy_wav = add_noise(clean_wav, self.noisy_data_dir, snr_list=self.noise["snr"],
-                              min_noises=self.noise["min_noises"], max_noises=self.noise["max_noises"], sample_rate=sample_rate)
         clean_slices = slice_signal(clean_wav, self.window_size, self.stride)
-        noisy_slices = slice_signal(noisy_wav, self.window_size, self.stride)
 
-        for clean_slice, noisy_slice in zip(clean_slices, noisy_slices):
-          if len(clean_slice) == 0:
-            continue
-          yield preemphasis(clean_slice, coeff), preemphasis(noisy_slice, coeff)
+        for snr in self.noise["snr"]:
+          # noisy_wav = read_raw_audio(noisy_wav_path, sample_rate=16000)
+          noisy_wav = add_noise(clean_wav, self.noisy_data_dir, snr_list=[snr],
+                                min_noises=self.noise["min_noises"], max_noises=self.noise["max_noises"],
+                                sample_rate=sample_rate)
+          noisy_slices = slice_signal(noisy_wav, self.window_size, self.stride)
+
+          for clean_slice, noisy_slice in zip(clean_slices, noisy_slices):
+            if len(clean_slice) == 0:
+              continue
+            yield preemphasis(clean_slice, coeff), preemphasis(noisy_slice, coeff)
 
     dataset = tf.data.Dataset.from_generator(
       _gen_data,
