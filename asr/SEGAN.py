@@ -59,9 +59,10 @@ class SEGAN:
   def train(self, export_dir=None):
     train_dataset = SeganDataset(clean_data_dir=self.configs["clean_train_data_dir"],
                                  noisy_data_dir=self.configs["noisy_train_data_dir"],
+                                 noise=self.configs["noise_conf"],
                                  window_size=self.window_size, stride=self.stride)
 
-    tf_train_dataset = train_dataset.create(self.configs["batch_size"], coeff=self.coeff)
+    tf_train_dataset = train_dataset.create(self.configs["batch_size"], coeff=self.coeff, sample_rate=self.configs["sample_rate"])
 
     epochs = self.configs["num_epochs"]
 
@@ -118,14 +119,16 @@ class SEGAN:
           self.deactivated_noise = True
 
       for clean_wav, noisy_wav in tf_train_dataset:
+        substart = time.time()
         gen_l1_loss, gen_adv_loss, disc_loss = train_step(clean_wav, noisy_wav)
         g_l1_loss.append(gen_l1_loss)
         g_adv_loss.append(gen_adv_loss)
         d_loss.append(disc_loss)
         sys.stdout.write("\033[K")
-        print(f"Epoch: {epoch + 1}/{epochs}, batch: {batch_idx}/{num_batch}, "
+        print(f"\rEpoch: {epoch + 1}/{epochs}, batch: {batch_idx}/{num_batch}, "
+              f"duration: {time.time() - substart}, "
               f"gen_l1_loss = {gen_l1_loss}, gen_adv_loss = {gen_adv_loss}, "
-              f"disc_loss = {disc_loss}", end="\r", flush=True)
+              f"disc_loss = {disc_loss}", end="")
         batch_idx += 1
 
       num_batch = batch_idx
@@ -213,3 +216,34 @@ class SEGAN:
 
     signal = gen(tf.convert_to_tensor(slices)).numpy()
     return deemphasis(signal, self.configs["pre_emph"])
+
+  def load_interpreter(self, export_dir):
+    try:
+      self.load_model(export_dir)
+      converter = tf.lite.TFLiteConverter.from_keras_model(self.generator)
+      converter.optimizations = [tf.lite.Optimize.DEFAULT]
+      converter.experimental_new_converter = True
+      supported_ops = [tf.lite.OpsSet.TFLITE_BUILTINS]
+      supported_ops += [tf.lite.OpsSet.SELECT_TF_OPS]
+      converter.target_spec.supported_ops = supported_ops
+      tflite_model = converter.convert()
+      self.generator = tf.lite.Interpreter(model_content=tflite_model)
+      self.generator.allocate_tensors()
+    except Exception as e:
+      return f"Model is not trained: {e}"
+    return None
+
+  def generate_interpreter(self, signal):
+    signal = preemphasis(signal, self.configs["pre_emph"])
+    slices = slice_signal(signal, self.window_size, stride=1)
+    slices = tf.reshape(slices, [-1, self.window_size])
+
+    input_index = self.generator.get_input_details()[0]["index"]
+    output_index = self.generator.get_output_details()[0]["index"]
+
+    self.generator.set_tensor(input_index, slices)
+    self.generator.invoke()
+
+    pred = self.generator.get_tensor(output_index)
+    pred = merge_slices(pred)
+    return deemphasis(pred.numpy(), self.configs["pre_emph"])

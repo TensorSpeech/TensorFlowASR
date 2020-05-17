@@ -1,4 +1,4 @@
-FROM tensorflow/tensorflow:latest
+FROM python:3.7.7
 
 WORKDIR /app
 

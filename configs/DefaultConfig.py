@@ -3,9 +3,7 @@ from __future__ import absolute_import
 from models.deepspeech2.DeepSpeech2 import DeepSpeech2
 from augmentations.Augments import Noise
 
-base_model = DeepSpeech2(conv_type=1, rnn_type="gru", num_rnn=7, rnn_units=256,
-                         kernel_size=(5, 5, 5), strides=(2, 1, 1), pre_fc_units=0,
-                         filters=(32, 32, 96), is_bidirectional=True)
+base_model = DeepSpeech2()
 
 streaming_size = None
 
@@ -17,7 +15,7 @@ decoder = {
   "beta": 0.5
 }
 
-# augmentations = [Noise(min_snr=3, max_snr=10,
+# augmentations = [Noise(snr_list=[0, 5, 10, 15],
 #                        min_noises=1, max_noises=3,
 #                        noise_dir="/mnt/Data/ML/ASR/Preprocessed/Noises")]
 augmentations = []

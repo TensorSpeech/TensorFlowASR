@@ -7,6 +7,8 @@ from featurizers.SpeechFeaturizer import read_raw_audio
 
 
 def get_white_noise(signal: np.ndarray, snr=10):
+  if snr == 0:
+    return None
   RMS_s = math.sqrt(np.mean(signal ** 2))
   # RMS values of noise
   RMS_n = math.sqrt(RMS_s ** 2 / (pow(10, snr / 20)))
@@ -20,7 +22,7 @@ def get_white_noise(signal: np.ndarray, snr=10):
 
 
 def get_noise_from_sound(signal: np.ndarray, noise: np.ndarray, snr=10):
-  if len(noise) < len(signal):
+  if len(noise) < len(signal) or snr == 0:
     return None
 
   idx = random.choice(range(0, len(noise) - len(signal)))  # randomly crop noise wav
@@ -37,16 +39,18 @@ def get_noise_from_sound(signal: np.ndarray, noise: np.ndarray, snr=10):
   return noise
 
 
-def add_noise(signal: np.ndarray, noises: list, min_snr: int, max_snr: int,
+def add_noise(signal: np.ndarray, noises: list, snr_list: list,
               min_noises: int, max_noises: int, sample_rate=16000):
   random.shuffle(noises)
   num_noises = random.randint(min_noises, max_noises)
   selected_noises = random.choices(noises, k=num_noises)
   added_noises = []
   for noise_type in selected_noises:
-    snr = random.uniform(min_snr, max_snr)
+    snr = random.choice(snr_list)
     if noise_type == "white_noise":
-      added_noises.append(get_white_noise(signal, snr))
+      noise = get_white_noise(signal, snr)
+      if noise is not None:
+        added_noises.append(noise)
     else:
       noise = read_raw_audio(noise_type, sample_rate=sample_rate)
       noise = get_noise_from_sound(signal, noise, snr)

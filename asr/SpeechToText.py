@@ -408,6 +408,29 @@ class SpeechToText:
     pred = self.predict(tf.expand_dims(features, 0), tf.expand_dims(input_length, 0))
     return bytes_to_string(pred.numpy())[0]
 
+  def infer_single_interpreter(self, signal):
+    features = speech_feature_extraction(signal, self.configs["speech_conf"])
+    input_length = tf.cast(tf.shape(features)[0], tf.int32)
+
+    input_index = self.model.get_input_details()[0]["index"]
+    output_index = self.model.get_output_details()[0]["index"]
+
+    self.model.set_tensor(input_index, features)
+    self.model.invoke()
+
+    pred = self.model.get_tensor(output_index)
+    pred = self.decoder(probs=pred, input_length=input_length,
+                        last_activation=self.configs["last_activation"])
+    return bytes_to_string(pred.numpy())[0]
+
+  def load_interpreter(self, tflite_file):
+    try:
+      self.model = tf.lite.Interpreter(model_path=str(tflite_file))
+      self.model.allocate_tensors()
+    except ValueError as e:
+      return f"Model is not trained: {e}"
+    return None
+
   def load_model(self, model_file):
     try:
       self.model = tf.keras.models.load_model(model_file)

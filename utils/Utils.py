@@ -35,7 +35,9 @@ segan_conf_required = ["batch_size",
                        "l1_lambda",
                        "pre_emph",
                        "window_size",
+                       "sample_rate",
                        "stride",
+                       "noise_conf",
                        "g_learning_rate",
                        "d_learning_rate"]
 
