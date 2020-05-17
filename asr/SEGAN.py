@@ -59,9 +59,10 @@ class SEGAN:
   def train(self, export_dir=None):
     train_dataset = SeganDataset(clean_data_dir=self.configs["clean_train_data_dir"],
                                  noisy_data_dir=self.configs["noisy_train_data_dir"],
+                                 noise=self.configs["noise_conf"],
                                  window_size=self.window_size, stride=self.stride)
 
-    tf_train_dataset = train_dataset.create(self.configs["batch_size"], coeff=self.coeff)
+    tf_train_dataset = train_dataset.create(self.configs["batch_size"], coeff=self.coeff, sample_rate=self.configs["sample_rate"])
 
     epochs = self.configs["num_epochs"]
 

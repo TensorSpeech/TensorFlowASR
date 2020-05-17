@@ -22,15 +22,24 @@ pre_emph = 0.95
 
 window_size = 2 ** 14
 
+sample_rate = 16000
+
 stride = 0.5
+
+noise_conf = {
+  "snr": (0, 5, 10, 15),
+  "min_noises": 1,
+  "max_noises": 3
+}
 
 g_learning_rate = 0.0002
 
 d_learning_rate = 0.0002
 
-clean_train_data_dir = "/mnt/Data/ML/SEGAN/clean_trainset_wav_16k"
+clean_train_data_dir = "/mnt/Data/ML/ASR/Preprocessed/VivosClean"
 
-noisy_train_data_dir = "/mnt/Data/ML/SEGAN/noisy_trainset_wav_16k"
+# noisy_train_data_dir = "/mnt/Data/ML/SEGAN/noisy_trainset_wav_16k"
+noisy_train_data_dir = "/mnt/Data/ML/ASR/Preprocessed/Noises"
 
 clean_test_data_dir = "/mnt/Data/ML/SEGAN/"
 

@@ -5,26 +5,35 @@ import os
 import tensorflow as tf
 from utils.Utils import slice_signal
 from featurizers.SpeechFeaturizer import preemphasis, read_raw_audio
+from augmentations.NoiseAugment import add_noise
 
+DEFAULT_NOISE = {
+  "snr": (0, 5, 10, 15),
+  "min_noises": 1,
+  "max_noises": 3,
+}
 
 class SeganDataset:
-  def __init__(self, clean_data_dir, noisy_data_dir, window_size=2 ** 14, stride=0.5):
+  def __init__(self, clean_data_dir, noisy_data_dir, noise=DEFAULT_NOISE, window_size=2 ** 14, stride=0.5):
     self.clean_data_dir = clean_data_dir
-    self.noisy_data_dir = noisy_data_dir
+    self.noisy_data_dir = glob.glob(os.path.join(noisy_data_dir, "**", "*.wav"), recursive=True)
     self.window_size = window_size
     self.stride = stride
+    self.noise = noise
 
-  def create(self, batch_size, coeff=0.97, repeat=1):
+  def create(self, batch_size, coeff=0.97, repeat=1, sample_rate=16384):
     def _gen_data():
       for clean_wav_path in glob.iglob(os.path.join(self.clean_data_dir, "**", "*.wav"), recursive=True):
-        clean_split = clean_wav_path.split('/')
-        noisy_split = self.noisy_data_dir.split('/')
-        clean_split = clean_split[len(noisy_split):]
-        noisy_split = noisy_split + clean_split
-        noisy_wav_path = '/' + os.path.join(*noisy_split)
+        # clean_split = clean_wav_path.split('/')
+        # noisy_split = self.noisy_data_dir.split('/')
+        # clean_split = clean_split[len(noisy_split):]
+        # noisy_split = noisy_split + clean_split
+        # noisy_wav_path = '/' + os.path.join(*noisy_split)
 
-        clean_wav = read_raw_audio(clean_wav_path, sample_rate=16000)
-        noisy_wav = read_raw_audio(noisy_wav_path, sample_rate=16000)
+        clean_wav = read_raw_audio(clean_wav_path, sample_rate=sample_rate)
+        # noisy_wav = read_raw_audio(noisy_wav_path, sample_rate=16000)
+        noisy_wav = add_noise(clean_wav, self.noisy_data_dir, snr_list=self.noise["snr"],
+                              min_noises=self.noise["min_noises"], max_noises=self.noise["max_noises"], sample_rate=sample_rate)
         clean_slices = slice_signal(clean_wav, self.window_size, self.stride)
         noisy_slices = slice_signal(noisy_wav, self.window_size, self.stride)
 
