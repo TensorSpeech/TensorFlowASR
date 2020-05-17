@@ -119,14 +119,16 @@ class SEGAN:
           self.deactivated_noise = True
 
       for clean_wav, noisy_wav in tf_train_dataset:
+        substart = time.time()
         gen_l1_loss, gen_adv_loss, disc_loss = train_step(clean_wav, noisy_wav)
         g_l1_loss.append(gen_l1_loss)
         g_adv_loss.append(gen_adv_loss)
         d_loss.append(disc_loss)
         sys.stdout.write("\033[K")
-        print(f"Epoch: {epoch + 1}/{epochs}, batch: {batch_idx}/{num_batch}, "
+        print(f"\rEpoch: {epoch + 1}/{epochs}, batch: {batch_idx}/{num_batch}, "
+              f"duration: {time.time() - substart}, "
               f"gen_l1_loss = {gen_l1_loss}, gen_adv_loss = {gen_adv_loss}, "
-              f"disc_loss = {disc_loss}", end="\r", flush=True)
+              f"disc_loss = {disc_loss}", end="")
         batch_idx += 1
 
       num_batch = batch_idx
