@@ -111,28 +111,22 @@ class SpeechToText:
                       keys=["tfrecords_dir", "checkpoint_dir", "augmentations",
                             "log_dir", "train_data_transcript_paths"])
     augmentations = self.configs["augmentations"]
-    augmentations.append(None)
 
-    train_dataset = Dataset(data_path=self.configs["train_data_transcript_paths"],
-                            tfrecords_dir=self.configs["tfrecords_dir"], mode="train")
-    tf_train_dataset = train_dataset.get_dataset_from_generator(
-      text_featurizer=self.text_featurizer,
-      speech_conf=self.configs["speech_conf"],
-      batch_size=self.configs["batch_size"],
-      augmentations=augmentations
-    )
+    train_dataset = Dataset(data_path=self.configs["train_data_transcript_paths"], mode="train")
+    tf_train_dataset = train_dataset(text_featurizer=self.text_featurizer,
+                                     speech_conf=self.configs["speech_conf"],
+                                     batch_size=self.configs["batch_size"],
+                                     augmentations=augmentations, sortagrad=False,
+                                     builtin=False, fext=True, tfrecords_dir=None)
 
     tf_eval_dataset = None
 
     if self.configs["eval_data_transcript_paths"]:
-      eval_dataset = Dataset(data_path=self.configs["eval_data_transcript_paths"],
-                             tfrecords_dir=self.configs["tfrecords_dir"], mode="eval")
-      tf_eval_dataset = eval_dataset.get_dataset_from_generator(
-        text_featurizer=self.text_featurizer,
-        speech_conf=self.configs["speech_conf"],
-        batch_size=self.configs["batch_size"],
-        augmentations=[None]
-      )
+      eval_dataset = Dataset(data_path=self.configs["eval_data_transcript_paths"], mode="eval")
+      tf_eval_dataset = eval_dataset(text_featurizer=self.text_featurizer,
+                                     speech_conf=self.configs["speech_conf"],
+                                     batch_size=self.configs["batch_size"],
+                                     sortagrad=False, builtin=False, fext=True, tfrecords_dir=None)
 
     self.model.summary()
 
@@ -190,33 +184,35 @@ class SpeechToText:
     if model_file:
       self.save_model(model_file)
 
-  def keras_train_and_eval(self, model_file=None):
+  def train_and_eval_builtin(self, model_file=None):
     print("Training and evaluating model ...")
 
     check_key_in_dict(dictionary=self.configs,
                       keys=["tfrecords_dir", "checkpoint_dir", "augmentations",
-                            "log_dir", "train_data_transcript_paths"])
+                            "log_dir", "train_data_transcript_paths", "sortagrad"])
     augmentations = self.configs["augmentations"]
-    augmentations.append(None)
 
-    train_dataset = Dataset(data_path=self.configs["train_data_transcript_paths"],
-                            tfrecords_dir=self.configs["tfrecords_dir"], mode="train", is_keras=True)
+    train_dataset = Dataset(data_path=self.configs["train_data_transcript_paths"], mode="train")
+    if self.configs["sortagrad"]:
+      tf_train_dataset_sortagrad = train_dataset(text_featurizer=self.text_featurizer,
+                                                 speech_conf=self.configs["speech_conf"],
+                                                 batch_size=self.configs["batch_size"],
+                                                 augmentations=augmentations, sortagrad=True, builtin=True,
+                                                 fext=True, tfrecords_dir=self.configs["tfrecords_dir"])
     tf_train_dataset = train_dataset(text_featurizer=self.text_featurizer,
                                      speech_conf=self.configs["speech_conf"],
                                      batch_size=self.configs["batch_size"],
-                                     augmentations=augmentations)
-    # tf_train_dataset_sortagrad = train_dataset(text_featurizer=self.text_featurizer,
-    #                                            speech_conf=self.configs["speech_conf"],
-    #                                            batch_size=self.configs["batch_size"],
-    #                                            augmentations=augmentations, sortagrad=True)
+                                     augmentations=augmentations, sortagrad=False, builtin=True,
+                                     fext=True, tfrecords_dir=self.configs["tfrecords_dir"])
 
     tf_eval_dataset = None
     if self.configs["eval_data_transcript_paths"]:
-      eval_dataset = Dataset(data_path=self.configs["eval_data_transcript_paths"],
-                             tfrecords_dir=self.configs["tfrecords_dir"], mode="eval", is_keras=True)
+      eval_dataset = Dataset(data_path=self.configs["eval_data_transcript_paths"], mode="eval")
       tf_eval_dataset = eval_dataset(text_featurizer=self.text_featurizer,
                                      speech_conf=self.configs["speech_conf"],
-                                     batch_size=self.configs["batch_size"])
+                                     batch_size=self.configs["batch_size"],
+                                     sortagrad=False, builtin=True, fext=True,
+                                     tfrecords_dir=self.configs["tfrecords_dir"])
 
     train_model = create_ctc_train_model(self.model, last_activation=self.configs["last_activation"],
                                          num_classes=self.text_featurizer.num_classes)
@@ -242,20 +238,20 @@ class SpeechToText:
       callback.append(tf.keras.callbacks.TensorBoard(log_dir=self.configs["log_dir"]))
 
     if tf_eval_dataset is not None:
-      # if initial_epoch == 0:
-      #   train_model.fit(x=tf_train_dataset_sortagrad, epochs=1,
-      #                   validation_data=tf_eval_dataset, shuffle="batch",
-      #                   initial_epoch=initial_epoch, callbacks=callback)
-      #   initial_epoch = 1
+      if initial_epoch == 0 and self.configs["sortagrad"]:
+        train_model.fit(x=tf_train_dataset_sortagrad, epochs=1,
+                        validation_data=tf_eval_dataset, shuffle="batch",
+                        initial_epoch=initial_epoch, callbacks=callback)
+        initial_epoch = 1
 
       train_model.fit(x=tf_train_dataset, epochs=self.configs["num_epochs"],
                       validation_data=tf_eval_dataset, shuffle="batch",
                       initial_epoch=initial_epoch, callbacks=callback)
     else:
-      # if initial_epoch == 0:
-      #   train_model.fit(x=tf_train_dataset_sortagrad, epochs=1, shuffle="batch",
-      #                   initial_epoch=initial_epoch, callbacks=callback)
-      #   initial_epoch = 1
+      if initial_epoch == 0 and self.configs["sortagrad"]:
+        train_model.fit(x=tf_train_dataset_sortagrad, epochs=1, shuffle="batch",
+                        initial_epoch=initial_epoch, callbacks=callback)
+        initial_epoch = 1
 
       train_model.fit(x=tf_train_dataset, epochs=self.configs["num_epochs"], shuffle="batch",
                       initial_epoch=initial_epoch, callbacks=callback)
@@ -267,16 +263,16 @@ class SpeechToText:
     print("Testing model ...")
     check_key_in_dict(dictionary=self.configs,
                       keys=["test_data_transcript_paths", "tfrecords_dir"])
-    test_dataset = Dataset(data_path=self.configs["test_data_transcript_paths"],
-                           tfrecords_dir=self.configs["tfrecords_dir"],
-                           mode="test")
+    test_dataset = Dataset(data_path=self.configs["test_data_transcript_paths"], mode="test")
     msg = self.load_saved_model(model_file)
     if msg:
       raise Exception(msg)
 
     tf_test_dataset = test_dataset(text_featurizer=self.text_featurizer,
                                    speech_conf=self.configs["speech_conf"],
-                                   batch_size=self.configs["batch_size"])
+                                   batch_size=self.configs["batch_size"],
+                                   sortagrad=False, builtin=False, fext=True,
+                                   tfrecords_dir=self.configs["tfrecords_dir"])
 
     def test_step(features, inp_length, transcripts):
       predictions = self.predict(features, inp_length)
@@ -330,16 +326,15 @@ class SpeechToText:
 
     check_key_in_dict(dictionary=self.configs,
                       keys=["test_data_transcript_paths", "tfrecords_dir"])
-    test_dataset = Dataset(data_path=self.configs["test_data_transcript_paths"],
-                           tfrecords_dir=self.configs["tfrecords_dir"],
-                           mode="test")
+    test_dataset = Dataset(data_path=self.configs["test_data_transcript_paths"], mode="test")
     msg = self.load_saved_model(model_file)
     if msg:
       raise Exception(msg)
 
     tf_test_dataset = test_dataset(text_featurizer=self.text_featurizer,
                                    speech_conf=self.configs["speech_conf"],
-                                   batch_size=1, feature_extraction=False)
+                                   batch_size=1, sortagrad=False, builtin=False, fext=False,
+                                   tfrecords_dir=self.config["tfrecords_dir"])
 
     def test_step(signal, label):
       prediction = self.infer_single(signal)
@@ -381,12 +376,12 @@ class SpeechToText:
     msg = self.load_model(model_file)
     if msg:
       raise Exception(msg)
-    tf_infer_dataset = Dataset(data_path=input_file_path,
-                               tfrecords_dir=self.configs["tfrecords_dir"],
-                               mode="infer")
+    tf_infer_dataset = Dataset(data_path=input_file_path, mode="infer")
     tf_infer_dataset = tf_infer_dataset(batch_size=self.configs["batch_size"],
                                         text_featurizer=self.text_featurizer,
-                                        speech_conf=self.configs["speech_conf"])
+                                        speech_conf=self.configs["speech_conf"],
+                                        sortagrad=False, builtin=False, fext=True,
+                                        tfrecords_dir=self.configs["tfrecords_dir"])
 
     def infer_step(feature, input_length):
       prediction = self.predict(feature, input_length)

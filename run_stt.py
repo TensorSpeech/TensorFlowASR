@@ -48,7 +48,7 @@ parser.add_argument("--ckpt_index", type=int, default=-1,
 args = parser.parse_args()
 
 def main():
-  assert args.mode in ["train", "train_keras", "test", "infer", "infer_single",
+  assert args.mode in ["train", "train_builtin", "test", "infer", "infer_single",
                        "create_tfrecords", "convert_to_tflite",
                        "save", "save_from_checkpoint", "save_from_checkpoint_builtin"]
 
@@ -62,8 +62,8 @@ def main():
   if args.mode == "train":
     asr.train_and_eval(model_file=args.export_file)
 
-  elif args.mode == "train_keras":
-    asr.keras_train_and_eval(model_file=args.export_file)
+  elif args.mode == "train_builtin":
+    asr.train_and_eval_builtin(model_file=args.export_file)
 
   elif args.mode == "test":
     assert args.output_file_path and args.export_file

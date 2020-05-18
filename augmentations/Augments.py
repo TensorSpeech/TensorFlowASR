@@ -44,16 +44,14 @@ class TimeWarping(Augmentation):
 
 
 class Noise(Augmentation):
-  def __init__(self, min_snr: int, max_snr: int, min_noises: int, max_noises: int, noise_dir: str, **kwargs):
-    self.min_snr = min_snr
-    self.max_snr = max_snr
+  def __init__(self, snr_list: list, min_noises: int, max_noises: int, noise_dir: str, **kwargs):
+    self.snr_list = snr_list
     self.min_noises = min_noises
     self.max_noises = max_noises
     self.noises = glob.glob(os.path.join(noise_dir, "**", "*.wav"), recursive=True)
     self.noises.append("white_noise")
     super().__init__(func=functools.partial(
-      add_noise, min_snr=self.min_snr,
-      max_snr=self.max_snr, min_noises=self.min_noises,
+      add_noise, snr_list=self.snr_list, min_noises=self.min_noises,
       max_noises=self.max_noises, noises=self.noises), is_post=False, **kwargs)
 
 
