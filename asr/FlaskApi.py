@@ -46,11 +46,13 @@ def check_form_request(func):
   return decorated_func
 
 
-segan = SEGAN(config_path=app.config["SEGAN_CONFIG_PATH"], training=False)
-segan_error = segan.load_interpreter(app.config["SEGAN_FILE"])
+segan = None
 
-if segan_error is not None:
-  segan = None
+if app.config["SEGAN_FILE"]:
+  segan = SEGAN(config_path=app.config["SEGAN_CONFIG_PATH"], training=False)
+  segan_error = segan.load_interpreter(app.config["SEGAN_FILE"])
+  if segan_error is not None:
+    segan = None
 
 asr = SpeechToText(configs_path=app.config["BI_CONFIG_PATH"])
 asr_error = asr.load_model(app.config["MODEL_FILE"])

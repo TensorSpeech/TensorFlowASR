@@ -1,7 +1,7 @@
 from __future__ import absolute_import
 
 from models.deepspeech2.DeepSpeech2 import DeepSpeech2
-from augmentations.Augments import Noise
+from augmentations.Augments import Noise, TimeStretch
 
 base_model = DeepSpeech2()
 
@@ -15,10 +15,10 @@ decoder = {
   "beta": 0.5
 }
 
-# augmentations = [Noise(snr_list=[0, 5, 10, 15],
-#                        min_noises=1, max_noises=3,
-#                        noise_dir="/mnt/Data/ML/ASR/Preprocessed/Noises")]
-augmentations = []
+augmentations = [
+  Noise(snr_list=[5, 10, 15], min_noises=1, max_noises=3, noise_dir="/mnt/Data/ML/ASR/Preprocessed/Noises"),
+  TimeStretch(min_ratio=0.5, max_ratio=2.0)
+]
 
 batch_size = 8
 
@@ -44,19 +44,19 @@ speech_conf = {
 }
 
 train_data_transcript_paths = [
-  "/mnt/Data/ML/ASR/Preprocessed/Large/Train/transcripts.tsv"
+  "/mnt/Data/ML/ASR/Preprocessed/VLSP/train_transcripts.tsv"
 ]
 
 eval_data_transcript_paths = [
-  "/mnt/Data/ML/ASR/Preprocessed/Large/Dev/transcripts.tsv"
+  "/mnt/Data/ML/ASR/Preprocessed/VLSP/dev_transcripts.tsv"
 ]
 
 test_data_transcript_paths = [
-  "/mnt/Data/ML/ASR/Preprocessed/Large/Test/transcripts.tsv"
+  "/mnt/Data/ML/ASR/Preprocessed/VLSP/test_transcripts.tsv"
 ]
 
-tfrecords_dir = "/mnt/Data/ML/ASR/Preprocessed/Large/TFRecords"
+tfrecords_dir = "/mnt/Data/ML/ASR/Preprocessed/VLSP/TFRecords"
 
-checkpoint_dir = "/mnt/Projects/asrk16/trained/large/ckpts/"
+checkpoint_dir = "/mnt/Projects/asrk16/trained/vlsp_local/ckpts/"
 
-log_dir = "/mnt/Projects/asrk16/trained/large/logs/"
+log_dir = "/mnt/Projects/asrk16/trained/vlsp_local/logs/"
