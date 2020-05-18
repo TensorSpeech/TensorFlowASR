@@ -21,6 +21,7 @@ DEFAULT_RNN = {
   "rnn_layers": 3,
   "rnn_type": "gru",
   "rnn_units": 350,
+  "rnn_activation": "tanh",
   "rnn_bidirectional": True,
   "rnn_rowconv": False,
   "rnn_rowconv_context": 2,
@@ -85,38 +86,29 @@ class DeepSpeech2:
     if self.conv_conf["conv_type"] == 2:
       layer = self.merge_filter_to_channel(layer)
 
-    # Convert to time_major only for bi_directional
-    if self.rnn_conf["rnn_bidirectional"]:
-      layer = tf.transpose(layer, [1, 0, 2])
-
     if self.rnn_conf["rnn_type"] == "rnn":
-      rnn_cell = tf.keras.layers.SimpleRNNCell(self.rnn_conf["rnn_units"], activation="tanh",
-                                               use_bias=True, dropout=self.rnn_conf["rnn_dropout"])
+      rnn = tf.keras.layers.SimpleRNN
     elif self.rnn_conf["rnn_type"] == "lstm":
-      rnn_cell = tf.keras.layers.LSTMCell(self.rnn_conf["rnn_units"], activation="tanh", use_bias=True,
-                                          recurrent_activation="sigmoid", dropout=self.rnn_conf["rnn_dropout"])
+      rnn = tf.keras.layers.LSTM
     else:
-      rnn_cell = tf.keras.layers.GRUCell(self.rnn_conf["rnn_units"], activation="tanh", use_bias=True,
-                                         recurrent_activation="sigmoid", dropout=self.rnn_conf["rnn_dropout"])
+      rnn = tf.keras.layers.GRU
 
     # RNN layers
     for i in range(self.rnn_conf["rnn_layers"]):
       if self.rnn_conf["rnn_bidirectional"]:
         layer = tf.keras.layers.Bidirectional(
-          tf.keras.layers.RNN(rnn_cell, return_sequences=True, unroll=False,
-                              time_major=True, stateful=False), name=f"b{self.rnn_conf['rnn_type']}_{i}")(layer)
+          rnn(self.rnn_conf["rnn_units"], activation=self.rnn_conf["rnn_activation"],
+              dropout=self.rnn_conf["rnn_dropout"], return_sequences=True, use_bias=True),
+          name=f"b{self.rnn_conf['rnn_type']}_{i}")(layer)
         layer = SequenceBatchNorm(time_major=True, name=f"sequence_wise_bn_{i}")(layer)
       else:
-        layer = tf.keras.layers.RNN(rnn_cell, return_sequences=True, unroll=False,
-                                    time_major=False, stateful=False, name=f"{self.rnn_conf['rnn_type']}_{i}")(layer)
+        layer = rnn(self.rnn_conf["rnn_units"], activation=self.rnn_conf["rnn_activation"],
+                    dropout=self.rnn_conf["rnn_dropout"], return_sequences=True, use_bias=True,
+                    name=f"{self.rnn_conf['rnn_type']}_{i}")(layer)
         layer = SequenceBatchNorm(time_major=False, name=f"sequence_wise_bn_{i}")(layer)
         if self.rnn_conf["rnn_rowconv"]:
           layer = RowConv1D(filters=self.rnn_conf["rnn_units"],
                             future_context=self.rnn_conf["rnn_rowconv_context"], name=f"row_conv_{i}")(layer)
-
-    # Convert to batch_major
-    if self.rnn_conf["rnn_bidirectional"]:
-      layer = tf.transpose(layer, [1, 0, 2])
 
     if self.fc_conf["fc_units"]:
       assert self.fc_conf["fc_dropout"] >= 0.0
