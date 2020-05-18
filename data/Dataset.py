@@ -200,7 +200,7 @@ class Dataset:
       def parse(record):
         return self.parse_from_tfrecord(record, speech_conf, text_featurizer,
                                         augment=augment, builtin=builtin)
-      dataset.concatenate(records_dataset.map(parse, num_parallel_calls=AUTOTUNE))
+      dataset = dataset.concatenate(records_dataset.map(parse, num_parallel_calls=AUTOTUNE))
 
     del records_dataset
 
@@ -253,7 +253,7 @@ class Dataset:
       def parse(record):
         return self.parse_from_tfrecord(record, speech_conf, text_featurizer,
                                         augment=augment, builtin=builtin, fext=False)
-      dataset.concatenate(records_dataset.map(parse, num_parallel_calls=AUTOTUNE))
+      dataset = dataset.concatenate(records_dataset.map(parse, num_parallel_calls=AUTOTUNE))
 
     del records_dataset
 
@@ -306,7 +306,7 @@ class Dataset:
         return self.parse_from_generator(signal, transcript, speech_conf=speech_conf,
                                          text_featurizer=text_featurizer, augment=augment, builtin=builtin)
 
-      dataset.concatenate(gen_dataset.map(parse, num_parallel_calls=AUTOTUNE))
+      dataset = dataset.concatenate(gen_dataset.map(parse, num_parallel_calls=AUTOTUNE))
 
     del gen_dataset
 
