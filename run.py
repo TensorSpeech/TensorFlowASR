@@ -60,7 +60,7 @@ def main():
   asr = SpeechToText(configs_path=args.asr_config, noise_filter=segan)
 
   if args.mode == "test":
-    assert args.ouput_file_path
+    assert args.output_file_path
     asr.test_with_noise_filter(model_file=args.saved_asr,
                                output_file_path=args.output_file_path)
 

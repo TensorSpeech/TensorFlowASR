@@ -334,7 +334,7 @@ class SpeechToText:
     tf_test_dataset = test_dataset(text_featurizer=self.text_featurizer,
                                    speech_conf=self.configs["speech_conf"],
                                    batch_size=1, sortagrad=False, builtin=False, fext=False,
-                                   tfrecords_dir=self.config["tfrecords_dir"])
+                                   tfrecords_dir=self.configs["tfrecords_dir"])
 
     def test_step(signal, label):
       prediction = self.infer_single(signal)
