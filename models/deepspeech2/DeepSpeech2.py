@@ -107,8 +107,8 @@ class DeepSpeech2:
                               time_major=True, stateful=False), name=f"b{self.rnn_conf['rnn_type']}_{i}")(layer)
         layer = SequenceBatchNorm(time_major=True, name=f"sequence_wise_bn_{i}")(layer)
       else:
-        tf.keras.layers.RNN(rnn_cell, return_sequences=True, unroll=False,
-                            time_major=False, stateful=False, name=f"{self.rnn_conf['rnn_type']}_{i}")(layer)
+        layer = tf.keras.layers.RNN(rnn_cell, return_sequences=True, unroll=False,
+                                    time_major=False, stateful=False, name=f"{self.rnn_conf['rnn_type']}_{i}")(layer)
         layer = SequenceBatchNorm(time_major=False, name=f"sequence_wise_bn_{i}")(layer)
         if self.rnn_conf["rnn_rowconv"]:
           layer = RowConv1D(filters=self.rnn_conf["rnn_units"],
