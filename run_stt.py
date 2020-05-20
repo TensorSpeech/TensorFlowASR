@@ -47,6 +47,7 @@ parser.add_argument("--ckpt_index", type=int, default=-1,
 
 args = parser.parse_args()
 
+
 def main():
   assert args.mode in ["train", "train_builtin", "test", "infer", "infer_single",
                        "create_tfrecords", "convert_to_tflite",
@@ -110,14 +111,16 @@ def main():
   elif args.mode == "convert_to_tflite":
     assert args.export_file and args.output_file_path
     converter = tf.lite.TFLiteConverter.from_saved_model(saved_model_dir=args.export_file)
+    converter.experimental_new_converter = True
     converter.optimizations = [tf.lite.Optimize.DEFAULT]
-    converter.post_training_quantize = True
+    converter.target_spec.supported_ops = [tf.lite.OpsSet.TFLITE_BUILTINS,
+                                           tf.lite.OpsSet.SELECT_TF_OPS]
     tflite_model = converter.convert()
 
     tflite_model_dir = pathlib.Path(os.path.dirname(args.output_file_path))
     tflite_model_dir.mkdir(exist_ok=True, parents=True)
 
-    tflite_model_file = tflite_model_dir/f"{os.path.basename(args.output_file_path)}"
+    tflite_model_file = tflite_model_dir / f"{os.path.basename(args.output_file_path)}"
     tflite_model_file.write_bytes(tflite_model)
 
 

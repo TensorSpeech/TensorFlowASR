@@ -117,7 +117,7 @@ class BeamSearchDecoder(Decoder):
   # return self.convert_to_string(decoded)
 
 
-def create_decoder(decoder_config, index_to_token, num_classes, vocab_array):
+def create_ctc_decoder(decoder_config, index_to_token, num_classes, vocab_array):
   check_key_in_dict(decoder_config, keys=["name"])
   if decoder_config["name"] == "beamsearch":
     check_key_in_dict(decoder_config, keys=["beam_width"])

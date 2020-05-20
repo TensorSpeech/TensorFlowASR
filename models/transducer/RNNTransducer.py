@@ -47,7 +47,7 @@ class RNNTransducer:
     return tf.reshape(x, [batch_size, -1, f * c])
 
   def encoder_network(self, x):
-    assert encoder_conf["cnn_type"] in [1, 2]
+    assert self.encoder_conf["cnn_type"] in [1, 2]
     if self.encoder_conf["cnn_type"] == 1:
       conv = tf.keras.layers.Conv1D
       x = self.merge_features_to_channels(x)

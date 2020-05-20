@@ -7,7 +7,7 @@ import time
 import tensorflow as tf
 
 from models.CTCModel import create_ctc_model, ctc_loss, ctc_loss_1, create_ctc_train_model
-from decoders.Decoders import create_decoder
+from decoders.CTCDecoders import create_ctc_decoder
 from featurizers.TextFeaturizer import TextFeaturizer
 from utils.Utils import get_asr_config, check_key_in_dict, bytes_to_string, wer, cer
 from featurizers.SpeechFeaturizer import speech_feature_extraction
@@ -20,10 +20,10 @@ class SpeechToText:
   def __init__(self, configs_path, noise_filter=None):
     self.configs = get_asr_config(configs_path)
     self.text_featurizer = TextFeaturizer(self.configs["vocabulary_file_path"])
-    self.decoder = create_decoder(decoder_config=self.configs["decoder"],
-                                  index_to_token=self.text_featurizer.index_to_token,
-                                  num_classes=self.text_featurizer.num_classes,
-                                  vocab_array=self.text_featurizer.vocab_array)
+    self.decoder = create_ctc_decoder(decoder_config=self.configs["decoder"],
+                                      index_to_token=self.text_featurizer.index_to_token,
+                                      num_classes=self.text_featurizer.num_classes,
+                                      vocab_array=self.text_featurizer.vocab_array)
     self.model, self.optimizer = create_ctc_model(num_classes=self.text_featurizer.num_classes,
                                                   last_activation=self.configs["last_activation"],
                                                   base_model=self.configs["base_model"],
@@ -472,3 +472,7 @@ class SpeechToText:
     else:
       self.ckpt.restore(self.ckpt_manager.checkpoints[idx])
     self.save_model(model_file)
+
+  def save_weights(self, model_file):
+    print("Saving ASR model's weights ...")
+    self.model.save_weights(model_file)

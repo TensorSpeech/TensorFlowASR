@@ -12,3 +12,20 @@ chown $USER:$USER setup.sh
 
 ./setup.sh
 
+cd ..
+
+git clone https://github.com/noahchalifour/warp-transducer.git
+
+cd ./warp-transducer
+
+mkdir build
+cd build
+cmake ..
+make
+
+cd ../tensorflow_binding
+python setup.py install
+
+cd ../..
+
+
