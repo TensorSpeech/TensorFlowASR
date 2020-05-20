@@ -48,20 +48,8 @@ class DeepSpeech2:
 
   @staticmethod
   def merge_filter_to_channel(x):
-    batch_size = tf.shape(x)[0]
     f, c = x.get_shape().as_list()[2:]
-    return tf.reshape(x, [batch_size, -1, f * c])
-
-  @staticmethod
-  def merge_batch_and_time(x):
-    batch_size = tf.shape(x)[0]
-    feat = x.get_shape().as_list()[-1]
-    return tf.reshape(x, [-1, feat]), batch_size
-
-  @staticmethod
-  def undo_merge_batch_and_time(x, batch_size):
-    feat = x.get_shape().as_list()[-1]
-    return tf.reshape(x, [batch_size, -1, feat])
+    return tf.keras.layers.Reshape([-1, f * c])(x)
 
   def __call__(self, features, streaming=False):
     layer = features
@@ -75,6 +63,7 @@ class DeepSpeech2:
       filter_shape = np.shape(self.conv_conf["conv_filters"])
       assert len(ker_shape) == 1 and len(stride_shape) == 1 and len(filter_shape) == 1
 
+    # CONV Layers
     for i, fil in enumerate(self.conv_conf["conv_filters"]):
       layer = conv(filters=fil, kernel_size=self.conv_conf["conv_kernels"][i],
                    strides=self.conv_conf["conv_strides"][i], padding="same",
@@ -93,11 +82,15 @@ class DeepSpeech2:
     else:
       rnn = tf.keras.layers.GRU
 
+    # To time major
+    if self.rnn_conf["rnn_bidirectional"]:
+      layer = tf.transpose(layer, perm=[1, 0, 2])
+
     # RNN layers
     for i in range(self.rnn_conf["rnn_layers"]):
       if self.rnn_conf["rnn_bidirectional"]:
         layer = tf.keras.layers.Bidirectional(
-          rnn(self.rnn_conf["rnn_units"], activation=self.rnn_conf["rnn_activation"],
+          rnn(self.rnn_conf["rnn_units"], activation=self.rnn_conf["rnn_activation"], time_major=True,
               dropout=self.rnn_conf["rnn_dropout"], return_sequences=True, use_bias=True),
           name=f"b{self.rnn_conf['rnn_type']}_{i}")(layer)
         layer = SequenceBatchNorm(time_major=True, name=f"sequence_wise_bn_{i}")(layer)
@@ -110,10 +103,13 @@ class DeepSpeech2:
           layer = RowConv1D(filters=self.rnn_conf["rnn_units"],
                             future_context=self.rnn_conf["rnn_rowconv_context"], name=f"row_conv_{i}")(layer)
 
+    # To batch major
+    if self.rnn_conf["rnn_bidirectional"]:
+      layer = tf.transpose(layer, perm=[1, 0, 2])
+
+    # FC Layers
     if self.fc_conf["fc_units"]:
       assert self.fc_conf["fc_dropout"] >= 0.0
-
-      layer, batch_size = self.merge_batch_and_time(layer)
 
       for idx, units in enumerate(self.fc_conf["fc_units"]):
         layer = tf.keras.layers.Dense(units=units, activation=None,
@@ -121,7 +117,5 @@ class DeepSpeech2:
         layer = tf.keras.layers.BatchNormalization(name=f"hidden_fc_bn_{idx}")(layer)
         layer = tf.keras.layers.ReLU(name=f"hidden_fc_relu_{idx}")(layer)
         layer = tf.keras.layers.Dropout(self.fc_conf["fc_dropout"], name=f"hidden_fc_dropout_{idx}")(layer)
-
-      layer = self.undo_merge_batch_and_time(layer, batch_size)
 
     return layer

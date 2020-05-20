@@ -3,7 +3,16 @@ from __future__ import absolute_import
 from models.deepspeech2.DeepSpeech2 import DeepSpeech2
 from augmentations.Augments import Noise, TimeStretch
 
-base_model = DeepSpeech2()
+base_model = DeepSpeech2(rnn_conf={
+  "rnn_type": "lstm",
+  "rnn_layers": 3,
+  "rnn_bidirectional": False,
+  "rnn_rowconv": False,
+  "rnn_dropout": 0.2,
+  "rnn_rowconv_context": 2,
+  "rnn_units": 512,
+  "rnn_activation": "relu"
+})
 
 streaming_size = None
 

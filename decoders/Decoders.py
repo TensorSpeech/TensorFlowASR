@@ -85,7 +85,7 @@ class BeamSearchDecoder(Decoder):
     self.alpha = alpha
     self.beta = beta
     if self.lm_path:
-      assert self.alpha and self.beta and self.vocab_array, \
+      assert self.alpha is not None and self.beta is not None and self.vocab_array is not None, \
         "alpha, beta and vocab_array must be specified"
       self.scorer = Scorer(self.alpha, self.beta, model_path=self.lm_path,
                            vocabulary=self.vocab_array)

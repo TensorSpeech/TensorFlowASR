@@ -52,7 +52,7 @@ def main():
                        "create_tfrecords", "convert_to_tflite",
                        "save", "save_from_checkpoint", "save_from_checkpoint_builtin"]
 
-  if args.mode in ["train", "train_keras"]:
+  if args.mode in ["train", "train_keras", "convert_to_tflite"]:
     tf.random.set_seed(2020)
   else:
     tf.random.set_seed(0)
@@ -111,6 +111,7 @@ def main():
     assert args.export_file and args.output_file_path
     converter = tf.lite.TFLiteConverter.from_saved_model(saved_model_dir=args.export_file)
     converter.optimizations = [tf.lite.Optimize.DEFAULT]
+    converter.post_training_quantize = True
     tflite_model = converter.convert()
 
     tflite_model_dir = pathlib.Path(os.path.dirname(args.output_file_path))
