@@ -37,10 +37,8 @@ class SpeechToText:
       raise ValueError("Must set checkpoint_dir")
     if not os.path.exists(self.configs["checkpoint_dir"]):
       os.makedirs(self.configs["checkpoint_dir"])
-    self.ckpt = tf.train.Checkpoint(model=model,
-                                    optimizer=self.optimizer)
-    self.ckpt_manager = tf.train.CheckpointManager(
-      self.ckpt, self.configs["checkpoint_dir"], max_to_keep=None)
+    self.ckpt = tf.train.Checkpoint(model=model, optimizer=self.optimizer)
+    self.ckpt_manager = tf.train.CheckpointManager(self.ckpt, self.configs["checkpoint_dir"], max_to_keep=None)
 
   @tf.function
   def train(self, model, dataset, optimizer, loss, num_classes, epoch, num_epochs):
