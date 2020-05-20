@@ -45,8 +45,8 @@ parser.add_argument("--output_file_path", "-o", type=str, default=None,
 args = parser.parse_args()
 
 def main():
-  assert args.mode in ["train", "test", "infer", "save",
-                       "save_from_checkpoint", "convert_to_tflite"]
+  assert args.mode in ["train", "test", "infer", "save", "save_from_checkpoint",
+                       "convert_to_tflite", "load_tflite"]
 
   if args.mode == "train":
     tf.random.set_seed(2020)
@@ -78,6 +78,7 @@ def main():
     assert msg is None
     converter = tf.lite.TFLiteConverter.from_keras_model(segan.generator)
     converter.optimizations = [tf.lite.Optimize.DEFAULT]
+    converter.allow_custom_ops = True
     converter.experimental_new_converter = True
     supported_ops = [tf.lite.OpsSet.TFLITE_BUILTINS]
     supported_ops += [tf.lite.OpsSet.SELECT_TF_OPS]
@@ -89,6 +90,10 @@ def main():
 
     tflite_model_file = tflite_model_dir/f"{os.path.basename(args.output_file_path)}"
     tflite_model_file.write_bytes(tflite_model)
+  elif args.mode == "load_tflite":
+    assert args.export_file
+    msg = segan.load_interpreter(args.export_file)
+    print(msg)
 
 
 if __name__ == "__main__":

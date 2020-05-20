@@ -219,15 +219,7 @@ class SEGAN:
 
   def load_interpreter(self, export_dir):
     try:
-      self.load_model(export_dir)
-      converter = tf.lite.TFLiteConverter.from_keras_model(self.generator)
-      converter.optimizations = [tf.lite.Optimize.DEFAULT]
-      converter.experimental_new_converter = True
-      supported_ops = [tf.lite.OpsSet.TFLITE_BUILTINS]
-      supported_ops += [tf.lite.OpsSet.SELECT_TF_OPS]
-      converter.target_spec.supported_ops = supported_ops
-      tflite_model = converter.convert()
-      self.generator = tf.lite.Interpreter(model_content=tflite_model)
+      self.generator = tf.lite.Interpreter(model_path=export_dir)
       self.generator.allocate_tensors()
     except Exception as e:
       return f"Model is not trained: {e}"
