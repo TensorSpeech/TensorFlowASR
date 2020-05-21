@@ -4,6 +4,7 @@ import os.path as o
 import sys
 sys.path.append(o.abspath(o.join(o.dirname(sys.modules[__name__].__file__), "..")))
 from featurizers.SpeechFeaturizer import read_raw_audio, speech_feature_extraction, compute_time_dim
+from augmentations.Augments import FreqMasking
 import matplotlib.pyplot as plt
 
 
@@ -28,6 +29,8 @@ def main(argv):
   signal = signal[:speech_conf["sample_rate"]]
   print(len(signal))
   ft = speech_feature_extraction(signal, speech_conf)
+  au = FreqMasking()
+  ft[:, :, 0] = au(ft[:, :, 0])
   print(compute_time_dim(speech_conf, 1))
   print(ft.shape[0])
 
