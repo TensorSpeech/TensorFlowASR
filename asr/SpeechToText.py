@@ -21,9 +21,7 @@ class SpeechToText:
     self.configs = get_asr_config(configs_path)
     self.text_featurizer = TextFeaturizer(self.configs["vocabulary_file_path"])
     self.decoder = create_ctc_decoder(decoder_config=self.configs["decoder"],
-                                      index_to_token=self.text_featurizer.index_to_token,
-                                      num_classes=self.text_featurizer.num_classes,
-                                      vocab_array=self.text_featurizer.vocab_array)
+                                      text_featurizer=self.text_featurizer)
     self.model, self.optimizer = create_ctc_model(num_classes=self.text_featurizer.num_classes,
                                                   last_activation=self.configs["last_activation"],
                                                   base_model=self.configs["base_model"],
@@ -401,9 +399,12 @@ class SpeechToText:
     pred = self.predict(tf.expand_dims(features, 0), tf.expand_dims(input_length, 0))
     return bytes_to_string(pred.numpy())[0]
 
-  def infer_single_interpreter(self, signal):
+  def infer_single_interpreter(self, signal, length):
     features = speech_feature_extraction(signal, self.configs["speech_conf"])
     input_length = tf.cast(tf.shape(features)[0], tf.int32)
+    features = tf.expand_dims(features, 0)
+    if input_length < length:
+      features = tf.pad(features, paddings=[[0, 0], [0, length - input_length], [0, 0], [0, 0]])
 
     input_index = self.model.get_input_details()[0]["index"]
     output_index = self.model.get_output_details()[0]["index"]
@@ -412,8 +413,10 @@ class SpeechToText:
     self.model.invoke()
 
     pred = self.model.get_tensor(output_index)
+
     pred = self.decoder(probs=pred, input_length=input_length,
                         last_activation=self.configs["last_activation"])
+
     return bytes_to_string(pred.numpy())[0]
 
   def load_interpreter(self, tflite_file):

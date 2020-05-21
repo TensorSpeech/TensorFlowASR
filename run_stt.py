@@ -6,7 +6,7 @@ import pathlib
 from logging import ERROR
 import tensorflow as tf
 from asr.SpeechToText import SpeechToText
-from featurizers.SpeechFeaturizer import read_raw_audio
+from featurizers.SpeechFeaturizer import read_raw_audio, compute_feature_dim
 from data.Dataset import Dataset
 
 tf.get_logger().setLevel(ERROR)
@@ -50,10 +50,10 @@ args = parser.parse_args()
 
 def main():
   assert args.mode in ["train", "train_builtin", "test", "infer", "infer_single",
-                       "create_tfrecords", "convert_to_tflite",
+                       "create_tfrecords", "convert_to_tflite", "infer_interpreter",
                        "save", "save_from_checkpoint", "save_from_checkpoint_builtin"]
 
-  if args.mode in ["train", "train_keras", "convert_to_tflite"]:
+  if args.mode in ["train", "train_keras"]:
     tf.random.set_seed(2020)
   else:
     tf.random.set_seed(0)
@@ -110,11 +110,14 @@ def main():
 
   elif args.mode == "convert_to_tflite":
     assert args.export_file and args.output_file_path
-    converter = tf.lite.TFLiteConverter.from_saved_model(saved_model_dir=args.export_file)
+    model = tf.saved_model.load(args.export_file)
+    concrete_func = model.signatures[tf.saved_model.DEFAULT_SERVING_SIGNATURE_DEF_KEY]
+    f, c = compute_feature_dim(speech_conf=asr.configs["speech_conf"])
+    concrete_func.inputs[0].set_shape([1, 800, f, c])
+    converter = tf.lite.TFLiteConverter.from_concrete_functions([concrete_func])
+    # converter = tf.lite.TFLiteConverter.from_saved_model(saved_model_dir=args.export_file)
     converter.experimental_new_converter = True
     converter.optimizations = [tf.lite.Optimize.DEFAULT]
-    converter.target_spec.supported_ops = [tf.lite.OpsSet.TFLITE_BUILTINS,
-                                           tf.lite.OpsSet.SELECT_TF_OPS]
     tflite_model = converter.convert()
 
     tflite_model_dir = pathlib.Path(os.path.dirname(args.output_file_path))
@@ -122,6 +125,15 @@ def main():
 
     tflite_model_file = tflite_model_dir / f"{os.path.basename(args.output_file_path)}"
     tflite_model_file.write_bytes(tflite_model)
+
+  elif args.mode == "infer_interpreter":
+    assert args.export_file and args.input_file_path
+    msg = asr.load_interpreter(args.export_file)
+    print(msg)
+    assert msg is None
+    signal = read_raw_audio(args.input_file_path, asr.configs["speech_conf"]["sample_rate"])
+    pred = asr.infer_single_interpreter(signal, 800)
+    print(pred)
 
 
 if __name__ == "__main__":

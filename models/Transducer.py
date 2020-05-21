@@ -1,12 +1,9 @@
 from __future__ import absolute_import
 
 import tensorflow as tf
-from utils.Utils import get_length
 from featurizers.SpeechFeaturizer import compute_feature_dim
-try:
-  from warprnnt_tensorflow import rnnt_loss
-except Exception as e:
-  raise ImportError(f"{e}: Install warprnnt_tensorflow from https://github.com/HawkAaron/warp-transducer/tree/master/tensorflow_binding")
+from warprnnt_tensorflow import rnnt_loss
+
 
 def create_transducer_model(base_model, num_classes, speech_conf,
                             last_activation='linear', streaming_size=None, name="transducer_model"):
@@ -19,8 +16,8 @@ def create_transducer_model(base_model, num_classes, speech_conf,
     # features = self.speech_featurizer(signal)
     outputs = base_model(x=x, y=y, streaming=True)
   else:
-    features = tf.keras.layers.Input(shape=(None, feature_dim, channel_dim),
-                                     dtype=tf.float32, name="features")
+    x = tf.keras.layers.Input(shape=(None, feature_dim, channel_dim),
+                              dtype=tf.float32, name="features")
     y = tf.keras.layers.Input(batch_shape=(None,), dtype=tf.int32, name="predicted")
     # features = self.speech_featurizer(signal)
     outputs = base_model(x=x, y=y, streaming=False)
@@ -30,8 +27,9 @@ def create_transducer_model(base_model, num_classes, speech_conf,
     tf.keras.layers.Dense(units=num_classes, activation=last_activation,
                           use_bias=True), name="fully_connected")(outputs)
 
-  model = tf.keras.Model(inputs=features, outputs=outputs, name=name)
+  model = tf.keras.Model(inputs=[x, y], outputs=outputs, name=name)
   return model, base_model.optimizer
+
 
 @tf.function
 def transducer_loss(y_true, y_pred, input_length, label_length, last_activation="linear"):

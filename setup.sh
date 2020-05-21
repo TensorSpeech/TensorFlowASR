@@ -1,6 +1,5 @@
 #!/usr/bin/env sh
 
-pip install tensorflow==2.2.0
 pip install -r requirements.txt
 
 git clone https://github.com/huylenguyen806/beamsearch_with_lm.git
