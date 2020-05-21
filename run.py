@@ -1,13 +1,19 @@
 from __future__ import absolute_import
 
+import os
 import argparse
-from logging import ERROR
+import warnings
+
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
+warnings.simplefilter('ignore')
 import tensorflow as tf
+
+tf.get_logger().setLevel('ERROR')
+
 from asr.SpeechToText import SpeechToText
 from asr.SEGAN import SEGAN
 from featurizers.SpeechFeaturizer import read_raw_audio
 
-tf.get_logger().setLevel(ERROR)
 gpus = tf.config.experimental.list_physical_devices('GPU')
 if gpus:
   try:

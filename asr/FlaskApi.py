@@ -2,7 +2,8 @@ from __future__ import absolute_import
 
 import os
 import functools
-from logging import ERROR
+
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 import tensorflow as tf
 from flask import Flask, Blueprint, request, make_response
 from flask_socketio import SocketIO
@@ -13,8 +14,8 @@ from asr.SEGAN import SEGAN
 from utils.Utils import check_key_in_dict
 from featurizers.SpeechFeaturizer import read_raw_audio
 
-tf.get_logger().setLevel(ERROR)
-tf.compat.v1.set_random_seed(0)
+tf.get_logger().setLevel('ERROR')
+tf.random.set_seed(0)
 
 socketio = SocketIO()
 
