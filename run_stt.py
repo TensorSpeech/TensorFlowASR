@@ -1,12 +1,10 @@
 from __future__ import absolute_import
 
-import os
 import argparse
-import pathlib
 from logging import ERROR
 import tensorflow as tf
 from asr.SpeechToText import SpeechToText
-from featurizers.SpeechFeaturizer import read_raw_audio, compute_feature_dim
+from featurizers.SpeechFeaturizer import read_raw_audio
 from data.Dataset import Dataset
 
 tf.get_logger().setLevel(ERROR)
@@ -25,10 +23,14 @@ if gpus:
 
 tf.keras.backend.clear_session()
 
+modes = ["train", "train_builtin", "test", "infer", "infer_single",
+         "create_tfrecords", "convert_to_tflite", "infer_interpreter",
+         "save", "save_from_checkpoint", "save_from_checkpoint_builtin"]
+
 parser = argparse.ArgumentParser(description="ASR Commands")
 
 parser.add_argument("--mode", "-m", type=str, default="train",
-                    help="Mode for training, testing or infering")
+                    help=f"Mode in {modes}")
 
 parser.add_argument("--config", "-c", type=str, default=None,
                     help="The file path of model configuration file")
@@ -49,9 +51,7 @@ args = parser.parse_args()
 
 
 def main():
-  assert args.mode in ["train", "train_builtin", "test", "infer", "infer_single",
-                       "create_tfrecords", "convert_to_tflite", "infer_interpreter",
-                       "save", "save_from_checkpoint", "save_from_checkpoint_builtin"]
+  assert args.mode in modes, f"Mode must in {modes}"
 
   if args.mode in ["train", "train_keras"]:
     tf.random.set_seed(2020)
@@ -110,29 +110,14 @@ def main():
 
   elif args.mode == "convert_to_tflite":
     assert args.export_file and args.output_file_path
-    model = tf.saved_model.load(args.export_file)
-    concrete_func = model.signatures[tf.saved_model.DEFAULT_SERVING_SIGNATURE_DEF_KEY]
-    f, c = compute_feature_dim(speech_conf=asr.configs["speech_conf"])
-    concrete_func.inputs[0].set_shape([1, 800, f, c])
-    converter = tf.lite.TFLiteConverter.from_concrete_functions([concrete_func])
-    # converter = tf.lite.TFLiteConverter.from_saved_model(saved_model_dir=args.export_file)
-    converter.experimental_new_converter = True
-    converter.optimizations = [tf.lite.Optimize.DEFAULT]
-    tflite_model = converter.convert()
-
-    tflite_model_dir = pathlib.Path(os.path.dirname(args.output_file_path))
-    tflite_model_dir.mkdir(exist_ok=True, parents=True)
-
-    tflite_model_file = tflite_model_dir / f"{os.path.basename(args.output_file_path)}"
-    tflite_model_file.write_bytes(tflite_model)
+    asr.convert_to_tflite(args.export_file, 4, args.output_file_path)
 
   elif args.mode == "infer_interpreter":
     assert args.export_file and args.input_file_path
     msg = asr.load_interpreter(args.export_file)
-    print(msg)
     assert msg is None
     signal = read_raw_audio(args.input_file_path, asr.configs["speech_conf"]["sample_rate"])
-    pred = asr.infer_single_interpreter(signal, 800)
+    pred = asr.infer_single_interpreter(signal, 4)
     print(pred)
 
 

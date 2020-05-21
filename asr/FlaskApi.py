@@ -1,5 +1,6 @@
 from __future__ import absolute_import
 
+import os
 import functools
 from logging import ERROR
 import tensorflow as tf
@@ -10,7 +11,7 @@ from configs.FlaskConfig import FlaskConfig
 from asr.SpeechToText import SpeechToText
 from asr.SEGAN import SEGAN
 from utils.Utils import check_key_in_dict
-from featurizers.SpeechFeaturizer import preemphasis, read_raw_audio
+from featurizers.SpeechFeaturizer import read_raw_audio
 
 tf.get_logger().setLevel(ERROR)
 tf.compat.v1.set_random_seed(0)
@@ -48,14 +49,19 @@ def check_form_request(func):
 
 segan = None
 
-if app.config["SEGAN_FILE"]:
+if app.config["SEGAN_SAVED_WEIGHTS"]:
   segan = SEGAN(config_path=app.config["SEGAN_CONFIG_PATH"], training=False)
-  segan_error = segan.load_interpreter(app.config["SEGAN_FILE"])
+  try:
+    segan.convert_to_tflite(app.config["SEGAN_SAVED_WEIGHTS"], app.config["SEGAN_TFLITE"])
+    segan_error = segan.load_interpreter(app.config["SEGAN_TFLITE"])
+  except Exception as e:
+    segan = None
   if segan_error is not None:
     segan = None
 
-asr = SpeechToText(configs_path=app.config["BI_CONFIG_PATH"])
-asr_error = asr.load_model(app.config["MODEL_FILE"])
+asr = SpeechToText(configs_path=app.config["CONFIG_PATH"])
+asr.convert_to_tflite(app.config["SAVED_MODEL"], app.config["TFLITE_LENGTH"], app.config["TFLITE"])
+asr_error = asr.load_interpreter(app.config["TFLITE"])
 
 
 # asr_streaming = SpeechToText(configs_path=app.config["UNI_CONFIG_PATH"])
@@ -64,13 +70,15 @@ asr_error = asr.load_model(app.config["MODEL_FILE"])
 
 def predict(signal, streaming=False):
   signal = read_raw_audio(signal, asr.configs["speech_conf"]["sample_rate"])
-  if not streaming and not asr_error:
+  if not streaming:
+    if asr_error:
+      return asr_error
     if segan:
       signal = segan.generate_interpreter(signal)
-    return asr.infer_single(signal)
+    return asr.infer_single_interpreter(signal, app.config["TFLITE_LENGTH"])
   # if streaming and not asr_streaming_error:
   #   return asr_streaming.infer_single(signal)
-  return "Model is not trained"
+  return "Streaming is not supported yet"
 
 
 @asr_blueprint.route("/", methods=["GET"])

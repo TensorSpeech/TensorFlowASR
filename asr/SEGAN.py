@@ -3,6 +3,7 @@ from __future__ import absolute_import
 import time
 import os
 import sys
+import pathlib
 import tensorflow as tf
 from models.segan.Discriminator import create_discriminator, discriminator_loss
 from models.segan.Generator import create_generator, generator_loss
@@ -62,7 +63,8 @@ class SEGAN:
                                  noise=self.configs["noise_conf"],
                                  window_size=self.window_size, stride=self.stride)
 
-    tf_train_dataset = train_dataset.create(self.configs["batch_size"], coeff=self.coeff, sample_rate=self.configs["sample_rate"])
+    tf_train_dataset = train_dataset.create(self.configs["batch_size"], coeff=self.coeff,
+                                            sample_rate=self.configs["sample_rate"])
 
     epochs = self.configs["num_epochs"]
 
@@ -216,6 +218,23 @@ class SEGAN:
 
     signal = gen(tf.convert_to_tensor(slices)).numpy()
     return deemphasis(signal, self.configs["pre_emph"])
+
+  def convert_to_tflite(self, export_file, output_file_path):
+    if os.path.exists(output_file_path):
+      return
+    msg = self.load_model(export_file)
+    print(msg)
+    converter = tf.lite.TFLiteConverter.from_keras_model(self.generator)
+    converter.optimizations = [tf.lite.Optimize.DEFAULT]
+    converter.experimental_new_converter = True
+    converter.target_spec.supported_ops = [tf.lite.OpsSet.TFLITE_BUILTINS, tf.lite.OpsSet.SELECT_TF_OPS]
+    tflite_model = converter.convert()
+
+    tflite_model_dir = pathlib.Path(os.path.dirname(output_file_path))
+    tflite_model_dir.mkdir(exist_ok=True, parents=True)
+
+    tflite_model_file = tflite_model_dir / f"{os.path.basename(output_file_path)}"
+    tflite_model_file.write_bytes(tflite_model)
 
   def load_interpreter(self, export_dir):
     try:

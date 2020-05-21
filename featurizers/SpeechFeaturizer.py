@@ -9,6 +9,18 @@ import soundfile as sf
 import tensorflow as tf
 
 
+def compute_time_dim(speech_conf, seconds):
+  frame_ms = speech_conf["frame_ms"]
+  stride_ms = speech_conf["stride_ms"]
+  sample_rate = speech_conf["sample_rate"]
+
+  frame_length = int(sample_rate * (frame_ms / 1000))
+  frame_step = int(sample_rate * (stride_ms / 1000))
+
+  # implementation using pad "reflect" with n_fft // 2
+  return int(seconds * (1 + ((sample_rate + 2 * (frame_length // 2)) - frame_length) // frame_step))
+
+
 def compute_feature_dim(speech_conf):
   feature_dim = speech_conf["num_feature_bins"]
   channel_dim = 1
@@ -79,8 +91,8 @@ def compute_pitch_feature(signal, speech_conf):
   pitches = pitches.T
 
   assert num_feature_bins <= frame_length // 2 + 1, \
-      "num_features for spectrogram should \
-      be <= (sample_rate * window_size // 2 + 1)"
+    "num_features for spectrogram should \
+    be <= (sample_rate * window_size // 2 + 1)"
 
   return pitches[:, :num_feature_bins]
 
@@ -101,8 +113,8 @@ def compute_spectrogram_feature(signal, speech_conf):
   features = 20 * np.log10(powspec.T)
 
   assert num_feature_bins <= frame_length // 2 + 1, \
-      "num_features for spectrogram should \
-      be <= (sample_rate * window_size // 2 + 1)"
+    "num_features for spectrogram should \
+    be <= (sample_rate * window_size // 2 + 1)"
 
   # cut high frequency part, keep num_feature_bins features
   features = features[:, :num_feature_bins]
@@ -252,11 +264,11 @@ class SpeechFeaturizer(tf.keras.layers.Layer):
 
   def get_config(self):
     config = super(SpeechFeaturizer, self).get_config()
-    config.update({'sample_rate': self.sample_rate,
+    config.update({'sample_rate':      self.sample_rate,
                    'num_feature_bins': self.num_feature_bins,
-                   'frame_length': self.frame_length,
-                   'frame_step': self.frame_step,
-                   'num_fft': self.num_fft})
+                   'frame_length':     self.frame_length,
+                   'frame_step':       self.frame_step,
+                   'num_fft':          self.num_fft})
     return config
 
   def from_config(self, config):
