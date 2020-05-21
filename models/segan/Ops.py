@@ -19,6 +19,14 @@ class DownConv(tf.keras.layers.Layer):
   def call(self, inputs, training=False):
     return self.layer(inputs, training=training)
 
+  def get_config(self):
+    config = super(DownConv, self).get_config()
+    config.update({"layer": self.layer})
+    return config
+
+  def from_config(self, config):
+    return self(**config)
+
 
 class DeConv(tf.keras.layers.Layer):
   def __init__(self, depth, kwidth=5, dilation=2, name="deconv", **kwargs):
@@ -35,6 +43,14 @@ class DeConv(tf.keras.layers.Layer):
 
   def call(self, inputs, training=False):
     return self.layer(inputs, training=training)
+
+  def get_config(self):
+    config = super(DeConv, self).get_config()
+    config.update({"layer": self.layer})
+    return config
+
+  def from_config(self, config):
+    return self(**config)
 
 
 class VirtualBatchNorm:
@@ -89,6 +105,13 @@ class Reshape1to3(tf.keras.layers.Layer):
     width = inputs.get_shape().as_list()[1]
     return tf.reshape(inputs, [batch_size, width, 1, 1])
 
+  def get_config(self):
+    config = super(Reshape1to3, self).get_config()
+    return config
+
+  def from_config(self, config):
+    return self(**config)
+
 
 class Reshape3to1(tf.keras.layers.Layer):
   def __init__(self, name="reshape_3_to_1", **kwargs):
@@ -98,6 +121,13 @@ class Reshape3to1(tf.keras.layers.Layer):
     batch_size = tf.shape(inputs)[0]
     width = inputs.get_shape().as_list()[1]
     return tf.reshape(inputs, [batch_size, width])
+
+  def get_config(self):
+    config = super(Reshape3to1, self).get_config()
+    return config
+
+  def from_config(self, config):
+    return self(**config)
 
 
 class SeganPrelu(tf.keras.layers.Layer):
@@ -115,3 +145,10 @@ class SeganPrelu(tf.keras.layers.Layer):
     pos = tf.nn.relu(x)
     neg = self.alpha * (x - tf.abs(x)) * .5
     return pos + neg
+
+  def get_config(self):
+    config = super(SeganPrelu, self).get_config()
+    return config
+
+  def from_config(self, config):
+    return self(**config)

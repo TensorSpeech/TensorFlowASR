@@ -59,6 +59,10 @@ chmod a+x setup.sh && chown $USER:$USER setup.sh && ./setup.sh # Install depende
 python $SCRIPT --help # Where $SCRIPT is one of the run_*.py files, --help to see the flags
 ```
 
+## Tensorflow Lite
+
+Install ```tf-nightly``` to use tflite (due to error ```Quantize weights transformation failed``` in tensorflow 2.2.0)
+
 ## References
 
 1. [https://arxiv.org/abs/1512.02595](https://arxiv.org/abs/1512.02595)

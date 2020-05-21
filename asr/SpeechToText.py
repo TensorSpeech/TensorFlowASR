@@ -4,13 +4,14 @@ import os
 import gc
 import sys
 import time
+import pathlib
 import tensorflow as tf
 
 from models.CTCModel import create_ctc_model, ctc_loss, ctc_loss_1, create_ctc_train_model
-from decoders.Decoders import create_decoder
+from decoders.CTCDecoders import create_ctc_decoder
 from featurizers.TextFeaturizer import TextFeaturizer
 from utils.Utils import get_asr_config, check_key_in_dict, bytes_to_string, wer, cer
-from featurizers.SpeechFeaturizer import speech_feature_extraction
+from featurizers.SpeechFeaturizer import speech_feature_extraction, compute_feature_dim, compute_time_dim
 from utils.Checkpoint import Checkpoint
 from utils.TimeHistory import TimeHistory
 from data.Dataset import Dataset
@@ -20,10 +21,8 @@ class SpeechToText:
   def __init__(self, configs_path, noise_filter=None):
     self.configs = get_asr_config(configs_path)
     self.text_featurizer = TextFeaturizer(self.configs["vocabulary_file_path"])
-    self.decoder = create_decoder(decoder_config=self.configs["decoder"],
-                                  index_to_token=self.text_featurizer.index_to_token,
-                                  num_classes=self.text_featurizer.num_classes,
-                                  vocab_array=self.text_featurizer.vocab_array)
+    self.decoder = create_ctc_decoder(decoder_config=self.configs["decoder"],
+                                      text_featurizer=self.text_featurizer)
     self.model, self.optimizer = create_ctc_model(num_classes=self.text_featurizer.num_classes,
                                                   last_activation=self.configs["last_activation"],
                                                   base_model=self.configs["base_model"],
@@ -37,10 +36,8 @@ class SpeechToText:
       raise ValueError("Must set checkpoint_dir")
     if not os.path.exists(self.configs["checkpoint_dir"]):
       os.makedirs(self.configs["checkpoint_dir"])
-    self.ckpt = tf.train.Checkpoint(model=model,
-                                    optimizer=self.optimizer)
-    self.ckpt_manager = tf.train.CheckpointManager(
-      self.ckpt, self.configs["checkpoint_dir"], max_to_keep=None)
+    self.ckpt = tf.train.Checkpoint(model=model, optimizer=self.optimizer)
+    self.ckpt_manager = tf.train.CheckpointManager(self.ckpt, self.configs["checkpoint_dir"], max_to_keep=None)
 
   @tf.function
   def train(self, model, dataset, optimizer, loss, num_classes, epoch, num_epochs):
@@ -403,9 +400,16 @@ class SpeechToText:
     pred = self.predict(tf.expand_dims(features, 0), tf.expand_dims(input_length, 0))
     return bytes_to_string(pred.numpy())[0]
 
-  def infer_single_interpreter(self, signal):
+  def infer_single_interpreter(self, signal, length):
+    # Inference only on "length" seconds due to limitation of tflite
     features = speech_feature_extraction(signal, self.configs["speech_conf"])
     input_length = tf.cast(tf.shape(features)[0], tf.int32)
+    features = tf.expand_dims(features, 0)
+    length = compute_time_dim(self.configs["speech_conf"], length)
+    if input_length < length:
+      features = tf.pad(features, paddings=[[0, 0], [0, length - input_length], [0, 0], [0, 0]])
+    elif input_length > length:
+      features = features[:, :length, :, :]
 
     input_index = self.model.get_input_details()[0]["index"]
     output_index = self.model.get_output_details()[0]["index"]
@@ -414,8 +418,10 @@ class SpeechToText:
     self.model.invoke()
 
     pred = self.model.get_tensor(output_index)
+
     pred = self.decoder(probs=pred, input_length=input_length,
                         last_activation=self.configs["last_activation"])
+
     return bytes_to_string(pred.numpy())[0]
 
   def load_interpreter(self, tflite_file):
@@ -474,3 +480,27 @@ class SpeechToText:
     else:
       self.ckpt.restore(self.ckpt_manager.checkpoints[idx])
     self.save_model(model_file)
+
+  def save_weights(self, model_file):
+    print("Saving ASR model's weights ...")
+    self.model.save_weights(model_file)
+
+  def convert_to_tflite(self, model_file, length, output_file_path):
+    # Convert model to tflite with input [1, num frames of "length" seconds, f, c]
+    if os.path.exists(output_file_path):
+      return
+    model = tf.saved_model.load(model_file)
+    concrete_func = model.signatures[tf.saved_model.DEFAULT_SERVING_SIGNATURE_DEF_KEY]
+    f, c = compute_feature_dim(speech_conf=self.configs["speech_conf"])
+    concrete_func.inputs[0].set_shape([1, compute_time_dim(self.configs["speech_conf"], length), f, c])
+    converter = tf.lite.TFLiteConverter.from_concrete_functions([concrete_func])
+    # converter = tf.lite.TFLiteConverter.from_saved_model(saved_model_dir=args.export_file)
+    converter.experimental_new_converter = True
+    converter.optimizations = [tf.lite.Optimize.DEFAULT]
+    tflite_model = converter.convert()
+
+    tflite_model_dir = pathlib.Path(os.path.dirname(output_file_path))
+    tflite_model_dir.mkdir(exist_ok=True, parents=True)
+
+    tflite_model_file = tflite_model_dir / f"{os.path.basename(output_file_path)}"
+    tflite_model_file.write_bytes(tflite_model)

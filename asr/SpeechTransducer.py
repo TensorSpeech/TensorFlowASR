@@ -7,7 +7,7 @@ import time
 import tensorflow as tf
 
 from featurizers.TextFeaturizer import TextFeaturizer
-from decoders.Decoders import create_decoder
+from decoders.CTCDecoders import create_decoder
 from models.Transducer import create_transducer_model
 from utils.Utils import get_asr_config, check_key_in_dict, bytes_to_string, wer, cer
 

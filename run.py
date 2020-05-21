@@ -1,13 +1,19 @@
 from __future__ import absolute_import
 
+import os
 import argparse
-from logging import ERROR
+import warnings
+
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
+warnings.simplefilter('ignore')
 import tensorflow as tf
+
+tf.get_logger().setLevel('ERROR')
+
 from asr.SpeechToText import SpeechToText
 from asr.SEGAN import SEGAN
 from featurizers.SpeechFeaturizer import read_raw_audio
 
-tf.get_logger().setLevel(ERROR)
 gpus = tf.config.experimental.list_physical_devices('GPU')
 if gpus:
   try:
@@ -23,10 +29,12 @@ if gpus:
 
 tf.keras.backend.clear_session()
 
+modes = ["test", "infer_single"]
+
 parser = argparse.ArgumentParser(description="Script to run both SEGAN and ASR")
 
 parser.add_argument("--mode", "-m", type=str, default="test",
-                    help="Mode for training, testing or infering")
+                    help=f"Mode in {modes}")
 
 parser.add_argument("--segan_config", "-s", type=str, default=None,
                     help="The file path of segan configuration file")
@@ -46,11 +54,11 @@ parser.add_argument("--saved_segan", type=str, default=None,
 parser.add_argument("--saved_asr", type=str, default=None,
                     help="Path to the saved asr model")
 
-
 args = parser.parse_args()
 
+
 def main():
-  assert args.mode in ["test", "infer_single"]
+  assert args.mode in modes, f"Mode must in {modes}"
 
   tf.random.set_seed(0)
 

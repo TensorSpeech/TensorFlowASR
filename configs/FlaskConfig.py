@@ -15,13 +15,19 @@ class FlaskConfig:
   SECRET_KEY = "this is a secret key muahahahahahaha"
 
   # ASR
-  MODEL_FILE = os.path.expanduser(os.getenv("MODEL_FILE", "/app/trained/deepspeech2/bilstm"))
-  STATIC_WAV_FILE = os.path.expanduser(os.getenv("STATIC_WAV_FILE", "/tmp/temp.wav"))
+  STATIC_WAV_FILE = os.path.abspath(os.getenv("STATIC_WAV_FILE", "/tmp/temp.wav"))
 
-  UNI_CONFIG_PATH = os.path.expanduser(os.getenv("UNI_CONFIG_PATH", ""))
+  SAVED_MODEL = os.path.abspath(os.getenv("SAVED_MODEL", "/app/trained/deepspeech2/model"))
+  STREAMING_SAVED_MODEL = os.path.abspath(os.getenv("STREAMING_SAVED_MODEL", "/app/trained/deepspeech2/streaming"))
 
-  BI_CONFIG_PATH = os.path.expanduser(os.getenv("BI_CONFIG_PATH", ""))
+  TFLITE = os.path.abspath(os.getenv("TFLITE", "/app/trained/deepspeech2/model.tflite"))
+  STREAMING_TFLITE = os.path.abspath(os.getenv("STREAMING_TFLITE", "/app/trained/deepspeech2/streaming.tflite"))
+  TFLITE_LENGTH = int(os.getenv("ASR_TFLITE_LENGTH", 4))
+
+  CONFIG_PATH = os.path.abspath(os.getenv("CONFIG_PATH", ""))
+  STREAMING_CONFIG_PATH = os.path.abspath(os.getenv("STREAMING_CONFIG_PATH", ""))
 
   # SEGAN
-  SEGAN_FILE = os.path.expanduser(os.getenv("SEGAN_FILE", "/app/trained/segan/trained"))
-  SEGAN_CONFIG_PATH = os.path.expanduser(os.getenv("SEGAN_CONFIG_PATH", "/app/configs/SeganConfig.py"))
+  SEGAN_SAVED_WEIGHTS = os.path.abspath(os.getenv("SEGAN_SAVED_WEIGHTS", "/app/trained/segan/trained"))
+  SEGAN_TFLITE = os.path.abspath(os.getenv("SEGAN_TFLITE", "/app/trained/segan/model.tflite"))
+  SEGAN_CONFIG_PATH = os.path.abspath(os.getenv("SEGAN_CONFIG_PATH", "/app/configs/SeganConfig.py"))

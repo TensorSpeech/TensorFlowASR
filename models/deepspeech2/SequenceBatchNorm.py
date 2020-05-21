@@ -1,7 +1,6 @@
 from __future__ import absolute_import
 
 import tensorflow as tf
-from tensorflow.keras.backend import epsilon
 
 
 # https://arxiv.org/abs/1510.01378
@@ -30,7 +29,7 @@ class SequenceBatchNorm(tf.keras.layers.Layer):
     mean = (mean * total_padded_frames * batch_size) / total_unpadded_frames_batch
     variance = (variance * total_padded_frames * batch_size) / total_unpadded_frames_batch
     return tf.nn.batch_normalization(inputs, mean=mean, variance=variance,
-                                     offset=self.beta, scale=self.gamma, variance_epsilon=epsilon())
+                                     offset=self.beta, scale=self.gamma, variance_epsilon=tf.keras.backend.epsilon())
 
   def get_config(self):
     config = super(SequenceBatchNorm, self).get_config()

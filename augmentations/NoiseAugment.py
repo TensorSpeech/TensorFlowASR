@@ -50,12 +50,32 @@ def add_noise(signal: np.ndarray, noises: list, snr_list: list,
     if noise_type == "white_noise":
       noise = get_white_noise(signal, snr)
       if noise is not None:
-        added_noises.append(noise)
+        signal = np.add(signal, noise)
     else:
       noise = read_raw_audio(noise_type, sample_rate=sample_rate)
       noise = get_noise_from_sound(signal, noise, snr)
       if noise is not None:
-        added_noises.append(noise)
-  for noise in added_noises:
+        signal = np.add(signal, noise)
+  return signal
+
+
+def add_white_noise(signal: np.ndarray, snr_list: list):
+  snr = random.choice(snr_list)
+  noise = get_white_noise(signal, snr)
+  if noise is not None:
     signal = np.add(signal, noise)
+  return signal
+
+
+def add_realworld_noise(signal: np.ndarray, noises: list, snr_list: list,
+                        min_noises: int, max_noises: int, sample_rate=16000):
+  random.shuffle(noises)
+  num_noises = random.randint(min_noises, max_noises)
+  selected_noises = random.choices(noises, k=num_noises)
+  for noise_type in selected_noises:
+    snr = random.choice(snr_list)
+    noise = read_raw_audio(noise_type, sample_rate=sample_rate)
+    noise = get_noise_from_sound(signal, noise, snr)
+    if noise is not None:
+      signal = np.add(signal, noise)
   return signal
