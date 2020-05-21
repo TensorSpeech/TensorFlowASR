@@ -27,7 +27,7 @@ def _bytestring_feature(list_of_bytestrings):
 
 def to_tfrecord(audio, transcript):
   feature = {
-    "audio": _bytestring_feature([audio]),
+    "audio":      _bytestring_feature([audio]),
     "transcript": _bytestring_feature([transcript])
   }
   return tf.train.Example(features=tf.train.Features(feature=feature))
@@ -125,7 +125,7 @@ class Dataset:
     features = speech_feature_extraction(signal, speech_conf)
 
     if augment is not None and augment.is_post:
-      features = augment(features)
+      features[:, :, 0] = augment(features[:, :, 0])
 
     label = text_featurizer.compute_label_features(transcript.numpy().decode("utf-8"))
     label_length = tf.cast(tf.shape(label)[0], tf.int32)
@@ -145,7 +145,7 @@ class Dataset:
 
   def parse_from_tfrecord(self, record, speech_conf, text_featurizer, augment, builtin=False, fext=True):
     feature_description = {
-      "audio": tf.io.FixedLenFeature([], tf.string),
+      "audio":      tf.io.FixedLenFeature([], tf.string),
       "transcript": tf.io.FixedLenFeature([], tf.string)
     }
     example = tf.io.parse_single_example(record, feature_description)
@@ -172,8 +172,8 @@ class Dataset:
     features, input_length, label, label_length = tf.py_function(
       functools.partial(self.preprocess, text_featurizer=text_featurizer,
                         speech_conf=speech_conf, augment=augment),
-        inp=[signal, transcript],
-        Tout=(tf.float32, tf.int32, tf.int32, tf.int32)
+      inp=[signal, transcript],
+      Tout=(tf.float32, tf.int32, tf.int32, tf.int32)
     )
     if builtin:
       return (features, input_length, label, label_length), -1
@@ -193,6 +193,7 @@ class Dataset:
     def no_aug_parse(record):
       return self.parse_from_tfrecord(record, speech_conf, text_featurizer,
                                       augment=None, builtin=builtin, fext=True)
+
     dataset = records_dataset.map(no_aug_parse, num_parallel_calls=AUTOTUNE)
 
     # CREATE dataset with augmentations
@@ -200,6 +201,7 @@ class Dataset:
       def parse(record):
         return self.parse_from_tfrecord(record, speech_conf, text_featurizer,
                                         augment=augment, builtin=builtin)
+
       dataset = dataset.concatenate(records_dataset.map(parse, num_parallel_calls=AUTOTUNE))
 
     del records_dataset
@@ -253,6 +255,7 @@ class Dataset:
       def parse(record):
         return self.parse_from_tfrecord(record, speech_conf, text_featurizer,
                                         augment=augment, builtin=builtin, fext=False)
+
       dataset = dataset.concatenate(records_dataset.map(parse, num_parallel_calls=AUTOTUNE))
 
     del records_dataset
