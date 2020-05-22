@@ -50,138 +50,134 @@ segan_conf_paths = ["clean_train_data_dir",
 
 
 def check_key_in_dict(dictionary, keys):
-  for key in keys:
-    if key not in dictionary.keys():
-      raise ValueError("{} must be defined".format(key))
+    for key in keys:
+        if key not in dictionary.keys():
+            raise ValueError("{} must be defined".format(key))
 
 
 def preprocess_paths(paths):
-  if isinstance(paths, list):
-    return list(map(os.path.abspath, paths))
-  return os.path.abspath(paths)
+    if isinstance(paths, list):
+        return list(map(os.path.abspath, paths))
+    return os.path.abspath(paths)
 
 
 def get_asr_config(config_path):
-  if config_path is None:
-    conf_dict = vars(DefaultConfig)
-  else:
-    conf_dict = runpy.run_path(config_path)
-  check_key_in_dict(dictionary=conf_dict, keys=asr_conf_required)
-  # fill missing default optional values
-  default_dict = vars(DefaultConfig)
-  conf_dict = append_default_keys_dict(default_dict, conf_dict)
-  # convert paths to take ~/ dir
-  for key in asr_conf_paths:
-    conf_dict[key] = preprocess_paths(conf_dict[key])
+    if config_path is None:
+        conf_dict = vars(DefaultConfig)
+    else:
+        conf_dict = runpy.run_path(config_path)
+    check_key_in_dict(dictionary=conf_dict, keys=asr_conf_required)
+    # fill missing default optional values
+    default_dict = vars(DefaultConfig)
+    conf_dict = append_default_keys_dict(default_dict, conf_dict)
+    # convert paths to take ~/ dir
+    for key in asr_conf_paths:
+        conf_dict[key] = preprocess_paths(conf_dict[key])
 
-  return conf_dict
+    return conf_dict
 
 
 def get_segan_config(config_path):
-  if config_path is None:
-    conf_dict = vars(SeganConfig)
-  else:
-    conf_dict = runpy.run_path(config_path)
-  check_key_in_dict(dictionary=conf_dict, keys=segan_conf_required)
-  # fill missing default optional values
-  default_dict = vars(SeganConfig)
-  conf_dict = append_default_keys_dict(default_dict, conf_dict)
-  # convert paths to take ~/ dir
-  for key in segan_conf_paths:
-    conf_dict[key] = preprocess_paths(conf_dict[key])
+    if config_path is None:
+        conf_dict = vars(SeganConfig)
+    else:
+        conf_dict = runpy.run_path(config_path)
+    check_key_in_dict(dictionary=conf_dict, keys=segan_conf_required)
+    # fill missing default optional values
+    default_dict = vars(SeganConfig)
+    conf_dict = append_default_keys_dict(default_dict, conf_dict)
+    # convert paths to take ~/ dir
+    for key in segan_conf_paths:
+        conf_dict[key] = preprocess_paths(conf_dict[key])
 
-  return conf_dict
+    return conf_dict
 
 
 def append_default_keys_dict(default_dict, dest_dict):
-  for key in default_dict.keys():
-    if key not in dest_dict.keys():
-      dest_dict[key] = default_dict[key]
-  return dest_dict
+    for key in default_dict.keys():
+        if key not in dest_dict.keys():
+            dest_dict[key] = default_dict[key]
+    return dest_dict
 
 
 def levenshtein(a, b):
-  """
-  Calculate Levenshtein distance between a and b
-  """
-  n, m = len(a), len(b)
-  if n > m:
-    # Make sure n <= m, to use O(min(n,m)) space
-    a, b = b, a
-    n, m = m, n
-  current = list(range(n + 1))
-  for i in range(1, m + 1):
-    previous, current = current, [i] + [0] * n
-    for j in range(1, n + 1):
-      add, delete = previous[j] + 1, current[j - 1] + 1
-      change = previous[j - 1]
-      if a[j - 1] != b[i - 1]:
-        change = change + 1
-      current[j] = min(add, delete, change)
-  return current[n]
+    """
+    Calculate Levenshtein distance between a and b
+    """
+    n, m = len(a), len(b)
+    if n > m:
+        # Make sure n <= m, to use O(min(n,m)) space
+        a, b = b, a
+        n, m = m, n
+    current = list(range(n + 1))
+    for i in range(1, m + 1):
+        previous, current = current, [i] + [0] * n
+        for j in range(1, n + 1):
+            add, delete = previous[j] + 1, current[j - 1] + 1
+            change = previous[j - 1]
+            if a[j - 1] != b[i - 1]:
+                change = change + 1
+            current[j] = min(add, delete, change)
+    return current[n]
 
 
 def wer(decode, target):
-  words = set(decode.split() + target.split())
-  word2char = dict(zip(words, range(len(words))))
+    words = set(decode.split() + target.split())
+    word2char = dict(zip(words, range(len(words))))
 
-  new_decode = [chr(word2char[w]) for w in decode.split()]
-  new_target = [chr(word2char[w]) for w in target.split()]
+    new_decode = [chr(word2char[w]) for w in decode.split()]
+    new_target = [chr(word2char[w]) for w in target.split()]
 
-  return distance.edit_distance(''.join(new_decode),
-                                ''.join(new_target)), len(target.split())
+    return distance.edit_distance(''.join(new_decode),
+                                  ''.join(new_target)), len(target.split())
 
 
 def mywer(decode, target):
-  dist = levenshtein(target.lower().split(), decode.lower().split())
-  return dist, len(target.split())
+    dist = levenshtein(target.lower().split(), decode.lower().split())
+    return dist, len(target.split())
 
 
 def cer(decode, target):
-  return distance.edit_distance(decode, target), len(target)
+    return distance.edit_distance(decode, target), len(target)
 
 
 def mask_nan(x):
-  x_zeros = tf.zeros_like(x)
-  x_mask = tf.math.is_finite(x)
-  y = tf.where(x_mask, x, x_zeros)
-  return y
+    x_zeros = tf.zeros_like(x)
+    x_mask = tf.math.is_finite(x)
+    y = tf.where(x_mask, x, x_zeros)
+    return y
 
 
 def bytes_to_string(array, encoding: str = "utf-8"):
-  return [transcript.decode(encoding) for transcript in array]
+    return [transcript.decode(encoding) for transcript in array]
 
 
 def get_length(batch_data):
-  def map_fn(elem):
-    return tf.shape(elem)[0]
+    def map_fn(elem):
+        return tf.shape(elem)[0]
 
-  return tf.map_fn(map_fn, batch_data, dtype=tf.int32)
+    return tf.map_fn(map_fn, batch_data, dtype=tf.int32)
 
 
 def slice_signal(signal, window_size, stride=0.5):
-  """ Return windows of the given signal by sweeping in stride fractions
-      of window
-  """
-  assert signal.ndim == 1, signal.ndim
-  n_samples = signal.shape[0]
-  offset = int(window_size * stride)
-  slices = []
-  for beg_i, end_i in zip(range(0, n_samples, offset),
-                          range(window_size, n_samples + offset,
-                                offset)):
-    slice_ = signal[beg_i:end_i]
-    if slice_.shape[0] < window_size:
-      slice_ = np.pad(slice_, (0, window_size - slice_.shape[0]), 'constant', constant_values=0.0)
-    if slice_.shape[0] == window_size:
-      slices.append(slice_)
-  return np.array(slices, dtype=np.float32)
+    """ Return windows of the given signal by sweeping in stride fractions
+        of window
+    """
+    assert signal.ndim == 1, signal.ndim
+    n_samples = signal.shape[0]
+    offset = int(window_size * stride)
+    slices = []
+    for beg_i, end_i in zip(range(0, n_samples, offset),
+                            range(window_size, n_samples + offset,
+                                  offset)):
+        slice_ = signal[beg_i:end_i]
+        if slice_.shape[0] < window_size:
+            slice_ = np.pad(slice_, (0, window_size - slice_.shape[0]), 'constant', constant_values=0.0)
+        if slice_.shape[0] == window_size:
+            slices.append(slice_)
+    return np.array(slices, dtype=np.float32)
 
 
 def merge_slices(slices):
-  # slices shape = [batch, window_size]
-  return tf.keras.backend.flatten(slices)  # return shape = [-1, ]
-
-
-def scalar_summary(name, x, **kwargs):
-  return tf.summary.scalar(name, x, **kwargs)
+    # slices shape = [batch, window_size]
+    return tf.keras.backend.flatten(slices)  # return shape = [-1, ]
