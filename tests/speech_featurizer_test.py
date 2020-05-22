@@ -20,17 +20,17 @@ def main(argv):
     "normalize_signal": True,
     "normalize_feature": True,
     "norm_per_feature": False,
-    "num_feature_bins": int(16000 * 20 / 1000) // 2 + 1,
+    "num_feature_bins": 128,
     "delta": True,
     "delta_delta": True,
     "pitch": True
   }
   signal = read_raw_audio(speech_file, speech_conf["sample_rate"])
-  signal = signal[:speech_conf["sample_rate"]]
+  # signal = signal[:speech_conf["sample_rate"]]
   print(len(signal))
   ft = speech_feature_extraction(signal, speech_conf)
-  au = FreqMasking()
-  ft[:, :, 0] = au(ft[:, :, 0])
+  # au = FreqMasking()
+  # ft[:, :, 0] = au(ft[:, :, 0])
   print(compute_time_dim(speech_conf, 1))
   print(ft.shape[0])
 

@@ -60,10 +60,14 @@ def speech_feature_extraction(signal, speech_conf):
 
   if speech_conf["delta"]:
     delta = librosa.feature.delta(original_features.T).T
+    if speech_conf["normalize_feature"]:
+      delta = normalize_audio_feature(delta, per_feature=speech_conf["norm_per_feature"])
     features = np.concatenate([features, np.expand_dims(delta, axis=-1)], axis=-1)
 
   if speech_conf["delta_delta"]:
     delta_delta = librosa.feature.delta(original_features.T, order=2).T
+    if speech_conf["normalize_feature"]:
+      delta_delta = normalize_audio_feature(delta_delta, per_feature=speech_conf["norm_per_feature"])
     features = np.concatenate([features, np.expand_dims(delta_delta, axis=-1)], axis=-1)
 
   if speech_conf["pitch"] > 0:
