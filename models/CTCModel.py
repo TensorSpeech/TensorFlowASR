@@ -1,7 +1,7 @@
 from __future__ import absolute_import
 
 import tensorflow as tf
-from utils.Utils import get_length
+from utils.Utils import get_length, mask_nan
 from featurizers.SpeechFeaturizer import compute_feature_dim
 
 
@@ -64,45 +64,49 @@ def create_ctc_train_model(ctc_model, last_activation, num_classes, name="ctc_tr
 
 
 @tf.function
-def ctc_loss_1(y_true, y_pred, input_length, label_length, num_classes):
-  return tf.reduce_mean(tf.keras.backend.ctc_batch_cost(
+def ctc_loss_1(y_true, y_pred, input_length, label_length, **kwargs):
+  loss = tf.keras.backend.ctc_batch_cost(
     y_pred=y_pred,
     input_length=tf.expand_dims(input_length, -1),
     y_true=tf.cast(y_true, tf.int32),
     label_length=tf.expand_dims(label_length, -1)
-  ))
+  )
+  return tf.reduce_mean(mask_nan(loss))
 
 
 @tf.function
-def ctc_loss(y_true, y_pred, input_length, label_length, num_classes):
-  return tf.reduce_mean(tf.nn.ctc_loss(
+def ctc_loss(y_true, y_pred, input_length, label_length, num_classes, **kwargs):
+  loss = tf.nn.ctc_loss(
     labels=tf.cast(y_true, tf.int32),
     logit_length=input_length,
     logits=y_pred,
     label_length=label_length,
     logits_time_major=False,
     blank_index=num_classes - 1
-  ))
+  )
+  return tf.reduce_mean(mask_nan(loss))
 
 
 @tf.function
-def ctc_loss_keras(layer):
+def ctc_loss_keras(layer, **kwargs):
   y_pred, input_length, y_true, label_length = layer
-  return tf.keras.backend.ctc_batch_cost(
+  loss = tf.keras.backend.ctc_batch_cost(
     y_pred=y_pred,
     input_length=tf.expand_dims(input_length, -1),
     y_true=y_true,
     label_length=tf.expand_dims(label_length, -1))
+  return tf.reduce_mean(mask_nan(loss))
 
 
 @tf.function
 def ctc_loss_keras_2(layer, **kwargs):
   num_classes = kwargs["num_classes"]
   y_pred, input_length, y_true, label_length = layer
-  return tf.reduce_mean(tf.nn.ctc_loss(
+  loss = tf.nn.ctc_loss(
     labels=y_true,
     logit_length=input_length,
     logits=y_pred,
     label_length=label_length,
     logits_time_major=False,
-    blank_index=num_classes - 1))
+    blank_index=num_classes - 1)
+  return tf.reduce_mean(mask_nan(loss))

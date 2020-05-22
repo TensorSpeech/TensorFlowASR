@@ -6,11 +6,12 @@ from __future__ import absolute_import
 
 import numpy as np
 import tensorflow as tf
+from utils.Utils import append_default_keys_dict
 from models.deepspeech2.RowConv1D import RowConv1D
 from models.deepspeech2.SequenceBatchNorm import SequenceBatchNorm
 
 DEFAULT_CONV = {
-  "conv_type": 2,
+  "conv_type":    2,
   "conv_kernels": ((11, 41), (11, 21), (11, 21)),
   "conv_strides": ((2, 2), (1, 2), (1, 2)),
   "conv_filters": (32, 32, 96),
@@ -18,18 +19,18 @@ DEFAULT_CONV = {
 }
 
 DEFAULT_RNN = {
-  "rnn_layers": 3,
-  "rnn_type": "gru",
-  "rnn_units": 350,
-  "rnn_activation": "tanh",
-  "rnn_bidirectional": True,
-  "rnn_rowconv": False,
+  "rnn_layers":          3,
+  "rnn_type":            "gru",
+  "rnn_units":           350,
+  "rnn_activation":      "tanh",
+  "rnn_bidirectional":   True,
+  "rnn_rowconv":         False,
   "rnn_rowconv_context": 2,
-  "rnn_dropout": 0.2
+  "rnn_dropout":         0.2
 }
 
 DEFAULT_FC = {
-  "fc_units": (1024,),
+  "fc_units":   (1024,),
   "fc_dropout": 0.2
 }
 
@@ -38,9 +39,9 @@ class DeepSpeech2:
   def __init__(self, conv_conf=DEFAULT_CONV, rnn_conf=DEFAULT_RNN, fc_conf=DEFAULT_FC,
                optimizer=tf.keras.optimizers.SGD(lr=0.0002, momentum=0.99, nesterov=True)):
     self.optimizer = optimizer
-    self.conv_conf = conv_conf
-    self.rnn_conf = rnn_conf
-    self.fc_conf = fc_conf
+    self.conv_conf = append_default_keys_dict(DEFAULT_CONV, conv_conf)
+    self.rnn_conf = append_default_keys_dict(DEFAULT_RNN, rnn_conf)
+    self.fc_conf = append_default_keys_dict(DEFAULT_FC, fc_conf)
     assert len(conv_conf["conv_strides"]) == len(conv_conf["conv_filters"]) == len(conv_conf["conv_kernels"])
     assert conv_conf["conv_type"] in [1, 2]
     assert rnn_conf["rnn_type"] in ["lstm", "gru", "rnn"]

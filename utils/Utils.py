@@ -69,9 +69,7 @@ def get_asr_config(config_path):
   check_key_in_dict(dictionary=conf_dict, keys=asr_conf_required)
   # fill missing default optional values
   default_dict = vars(DefaultConfig)
-  for key in default_dict.keys():
-    if key not in conf_dict.keys():
-      conf_dict[key] = default_dict[key]
+  conf_dict = append_default_keys_dict(default_dict, conf_dict)
   # convert paths to take ~/ dir
   for key in asr_conf_paths:
     conf_dict[key] = preprocess_paths(conf_dict[key])
@@ -87,14 +85,19 @@ def get_segan_config(config_path):
   check_key_in_dict(dictionary=conf_dict, keys=segan_conf_required)
   # fill missing default optional values
   default_dict = vars(SeganConfig)
-  for key in default_dict.keys():
-    if key not in conf_dict.keys():
-      conf_dict[key] = default_dict[key]
+  conf_dict = append_default_keys_dict(default_dict, conf_dict)
   # convert paths to take ~/ dir
   for key in segan_conf_paths:
     conf_dict[key] = preprocess_paths(conf_dict[key])
 
   return conf_dict
+
+
+def append_default_keys_dict(default_dict, dest_dict):
+  for key in default_dict.keys():
+    if key not in dest_dict.keys():
+      dest_dict[key] = default_dict[key]
+  return dest_dict
 
 
 def levenshtein(a, b):

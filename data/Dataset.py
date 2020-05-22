@@ -117,15 +117,18 @@ class Dataset:
     return lines
 
   @staticmethod
-  def preprocess(audio, transcript, speech_conf, text_featurizer, augment):
+  def preprocess(audio, transcript, speech_conf, text_featurizer, augments):
     signal = read_raw_audio(audio.numpy(), speech_conf["sample_rate"])
-    if augment is not None and not augment.is_post:
-      signal = augment(signal=signal, sample_rate=speech_conf["sample_rate"])
+
+    for augment in augments:
+      if not augment.is_post:
+        signal = augment(signal=signal, sample_rate=speech_conf["sample_rate"])
 
     features = speech_feature_extraction(signal, speech_conf)
 
-    if augment is not None and augment.is_post:
-      features[:, :, 0] = augment(features[:, :, 0])
+    for augment in augments:
+      if augment.is_post:
+        features[:, :, 0] = augment(features[:, :, 0])
 
     label = text_featurizer.compute_label_features(transcript.numpy().decode("utf-8"))
     label_length = tf.cast(tf.shape(label)[0], tf.int32)
@@ -134,16 +137,17 @@ class Dataset:
     return features, input_length, label, label_length
 
   @staticmethod
-  def preprocess_no_fext(audio, transcript, speech_conf, text_featurizer, augment):
+  def preprocess_no_fext(audio, transcript, speech_conf, text_featurizer, augments):
     signal = read_raw_audio(audio.numpy(), speech_conf["sample_rate"])
 
-    if augment is not None and not augment.is_post:
-      signal = augment(signal=signal, sample_rate=speech_conf["sample_rate"])
+    for augment in augments:
+      if not augment.is_post:
+        signal = augment(signal=signal, sample_rate=speech_conf["sample_rate"])
 
     label = text_featurizer.compute_label_features(transcript.numpy().decode("utf-8"))
     return signal, label
 
-  def parse_from_tfrecord(self, record, speech_conf, text_featurizer, augment, builtin=False, fext=True):
+  def parse_from_tfrecord(self, record, speech_conf, text_featurizer, augments, builtin=False, fext=True):
     feature_description = {
       "audio":      tf.io.FixedLenFeature([], tf.string),
       "transcript": tf.io.FixedLenFeature([], tf.string)
@@ -152,7 +156,7 @@ class Dataset:
     if fext:
       features, input_length, label, label_length = tf.py_function(
         functools.partial(self.preprocess, text_featurizer=text_featurizer,
-                          speech_conf=speech_conf, augment=augment),
+                          speech_conf=speech_conf, augments=augments),
         inp=[example["audio"], example["transcript"]],
         Tout=(tf.float32, tf.int32, tf.int32, tf.int32))
       if builtin:
@@ -161,17 +165,17 @@ class Dataset:
     else:
       signal, label = tf.py_function(
         functools.partial(self.preprocess_no_fext, text_featurizer=text_featurizer,
-                          speech_conf=speech_conf, augment=augment),
+                          speech_conf=speech_conf, augments=augments),
         inp=[example["audio"], example["transcript"]],
         Tout=(tf.float32, tf.int32))
       if builtin:
         return (signal, label), -1
       return signal, label
 
-  def parse_from_generator(self, signal, transcript, speech_conf, text_featurizer, augment, builtin=False):
+  def parse_from_generator(self, signal, transcript, speech_conf, text_featurizer, augments, builtin=False):
     features, input_length, label, label_length = tf.py_function(
       functools.partial(self.preprocess, text_featurizer=text_featurizer,
-                        speech_conf=speech_conf, augment=augment),
+                        speech_conf=speech_conf, augments=augments),
       inp=[signal, transcript],
       Tout=(tf.float32, tf.int32, tf.int32, tf.int32)
     )
@@ -187,24 +191,14 @@ class Dataset:
     ignore_order = tf.data.Options()
     ignore_order.experimental_deterministic = False
     files_ds = files_ds.with_options(ignore_order)
-    records_dataset = tf.data.TFRecordDataset(files_ds, compression_type='ZLIB', num_parallel_reads=AUTOTUNE)
+    dataset = tf.data.TFRecordDataset(files_ds, compression_type='ZLIB', num_parallel_reads=AUTOTUNE)
 
-    # CREATE dataset with NO augmentation
-    def no_aug_parse(record):
+    # CREATE dataset with augmentations (or not due to random)
+    def parse(record):
       return self.parse_from_tfrecord(record, speech_conf, text_featurizer,
-                                      augment=None, builtin=builtin, fext=True)
+                                      augments=augmentations, builtin=builtin)
 
-    dataset = records_dataset.map(no_aug_parse, num_parallel_calls=AUTOTUNE)
-
-    # CREATE dataset with augmentations
-    for augment in augmentations:
-      def parse(record):
-        return self.parse_from_tfrecord(record, speech_conf, text_featurizer,
-                                        augment=augment, builtin=builtin)
-
-      dataset = dataset.concatenate(records_dataset.map(parse, num_parallel_calls=AUTOTUNE))
-
-    del records_dataset
+    dataset = dataset.map(parse, num_parallel_calls=AUTOTUNE)
 
     # SHUFFLE unbatched dataset (shuffle the elements with each other) if not using sortagrad
     if shuffle and not sort:
@@ -243,22 +237,13 @@ class Dataset:
     ignore_order = tf.data.Options()
     ignore_order.experimental_deterministic = False
     files_ds = files_ds.with_options(ignore_order)
-    records_dataset = tf.data.TFRecordDataset(files_ds, compression_type='ZLIB', num_parallel_reads=AUTOTUNE)
+    dataset = tf.data.TFRecordDataset(files_ds, compression_type='ZLIB', num_parallel_reads=AUTOTUNE)
 
-    def no_aug_parse(record):
+    def parse(record):
       return self.parse_from_tfrecord(record, speech_conf, text_featurizer,
-                                      augment=None, builtin=builtin, fext=False)
+                                      augments=augmentations, builtin=builtin, fext=False)
 
-    dataset = records_dataset.map(no_aug_parse, num_parallel_calls=AUTOTUNE)
-
-    for augment in augmentations:
-      def parse(record):
-        return self.parse_from_tfrecord(record, speech_conf, text_featurizer,
-                                        augment=augment, builtin=builtin, fext=False)
-
-      dataset = dataset.concatenate(records_dataset.map(parse, num_parallel_calls=AUTOTUNE))
-
-    del records_dataset
+    dataset = dataset.map(parse, num_parallel_calls=AUTOTUNE)
 
     if shuffle and not sort:
       dataset = dataset.shuffle(batch_size)
@@ -292,32 +277,23 @@ class Dataset:
           signal = f.read()
         yield signal, bytes(transcript, "utf-8")
 
-    gen_dataset = tf.data.Dataset.from_generator(
+    dataset = tf.data.Dataset.from_generator(
       gen,
       output_types=(tf.string, tf.string),
       output_shapes=(tf.TensorShape([]), tf.TensorShape([]))
     )
 
-    def no_aug_parse(signal, transcript):
-      return self.parse_from_generator(signal, transcript, speech_conf=speech_conf,
-                                       text_featurizer=text_featurizer, augment=None, builtin=builtin)
-
-    dataset = gen_dataset.map(no_aug_parse, num_parallel_calls=AUTOTUNE)
-
-    for augment in augmentations:
-      def parse(signal, transcript):
-        return self.parse_from_generator(signal, transcript, speech_conf=speech_conf,
-                                         text_featurizer=text_featurizer, augment=augment, builtin=builtin)
-
-      dataset = dataset.concatenate(gen_dataset.map(parse, num_parallel_calls=AUTOTUNE))
-
-    del gen_dataset
-
-    feature_dim, channel_dim = compute_feature_dim(speech_conf)
-
     option = tf.data.Options()
     option.experimental_deterministic = False
     dataset = dataset.with_options(option)
+
+    def parse(signal, transcript):
+      return self.parse_from_generator(signal, transcript, speech_conf=speech_conf,
+                                       text_featurizer=text_featurizer, augments=augmentations, builtin=builtin)
+
+    dataset = dataset.map(parse, num_parallel_calls=AUTOTUNE)
+
+    feature_dim, channel_dim = compute_feature_dim(speech_conf)
 
     if shuffle and not sort:
       dataset = dataset.shuffle(batch_size)
