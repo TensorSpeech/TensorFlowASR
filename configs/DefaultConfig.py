@@ -11,7 +11,7 @@ base_model = DeepSpeech2(rnn_conf={
   "rnn_dropout": 0.2,
   "rnn_rowconv_context": 2,
   "rnn_units": 512,
-  "rnn_activation": "relu"
+  "rnn_activation": "tanh"
 })
 
 streaming_size = None
@@ -35,7 +35,7 @@ num_epochs = 10
 
 vocabulary_file_path = "/mnt/Projects/asrk16/vnasr/data/vocabulary.txt"
 
-last_activation = 'relu'
+last_activation = 'linear'
 
 speech_conf = {
   "sample_rate": 16000,
