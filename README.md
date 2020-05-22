@@ -35,7 +35,7 @@ There're 3 main models in this repo: CTCModel, SEGAN and RNNTransducer
 
 **SEGAN** was created exactly as the segan repo in the references and tested.
 
-**RNNTransducer** is on development.
+**RNNTransducer** is under development.
 
 ## Training
 
