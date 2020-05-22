@@ -1,4 +1,8 @@
 from __future__ import absolute_import
+from featurizers.SpeechFeaturizer import read_raw_audio
+from asr.SEGAN import SEGAN
+from asr.SpeechToText import SpeechToText
+import tensorflow as tf
 
 import os
 import argparse
@@ -6,26 +10,22 @@ import warnings
 
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 warnings.simplefilter('ignore')
-import tensorflow as tf
 
 tf.get_logger().setLevel('ERROR')
 
-from asr.SpeechToText import SpeechToText
-from asr.SEGAN import SEGAN
-from featurizers.SpeechFeaturizer import read_raw_audio
 
 gpus = tf.config.experimental.list_physical_devices('GPU')
 if gpus:
-  try:
-    # Currently, memory growth needs to be the same across GPUs
-    for gpu in gpus:
-      tf.config.experimental.set_memory_growth(gpu, True)
-    logical_gpus = tf.config.experimental.list_logical_devices('GPU')
-    print(len(gpus), "Physical GPUs,",
-          len(logical_gpus), "Logical GPUs")
-  except RuntimeError as e:
-    # Memory growth must be set before GPUs have been initialized
-    print(e)
+    try:
+        # Currently, memory growth needs to be the same across GPUs
+        for gpu in gpus:
+            tf.config.experimental.set_memory_growth(gpu, True)
+        logical_gpus = tf.config.experimental.list_logical_devices('GPU')
+        print(len(gpus), "Physical GPUs,",
+              len(logical_gpus), "Logical GPUs")
+    except RuntimeError as e:
+        # Memory growth must be set before GPUs have been initialized
+        print(e)
 
 tf.keras.backend.clear_session()
 
@@ -58,27 +58,27 @@ args = parser.parse_args()
 
 
 def main():
-  assert args.mode in modes, f"Mode must in {modes}"
+    assert args.mode in modes, f"Mode must in {modes}"
 
-  tf.random.set_seed(0)
+    tf.random.set_seed(0)
 
-  segan = SEGAN(config_path=args.segan_config, training=False)
-  segan.load_model(args.saved_segan)
+    segan = SEGAN(config_path=args.segan_config, training=False)
+    segan.load_model(args.saved_segan)
 
-  asr = SpeechToText(configs_path=args.asr_config, noise_filter=segan)
+    asr = SpeechToText(configs_path=args.asr_config, noise_filter=segan)
 
-  if args.mode == "test":
-    assert args.output_file_path
-    asr.test_with_noise_filter(model_file=args.saved_asr,
-                               output_file_path=args.output_file_path)
+    if args.mode == "test":
+        assert args.output_file_path
+        asr.test_with_noise_filter(model_file=args.saved_asr,
+                                   output_file_path=args.output_file_path)
 
-  elif args.mode == "infer_single":
-    assert args.input_file_path
-    asr.load_model(args.saved_asr)
-    signal = read_raw_audio(args.input_file_path, 16000)
-    pred = asr.infer_single(signal)
-    print(pred)
+    elif args.mode == "infer_single":
+        assert args.input_file_path
+        asr.load_model(args.saved_asr)
+        signal = read_raw_audio(args.input_file_path, 16000)
+        pred = asr.infer_single(signal)
+        print(pred)
 
 
 if __name__ == "__main__":
-  main()
+    main()

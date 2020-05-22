@@ -27,9 +27,9 @@ sample_rate = 16000
 stride = 0.5
 
 noise_conf = {
-  "snr": (0, 5, 10, 15),
-  "min_noises": 1,
-  "max_noises": 3
+    "snr": (0, 5, 10, 15),
+    "min_noises": 1,
+    "max_noises": 3
 }
 
 g_learning_rate = 0.0002

@@ -1,12 +1,12 @@
 from __future__ import absolute_import
+import matplotlib.pyplot as plt
+from augmentations.Augments import TimeWarping, TimeMasking, FreqMasking
+from featurizers.SpeechFeaturizer import SpeechFeaturizer
+import tensorflow as tf
 
 import sys
 import os.path as o
 sys.path.append(o.abspath(o.join(o.dirname(sys.modules[__name__].__file__), "..")))
-import tensorflow as tf
-from featurizers.SpeechFeaturizer import SpeechFeaturizer
-from augmentations.Augments import TimeWarping, TimeMasking, FreqMasking
-import matplotlib.pyplot as plt
 
 
 def main(argv):
