@@ -40,7 +40,7 @@ def get_noise_from_sound(signal: np.ndarray, noise: np.ndarray, snr=10):
 
 
 def add_noise(signal: np.ndarray, noises: list, snr_list: list,
-              min_noises: int, max_noises: int, sample_rate=16000):
+              min_noises: int, max_noises: int, sample_rate=16000, **kwargs):
   random.shuffle(noises)
   num_noises = random.randint(min_noises, max_noises)
   selected_noises = random.choices(noises, k=num_noises)
@@ -59,7 +59,7 @@ def add_noise(signal: np.ndarray, noises: list, snr_list: list,
   return signal
 
 
-def add_white_noise(signal: np.ndarray, snr_list: list):
+def add_white_noise(signal: np.ndarray, snr_list: list, **kwargs):
   snr = random.choice(snr_list)
   noise = get_white_noise(signal, snr)
   if noise is not None:
@@ -68,7 +68,7 @@ def add_white_noise(signal: np.ndarray, snr_list: list):
 
 
 def add_realworld_noise(signal: np.ndarray, noises: list, snr_list: list,
-                        min_noises: int, max_noises: int, sample_rate=16000):
+                        min_noises: int, max_noises: int, sample_rate=16000, **kwargs):
   random.shuffle(noises)
   num_noises = random.randint(min_noises, max_noises)
   selected_noises = random.choices(noises, k=num_noises)
