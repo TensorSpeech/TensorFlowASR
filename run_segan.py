@@ -1,8 +1,4 @@
 from __future__ import absolute_import
-from featurizers.SpeechFeaturizer import read_raw_audio
-from asr.SEGAN import SEGAN
-import librosa
-import tensorflow as tf
 
 import argparse
 import os
@@ -11,10 +7,13 @@ import warnings
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 warnings.simplefilter('ignore')
 
+import tensorflow as tf
 tf.get_logger().setLevel('ERROR')
 
+import librosa
+from featurizers.SpeechFeaturizer import read_raw_audio
+from asr.SEGAN import SEGAN
 
-tf.get_logger().setLevel('ERROR')
 gpus = tf.config.experimental.list_physical_devices('GPU')
 if gpus:
     try:
