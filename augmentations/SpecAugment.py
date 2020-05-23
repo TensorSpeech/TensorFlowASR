@@ -58,6 +58,7 @@ def time_warping(spectrogram: np.ndarray, time_warp_param=None) -> np.ndarray:
     """
     # Expand to shape (1, time_steps, num_feature_bins, 1)
     spectrogram = tf.expand_dims(spectrogram, axis=0)
+    spectrogram = tf.expand_dims(spectrogram, axis=-1)
     time_warp_param = time_warp_param if time_warp_param else spectrogram.shape[1]
     assert 0 <= time_warp_param <= spectrogram.shape[1], \
         "time_warp_param >= 0 and must not exceed time steps"
@@ -79,4 +80,5 @@ def time_warping(spectrogram: np.ndarray, time_warp_param=None) -> np.ndarray:
         num_boundary_points=1
     )
     spectrogram = tf.squeeze(spectrogram, axis=0)
+    spectrogram = tf.squeeze(spectrogram, axis=-1)
     return spectrogram.numpy()
