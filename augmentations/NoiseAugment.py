@@ -7,7 +7,7 @@ from featurizers.SpeechFeaturizer import read_raw_audio
 
 
 def get_white_noise(signal: np.ndarray, snr=10):
-    if snr == 0:
+    if snr < 0:
         return None
     RMS_s = math.sqrt(np.mean(signal ** 2))
     # RMS values of noise
@@ -22,7 +22,7 @@ def get_white_noise(signal: np.ndarray, snr=10):
 
 
 def get_noise_from_sound(signal: np.ndarray, noise: np.ndarray, snr=10):
-    if len(noise) < len(signal) or snr == 0:
+    if len(noise) < len(signal) or snr < 0:
         return None
 
     idx = random.choice(range(0, len(noise) - len(signal)))  # randomly crop noise wav
@@ -71,6 +71,8 @@ def add_realworld_noise(signal: np.ndarray, noises: list, snr_list: list,
                         min_noises: int, max_noises: int, sample_rate=16000, **kwargs):
     random.shuffle(noises)
     num_noises = random.randint(min_noises, max_noises)
+    if len(noises) < num_noises:
+        return signal
     selected_noises = random.choices(noises, k=num_noises)
     for noise_type in selected_noises:
         snr = random.choice(snr_list)

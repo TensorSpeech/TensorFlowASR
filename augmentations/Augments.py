@@ -57,8 +57,8 @@ class Noise(Augmentation):
 class WhiteNoise(Augmentation):
     def __init__(self, snr_list: list):
         self.snr_list = snr_list
-        if not any([i == 0 for i in self.snr_list]):
-            self.snr_list.append(0)
+        if not any([i < 0 for i in self.snr_list]):
+            self.snr_list.append(-1)
         super(WhiteNoise, self).__init__(
             func=functools.partial(add_white_noise, snr_list=self.snr_list),
             is_post=False
@@ -68,8 +68,8 @@ class WhiteNoise(Augmentation):
 class RealWorldNoise(Augmentation):
     def __init__(self, snr_list: list, min_noises: int, max_noises: int, noise_dir: str):
         self.snr_list = snr_list
-        if not any([i == 0 for i in self.snr_list]):
-            self.snr_list.append(0)
+        if not any([i < 0 for i in self.snr_list]):
+            self.snr_list.append(-1)
         self.min_noises = min_noises
         self.max_noises = max_noises
         self.noises = glob.glob(os.path.join(noise_dir, "**", "*.wav"), recursive=True)
