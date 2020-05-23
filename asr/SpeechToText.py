@@ -5,6 +5,7 @@ import gc
 import sys
 import time
 import pathlib
+import math
 import tensorflow as tf
 
 from models.CTCModel import create_ctc_model, ctc_loss, ctc_loss_1, create_ctc_train_model
@@ -40,7 +41,7 @@ class SpeechToText:
         self.ckpt_manager = tf.train.CheckpointManager(self.ckpt, self.configs["checkpoint_dir"], max_to_keep=None)
 
     @tf.function
-    def train(self, model, dataset, optimizer, loss, num_classes, epoch, num_epochs):
+    def train(self, model, dataset, optimizer, loss, num_classes, epoch, num_epochs, total_steps):
         for step, [features, input_length, label, label_length] in dataset.enumerate(start=1):
             start = time.time()
             with tf.GradientTape() as tape:
@@ -52,7 +53,8 @@ class SpeechToText:
             optimizer.apply_gradients(zip(gradients, model.trainable_variables))
 
             sys.stdout.write("\033[K")
-            tf.print("\rEpoch: ", epoch, "/", num_epochs, ", step: ", step,
+            tf.print("\rEpoch: ", epoch, "/", num_epochs,
+                     ", step: ", step, "/", total_steps,
                      ", duration: ", int(time.time() - start), "s",
                      ", train_loss = ", train_loss,
                      sep="", end="", output_stream=sys.stdout)
@@ -146,6 +148,7 @@ class SpeechToText:
             loss = ctc_loss_1
 
         epochs = self.configs["num_epochs"]
+        steps = math.ceil(train_dataset.samples / self.configs["batch_size"])
 
         for epoch in range(initial_epoch, epochs, 1):
             epoch_eval_loss = None
@@ -153,7 +156,7 @@ class SpeechToText:
             start = time.time()
 
             self.train(self.model, tf_train_dataset, self.optimizer, loss,
-                       self.text_featurizer.num_classes, epoch, epochs)
+                       self.text_featurizer.num_classes, epoch, epochs, steps)
 
             print(f"\nEnd training on epoch = {epoch}")
 
