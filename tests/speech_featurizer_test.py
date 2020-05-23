@@ -1,11 +1,12 @@
 from __future__ import absolute_import, print_function
-import matplotlib.pyplot as plt
-from augmentations.Augments import FreqMasking
-from featurizers.SpeechFeaturizer import read_raw_audio, speech_feature_extraction, compute_time_dim
 
 import os.path as o
 import sys
 sys.path.append(o.abspath(o.join(o.dirname(sys.modules[__name__].__file__), "..")))
+
+import matplotlib.pyplot as plt
+from augmentations.Augments import FreqMasking, TimeWarping
+from featurizers.SpeechFeaturizer import read_raw_audio, speech_feature_extraction, compute_time_dim
 
 
 def main(argv):
@@ -29,8 +30,8 @@ def main(argv):
     # signal = signal[:speech_conf["sample_rate"]]
     print(len(signal))
     ft = speech_feature_extraction(signal, speech_conf)
-    # au = FreqMasking()
-    # ft[:, :, 0] = au(ft[:, :, 0])
+    au = FreqMasking()
+    ft = au(ft)
     print(compute_time_dim(speech_conf, 1))
     print(ft.shape[0])
 
@@ -38,7 +39,7 @@ def main(argv):
 
     plt.figure(figsize=(15, 5))
     for i in range(4):
-        plt.subplot(2, 2, i+1)
+        plt.subplot(2, 2, i + 1)
         plt.imshow(ft[:, :, i].T, origin="lower")
         plt.title(ftypes[i])
         plt.colorbar()

@@ -130,7 +130,7 @@ class Dataset:
 
         for augment in augments:
             if augment.is_post:
-                features[:, :, 0] = augment(features[:, :, 0])
+                features = augment(features)
 
         label = text_featurizer.compute_label_features(transcript.numpy().decode("utf-8"))
         label_length = tf.cast(tf.shape(label)[0], tf.int32)
