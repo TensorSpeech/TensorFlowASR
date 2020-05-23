@@ -27,7 +27,7 @@ def _bytestring_feature(list_of_bytestrings):
 
 def to_tfrecord(audio, transcript):
     feature = {
-        "audio":      _bytestring_feature([audio]),
+        "audio": _bytestring_feature([audio]),
         "transcript": _bytestring_feature([transcript])
     }
     return tf.train.Example(features=tf.train.Features(feature=feature))
@@ -37,6 +37,7 @@ class Dataset:
     def __init__(self, data_path, mode="train"):
         self.data_path = data_path
         self.mode = mode
+        self.samples = 0
 
     def __call__(self, speech_conf, text_featurizer, batch_size=32, augmentations=(),
                  sortagrad=False, builtin=False, fext=True, tfrecords_dir=None):
@@ -77,13 +78,13 @@ class Dataset:
     def write_tfrecord_file(splitted_entries):
         shard_path, entries = splitted_entries
         with tf.io.TFRecordWriter(shard_path, options='ZLIB') as out:
-            for audio_file, _, transcript in entries:
+            for idx, (audio_file, _, transcript) in enumerate(entries, 1):
                 with open(audio_file, "rb") as f:
                     audio = f.read()
                 example = to_tfrecord(audio, bytes(transcript, "utf-8"))
                 out.write(example.SerializeToString())
                 sys.stdout.write("\033[K")
-                print(f"\rProcessed: {audio_file}", end="")
+                print(f"\rProcessed {idx}/{len(entries)}: {audio_file}", end="")
         print(f"\nCreated {shard_path}")
 
     def create_tfrecords(self, tfrecords_dir, sortagrad=False):
@@ -114,6 +115,7 @@ class Dataset:
         if sort:
             lines.sort(key=lambda item: float(item[1]))
         lines = np.array(lines)
+        self.samples = len(lines)
         return lines
 
     @staticmethod
@@ -149,7 +151,7 @@ class Dataset:
 
     def parse_from_tfrecord(self, record, speech_conf, text_featurizer, augments, builtin=False, fext=True):
         feature_description = {
-            "audio":      tf.io.FixedLenFeature([], tf.string),
+            "audio": tf.io.FixedLenFeature([], tf.string),
             "transcript": tf.io.FixedLenFeature([], tf.string)
         }
         example = tf.io.parse_single_example(record, feature_description)
