@@ -37,6 +37,8 @@ vocabulary_file_path = "/mnt/Projects/asrk16/vnasr/data/vocabulary.txt"
 
 last_activation = 'linear'
 
+sortagrad = False
+
 speech_conf = {
     "sample_rate": 16000,
     "frame_ms": 25,
