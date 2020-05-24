@@ -4,6 +4,7 @@ import os
 import sys
 import functools
 import glob
+import random
 import multiprocessing
 import numpy as np
 import tensorflow as tf
@@ -78,13 +79,13 @@ class Dataset:
     def write_tfrecord_file(splitted_entries):
         shard_path, entries = splitted_entries
         with tf.io.TFRecordWriter(shard_path, options='ZLIB') as out:
-            for idx, (audio_file, _, transcript) in enumerate(entries, 1):
+            for audio_file, _, transcript in entries:
                 with open(audio_file, "rb") as f:
                     audio = f.read()
                 example = to_tfrecord(audio, bytes(transcript, "utf-8"))
                 out.write(example.SerializeToString())
                 sys.stdout.write("\033[K")
-                print(f"\rProcessed {idx}/{len(entries)}: {audio_file}", end="")
+                print(f"\rProcessed: {audio_file}", end="")
         print(f"\nCreated {shard_path}")
 
     def create_tfrecords(self, tfrecords_dir, sortagrad=False):
@@ -116,6 +117,8 @@ class Dataset:
         lines = [line.split("\t", 2) for line in lines]
         if sort:
             lines.sort(key=lambda item: float(item[1]))
+        else:
+            random.shuffle(lines)
         lines = np.array(lines)
         self.samples = len(lines)
         return lines
