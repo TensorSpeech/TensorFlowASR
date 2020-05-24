@@ -1,6 +1,7 @@
 from __future__ import absolute_import
 
 import codecs
+import unicodedata
 import tensorflow as tf
 
 
@@ -32,10 +33,11 @@ class TextFeaturizer:
 
     def compute_label_features(self, text):
         # Convert string to a list of integers
-        tokens = list(text.strip().lower())
+        text = unicodedata.normalize("NFC", text.lower())
+        tokens = list(text.strip())
         new_tokens = []
         for tok in tokens:
-            if tok not in ":,\".;<>/\\!~-?+=[]{}()`":
+            if tok in self.vocab_array:
                 new_tokens.append(tok)
         tokens = new_tokens
         feats = [self.token_to_index[token] for token in tokens]
