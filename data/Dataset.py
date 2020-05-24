@@ -90,6 +90,8 @@ class Dataset:
     def create_tfrecords(self, tfrecords_dir, sortagrad=False):
         print(f"Creating {self.mode}.tfrecord ...")
         self.tfrecords_dir = tfrecords_dir
+        if not os.path.exists(self.tfrecords_dir):
+            os.makedirs(self.tfrecords_dir)
         if glob.glob(os.path.join(tfrecords_dir, f"{self.mode}*.tfrecord")):
             return
         entries = self.create_entries(sortagrad)
