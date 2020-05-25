@@ -1,4 +1,4 @@
-tf-nightly
+tensorflow
 numpy
 nltk
 pandas
