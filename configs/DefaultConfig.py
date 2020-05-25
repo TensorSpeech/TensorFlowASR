@@ -1,12 +1,12 @@
 from __future__ import absolute_import
 
 from models.deepspeech2.DeepSpeech2 import DeepSpeech2
-from augmentations.Augments import Noise, TimeStretch
+from augmentations.Augments import Noise, TimeStretch, TimeMasking, FreqMasking, TimeWarping
 
 base_model = DeepSpeech2(rnn_conf={
     "rnn_type": "lstm",
-    "rnn_layers": 3,
-    "rnn_bidirectional": False,
+    "rnn_layers": 5,
+    "rnn_bidirectional": True,
     "rnn_rowconv": False,
     "rnn_dropout": 0.2,
     "rnn_rowconv_context": 2,
@@ -25,8 +25,11 @@ decoder = {
 }
 
 augmentations = [
-    Noise(snr_list=[5, 10, 15], min_noises=1, max_noises=3, noise_dir="/mnt/Data/ML/ASR/Preprocessed/Noises"),
-    TimeStretch(min_ratio=0.5, max_ratio=2.0)
+    Noise(snr_list=[0, 5, 10, 15], max_noises=3, noise_dir="/mnt/Data/ML/ASR/Preprocessed/Noises"),
+    TimeStretch(min_ratio=0.5, max_ratio=2.0),
+    TimeMasking(),
+    FreqMasking(),
+    # TimeWarping()
 ]
 
 batch_size = 8
@@ -43,31 +46,31 @@ speech_conf = {
     "sample_rate": 16000,
     "frame_ms": 25,
     "stride_ms": 10,
-    "num_feature_bins": 40,
-    "feature_type": "mfcc",
+    "num_feature_bins": 80,
+    "feature_type": "logfbank",
     "pre_emph": 0.97,
     "delta": True,
     "delta_delta": True,
     "normalize_signal": True,
     "normalize_feature": True,
     "norm_per_feature": False,
-    "pitch": True
+    "pitch": False
 }
 
 train_data_transcript_paths = [
-    "/mnt/Data/ML/ASR/Preprocessed/VLSP/train_transcripts.tsv"
+    "/mnt/Data/ML/ASR/Preprocessed/Vivos/train/transcripts.tsv"
 ]
 
 eval_data_transcript_paths = [
-    "/mnt/Data/ML/ASR/Preprocessed/VLSP/dev_transcripts.tsv"
+    # "/mnt/Data/ML/ASR/Preprocessed/VLSP/dev_transcripts.tsv"
 ]
 
 test_data_transcript_paths = [
-    "/mnt/Data/ML/ASR/Preprocessed/VLSP/test_transcripts.tsv"
+    "/mnt/Data/ML/ASR/Preprocessed/Vivos/test/transcripts.tsv"
 ]
 
-tfrecords_dir = "/mnt/Data/ML/ASR/Preprocessed/VLSP/TFRecords"
+tfrecords_dir = "/mnt/Data/ML/ASR/Preprocessed/Vivos/TFRecords"
 
-checkpoint_dir = "/mnt/Projects/asrk16/trained/vlsp_local/ckpts/"
+checkpoint_dir = "/mnt/Projects/asrk16/trained/local/vivos/ckpts/"
 
-log_dir = "/mnt/Projects/asrk16/trained/vlsp_local/logs/"
+log_dir = "/mnt/Projects/asrk16/trained/local/vivos/logs/"

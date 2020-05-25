@@ -30,7 +30,7 @@ def main(argv):
     # signal = signal[:speech_conf["sample_rate"]]
     print(len(signal))
     ft = speech_feature_extraction(signal, speech_conf)
-    au = FreqMasking()
+    au = TimeWarping()
     ft = au(ft)
     print(compute_time_dim(speech_conf, 1))
     print(ft.shape[0])
