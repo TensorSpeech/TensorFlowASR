@@ -127,7 +127,7 @@ class SEGAN:
                 g_adv_loss.append(gen_adv_loss)
                 d_loss.append(disc_loss)
                 sys.stdout.write("\033[K")
-                print(f"\rEpoch: {epoch + 1}/{epochs}, step: {step}/{self.steps.numpy()}, "
+                print(f"\rEpoch: {epoch + 1}/{epochs}, step: {step}/{self.steps.numpy() / (epoch + 1)}, "
                       f"duration: {(time.time() - substart):.2f}s, "
                       f"gen_l1_loss = {gen_l1_loss}, gen_adv_loss = {gen_adv_loss}, "
                       f"disc_loss = {disc_loss}", end="")
