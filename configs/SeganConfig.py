@@ -27,8 +27,7 @@ sample_rate = 16000
 stride = 0.5
 
 noise_conf = {
-    "snr": (0, 5, 10, 15),
-    "min_noises": 1,
+    "snr": (-1, 0, 5, 10, 15),
     "max_noises": 3
 }
 
