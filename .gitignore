@@ -8,6 +8,8 @@ __pycache__
 venv
 trained
 .env
+.env.production
+.env.development
 # Created by https://www.gitignore.io/api/pycharm+all
 # Edit at https://www.gitignore.io/?templates=pycharm+all
 
