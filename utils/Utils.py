@@ -50,8 +50,8 @@ def check_key_in_dict(dictionary, keys):
 
 def preprocess_paths(paths):
     if isinstance(paths, list):
-        return list(map(os.path.abspath, paths))
-    return os.path.abspath(paths)
+        return [os.path.abspath(os.path.expanduser(path)) for path in paths]
+    return os.path.abspath(os.path.expanduser(paths))
 
 
 def get_asr_config(config_path):
