@@ -127,13 +127,15 @@ class Dataset:
     def preprocess(audio, transcript, speech_conf, text_featurizer, augments):
         signal = read_raw_audio(audio.numpy(), speech_conf["sample_rate"])
 
-        for augment in augments:
+        chosen_augments = np.random.choice(augments, np.random.randint(0, len(augments) + 1))
+
+        for augment in chosen_augments:
             if not augment.is_post:
                 signal = augment(signal=signal, sample_rate=speech_conf["sample_rate"])
 
         features = speech_feature_extraction(signal, speech_conf)
 
-        for augment in augments:
+        for augment in chosen_augments:
             if augment.is_post:
                 features = augment(features)
 

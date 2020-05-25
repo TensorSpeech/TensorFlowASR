@@ -121,7 +121,7 @@ class SpeechToText:
                                          speech_conf=self.configs["speech_conf"],
                                          batch_size=self.configs["batch_size"],
                                          augmentations=augmentations, sortagrad=False,
-                                         builtin=False, fext=True, tfrecords_dir=None)
+                                         builtin=False, fext=True, tfrecords_dir=self.configs["tfrecords_dir"])
 
         tf_eval_dataset = None
 
@@ -131,7 +131,7 @@ class SpeechToText:
                                            speech_conf=self.configs["speech_conf"],
                                            batch_size=self.configs["batch_size"],
                                            sortagrad=False, builtin=False, fext=True,
-                                           tfrecords_dir=None)
+                                           tfrecords_dir=self.configs["tfrecords_dir"])
 
         self.model.summary()
 
