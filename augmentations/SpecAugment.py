@@ -15,8 +15,9 @@ def freq_masking(spectrogram: np.ndarray, num_freq_mask: int = 1,
     :param freq_mask_param: parameter F of frequency masking, default 10
     :return: a tensor that's applied freq masking
     """
-    assert 0 <= freq_mask_param <= spectrogram.shape[1], \
-        "0 <= freq_mask_param <= num_feature_bins"
+    freq_mask_param = freq_mask_param \
+        if 0 <= freq_mask_param <= spectrogram.shape[1] \
+        else spectrogram.shape[1]
     for _ in range(num_freq_mask):
         freq = np.random.randint(0, freq_mask_param + 1)
         freq0 = np.random.randint(0, spectrogram.shape[1] - freq)
@@ -37,6 +38,9 @@ def time_masking(spectrogram: np.ndarray, num_time_mask: int = 1,
     :return: a tensor that's applied time masking
     """
     assert 0.0 <= p_upperbound <= 1.0, "0.0 <= p_upperbound <= 1.0"
+    time_mask_param = time_mask_param \
+        if 0 <= time_mask_param <= spectrogram.shape[0] \
+        else spectrogram.shape[0]
     for _ in range(num_time_mask):
         time = np.random.randint(0, time_mask_param + 1)
         if time > p_upperbound * spectrogram.shape[0]:
@@ -46,30 +50,38 @@ def time_masking(spectrogram: np.ndarray, num_time_mask: int = 1,
     return spectrogram
 
 
-def time_warping(spectrogram: np.ndarray, time_warp_param=None) -> np.ndarray:
+def time_warping(spectrogram: np.ndarray, time_warp_param: int = 50) -> np.ndarray:
     """
     Warping the spectrogram as image with 2 point along the middle
     horizontal line with a distance to the left or right
     :param spectrogram: shape (time_steps, num_feature_bins, 1)
     :param time_warp_param: parameter W of time warping, default 50
-    :param direction: "left" or "right", default "right"
     :return: a tensor that's applied time warping
     """
-    # Expand to shape (1, time_steps, num_feature_bins, 1)
+    time_warp_param = time_warp_param \
+        if 0 <= time_warp_param <= spectrogram.shape[0] \
+        else spectrogram.shape[0]
+    vertical = int(spectrogram.shape[1])
+    # Choose a random source point
+    a = time_warp_param
+    b = spectrogram.shape[0] - time_warp_param
+    if a > b:
+        a, b = b, a
+    h_source_point = np.random.randint(a, b)
+    distance = int(np.random.uniform(0.0, time_warp_param + 1.0))
+    direction = np.random.randint(1, 3)
+    # Choose a random destination point
+    h_dest_point = h_source_point + distance if direction == 1 else h_source_point - distance
+    h_dest_point = 0 if h_dest_point < 0 else spectrogram.shape[0] if h_dest_point > spectrogram.shape[0] else h_dest_point
+    if h_source_point == h_dest_point:
+        return spectrogram
+    # Expand to shape (1, time_steps, num_feature_bins, channels)
     spectrogram = tf.expand_dims(spectrogram, axis=0)
     spectrogram = tf.cast(spectrogram, dtype=tf.float32)
-    time_warp_param = time_warp_param if time_warp_param else spectrogram.shape[1]
-    assert 0 <= time_warp_param <= spectrogram.shape[1], \
-        "time_warp_param >= 0 and must not exceed time steps"
-    vertical = int(spectrogram.shape[2] / 2)
-    # Choose a random source point
-    h_source_point = np.random.randint(0, time_warp_param)
-    # Choose a random destination point
-    h_dest_point = np.random.randint(0, spectrogram.shape[1])
     # Convert to tensor with dtype=float32 to avoid TypeError
-    source_control_point_locations = tf.constant([[[h_source_point, vertical]]],
+    source_control_point_locations = tf.constant([[[h_source_point, vertical], [h_source_point, 0], [h_source_point, vertical // 2]]],
                                                  dtype=tf.float32)
-    dest_control_point_locations = tf.constant([[[h_dest_point, vertical]]],
+    dest_control_point_locations = tf.constant([[[h_dest_point, vertical], [h_dest_point, 0], [h_dest_point, vertical // 2]]],
                                                dtype=tf.float32)
     spectrogram, _ = tfa.image.sparse_image_warp(
         image=spectrogram,

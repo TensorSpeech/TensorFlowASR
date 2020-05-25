@@ -130,7 +130,8 @@ class SpeechToText:
             tf_eval_dataset = eval_dataset(text_featurizer=self.text_featurizer,
                                            speech_conf=self.configs["speech_conf"],
                                            batch_size=self.configs["batch_size"],
-                                           sortagrad=False, builtin=False, fext=True, tfrecords_dir=None)
+                                           sortagrad=False, builtin=False, fext=True,
+                                           tfrecords_dir=None)
 
         self.model.summary()
 

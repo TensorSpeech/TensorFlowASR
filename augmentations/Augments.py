@@ -11,35 +11,50 @@ from augmentations.NoiseAugment import add_noise, add_white_noise, add_realworld
 
 
 class Augmentation:
-    def __init__(self, func, is_post=True, **kwargs):
+    def __init__(self, func, is_post=True):
         self.func = func
         # Whether postaugmentation or preaugmentation of feature extraction
         self.is_post = is_post
-        self.kwargs = kwargs
 
     def __call__(self, *args, **kwargs):
-        if self.kwargs:
-            return self.func(*args, **self.kwargs)
         return self.func(*args, **kwargs)
 
 
 class FreqMasking(Augmentation):
-    def __init__(self, **kwargs):
-        super(FreqMasking, self).__init__(func=freq_masking, is_post=True, **kwargs)
+    def __init__(self, num_freq_mask: int = 1, freq_mask_param: int = 10):
+        self.num_freq_mask = num_freq_mask
+        self.freq_mask_param = freq_mask_param
+        super(FreqMasking, self).__init__(
+            func=functools.partial(freq_masking, num_freq_mask=self.num_freq_mask,
+                                   freq_mask_param=self.freq_mask_param),
+            is_post=True
+        )
 
 
 class TimeMasking(Augmentation):
-    def __init__(self, **kwargs):
-        super(TimeMasking, self).__init__(func=time_masking, is_post=True, **kwargs)
+    def __init__(self, num_time_mask: int = 1, time_mask_param: int = 50,
+                 p_upperbound: float = 1.0):
+        self.num_time_mask = num_time_mask
+        self.time_mask_param = time_mask_param
+        self.p_upperbound = p_upperbound
+        super(TimeMasking, self).__init__(
+            func=functools.partial(time_masking, num_time_mask=self.num_time_mask,
+                                   time_mask_param=self.time_mask_param, p_upperbound=self.p_upperbound),
+            is_post=True
+        )
 
 
 class TimeWarping(Augmentation):
-    def __init__(self, **kwargs):
-        super(TimeWarping, self).__init__(func=time_warping, is_post=True, **kwargs)
+    def __init__(self, time_warp_param: int = 50):
+        self.time_warp_param = time_warp_param
+        super(TimeWarping, self).__init__(
+            func=functools.partial(time_warping, time_warp_param=self.time_warp_param),
+            is_post=True
+        )
 
 
 class Noise(Augmentation):
-    def __init__(self, snr_list: list, max_noises: int, noise_dir: str):
+    def __init__(self, noise_dir: str, snr_list: list = (0, 5, 10, 15), max_noises: int = 3):
         self.snr_list = snr_list
         if not any([i < 0 for i in self.snr_list]):
             self.snr_list.append(-1)
@@ -53,7 +68,7 @@ class Noise(Augmentation):
 
 
 class WhiteNoise(Augmentation):
-    def __init__(self, snr_list: list):
+    def __init__(self, snr_list: list = (0, 5, 10, 15)):
         self.snr_list = snr_list
         if not any([i < 0 for i in self.snr_list]):
             self.snr_list.append(-1)
@@ -64,7 +79,7 @@ class WhiteNoise(Augmentation):
 
 
 class RealWorldNoise(Augmentation):
-    def __init__(self, snr_list: list, max_noises: int, noise_dir: str):
+    def __init__(self, noise_dir: str, snr_list: list = (0, 5, 10, 15), max_noises: int = 3):
         self.snr_list = snr_list
         if not any([i < 0 for i in self.snr_list]):
             self.snr_list.append(-1)
@@ -77,7 +92,7 @@ class RealWorldNoise(Augmentation):
 
 
 class TimeStretch(Augmentation):
-    def __init__(self, min_ratio: float = 1.0, max_ratio: float = 1.0):
+    def __init__(self, min_ratio: float = 0.5, max_ratio: float = 2.0):
         self.min_ratio = min_ratio
         self.max_ratio = max_ratio
         super(TimeStretch, self).__init__(func=self.func, is_post=False)
