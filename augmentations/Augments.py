@@ -55,7 +55,7 @@ class TimeWarping(Augmentation):
 
 class Noise(Augmentation):
     def __init__(self, noise_dir: str, snr_list: list = (0, 5, 10, 15), max_noises: int = 3):
-        self.snr_list = snr_list
+        self.snr_list = list(snr_list)
         if not any([i < 0 for i in self.snr_list]):
             self.snr_list.append(-1)
         self.max_noises = max_noises
@@ -69,7 +69,7 @@ class Noise(Augmentation):
 
 class WhiteNoise(Augmentation):
     def __init__(self, snr_list: list = (0, 5, 10, 15)):
-        self.snr_list = snr_list
+        self.snr_list = list(snr_list)
         if not any([i < 0 for i in self.snr_list]):
             self.snr_list.append(-1)
         super(WhiteNoise, self).__init__(
@@ -80,7 +80,7 @@ class WhiteNoise(Augmentation):
 
 class RealWorldNoise(Augmentation):
     def __init__(self, noise_dir: str, snr_list: list = (0, 5, 10, 15), max_noises: int = 3):
-        self.snr_list = snr_list
+        self.snr_list = list(snr_list)
         if not any([i < 0 for i in self.snr_list]):
             self.snr_list.append(-1)
         self.max_noises = max_noises
