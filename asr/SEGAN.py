@@ -43,13 +43,16 @@ class SEGAN:
             self.discriminator_optimizer = tf.keras.optimizers.RMSprop(
                 self.configs["d_learning_rate"])
 
-            self.writer = tf.summary.create_file_writer(os.path.join(self.configs["log_dir"]))
+            self.writer = tf.summary.create_file_writer(self.configs["log_dir"])
+
+            self.steps = tf.Variable(initial_value=0, trainable=False, shape=(), dtype=tf.int64)
 
             self.checkpoint = tf.train.Checkpoint(
                 generator=self.generator,
                 discriminator=self.discriminator,
                 generator_optimizer=self.generator_optimizer,
-                discriminator_optimizer=self.discriminator_optimizer
+                discriminator_optimizer=self.discriminator_optimizer,
+                steps=self.steps
             )
             self.ckpt_manager = tf.train.CheckpointManager(
                 self.checkpoint, self.configs["checkpoint_dir"], max_to_keep=5)
@@ -105,11 +108,8 @@ class SEGAN:
                                                              self.discriminator.trainable_variables))
             return _gen_l1_loss, _gen_adv_loss, _disc_loss
 
-        num_batch = None
-
         for epoch in range(initial_epoch, epochs):
             start = time.time()
-            batch_idx = 1
             g_l1_loss = []
             g_adv_loss = []
             d_loss = []
@@ -120,30 +120,28 @@ class SEGAN:
                     self.noise_std = 0.
                     self.deactivated_noise = True
 
-            for clean_wav, noisy_wav in tf_train_dataset:
+            for step, (clean_wav, noisy_wav) in tf_train_dataset.enumerate(start=0):
                 substart = time.time()
                 gen_l1_loss, gen_adv_loss, disc_loss = train_step(clean_wav, noisy_wav)
                 g_l1_loss.append(gen_l1_loss)
                 g_adv_loss.append(gen_adv_loss)
                 d_loss.append(disc_loss)
                 sys.stdout.write("\033[K")
-                print(f"\rEpoch: {epoch + 1}/{epochs}, batch: {batch_idx}/{num_batch}, "
-                      f"duration: {time.time() - substart}, "
+                print(f"\rEpoch: {epoch + 1}/{epochs}, step: {step}/{self.steps.numpy()}, "
+                      f"duration: {(time.time() - substart):.2f}s, "
                       f"gen_l1_loss = {gen_l1_loss}, gen_adv_loss = {gen_adv_loss}, "
                       f"disc_loss = {disc_loss}", end="")
-                batch_idx += 1
+                if self.writer and step % 500 == 0:
+                    with self.writer.as_default():
+                        tf.summary.scalar("g_l1_loss", tf.reduce_mean(g_l1_loss), step=(self.steps + step))
+                        tf.summary.scalar("g_adv_loss", tf.reduce_mean(g_adv_loss), step=(self.steps + step))
+                        tf.summary.scalar("d_loss", tf.reduce_mean(d_loss), step=(self.steps + step))
 
-            num_batch = batch_idx
+            self.steps.assign((epoch + 1) * (step + 1))
 
             self.ckpt_manager.save()
             print(f"\nSaved checkpoint at epoch {epoch + 1}", flush=True)
             print(f"Time for epoch {epoch + 1} is {time.time() - start} secs")
-
-            with self.writer.as_default():
-                tf.summary.scalar("g_l1_loss", tf.reduce_mean(g_l1_loss), step=epoch)
-                tf.summary.scalar("g_adv_loss", tf.reduce_mean(g_adv_loss), step=epoch)
-                tf.summary.scalar("d_loss", tf.reduce_mean(d_loss), step=epoch)
-                self.writer.flush()
 
         if export_dir:
             self.save(export_dir)

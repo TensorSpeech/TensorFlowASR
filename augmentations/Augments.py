@@ -39,17 +39,15 @@ class TimeWarping(Augmentation):
 
 
 class Noise(Augmentation):
-    def __init__(self, snr_list: list, min_noises: int, max_noises: int, noise_dir: str):
+    def __init__(self, snr_list: list, max_noises: int, noise_dir: str):
         self.snr_list = snr_list
-        if not any([i == 0 for i in self.snr_list]):
-            self.snr_list.append(0)
-        self.min_noises = min_noises
+        if not any([i < 0 for i in self.snr_list]):
+            self.snr_list.append(-1)
         self.max_noises = max_noises
         self.noises = glob.glob(os.path.join(noise_dir, "**", "*.wav"), recursive=True)
         self.noises.append("white_noise")
         super(Noise, self).__init__(
-            func=functools.partial(add_noise, snr_list=self.snr_list, min_noises=self.min_noises,
-                                   max_noises=self.max_noises, noises=self.noises),
+            func=functools.partial(add_noise, snr_list=self.snr_list, max_noises=self.max_noises, noises=self.noises),
             is_post=False
         )
 
@@ -66,16 +64,14 @@ class WhiteNoise(Augmentation):
 
 
 class RealWorldNoise(Augmentation):
-    def __init__(self, snr_list: list, min_noises: int, max_noises: int, noise_dir: str):
+    def __init__(self, snr_list: list, max_noises: int, noise_dir: str):
         self.snr_list = snr_list
         if not any([i < 0 for i in self.snr_list]):
             self.snr_list.append(-1)
-        self.min_noises = min_noises
         self.max_noises = max_noises
         self.noises = glob.glob(os.path.join(noise_dir, "**", "*.wav"), recursive=True)
         super(RealWorldNoise, self).__init__(
-            func=functools.partial(add_realworld_noise, snr_list=self.snr_list, min_noises=self.min_noises,
-                                   max_noises=self.max_noises, noises=self.noises),
+            func=functools.partial(add_realworld_noise, snr_list=self.snr_list, max_noises=self.max_noises, noises=self.noises),
             is_post=False
         )
 

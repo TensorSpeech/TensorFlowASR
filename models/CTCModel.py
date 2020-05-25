@@ -1,23 +1,8 @@
 from __future__ import absolute_import
 
 import tensorflow as tf
-from utils.Utils import get_length, mask_nan
+from utils.Utils import mask_nan
 from featurizers.SpeechFeaturizer import compute_feature_dim
-
-
-class GetLength(tf.keras.layers.Layer):
-    def __init__(self, name, **kwargs):
-        super(GetLength, self).__init__(name=name, trainable=False, **kwargs)
-
-    def call(self, inputs, **kwargs):
-        return get_length(inputs)
-
-    def get_config(self):
-        config = super(GetLength, self).get_config()
-        return config
-
-    def from_config(self, config):
-        return self(**config)
 
 
 def create_ctc_model(base_model, num_classes, speech_conf, last_activation='linear',

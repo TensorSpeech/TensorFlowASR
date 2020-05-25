@@ -33,36 +33,41 @@ class SpeechToText:
         self.writer = None
 
     def _create_checkpoints(self, model):
+        self.steps = tf.Variable(initial_value=0, trainable=False, shape=(), dtype=tf.int64)
         if not self.configs["checkpoint_dir"]:
             raise ValueError("Must set checkpoint_dir")
         if not os.path.exists(self.configs["checkpoint_dir"]):
             os.makedirs(self.configs["checkpoint_dir"])
-        self.ckpt = tf.train.Checkpoint(model=model, optimizer=self.optimizer)
+        self.ckpt = tf.train.Checkpoint(model=model, optimizer=self.optimizer, steps=self.steps)
         self.ckpt_manager = tf.train.CheckpointManager(self.ckpt, self.configs["checkpoint_dir"], max_to_keep=None)
 
     @tf.function
-    def train(self, model, dataset, optimizer, loss, num_classes, epoch, num_epochs, total_steps):
-        for step, [features, input_length, label, label_length] in dataset.enumerate(start=1):
+    def train(self, dataset, loss, epoch, num_epochs):
+        losses = []
+        step = tf.zeros(shape=(), dtype=tf.int64)
+        for step, [features, input_length, label, label_length] in dataset.enumerate(start=0):
             start = time.time()
             with tf.GradientTape() as tape:
                 y_pred = self.model(features, training=True)
                 train_loss = loss(y_true=label, y_pred=y_pred,
                                   input_length=input_length, label_length=label_length,
-                                  num_classes=num_classes)
-            gradients = tape.gradient(train_loss, model.trainable_variables)
-            optimizer.apply_gradients(zip(gradients, model.trainable_variables))
+                                  num_classes=self.text_featurizer.num_classes)
+                losses.append(train_loss)
+            gradients = tape.gradient(train_loss, self.model.trainable_variables)
+            self.optimizer.apply_gradients(zip(gradients, self.model.trainable_variables))
 
             sys.stdout.write("\033[K")
-            tf.print("\rEpoch: ", epoch, "/", num_epochs,
-                     ", step: ", step, "/", total_steps,
+            tf.print("\rEpoch: ", epoch + 1, "/", num_epochs,
+                     ", step: ", step + 1, "/", self.steps / (epoch + 1),
                      ", duration: ", int(time.time() - start), "s",
                      ", train_loss = ", train_loss,
                      sep="", end="", output_stream=sys.stdout)
 
-            if self.writer and (epoch * num_epochs + step) % 500 == 0:
+            if self.writer and (self.steps + step) % 500 == 0:
                 with self.writer.as_default():
-                    tf.summary.scalar("train_loss", train_loss, step=(epoch * num_epochs + step))
+                    tf.summary.scalar("train_loss", tf.reduce_mean(losses), step=(self.steps + step))
             gc.collect()
+        self.steps.assign((epoch + 1) * (step + 1))
 
     def validate(self, model, decoder, dataset, loss, num_classes, last_activation):
         eval_loss_count = 0
@@ -148,15 +153,13 @@ class SpeechToText:
             loss = ctc_loss_1
 
         epochs = self.configs["num_epochs"]
-        steps = math.ceil(train_dataset.samples / self.configs["batch_size"])
 
         for epoch in range(initial_epoch, epochs, 1):
             epoch_eval_loss = None
             epoch_eval_wer = None
             start = time.time()
 
-            self.train(self.model, tf_train_dataset, self.optimizer, loss,
-                       self.text_featurizer.num_classes, epoch, epochs, steps)
+            self.train(tf_train_dataset, loss, epoch, epochs)
 
             print(f"\nEnd training on epoch = {epoch}")
 
@@ -180,6 +183,7 @@ class SpeechToText:
                         tf.summary.scalar("eval_loss", epoch_eval_loss, step=epoch)
                         tf.summary.scalar("eval_wer", epoch_eval_wer, step=epoch)
                     tf.summary.scalar("epoch_time", time_epoch, step=epoch)
+                self.writer.flush()
 
         if model_file:
             self.save_model(model_file)

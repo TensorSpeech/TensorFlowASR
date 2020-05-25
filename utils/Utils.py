@@ -7,46 +7,39 @@ import tensorflow as tf
 from nltk.metrics import distance
 from configs import DefaultConfig, SeganConfig
 
-asr_conf_required = ["base_model",
-                     "decoder",
-                     "batch_size",
-                     "num_epochs",
-                     "vocabulary_file_path",
-                     "last_activation",
-                     "speech_conf",
-                     "streaming_size"]
+asr_conf_required = [
+    "base_model", "decoder",
+    "vocabulary_file_path", "last_activation",
+    "speech_conf", "streaming_size"
+]
 
-asr_conf_paths = ["train_data_transcript_paths",
-                  "test_data_transcript_paths",
-                  "eval_data_transcript_paths",
-                  "vocabulary_file_path",
-                  "checkpoint_dir",
-                  "tfrecords_dir",
-                  "log_dir"]
+asr_conf_paths = [
+    "train_data_transcript_paths",
+    "test_data_transcript_paths",
+    "eval_data_transcript_paths",
+    "vocabulary_file_path",
+    "checkpoint_dir",
+    "tfrecords_dir",
+    "log_dir"
+]
 
-segan_conf_required = ["batch_size",
-                       "num_epochs",
-                       "kwidth",
-                       "ratio",
-                       "noise_std",
-                       "denoise_epoch",
-                       "noise_decay",
-                       "noise_std_lbound",
-                       "l1_lambda",
-                       "pre_emph",
-                       "window_size",
-                       "sample_rate",
-                       "stride",
-                       "noise_conf",
-                       "g_learning_rate",
-                       "d_learning_rate"]
+segan_conf_required = [
+    "kwidth", "ratio",
+    "noise_std", "denoise_epoch",
+    "noise_decay", "noise_std_lbound",
+    "l1_lambda", "pre_emph",
+    "window_size", "sample_rate",
+    "stride", "noise_conf"
+]
 
-segan_conf_paths = ["clean_train_data_dir",
-                    "noisy_train_data_dir",
-                    "clean_test_data_dir",
-                    "noisy_test_data_dir",
-                    "checkpoint_dir",
-                    "log_dir"]
+segan_conf_paths = [
+    "clean_train_data_dir",
+    "noisy_train_data_dir",
+    "clean_test_data_dir",
+    "noisy_test_data_dir",
+    "checkpoint_dir",
+    "log_dir"
+]
 
 
 def check_key_in_dict(dictionary, keys):
@@ -148,15 +141,8 @@ def mask_nan(x):
     return y
 
 
-def bytes_to_string(array, encoding: str = "utf-8"):
+def bytes_to_string(array: np.ndarray, encoding: str = "utf-8"):
     return [transcript.decode(encoding) for transcript in array]
-
-
-def get_length(batch_data):
-    def map_fn(elem):
-        return tf.shape(elem)[0]
-
-    return tf.map_fn(map_fn, batch_data, dtype=tf.int32)
 
 
 def slice_signal(signal, window_size, stride=0.5):
