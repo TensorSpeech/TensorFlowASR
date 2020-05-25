@@ -2,6 +2,10 @@
 
 VASR and SEGAN Implementation in Tensorflow Keras.
 
+## !Important
+
+This code is NOT applied for distributed training YET.
+
 ## Dataset for Vietnamese
 
 Collected from many sources:
