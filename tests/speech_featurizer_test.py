@@ -5,7 +5,7 @@ import sys
 sys.path.append(o.abspath(o.join(o.dirname(sys.modules[__name__].__file__), "..")))
 
 import matplotlib.pyplot as plt
-from augmentations.Augments import FreqMasking, TimeWarping
+from augmentations.Augments import FreqMasking, TimeWarping, WhiteNoise, RealWorldNoise
 from featurizers.SpeechFeaturizer import read_raw_audio, speech_feature_extraction, compute_time_dim
 
 
@@ -29,9 +29,9 @@ def main(argv):
     signal = read_raw_audio(speech_file, speech_conf["sample_rate"])
     # signal = signal[:speech_conf["sample_rate"]]
     print(len(signal))
+    au = RealWorldNoise(snr_list=[0], max_noises=3, noise_dir="/mnt/Data/ML/ASR/Preprocessed/Noises")
+    signal = au(signal=signal, sample_rate=16000)
     ft = speech_feature_extraction(signal, speech_conf)
-    au = TimeWarping()
-    ft = au(ft)
     print(compute_time_dim(speech_conf, 1))
     print(ft.shape[0])
 

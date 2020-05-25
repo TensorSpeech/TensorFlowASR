@@ -39,7 +39,7 @@ def get_noise_from_sound(signal: np.ndarray, noise: np.ndarray, snr=10):
     return noise
 
 
-def add_noise(signal: np.ndarray, noises: list, snr_list: list, max_noises: int, sample_rate=16000, **kwargs):
+def add_noise(signal: np.ndarray, noises: list, snr_list: list, max_noises: int, sample_rate=16000, *args, **kwargs):
     num_noises = random.randint(0, max_noises)
     if len(noises) < num_noises:
         num_noises = len(noises)
@@ -60,7 +60,7 @@ def add_noise(signal: np.ndarray, noises: list, snr_list: list, max_noises: int,
     return signal
 
 
-def add_white_noise(signal: np.ndarray, snr_list: list, **kwargs):
+def add_white_noise(signal: np.ndarray, snr_list: list, *args, **kwargs):
     snr = random.choice(snr_list)
     noise = get_white_noise(signal, snr)
     if noise is not None:
@@ -68,7 +68,7 @@ def add_white_noise(signal: np.ndarray, snr_list: list, **kwargs):
     return signal
 
 
-def add_realworld_noise(signal: np.ndarray, noises: list, snr_list: list, max_noises: int, sample_rate=16000, **kwargs):
+def add_realworld_noise(signal: np.ndarray, noises: list, snr_list: list, max_noises: int, sample_rate=16000, *args, **kwargs):
     num_noises = random.randint(0, max_noises)
     if len(noises) < num_noises:
         num_noises = len(noises)
