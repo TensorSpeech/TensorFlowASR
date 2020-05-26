@@ -29,7 +29,7 @@ augmentations = [
     TimeStretch(min_ratio=0.5, max_ratio=2.0),
     TimeMasking(),
     FreqMasking(),
-    # TimeWarping()
+    TimeWarping()
 ]
 
 batch_size = 8
