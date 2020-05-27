@@ -83,12 +83,15 @@ def time_warping(spectrogram: np.ndarray, time_warp_param: int = 50) -> np.ndarr
                                                  dtype=tf.float32)
     dest_control_point_locations = tf.constant([[[h_dest_point, vertical], [h_dest_point, 0], [h_dest_point, vertical // 2]]],
                                                dtype=tf.float32)
-    spectrogram, _ = tfa.image.sparse_image_warp(
-        image=spectrogram,
-        source_control_point_locations=source_control_point_locations,
-        dest_control_point_locations=dest_control_point_locations,
-        interpolation_order=2,
-        num_boundary_points=1
-    )
+    try:
+        spectrogram, _ = tfa.image.sparse_image_warp(
+            image=spectrogram,
+            source_control_point_locations=source_control_point_locations,
+            dest_control_point_locations=dest_control_point_locations,
+            interpolation_order=2,
+            num_boundary_points=1
+        )
+    except Exception:
+        pass
     spectrogram = tf.squeeze(spectrogram, axis=0)
     return spectrogram.numpy()
