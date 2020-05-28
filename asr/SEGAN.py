@@ -163,15 +163,39 @@ class SEGAN:
         pesq_noisy, csig_noisy, cbak_noisy, covl_noisy, ssnr_noisy = 0
         pesq_gen, csig_gen, cbak_gen, covl_gen, ssnr_gen = 0
 
+        try:
+            from semetrics.main import pesq, composite, ssnr
+            import soundfile as sf
+        except ImportError as e:
+            print(e)
+            print("Please install https://github.com/usimarit/semetrics")
+            return
+
+        sr = self.configs["sample_rate"]
+
+        def save_to_tmp(clean_signal, gen_signal, noisy_signal):
+            sf.write("/tmp/clean_signal.wav", clean_signal, sr)
+            sf.write("/tmp/gen_signal.wav", gen_signal, sr)
+            sf.write("/tmp/noisy_signal.wav", noisy_signal, sr)
+
         for step, [clean_wav, noisy_wav] in tf_test_dataset.enumerate(start=1):
             gen_wav = self.generate(noisy_wav)
-            clean_wav = clean_wav.numpy()
-            noisy_wav = noisy_wav.numpy()
-            pesq_gen += pesq(clean_wav, gen_wav); pesq_noisy += pesq(clean_wav, noisy_wav)
-            csig_gen += csig(clean_wav, gen_wav); csig_noisy += csig(clean_wav, noisy_wav)
-            cbak_gen += cbak(clean_wav, gen_wav); cbak_noisy += cbak(clean_wav, noisy_wav)
-            covl_gen += covl(clean_wav, gen_wav); covl_noisy += covl(clean_wav, noisy_wav)
-            ssnr_gen += ssnr(clean_wav, gen_wav); ssnr_noisy += ssnr(clean_wav, noisy_wav)
+            clean_wav = clean_wav.numpy(); noisy_wav = noisy_wav.numpy()
+            save_to_tmp(clean_wav, gen_wav, noisy_wav)
+
+            pesq_gen += pesq(sr, "/tmp/clean_signal.wav", "/tmp/gen_signal.wav")
+            pesq_gen += pesq(sr, "/tmp/clean_signal.wav", "/tmp/noisy_signal.wav")
+
+            _csig_gen, _cbak_gen, _covl_gen = composite("/tmp/clean_signal.wav", "/tmp/gen_signal.wav")
+            csig_gen += _csig_gen; cbak_gen += _cbak_gen; covl_gen += _covl_gen
+            _csig_noisy, _cbak_noisy, _covl_noisy = composite("/tmp/clean_signal.wav", "/tmp/noisy_signal.wav")
+            csig_noisy += _csig_noisy; cbak_noisy += _cbak_noisy; covl_noisy += _covl_noisy
+
+            ssnr_gen += ssnr("/tmp/clean_signal.wav", "/tmp/gen_signal.wav", sr)
+            ssnr_noisy += ssnr("/tmp/clean_signal.wav", "/tmp/noisy_signal.wav", sr)
+
+            print(f"\rPESQ = {pesq_gen / step}, CSIG = {csig_gen / step}, "
+                  "CBAK = {cbak_gen / step}, COVL = {covl_gen / step}, SSNR = {ssnr_gen / step}", end="")
             print(f"\rPESQ = {pesq_gen / step}, CSIG = {csig_gen / step}, "
                   "CBAK = {cbak_gen / step}, COVL = {covl_gen / step}, SSNR = {ssnr_gen / step}", end="")
 

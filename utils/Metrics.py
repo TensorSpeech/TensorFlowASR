@@ -43,23 +43,3 @@ def mywer(decode, target):
 
 def cer(decode, target):
     return distance.edit_distance(decode, target), len(target)
-
-
-def pesq(clean_signal: np.ndarray, enhanced_signal: np.ndarray):
-    pass
-
-
-def csig(clean_signal: np.ndarray, enhanced_signal: np.ndarray):
-    pass
-
-
-def cbak(clean_signal: np.ndarray, enhanced_signal: np.ndarray):
-    pass
-
-
-def covl(clean_signal: np.ndarray, enhanced_signal: np.ndarray):
-    pass
-
-
-def ssnr(clean_signal: np.ndarray, enhanced_signal: np.ndarray):
-    pass

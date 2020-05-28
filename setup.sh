@@ -30,4 +30,6 @@ python setup.py install
 
 cd ../..
 
+git clone https://github.com/usimarit/semetrics
+
 
