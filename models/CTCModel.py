@@ -34,7 +34,7 @@ def create_ctc_train_model(ctc_model, num_classes, name="ctc_train_model"):
     label = tf.keras.Input(shape=(None,), dtype=tf.int32, name="label")
 
     ctc_loss = tf.keras.layers.Lambda(
-        ctc_loss_keras, output_shape=(1,),
+        ctc_loss_keras, output_shape=(1,), arguments={"num_classes": num_classes},
         name="ctc_loss")([ctc_model.outputs[0], input_length, label, label_length])
 
     return tf.keras.Model(inputs=(ctc_model.inputs, input_length, label, label_length),
