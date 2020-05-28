@@ -57,15 +57,17 @@ def main():
 
     if args.mode == "train":
         tf.random.set_seed(2020)
+        segan = SEGAN(config_path=args.config, training=True)
     else:
         tf.random.set_seed(0)
+        segan = SEGAN(config_path=args.config, training=False)
 
-    segan = SEGAN(config_path=args.config, training=True)
     if args.mode == "train":
         assert args.export_file
         segan.train(export_dir=args.export_file)
     elif args.mode == "test":
-        segan.test()
+        assert args.export_file and args.output_file_path
+        segan.test(args.export_file, args.output_file_path)
     elif args.mode == "save_from_checkpoint":
         assert args.export_file
         segan.save_from_checkpoint(args.export_file)

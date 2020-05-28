@@ -6,7 +6,7 @@ import random
 from featurizers.SpeechFeaturizer import read_raw_audio
 
 
-def get_white_noise(signal: np.ndarray, snr=10):
+def get_white_noise(signal: np.ndarray, snr: float = 10):
     if snr < 0:
         return None
     RMS_s = math.sqrt(np.mean(signal ** 2))
@@ -21,7 +21,7 @@ def get_white_noise(signal: np.ndarray, snr=10):
     return noise
 
 
-def get_noise_from_sound(signal: np.ndarray, noise: np.ndarray, snr=10):
+def get_noise_from_sound(signal: np.ndarray, noise: np.ndarray, snr: float = 10):
     if len(noise) < len(signal) or snr < 0:
         return None
 

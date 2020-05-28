@@ -8,6 +8,7 @@ import tensorflow as tf
 from models.segan.Discriminator import create_discriminator, discriminator_loss
 from models.segan.Generator import create_generator, generator_loss
 from utils.Utils import get_segan_config, slice_signal, merge_slices
+from utils.Metrics import pesq, csig, cbak, covl, ssnr
 from featurizers.SpeechFeaturizer import deemphasis, preemphasis
 from data.SeganDataset import SeganDataset
 
@@ -62,7 +63,7 @@ class SEGAN:
 
     def train(self, export_dir=None):
         train_dataset = SeganDataset(clean_data_dir=self.configs["clean_train_data_dir"],
-                                     noisy_data_dir=self.configs["noisy_train_data_dir"],
+                                     noises_dir=self.configs["noises_dir"],
                                      noise=self.configs["noise_conf"],
                                      window_size=self.window_size, stride=self.stride)
 
@@ -146,44 +147,43 @@ class SEGAN:
         if export_dir:
             self.save(export_dir)
 
-    def test(self):
+    def test(self, export_dir: str, output_file_dir: str):
         test_dataset = SeganDataset(clean_data_dir=self.configs["clean_test_data_dir"],
-                                    noisy_data_dir=self.configs["noisy_test_data_dir"],
-                                    window_size=self.window_size, stride=self.stride)
+                                    noises_dir=self.configs["noises_dir"],
+                                    noise=self.configs["noise_conf"],
+                                    window_size=self.window_size, stride=1)
 
-        tf_test_dataset = test_dataset.create(self.configs["batch_size"])
+        tf_test_dataset = test_dataset.create_test(coeff=self.coeff, sample_rate=self.configs["sample_rate"])
 
-        if self.ckpt_manager.latest_checkpoint:
-            # restoring the latest checkpoint in checkpoint_path
-            self.checkpoint.restore(self.ckpt_manager.latest_checkpoint)
-        else:
-            raise ValueError("Model is not trained")
-
-        @tf.function
-        def test_step(clean_wavs, noisy_wavs):
-            g_clean_wavs = self.generator(noisy_wavs, training=False)
-
-            d_real_logit = self.discriminator(clean_wavs, noisy_wavs, training=False)
-            d_fake_logit = self.discriminator(g_clean_wavs, noisy_wavs, training=False)
-
-            _gen_loss = self.generator.loss(y_true=clean_wavs,
-                                            y_pred=g_clean_wavs,
-                                            l1_lambda=self.l1_lambda,
-                                            d_fake_logit=d_fake_logit)
-
-            _disc_loss = self.discriminator.loss(d_real_logit, d_fake_logit)
-            # Evaluation methods
-            return _gen_loss, _disc_loss
+        msg = self.load_model(export_dir)
+        if msg: raise Exception(msg)
 
         start = time.time()
-        batch_idx = 0
 
-        for clean_wav, noisy_wav in tf_test_dataset:
-            gen_loss, disc_loss = test_step(clean_wav, noisy_wav)
-            print(f"batch: {batch_idx}, gen_loss = {gen_loss}, disc_loss = {disc_loss}")
-            batch_idx += 1
+        pesq_noisy, csig_noisy, cbak_noisy, covl_noisy, ssnr_noisy = 0
+        pesq_gen, csig_gen, cbak_gen, covl_gen, ssnr_gen = 0
 
-        print(f"Time for testing is {time.time() - start} secs")
+        for step, [clean_wav, noisy_wav] in tf_test_dataset.enumerate(start=1):
+            gen_wav = self.generate(noisy_wav)
+            clean_wav = clean_wav.numpy()
+            noisy_wav = noisy_wav.numpy()
+            pesq_gen += pesq(clean_wav, gen_wav); pesq_noisy += pesq(clean_wav, noisy_wav)
+            csig_gen += csig(clean_wav, gen_wav); csig_noisy += csig(clean_wav, noisy_wav)
+            cbak_gen += cbak(clean_wav, gen_wav); cbak_noisy += cbak(clean_wav, noisy_wav)
+            covl_gen += covl(clean_wav, gen_wav); covl_noisy += covl(clean_wav, noisy_wav)
+            ssnr_gen += ssnr(clean_wav, gen_wav); ssnr_noisy += ssnr(clean_wav, noisy_wav)
+            print(f"\rPESQ = {pesq_gen / step}, CSIG = {csig_gen / step}, "
+                  "CBAK = {cbak_gen / step}, COVL = {covl_gen / step}, SSNR = {ssnr_gen / step}", end="")
+
+        with open(output_file_dir, "w", encoding="utf-8") as fo:
+            fo.write(f"PESQ_GEN = {(pesq_gen / step):.2f}, CSIG_GEN = {(csig_gen / step):.2f}, "
+                     f"CBAK_GEN = {(cbak_gen / step):.2f}, COVL_GEN = {(covl_gen / step):.2f}, "
+                     f"SSNR_GEN = {(ssnr_gen / step):.2f}\n")
+            fo.write(f"PESQ_NOISY = {(pesq_noisy / step):.2f}, CSIG_NOISY = {(csig_noisy / step):.2f}, "
+                     f"CBAK_NOISY = {(cbak_noisy / step):.2f}, COVL_NOISY = {(covl_noisy / step):.2f}, "
+                     f"SSNR_NOISY = {(ssnr_noisy / step):.2f}\n")
+
+        print(f"\nTime for testing is {time.time() - start} secs")
 
     def save_from_checkpoint(self, export_dir):
         if self.ckpt_manager.latest_checkpoint:

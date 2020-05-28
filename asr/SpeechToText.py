@@ -11,7 +11,8 @@ import tensorflow as tf
 from models.CTCModel import create_ctc_model, ctc_loss, ctc_loss_1, create_ctc_train_model
 from decoders.CTCDecoders import create_ctc_decoder
 from featurizers.TextFeaturizer import TextFeaturizer
-from utils.Utils import get_asr_config, check_key_in_dict, bytes_to_string, wer, cer
+from utils.Utils import get_asr_config, check_key_in_dict, bytes_to_string
+from utils.Metrics import wer, cer
 from featurizers.SpeechFeaturizer import speech_feature_extraction, compute_feature_dim, compute_time_dim
 from utils.Checkpoint import Checkpoint
 from utils.TimeHistory import TimeHistory

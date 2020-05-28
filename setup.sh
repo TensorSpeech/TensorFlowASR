@@ -1,5 +1,8 @@
 #!/usr/bin/env sh
 
+sudo apt install libboost-all-dev swig sox
+sudo snap install octave
+
 pip install -r requirements.txt
 
 git clone https://github.com/huylenguyen806/beamsearch_with_lm.git

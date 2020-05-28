@@ -14,6 +14,13 @@ Collected from many sources:
 2. InfoRe: 25hrs Single Person + ~415hrs from [facebook](https://www.facebook.com/groups/j2team.community/permalink/1010834009248719/)
 3. VLSP: ~415hrs (the same as InfoRe 415hrs)
 
+## Requirements
+
+1. Ubuntu or Debian distribution
+2. Snapd: ```sudo apt install snapd```
+3. Libraries: ```sudo apt install libboost-all-dev swig sox```
+4. Octave: ```sudo snap install octave```
+
 ## Featurizers
 
 ### Speech Features

@@ -27,9 +27,11 @@ sample_rate = 16000
 stride = 0.5
 
 noise_conf = {
-    "snr": (-1, 0, 5, 10, 15),
+    "snr": (-1, 2.5, 7.5, 12.5, 17.5),
     "max_noises": 3
 }
+
+noises_dir = "/mnt/Data/ML/ASR/Preprocessed/Noises"
 
 g_learning_rate = 0.0002
 
@@ -37,12 +39,7 @@ d_learning_rate = 0.0002
 
 clean_train_data_dir = "/mnt/Data/ML/ASR/Preprocessed/VivosClean"
 
-# noisy_train_data_dir = "/mnt/Data/ML/SEGAN/noisy_trainset_wav_16k"
-noisy_train_data_dir = "/mnt/Data/ML/ASR/Preprocessed/Noises"
-
-clean_test_data_dir = "/mnt/Data/ML/SEGAN/"
-
-noisy_test_data_dir = "/mnt/Data/ML/SEGAN/"
+clean_test_data_dir = "/mnt/Data/ML/ASR/Preprocessed/VLSP/test_transcripts.tsv"
 
 checkpoint_dir = "/mnt/Projects/asrk16/trained/segan/ckpts/"
 
