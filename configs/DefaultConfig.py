@@ -3,16 +3,21 @@ from __future__ import absolute_import
 from models.deepspeech2.DeepSpeech2 import DeepSpeech2
 from augmentations.Augments import Noise, TimeStretch, TimeMasking, FreqMasking, TimeWarping
 
-base_model = DeepSpeech2(rnn_conf={
-    "rnn_type": "lstm",
-    "rnn_layers": 5,
-    "rnn_bidirectional": True,
-    "rnn_rowconv": False,
-    "rnn_dropout": 0.2,
-    "rnn_rowconv_context": 2,
-    "rnn_units": 512,
-    "rnn_activation": "tanh"
-})
+base_model = DeepSpeech2(
+    rnn_conf={
+        "rnn_type": "lstm",
+        "rnn_layers": 5,
+        "rnn_bidirectional": True,
+        "rnn_rowconv": False,
+        "rnn_dropout": 0.2,
+        "rnn_rowconv_context": 2,
+        "rnn_units": 512,
+        "rnn_activation": "tanh"
+    },
+    fc_conf={
+        "fc_units": None
+    }
+)
 
 streaming_size = None
 
@@ -37,8 +42,6 @@ batch_size = 8
 num_epochs = 10
 
 vocabulary_file_path = "/mnt/Projects/asrk16/vnasr/data/vocabulary.txt"
-
-last_activation = 'linear'
 
 sortagrad = False
 

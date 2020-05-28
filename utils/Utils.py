@@ -8,7 +8,7 @@ from configs import DefaultConfig, SeganConfig
 
 asr_conf_required = [
     "base_model", "decoder",
-    "vocabulary_file_path", "last_activation",
+    "vocabulary_file_path",
     "speech_conf", "streaming_size"
 ]
 

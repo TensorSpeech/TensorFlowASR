@@ -8,7 +8,7 @@ import pathlib
 import math
 import tensorflow as tf
 
-from models.CTCModel import create_ctc_model, ctc_loss, ctc_loss_1, create_ctc_train_model
+from models.CTCModel import create_ctc_model, ctc_loss, create_ctc_train_model
 from decoders.CTCDecoders import create_ctc_decoder
 from featurizers.TextFeaturizer import TextFeaturizer
 from utils.Utils import get_asr_config, check_key_in_dict, bytes_to_string
@@ -26,7 +26,6 @@ class SpeechToText:
         self.decoder = create_ctc_decoder(decoder_config=self.configs["decoder"],
                                           text_featurizer=self.text_featurizer)
         self.model, self.optimizer = create_ctc_model(num_classes=self.text_featurizer.num_classes,
-                                                      last_activation=self.configs["last_activation"],
                                                       base_model=self.configs["base_model"],
                                                       streaming_size=self.configs["streaming_size"],
                                                       speech_conf=self.configs["speech_conf"])
@@ -149,11 +148,6 @@ class SpeechToText:
                 f.write(self.model.to_json())
             self.writer = tf.summary.create_file_writer(os.path.join(self.configs["log_dir"], "train"))
 
-        if self.configs["last_activation"] != "softmax":
-            loss = ctc_loss
-        else:
-            loss = ctc_loss_1
-
         epochs = self.configs["num_epochs"]
 
         for epoch in range(initial_epoch, epochs, 1):
@@ -161,7 +155,7 @@ class SpeechToText:
             epoch_eval_wer = None
             start = time.time()
 
-            self.train(tf_train_dataset, loss, epoch, epochs)
+            self.train(tf_train_dataset, ctc_loss, epoch, epochs)
 
             print(f"\nEnd training on epoch = {epoch}")
 
@@ -171,7 +165,7 @@ class SpeechToText:
             if tf_eval_dataset:
                 print("Validating ... ")
                 epoch_eval_loss, epoch_eval_wer = self.validate(
-                    self.model, self.decoder, tf_eval_dataset, loss,
+                    self.model, self.decoder, tf_eval_dataset, ctc_loss,
                     self.text_featurizer.num_classes, self.configs["last_activation"]
                 )
                 print(f"Average_val_loss = {epoch_eval_loss}, val_wer = {epoch_eval_wer}")
@@ -220,8 +214,7 @@ class SpeechToText:
                                            sortagrad=False, builtin=True, fext=True,
                                            tfrecords_dir=self.configs["tfrecords_dir"])
 
-        train_model = create_ctc_train_model(self.model, last_activation=self.configs["last_activation"],
-                                             num_classes=self.text_featurizer.num_classes)
+        train_model = create_ctc_train_model(self.model, num_classes=self.text_featurizer.num_classes)
         self._create_checkpoints(train_model)
 
         self.model.summary()

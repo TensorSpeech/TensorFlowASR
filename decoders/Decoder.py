@@ -40,11 +40,9 @@ class Decoder:
 
         return tf.convert_to_tensor(map_cvrt(decoded), dtype=tf.int32)
 
-    def __call__(self, probs, input_length, last_activation="linear"):
-        if last_activation not in ["softmax"]:
-            probs = tf.nn.softmax(probs)
-        return tf.py_function(self.decode, inp=[probs, input_length],
-                              Tout=tf.string)
+    def __call__(self, probs, input_length):
+        probs = tf.nn.softmax(probs)
+        return tf.py_function(self.decode, inp=[probs, input_length], Tout=tf.string)
 
     def decode(self, probs, input_length):
         pass

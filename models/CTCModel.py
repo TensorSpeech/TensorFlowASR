@@ -5,8 +5,7 @@ from utils.Utils import mask_nan
 from featurizers.SpeechFeaturizer import compute_feature_dim
 
 
-def create_ctc_model(base_model, num_classes, speech_conf, last_activation='linear',
-                     streaming_size=None, name="ctc_model"):
+def create_ctc_model(base_model, num_classes, speech_conf, streaming_size=None, name="ctc_model"):
     feature_dim, channel_dim = compute_feature_dim(speech_conf)
     if streaming_size:
         # Fixed input shape is required for live streaming audio
@@ -22,41 +21,24 @@ def create_ctc_model(base_model, num_classes, speech_conf, last_activation='line
 
     # Fully connected layer
     outputs = tf.keras.layers.TimeDistributed(
-        tf.keras.layers.Dense(units=num_classes, activation=last_activation,
+        tf.keras.layers.Dense(units=num_classes, activation="linear",
                               use_bias=True), name="fully_connected")(outputs)
 
     model = tf.keras.Model(inputs=features, outputs=outputs, name=name)
     return model, base_model.optimizer
 
 
-def create_ctc_train_model(ctc_model, last_activation, num_classes, name="ctc_train_model"):
+def create_ctc_train_model(ctc_model, num_classes, name="ctc_train_model"):
     input_length = tf.keras.Input(shape=(), dtype=tf.int32, name="input_length")
     label_length = tf.keras.Input(shape=(), dtype=tf.int32, name="label_length")
     label = tf.keras.Input(shape=(None,), dtype=tf.int32, name="label")
 
-    if last_activation != "softmax":
-        ctc_loss = tf.keras.layers.Lambda(
-            ctc_loss_keras_2, arguments={"num_classes": num_classes},
-            output_shape=(1,), name="ctc_loss")([ctc_model.outputs[0], input_length, label, label_length])
-    else:
-        ctc_loss = tf.keras.layers.Lambda(
-            ctc_loss_keras, output_shape=(1,),
-            name="ctc_loss")([ctc_model.outputs[0], input_length, label, label_length])
+    ctc_loss = tf.keras.layers.Lambda(
+        ctc_loss_keras, output_shape=(1,),
+        name="ctc_loss")([ctc_model.outputs[0], input_length, label, label_length])
 
-    return tf.keras.Model(
-        inputs=(ctc_model.inputs, input_length, label, label_length),
-        outputs=ctc_loss, name=name)
-
-
-@tf.function
-def ctc_loss_1(y_true, y_pred, input_length, label_length, **kwargs):
-    loss = tf.keras.backend.ctc_batch_cost(
-        y_pred=y_pred,
-        input_length=tf.expand_dims(input_length, -1),
-        y_true=tf.cast(y_true, tf.int32),
-        label_length=tf.expand_dims(label_length, -1)
-    )
-    return tf.reduce_mean(mask_nan(loss))
+    return tf.keras.Model(inputs=(ctc_model.inputs, input_length, label, label_length),
+                          outputs=ctc_loss, name=name)
 
 
 @tf.function
@@ -69,22 +51,11 @@ def ctc_loss(y_true, y_pred, input_length, label_length, num_classes, **kwargs):
         logits_time_major=False,
         blank_index=num_classes - 1
     )
-    return tf.reduce_mean(mask_nan(loss))
+    return tf.reduce_mean(loss)
 
 
 @tf.function
 def ctc_loss_keras(layer, **kwargs):
-    y_pred, input_length, y_true, label_length = layer
-    loss = tf.keras.backend.ctc_batch_cost(
-        y_pred=y_pred,
-        input_length=tf.expand_dims(input_length, -1),
-        y_true=y_true,
-        label_length=tf.expand_dims(label_length, -1))
-    return tf.reduce_mean(mask_nan(loss))
-
-
-@tf.function
-def ctc_loss_keras_2(layer, **kwargs):
     num_classes = kwargs["num_classes"]
     y_pred, input_length, y_true, label_length = layer
     loss = tf.nn.ctc_loss(
@@ -93,5 +64,6 @@ def ctc_loss_keras_2(layer, **kwargs):
         logits=y_pred,
         label_length=label_length,
         logits_time_major=False,
-        blank_index=num_classes - 1)
-    return tf.reduce_mean(mask_nan(loss))
+        blank_index=num_classes - 1
+    )
+    return tf.reduce_mean(loss)
