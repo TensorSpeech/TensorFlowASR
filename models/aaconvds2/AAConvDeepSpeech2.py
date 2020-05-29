@@ -8,10 +8,10 @@ from models.deepspeech2.SequenceBatchNorm import SequenceBatchNorm
 DEFAULT_CONV = {
     "kernels": ((11, 41), (11, 21), (11, 21)),
     "fout": (32, 32, 96),
-    "attn_heads": 8,
+    "Nh": 8,
     "k": 2,  # dk = fout * k
-    "v": 0.2,  # dv = fout * v,
-    "relative": True,
+    "v": 0.25,  # dv = fout * v,
+    "relative": False,
     "max_pool": (2, 2)
 }
 
@@ -46,7 +46,7 @@ class AAConvDeepSpeech2:
         self.conv_conf = append_default_keys_dict(DEFAULT_CONV, conv_conf)
         self.rnn_conf = append_default_keys_dict(DEFAULT_RNN, rnn_conf)
         self.fc_conf = append_default_keys_dict(DEFAULT_FC, fc_conf)
-        assert len(conv_conf["conv_filters"]) == len(conv_conf["conv_kernels"])
+        assert len(conv_conf["fout"]) == len(conv_conf["kernels"])
         assert rnn_conf["rnn_type"] in ["lstm", "gru", "rnn"]
         assert rnn_conf["rnn_dropout"] >= 0.0
 

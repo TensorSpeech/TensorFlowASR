@@ -3,6 +3,7 @@ from __future__ import absolute_import
 import tensorflow as tf
 
 
+@tf.function
 def shape_list(x):
     """Return list of dims, statically where possible."""
     static = x.get_shape().as_list()
@@ -14,6 +15,7 @@ def shape_list(x):
     return ret
 
 
+@tf.function
 def split_heads_2d(inputs, Nh):
     """Split channels into multiple heads."""
     B, H, W, d = shape_list(inputs)
@@ -22,6 +24,7 @@ def split_heads_2d(inputs, Nh):
     return tf.transpose(split, [0, 3, 1, 2, 4])
 
 
+@tf.function
 def combine_heads_2d(inputs):
     """Combine heads (inverse of split heads 2d)."""
     transposed = tf.transpose(inputs, [0, 2, 3, 1, 4])
@@ -30,6 +33,7 @@ def combine_heads_2d(inputs):
     return tf.reshape(transposed, ret_shape)
 
 
+@tf.function
 def rel_to_abs(x):
     """Converts tensor from relative to aboslute indexing."""
     # [B, Nh, L, 2L−1]
@@ -46,6 +50,7 @@ def rel_to_abs(x):
     return final_x
 
 
+@tf.function
 def relative_logits_1d(q, rel_k, H, W, Nh, transpose_mask):
     """Compute relative logits along one dimenion."""
     rel_logits = tf.einsum('bhxyd,md->bhxym', q, rel_k)
@@ -62,18 +67,28 @@ def relative_logits_1d(q, rel_k, H, W, Nh, transpose_mask):
     return rel_logits
 
 
-def relative_logits(q, H, W, Nh, dkh):
-    """Compute relative logits."""
-    # Relative logits in width dimension first.
-    rel_embeddings_w = tf.get_variable('r_width', shape=(2 * W - 1, dkh), initializer=tf.random_normal_initializer(dkh**-0.5))
-    # [B, Nh, HW, HW]
-    rel_logits_w = relative_logits_1d(q, rel_embeddings_w, H, W, Nh, [0, 1, 2, 4, 3, 5])
-    # Relative logits in height dimension next.
-    # For ease, we 1) transpose height and width,
-    # 2) repeat the above steps and
-    # 3) transpose to eventually put the logits
-    # in their right positions.
-    rel_embeddings_h = tf.get_variable('r_height', shape=(2 * H - 1, dkh), initializer=tf.random_normal_initializer(dkh**-0.5))
-    # [B, Nh, HW, HW]
-    rel_logits_h = relative_logits_1d(tf.transpose(q, [0, 1, 3, 2, 4]), rel_embeddings_h, W, H, Nh, [0, 1, 4, 2, 5, 3])
-    return rel_logits_h, rel_logits_w
+class relative_logits(tf.Module):
+    def __init__(self, H, W, Nh, dkh, name="relative_logits"):
+        super(relative_logits, self).__init__(name=name)
+        self.H = H; self.W = W; self.Nh = Nh; self.dkh = dkh
+        # Relative logits in width dimension first.
+        self.rel_embeddings_w = tf.Variable(name='r_width',
+                                            initial_value=tf.random.normal(shape=(2 * W - 1, dkh),
+                                                                           mean=dkh**-0.5))
+        # Relative logits in height dimension next.
+        self.rel_embeddings_h = tf.Variable(name='r_height',
+                                            initial_value=tf.random.normal(shape=(2 * H - 1, dkh),
+                                                                           mean=dkh**-0.5))
+
+    def __call__(self, q):
+        """Compute relative logits."""
+        # [B, Nh, HW, HW]
+        rel_logits_w = relative_logits_1d(q, self.rel_embeddings_w, self.H, self.W, self.Nh, [0, 1, 2, 4, 3, 5])
+        # For ease, we 1) transpose height and width,
+        # 2) repeat the above steps and
+        # 3) transpose to eventually put the logits
+        # in their right positions.
+        # [B, Nh, HW, HW]
+        rel_logits_h = relative_logits_1d(tf.transpose(q, [0, 1, 3, 2, 4]),
+                                          self.rel_embeddings_h, self.W, self.H, self.Nh, [0, 1, 4, 2, 5, 3])
+        return rel_logits_h, rel_logits_w
