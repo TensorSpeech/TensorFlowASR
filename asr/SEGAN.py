@@ -8,7 +8,6 @@ import tensorflow as tf
 from models.segan.Discriminator import create_discriminator, discriminator_loss
 from models.segan.Generator import create_generator, generator_loss
 from utils.Utils import get_segan_config, slice_signal, merge_slices
-from utils.Metrics import pesq, csig, cbak, covl, ssnr
 from featurizers.SpeechFeaturizer import deemphasis, preemphasis
 from data.SeganDataset import SeganDataset
 
@@ -64,7 +63,7 @@ class SEGAN:
     def train(self, export_dir=None):
         train_dataset = SeganDataset(clean_data_dir=self.configs["clean_train_data_dir"],
                                      noises_dir=self.configs["noises_dir"],
-                                     noise=self.configs["noise_conf"],
+                                     noise_conf=self.configs["noise_conf"],
                                      window_size=self.window_size, stride=self.stride)
 
         tf_train_dataset = train_dataset.create(self.configs["batch_size"], coeff=self.coeff,
@@ -150,21 +149,21 @@ class SEGAN:
     def test(self, export_dir: str, output_file_dir: str):
         test_dataset = SeganDataset(clean_data_dir=self.configs["clean_test_data_dir"],
                                     noises_dir=self.configs["noises_dir"],
-                                    noise=self.configs["noise_conf"],
+                                    noise_conf=self.configs["noise_conf"],
                                     window_size=self.window_size, stride=1)
 
-        tf_test_dataset = test_dataset.create_test(coeff=self.coeff, sample_rate=self.configs["sample_rate"])
+        tf_test_dataset = test_dataset.create_test(sample_rate=self.configs["sample_rate"])
 
         msg = self.load_model(export_dir)
         if msg: raise Exception(msg)
 
         start = time.time()
 
-        pesq_noisy, csig_noisy, cbak_noisy, covl_noisy, ssnr_noisy = 0
-        pesq_gen, csig_gen, cbak_gen, covl_gen, ssnr_gen = 0
+        pesq_noisy = csig_noisy = cbak_noisy = covl_noisy = ssnr_noisy = 0
+        pesq_gen = csig_gen = cbak_gen = covl_gen = ssnr_gen = 0
 
         try:
-            from semetrics.main import pesq, composite, ssnr
+            from semetrics.main import pesq_mos as pesq, composite
             import soundfile as sf
         except ImportError as e:
             print(e)
@@ -179,25 +178,22 @@ class SEGAN:
             sf.write("/tmp/noisy_signal.wav", noisy_signal, sr)
 
         for step, [clean_wav, noisy_wav] in tf_test_dataset.enumerate(start=1):
+            step = float(step)
             gen_wav = self.generate(noisy_wav)
             clean_wav = clean_wav.numpy(); noisy_wav = noisy_wav.numpy()
             save_to_tmp(clean_wav, gen_wav, noisy_wav)
 
-            pesq_gen += pesq(sr, "/tmp/clean_signal.wav", "/tmp/gen_signal.wav")
-            pesq_gen += pesq(sr, "/tmp/clean_signal.wav", "/tmp/noisy_signal.wav")
+            pesq_gen += pesq("/tmp/clean_signal.wav", "/tmp/gen_signal.wav")
+            pesq_gen += pesq("/tmp/clean_signal.wav", "/tmp/noisy_signal.wav")
 
-            _csig_gen, _cbak_gen, _covl_gen = composite("/tmp/clean_signal.wav", "/tmp/gen_signal.wav")
-            csig_gen += _csig_gen; cbak_gen += _cbak_gen; covl_gen += _covl_gen
-            _csig_noisy, _cbak_noisy, _covl_noisy = composite("/tmp/clean_signal.wav", "/tmp/noisy_signal.wav")
-            csig_noisy += _csig_noisy; cbak_noisy += _cbak_noisy; covl_noisy += _covl_noisy
+            _csig_gen, _cbak_gen, _covl_gen, _ssnr_gen = composite("/tmp/clean_signal.wav", "/tmp/gen_signal.wav")
+            csig_gen += _csig_gen; cbak_gen += _cbak_gen; covl_gen += _covl_gen; ssnr_gen += _ssnr_gen
+            _csig_noisy, _cbak_noisy, _covl_noisy, _ssnr_noisy = composite("/tmp/clean_signal.wav", "/tmp/noisy_signal.wav")
+            csig_noisy += _csig_noisy; cbak_noisy += _cbak_noisy; covl_noisy += _covl_noisy; ssnr_noisy += _ssnr_noisy
 
-            ssnr_gen += ssnr("/tmp/clean_signal.wav", "/tmp/gen_signal.wav", sr)
-            ssnr_noisy += ssnr("/tmp/clean_signal.wav", "/tmp/noisy_signal.wav", sr)
-
-            print(f"\rPESQ = {pesq_gen / step}, CSIG = {csig_gen / step}, "
-                  "CBAK = {cbak_gen / step}, COVL = {covl_gen / step}, SSNR = {ssnr_gen / step}", end="")
-            print(f"\rPESQ = {pesq_gen / step}, CSIG = {csig_gen / step}, "
-                  "CBAK = {cbak_gen / step}, COVL = {covl_gen / step}, SSNR = {ssnr_gen / step}", end="")
+            print(f"\rPESQ_GEN = {(pesq_gen / step):.2f}, CSIG_GEN = {(csig_gen / step):.2f}, "
+                  f"CBAK_GEN = {(cbak_gen / step):.2f}, COVL_GEN = {(covl_gen / step):.2f}, "
+                  f"SSNR_GEN = {(ssnr_gen / step):.2f}", end="")
 
         with open(output_file_dir, "w", encoding="utf-8") as fo:
             fo.write(f"PESQ_GEN = {(pesq_gen / step):.2f}, CSIG_GEN = {(csig_gen / step):.2f}, "

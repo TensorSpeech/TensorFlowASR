@@ -33,9 +33,8 @@ segan_conf_required = [
 
 segan_conf_paths = [
     "clean_train_data_dir",
-    "noisy_train_data_dir",
+    "noises_dir",
     "clean_test_data_dir",
-    "noisy_test_data_dir",
     "checkpoint_dir",
     "log_dir"
 ]

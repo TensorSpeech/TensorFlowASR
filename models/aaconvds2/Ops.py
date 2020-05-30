@@ -3,7 +3,6 @@ from __future__ import absolute_import
 import tensorflow as tf
 
 
-@tf.function
 def shape_list(x):
     """Return list of dims, statically where possible."""
     static = x.get_shape().as_list()
@@ -15,7 +14,6 @@ def shape_list(x):
     return ret
 
 
-@tf.function
 def split_heads_2d(inputs, Nh):
     """Split channels into multiple heads."""
     B, H, W, d = shape_list(inputs)
@@ -24,7 +22,6 @@ def split_heads_2d(inputs, Nh):
     return tf.transpose(split, [0, 3, 1, 2, 4])
 
 
-@tf.function
 def combine_heads_2d(inputs):
     """Combine heads (inverse of split heads 2d)."""
     transposed = tf.transpose(inputs, [0, 2, 3, 1, 4])
@@ -33,7 +30,6 @@ def combine_heads_2d(inputs):
     return tf.reshape(transposed, ret_shape)
 
 
-@tf.function
 def rel_to_abs(x):
     """Converts tensor from relative to aboslute indexing."""
     # [B, Nh, L, 2L−1]
@@ -50,7 +46,6 @@ def rel_to_abs(x):
     return final_x
 
 
-@tf.function
 def relative_logits_1d(q, rel_k, H, W, Nh, transpose_mask):
     """Compute relative logits along one dimenion."""
     rel_logits = tf.einsum('bhxyd,md->bhxym', q, rel_k)

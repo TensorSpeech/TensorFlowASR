@@ -78,7 +78,8 @@ class SeganDataset:
                 entries = entries[1:]
 
             def _gen_data():
-                for clean_wav_path, _, _ in entries:
+                for clean_wav_path in entries:
+                    clean_wav_path = clean_wav_path.split("\t")[0]
                     clean_wav = read_raw_audio(clean_wav_path, sample_rate=sample_rate)
                     noisy_wav = add_noise(clean_wav, self.noises_dir, snr_list=self.noise_conf["snr"],
                                           max_noises=self.noise_conf["max_noises"], sample_rate=sample_rate)
