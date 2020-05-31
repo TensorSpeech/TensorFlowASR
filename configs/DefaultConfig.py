@@ -4,9 +4,9 @@ from models.deepspeech2.DeepSpeech2 import DeepSpeech2
 from models.aaconvds2.AAConvDeepSpeech2 import AAConvDeepSpeech2
 from augmentations.Augments import Noise, TimeStretch, TimeMasking, FreqMasking, TimeWarping
 
-base_model = AAConvDeepSpeech2(
+base_model = DeepSpeech2(
     rnn_conf={
-        "rnn_type": "lstm",
+        "rnn_type": "ltm",
         "rnn_layers": 5,
         "rnn_bidirectional": True,
         "rnn_rowconv": False,
@@ -25,9 +25,9 @@ streaming_size = None
 decoder = {
     "name": "beamsearch",
     "beam_width": 500,
-    "lm_path": "/mnt/Data/ML/NLP/vntc_5gram_probing.binary",
-    "alpha": 1.0,
-    "beta": 0.5
+    "lm_path": "/mnt/Data/ML/NLP/vntc_asr_5g_pruned_probing.binary",
+    "alpha": 2.0,
+    "beta": 1.0
 }
 
 augmentations = [
