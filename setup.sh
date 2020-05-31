@@ -1,6 +1,6 @@
 #!/usr/bin/env sh
 
-sudo apt install libboost-all-dev swig sox octave
+sudo apt-get install libboost-all-dev swig sox octave
 
 pip install -r requirements.txt
 

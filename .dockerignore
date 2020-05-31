@@ -4,3 +4,6 @@
 .env.example
 .session.vim
 __pycache__
+beamsearch_with_lm
+semetrics
+warp-transducer
