@@ -6,7 +6,7 @@ from augmentations.Augments import Noise, TimeStretch, TimeMasking, FreqMasking,
 
 base_model = DeepSpeech2(
     rnn_conf={
-        "rnn_type": "ltm",
+        "rnn_type": "lstm",
         "rnn_layers": 5,
         "rnn_bidirectional": True,
         "rnn_rowconv": False,

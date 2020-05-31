@@ -1,7 +1,6 @@
 from __future__ import absolute_import
 
 import os
-import gc
 import sys
 import time
 import pathlib
@@ -33,17 +32,15 @@ class SpeechToText:
         self.writer = None
 
     def _create_checkpoints(self, model):
-        self.steps = tf.Variable(initial_value=0, trainable=False, shape=(), dtype=tf.int64)
         if not self.configs["checkpoint_dir"]:
             raise ValueError("Must set checkpoint_dir")
         if not os.path.exists(self.configs["checkpoint_dir"]):
             os.makedirs(self.configs["checkpoint_dir"])
-        self.ckpt = tf.train.Checkpoint(model=model, optimizer=self.optimizer, steps=self.steps)
+        self.ckpt = tf.train.Checkpoint(model=model, optimizer=self.optimizer)
         self.ckpt_manager = tf.train.CheckpointManager(self.ckpt, self.configs["checkpoint_dir"], max_to_keep=None)
 
     @tf.function
-    def train(self, dataset, loss, epoch, num_epochs):
-        losses = []
+    def train(self, dataset, loss, epoch, num_epochs, num_steps=0):
         step = tf.zeros(shape=(), dtype=tf.int64)
         for step, [features, input_length, label, label_length] in dataset.enumerate(start=0):
             start = time.time()
@@ -52,28 +49,26 @@ class SpeechToText:
                 train_loss = loss(y_true=label, y_pred=y_pred,
                                   input_length=input_length, label_length=label_length,
                                   num_classes=self.text_featurizer.num_classes)
-                losses.append(train_loss)
             gradients = tape.gradient(train_loss, self.model.trainable_variables)
             self.optimizer.apply_gradients(zip(gradients, self.model.trainable_variables))
 
             sys.stdout.write("\033[K")
             tf.print("\rEpoch: ", epoch + 1, "/", num_epochs,
-                     ", step: ", step + 1, "/", self.steps / (epoch + 1),
+                     ", step: ", step + 1, "/", num_steps,
                      ", duration: ", int(time.time() - start), "s",
                      ", train_loss = ", train_loss,
                      sep="", end="", output_stream=sys.stdout)
 
-            if self.writer and (self.steps + step) % 500 == 0:
+            if self.writer:
                 with self.writer.as_default():
-                    tf.summary.scalar("train_loss", tf.reduce_mean(losses), step=(self.steps + step))
-            gc.collect()
-        self.steps.assign((epoch + 1) * (step + 1))
+                    tf.summary.scalar("train_loss", train_loss, step=(((epoch + 1) * num_steps) + step))
+                self.writer.flush()
+        return step + 1
 
     def validate(self, model, decoder, dataset, loss, num_classes, last_activation):
-        eval_loss_count = 0
-        epoch_eval_loss = 0.0
-        total_wer = 0.0
-        wer_count = 0.0
+        eval_loss_count = 0; epoch_eval_loss = 0.0
+        total_wer = 0.0; wer_count = 0.0
+        total_cer = 0.0; cer_count = 0.0
 
         @tf.function
         def val_step(features, inp_length, y_true, lab_length):
@@ -97,15 +92,16 @@ class SpeechToText:
 
             for idx, decoded in enumerate(predictions):
                 _wer, _wer_count = wer(decode=decoded, target=transcripts[idx])
-                total_wer += _wer
-                wer_count += _wer_count
+                _cer, _cer_count = cer(decode=decoded, target=transcripts[idx])
+                total_wer += _wer; wer_count += _wer_count
+                total_cer += _cer; cer_count += _cer_count
 
-            epoch_eval_loss += _val_loss
-            eval_loss_count += 1
+            epoch_eval_loss += _val_loss; eval_loss_count += 1
 
         epoch_eval_loss = epoch_eval_loss / eval_loss_count
-        epoch_eval_wer = total_wer / wer_count
-        return epoch_eval_loss, epoch_eval_wer
+        total_wer = total_wer / wer_count
+        total_cer = total_cer / cer_count
+        return epoch_eval_loss, total_wer, total_cer
 
     def train_and_eval(self, model_file=None):
         print("Training and evaluating model ...")
@@ -149,13 +145,12 @@ class SpeechToText:
             self.writer = tf.summary.create_file_writer(os.path.join(self.configs["log_dir"], "train"))
 
         epochs = self.configs["num_epochs"]
+        steps = 0
 
         for epoch in range(initial_epoch, epochs, 1):
-            epoch_eval_loss = None
-            epoch_eval_wer = None
             start = time.time()
 
-            self.train(tf_train_dataset, ctc_loss, epoch, epochs)
+            steps = self.train(tf_train_dataset, ctc_loss, epoch, epochs, steps)
 
             print(f"\nEnd training on epoch = {epoch}")
 
@@ -164,20 +159,21 @@ class SpeechToText:
 
             if tf_eval_dataset:
                 print("Validating ... ")
-                epoch_eval_loss, epoch_eval_wer = self.validate(
+                epoch_eval_loss, epoch_eval_wer, epoch_eval_cer = self.validate(
                     self.model, self.decoder, tf_eval_dataset, ctc_loss,
                     self.text_featurizer.num_classes, self.configs["last_activation"]
                 )
-                print(f"Average_val_loss = {epoch_eval_loss}, val_wer = {epoch_eval_wer}")
+                print(f"Average_val_loss = {epoch_eval_loss:.2f}, val_wer = {epoch_eval_wer:.2f}, val_cer = {epoch_eval_cer:.2f}")
 
             time_epoch = time.time() - start
             print(f"Time for epoch {epoch + 1} is {time_epoch} secs")
 
             if self.writer:
                 with self.writer.as_default():
-                    if epoch_eval_loss and epoch_eval_wer:
+                    if epoch_eval_loss and epoch_eval_wer and epoch_eval_cer:
                         tf.summary.scalar("eval_loss", epoch_eval_loss, step=epoch)
                         tf.summary.scalar("eval_wer", epoch_eval_wer, step=epoch)
+                        tf.summary.scalar("eval_cer", epoch_eval_cer, step=epoch)
                     tf.summary.scalar("epoch_time", time_epoch, step=epoch)
                 self.writer.flush()
 
@@ -234,7 +230,8 @@ class SpeechToText:
             with open(os.path.join(self.configs["log_dir"], "model.json"), "w") as f:
                 f.write(self.model.to_json())
             callback.append(TimeHistory(os.path.join(self.configs["log_dir"], "time.txt")))
-            callback.append(tf.keras.callbacks.TensorBoard(log_dir=self.configs["log_dir"]))
+            callback.append(tf.keras.callbacks.TensorBoard(log_dir=self.configs["log_dir"], update_freq="batch",
+                                                           write_graph=True, histogram_freq=1))
 
         if tf_eval_dataset is not None:
             if initial_epoch == 0 and self.configs["sortagrad"]:
@@ -293,8 +290,6 @@ class SpeechToText:
                 b_cer += _cer
                 b_wer_count += _wer_count
                 b_cer_count += _cer_count
-
-            gc.collect()
 
             return b_wer, b_wer_count, b_cer, b_cer_count
 

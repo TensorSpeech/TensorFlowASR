@@ -94,6 +94,7 @@ class Dataset:
         if not os.path.exists(self.tfrecords_dir):
             os.makedirs(self.tfrecords_dir)
         if glob.glob(os.path.join(tfrecords_dir, f"{self.mode}*.tfrecord")):
+            print(f"TFRecords're already existed for mode: {self.mode}")
             return
         entries = self.create_entries(sortagrad)
 
