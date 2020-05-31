@@ -65,7 +65,7 @@ class SpeechToText:
                 self.writer.flush()
         return step + 1
 
-    def validate(self, model, decoder, dataset, loss, num_classes, last_activation):
+    def validate(self, model, decoder, dataset, loss, num_classes):
         eval_loss_count = 0; epoch_eval_loss = 0.0
         total_wer = 0.0; wer_count = 0.0
         total_cer = 0.0; cer_count = 0.0
@@ -77,7 +77,7 @@ class SpeechToText:
             _loss = loss(y_true=y_true, y_pred=y_pred,
                          input_length=inp_length, label_length=lab_length,
                          num_classes=num_classes)
-            _pred = decoder(probs=y_pred, input_length=inp_length, last_activation=last_activation)
+            _pred = decoder(probs=y_pred, input_length=inp_length)
 
             sys.stdout.write("\033[K")
             tf.print("\rVal_duration: ", int(time.time() - start), "s",
@@ -148,6 +148,7 @@ class SpeechToText:
         steps = 0
 
         for epoch in range(initial_epoch, epochs, 1):
+            epoch_eval_loss = None; epoch_eval_wer = None; epoch_eval_cer = None
             start = time.time()
 
             steps = self.train(tf_train_dataset, ctc_loss, epoch, epochs, steps)
@@ -161,7 +162,7 @@ class SpeechToText:
                 print("Validating ... ")
                 epoch_eval_loss, epoch_eval_wer, epoch_eval_cer = self.validate(
                     self.model, self.decoder, tf_eval_dataset, ctc_loss,
-                    self.text_featurizer.num_classes, self.configs["last_activation"]
+                    self.text_featurizer.num_classes
                 )
                 print(f"Average_val_loss = {epoch_eval_loss:.2f}, val_wer = {epoch_eval_wer:.2f}, val_cer = {epoch_eval_cer:.2f}")
 
@@ -339,8 +340,6 @@ class SpeechToText:
             _wer, _wer_count = wer(decode=prediction, target=label)
             _cer, _cer_count = cer(decode=prediction, target=label)
 
-            gc.collect()
-
             return _wer, _wer_count, _cer, _cer_count
 
         total_wer = 0.0
@@ -416,8 +415,7 @@ class SpeechToText:
 
         pred = self.model.get_tensor(output_index)
 
-        pred = self.decoder(probs=pred, input_length=input_length,
-                            last_activation=self.configs["last_activation"])
+        pred = self.decoder(probs=pred, input_length=input_length)
 
         return bytes_to_string(pred.numpy())[0]
 
@@ -454,8 +452,7 @@ class SpeechToText:
     @tf.function
     def predict(self, feature, input_length):
         logits = self.model(feature, training=False)
-        return self.decoder(probs=logits, input_length=input_length,
-                            last_activation=self.configs["last_activation"])
+        return self.decoder(probs=logits, input_length=input_length)
 
     def save_model(self, model_file):
         print("Saving whole ASR model ...")
@@ -463,10 +460,7 @@ class SpeechToText:
 
     def save_from_checkpoint(self, model_file, idx, is_builtin=False):
         if is_builtin:
-            train_model = create_ctc_train_model(
-                self.model, last_activation=self.configs["last_activation"],
-                num_classes=self.text_featurizer.num_classes
-            )
+            train_model = create_ctc_train_model(self.model, num_classes=self.text_featurizer.num_classes)
         else:
             train_model = self.model
         self._create_checkpoints(train_model)

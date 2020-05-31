@@ -66,7 +66,7 @@ train_data_transcript_paths = [
 ]
 
 eval_data_transcript_paths = [
-    # "/mnt/Data/ML/ASR/Preprocessed/VLSP/dev_transcripts.tsv"
+    "/mnt/Data/ML/ASR/Preprocessed/Vivos/test/transcripts.tsv"
 ]
 
 test_data_transcript_paths = [
