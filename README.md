@@ -17,9 +17,8 @@ Collected from many sources:
 ## Requirements
 
 1. Ubuntu or Debian distribution
-2. Snapd: ```sudo apt install snapd```
-3. Libraries: ```sudo apt install libboost-all-dev swig sox```
-4. Octave: ```sudo snap install octave```
+2. Libraries: ```sudo apt install libboost-all-dev swig sox octave```
+3. Tensorflow 2.2+: ```pip install tensorflow```
 
 ## Featurizers
 
@@ -52,10 +51,8 @@ There're 3 main models in this repo: CTCModel, SEGAN and RNNTransducer
 
 There're 2 training methods for the ASR:
 
-1. Train using ```tf.GradientTape``` with ```tf.data.Dataset.from_generator```.
-2. Train using keras built-in function ```fit``` with ```tf.data.TFRecordDataset```.
-
-```tf.GradientTape``` run with ```TFRecords``` causes RAM OOM, so I use ```tf.data.Dataset.from_generator``` instead (slower because it has to read many wav files)
+1. Train using ```tf.GradientTape``` with ```tf.data.Dataset.from_generator``` or ```tf.data.TFRecordDataset```.
+2. Train using keras built-in function ```fit``` with ```tf.data.Dataset.from_generator``` or ```tf.data.TFRecordDataset```.
 
 ## Evaluation Metrics
 
