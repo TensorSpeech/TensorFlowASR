@@ -8,9 +8,10 @@ os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 warnings.simplefilter('ignore')
 
 import tensorflow as tf
+
 tf.get_logger().setLevel('ERROR')
 
-from asr.SpeechToText import SpeechToText
+from asr.SpeechCTC import SpeechCTC
 from featurizers.SpeechFeaturizer import read_raw_audio
 
 gpus = tf.config.experimental.list_physical_devices('GPU')
@@ -27,6 +28,9 @@ if gpus:
         print(e)
 
 tf.keras.backend.clear_session()
+
+policy = tf.keras.mixed_precision.experimental.Policy("mixed_float16")
+tf.keras.mixed_precision.experimental.set_policy(policy)
 
 modes = ["train", "train_builtin", "test", "infer", "infer_single",
          "convert_to_tflite", "infer_interpreter",
@@ -63,7 +67,7 @@ def main():
     else:
         tf.random.set_seed(0)
 
-    asr = SpeechToText(configs_path=args.config)
+    asr = SpeechCTC(configs_path=args.config)
 
     if args.mode == "train":
         asr.train_and_eval(model_file=args.export_file)

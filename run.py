@@ -8,11 +8,12 @@ os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 warnings.simplefilter('ignore')
 
 import tensorflow as tf
+
 tf.get_logger().setLevel('ERROR')
 
 from featurizers.SpeechFeaturizer import read_raw_audio
 from asr.SEGAN import SEGAN
-from asr.SpeechToText import SpeechToText
+from asr.SpeechCTC import SpeechCTC
 
 gpus = tf.config.experimental.list_physical_devices('GPU')
 if gpus:
@@ -65,7 +66,7 @@ def main():
     segan = SEGAN(config_path=args.segan_config, training=False)
     segan.load_model(args.saved_segan)
 
-    asr = SpeechToText(configs_path=args.asr_config, noise_filter=segan)
+    asr = SpeechCTC(configs_path=args.asr_config, noise_filter=segan)
 
     if args.mode == "test":
         assert args.output_file_path

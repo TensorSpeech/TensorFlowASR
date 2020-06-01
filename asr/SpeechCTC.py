@@ -17,7 +17,7 @@ from utils.TimeHistory import TimeHistory
 from data.Dataset import Dataset
 
 
-class SpeechToText:
+class SpeechCTC:
     def __init__(self, configs_path, noise_filter=None):
         self.configs = get_asr_config(configs_path)
         self.text_featurizer = TextFeaturizer(self.configs["vocabulary_file_path"])
@@ -27,6 +27,7 @@ class SpeechToText:
                                                       base_model=self.configs["base_model"],
                                                       streaming_size=self.configs["streaming_size"],
                                                       speech_conf=self.configs["speech_conf"])
+        self.optimizer = tf.keras.mixed_precision.experimental.LossScaleOptimizer(self.optimizer, loss_scale="dynamic")
         self.noise_filter = noise_filter
         self.writer = None
 
@@ -48,7 +49,9 @@ class SpeechToText:
                 train_loss = loss(y_true=label, y_pred=y_pred,
                                   input_length=input_length, label_length=label_length,
                                   num_classes=self.text_featurizer.num_classes)
-            gradients = tape.gradient(train_loss, self.model.trainable_variables)
+                scaled_train_loss = self.optimizer.get_scaled_loss(loss)
+            scaled_gradients = tape.gradient(scaled_train_loss, self.model.trainable_variables)
+            gradients = self.optimizer.get_unscaled_gradients(scaled_gradients)
             self.optimizer.apply_gradients(zip(gradients, self.model.trainable_variables))
 
             sys.stdout.write("\033[K")

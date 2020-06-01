@@ -14,29 +14,33 @@ if [ ! -d beamsearch_with_lm ]; then
     cd ..
 fi
 
-if [ ! -d warp-transducer ]; then
-    git clone https://github.com/noahchalifour/warp-transducer.git
-    
-    cd ./warp-transducer
-    
-    mkdir build
-    cd build
-    cmake ..
-    make
-    
-    cd ../tensorflow_binding
-    python setup.py install
-    
-    cd ../..
-fi
+if [ ! $1 ]; then
 
-if [ ! -d semetrics ]; then
-    git clone https://github.com/usimarit/semetrics
+    if [ ! -d warp-transducer ]; then
+        git clone https://github.com/noahchalifour/warp-transducer.git
 
-    cd semetrics
-    chmod a+x setup.sh
-    chown $USER:$USER setup.sh
-    ./setup.sh
+        cd ./warp-transducer
 
-    cd ..
+        mkdir build
+        cd build
+        cmake ..
+        make
+
+        cd ../tensorflow_binding
+        python setup.py install
+
+        cd ../..
+    fi
+
+    if [ ! -d semetrics ]; then
+        git clone https://github.com/usimarit/semetrics
+
+        cd semetrics
+        chmod a+x setup.sh
+        chown $USER:$USER setup.sh
+        ./setup.sh
+
+        cd ..
+    fi
+
 fi

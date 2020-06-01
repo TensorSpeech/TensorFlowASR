@@ -2,7 +2,7 @@ from __future__ import absolute_import
 from featurizers.SpeechFeaturizer import read_raw_audio
 from utils.Utils import check_key_in_dict
 from asr.SEGAN import SEGAN
-from asr.SpeechToText import SpeechToText
+from asr.SpeechCTC import SpeechCTC
 from configs.FlaskConfig import FlaskConfig
 from flask_cors import CORS
 from flask_socketio import SocketIO
@@ -64,7 +64,7 @@ if app.config["SEGAN_SAVED_WEIGHTS"]:
     if segan_error is not None:
         segan = None
 
-asr = SpeechToText(configs_path=app.config["CONFIG_PATH"])
+asr = SpeechCTC(configs_path=app.config["CONFIG_PATH"])
 asr.convert_to_tflite(app.config["SAVED_MODEL"], app.config["TFLITE_LENGTH"], app.config["TFLITE"])
 asr_error = asr.load_interpreter(app.config["TFLITE"])
 
