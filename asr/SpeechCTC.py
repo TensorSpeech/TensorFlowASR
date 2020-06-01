@@ -27,7 +27,6 @@ class SpeechCTC:
                                                       base_model=self.configs["base_model"],
                                                       streaming_size=self.configs["streaming_size"],
                                                       speech_conf=self.configs["speech_conf"])
-        self.optimizer = tf.keras.mixed_precision.experimental.LossScaleOptimizer(self.optimizer, loss_scale="dynamic")
         self.noise_filter = noise_filter
         self.writer = None
 
@@ -107,6 +106,7 @@ class SpeechCTC:
 
     def train_and_eval(self, model_file=None):
         print("Training and evaluating model ...")
+        self.optimizer = tf.keras.mixed_precision.experimental.LossScaleOptimizer(self.optimizer, loss_scale="dynamic")
         self._create_checkpoints(self.model)
 
         check_key_in_dict(dictionary=self.configs,

@@ -20,7 +20,7 @@ def create_ctc_model(base_model, num_classes, speech_conf, streaming_size=None, 
 
     # Fully connected layer
     outputs = tf.keras.layers.TimeDistributed(
-        tf.keras.layers.Dense(units=num_classes, activation="linear", dtype=tf.float32,
+        tf.keras.layers.Dense(units=num_classes, activation="linear",
                               use_bias=True), name="fully_connected")(outputs)
 
     model = tf.keras.Model(inputs=features, outputs=outputs, name=name)
@@ -45,7 +45,7 @@ def ctc_loss(y_true, y_pred, input_length, label_length, num_classes):
     loss = tf.nn.ctc_loss(
         labels=tf.cast(y_true, tf.int32),
         logit_length=input_length,
-        logits=y_pred,
+        logits=tf.cast(y_pred, tf.float32),
         label_length=label_length,
         logits_time_major=False,
         blank_index=num_classes - 1
@@ -60,7 +60,7 @@ def ctc_loss_keras(layer, **kwargs):
     loss = tf.nn.ctc_loss(
         labels=y_true,
         logit_length=input_length,
-        logits=y_pred,
+        logits=tf.cast(y_pred, tf.float32),
         label_length=label_length,
         logits_time_major=False,
         blank_index=num_classes - 1

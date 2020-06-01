@@ -1,5 +1,6 @@
 from __future__ import absolute_import
 
+import tensorflow as tf
 from models.deepspeech2.DeepSpeech2 import DeepSpeech2
 from augmentations.Augments import Noise, TimeStretch, TimeMasking, FreqMasking, TimeWarping
 
@@ -16,7 +17,8 @@ base_model = DeepSpeech2(
     },
     fc_conf={
         "fc_units": None
-    }
+    },
+    optimizer=tf.keras.optimizers.Adam(0.0001)
 )
 
 streaming_size = None
