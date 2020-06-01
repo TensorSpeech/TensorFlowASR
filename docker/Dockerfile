@@ -8,6 +8,7 @@ COPY .env.production /app/.env
 RUN apt-get update && apt-get upgrade -y
 RUN apt-get install -y wget cmake make libsndfile1 ffmpeg gcc g++ git
 RUN /app/setup.sh asr
+RUN rm -r /app/beamsearch_with_lm
 
 EXPOSE 5000
 
