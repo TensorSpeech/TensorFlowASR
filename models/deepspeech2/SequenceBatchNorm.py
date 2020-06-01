@@ -19,13 +19,13 @@ class SequenceBatchNorm(tf.keras.layers.Layer):
 
     def call(self, inputs, **kwargs):
         if self.time_major:
-            total_padded_frames = tf.cast(tf.shape(inputs)[0], tf.float32)
-            batch_size = tf.cast(tf.shape(inputs)[1], tf.float32)
+            total_padded_frames = tf.cast(tf.shape(inputs)[0], tf.float16)
+            batch_size = tf.cast(tf.shape(inputs)[1], tf.float16)
         else:
-            total_padded_frames = tf.cast(tf.shape(inputs)[1], tf.float32)
-            batch_size = tf.cast(tf.shape(inputs)[0], tf.float32)
+            total_padded_frames = tf.cast(tf.shape(inputs)[1], tf.float16)
+            batch_size = tf.cast(tf.shape(inputs)[0], tf.float16)
         mean, variance = tf.nn.moments(inputs, axes=[0, 1], keepdims=False)
-        total_unpadded_frames_batch = tf.math.count_nonzero(inputs, axis=[0, 1], keepdims=False, dtype=tf.float32)
+        total_unpadded_frames_batch = tf.math.count_nonzero(inputs, axis=[0, 1], keepdims=False, dtype=tf.float16)
         mean = (mean * total_padded_frames * batch_size) / total_unpadded_frames_batch
         variance = (variance * total_padded_frames * batch_size) / total_unpadded_frames_batch
         return tf.nn.batch_normalization(inputs, mean=mean, variance=variance,
