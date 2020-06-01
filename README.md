@@ -17,7 +17,7 @@ Collected from many sources:
 ## Requirements
 
 1. Ubuntu or Debian distribution
-2. Libraries: ```sudo apt install libboost-all-dev swig sox octave```
+2. Python 3.6+
 3. Tensorflow 2.2+: ```pip install tensorflow```
 
 ## Featurizers

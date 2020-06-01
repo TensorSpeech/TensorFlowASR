@@ -1,7 +1,5 @@
 #!/usr/bin/env sh
 
-sudo apt-get install libboost-all-dev swig sox octave
-
 pip install -r requirements.txt
 
 if [ ! -d beamsearch_with_lm ]; then
@@ -11,7 +9,6 @@ if [ ! -d beamsearch_with_lm ]; then
     
     chmod a+x setup.sh
     chown $USER:$USER setup.sh
-    
     ./setup.sh
     
     cd ..
@@ -35,4 +32,11 @@ fi
 
 if [ ! -d semetrics ]; then
     git clone https://github.com/usimarit/semetrics
+
+    cd semetrics
+    chmod a+x setup.sh
+    chown $USER:$USER setup.sh
+    ./setup.sh
+
+    cd ..
 fi

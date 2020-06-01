@@ -4,7 +4,6 @@ import os
 import sys
 import time
 import pathlib
-import math
 import tensorflow as tf
 
 from models.CTCModel import create_ctc_model, ctc_loss, create_ctc_train_model

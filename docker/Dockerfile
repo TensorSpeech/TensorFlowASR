@@ -5,8 +5,8 @@ WORKDIR /app
 COPY . /app
 COPY .env.production /app/.env
 
-RUN apt update && apt upgrade -y
-RUN apt install -y wget cmake make libsndfile1 ffmpeg gcc g++ sox libboost-all-dev swig git
+RUN apt-get update && apt-get upgrade -y
+RUN apt-get install -y wget cmake make libsndfile1 ffmpeg gcc g++ git
 RUN /app/setup.sh
 
 EXPOSE 5000

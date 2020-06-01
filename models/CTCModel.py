@@ -1,7 +1,6 @@
 from __future__ import absolute_import
 
 import tensorflow as tf
-from utils.Utils import mask_nan
 from featurizers.SpeechFeaturizer import compute_feature_dim
 
 
@@ -42,7 +41,7 @@ def create_ctc_train_model(ctc_model, num_classes, name="ctc_train_model"):
 
 
 @tf.function
-def ctc_loss(y_true, y_pred, input_length, label_length, num_classes, **kwargs):
+def ctc_loss(y_true, y_pred, input_length, label_length, num_classes):
     loss = tf.nn.ctc_loss(
         labels=tf.cast(y_true, tf.int32),
         logit_length=input_length,
