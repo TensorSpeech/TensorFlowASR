@@ -63,13 +63,15 @@ class SpeechCTC:
             if self.writer:
                 with self.writer.as_default():
                     tf.summary.scalar("train_loss", train_loss, step=(((epoch + 1) * num_steps) + step))
-                self.writer.flush()
         return step + 1
 
     def validate(self, model, decoder, dataset, loss, num_classes):
-        eval_loss_count = 0; epoch_eval_loss = 0.0
-        total_wer = 0.0; wer_count = 0.0
-        total_cer = 0.0; cer_count = 0.0
+        eval_loss_count = 0;
+        epoch_eval_loss = 0.0
+        total_wer = 0.0;
+        wer_count = 0.0
+        total_cer = 0.0;
+        cer_count = 0.0
 
         @tf.function
         def val_step(features, inp_length, y_true, lab_length):
@@ -94,10 +96,13 @@ class SpeechCTC:
             for idx, decoded in enumerate(predictions):
                 _wer, _wer_count = wer(decode=decoded, target=transcripts[idx])
                 _cer, _cer_count = cer(decode=decoded, target=transcripts[idx])
-                total_wer += _wer; wer_count += _wer_count
-                total_cer += _cer; cer_count += _cer_count
+                total_wer += _wer;
+                wer_count += _wer_count
+                total_cer += _cer;
+                cer_count += _cer_count
 
-            epoch_eval_loss += _val_loss; eval_loss_count += 1
+            epoch_eval_loss += _val_loss;
+            eval_loss_count += 1
 
         epoch_eval_loss = epoch_eval_loss / eval_loss_count
         total_wer = total_wer / wer_count
@@ -150,7 +155,9 @@ class SpeechCTC:
         steps = 0
 
         for epoch in range(initial_epoch, epochs, 1):
-            epoch_eval_loss = None; epoch_eval_wer = None; epoch_eval_cer = None
+            epoch_eval_loss = None;
+            epoch_eval_wer = None;
+            epoch_eval_cer = None
             start = time.time()
 
             steps = self.train(tf_train_dataset, ctc_loss, epoch, epochs, steps, gpu)
