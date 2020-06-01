@@ -18,7 +18,6 @@ warnings.simplefilter('ignore')
 
 tf.get_logger().setLevel('ERROR')
 
-
 tf.random.set_seed(0)
 
 socketio = SocketIO()
@@ -59,9 +58,9 @@ if app.config["SEGAN_SAVED_WEIGHTS"]:
     try:
         segan.convert_to_tflite(app.config["SEGAN_SAVED_WEIGHTS"], app.config["SEGAN_TFLITE"])
         segan_error = segan.load_interpreter(app.config["SEGAN_TFLITE"])
-    except Exception as e:
-        segan = None
-    if segan_error is not None:
+        if segan_error is not None:
+            segan = None
+    except Exception:
         segan = None
 
 asr = SpeechCTC(configs_path=app.config["CONFIG_PATH"])

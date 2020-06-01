@@ -1,13 +1,7 @@
 numpy
 nltk
-pandas
 sox
 soundfile
-absl-py
 librosa
 tensorflow-addons
 matplotlib
-flask
-flask-cors
-flask-socketio
-python-dotenv
