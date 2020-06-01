@@ -48,7 +48,7 @@ class SpeechCTC:
                 train_loss = loss(y_true=label, y_pred=y_pred,
                                   input_length=input_length, label_length=label_length,
                                   num_classes=self.text_featurizer.num_classes)
-                scaled_train_loss = self.optimizer.get_scaled_loss(loss) if gpu else train_loss
+                scaled_train_loss = self.optimizer.get_scaled_loss(train_loss) if gpu else train_loss
             scaled_gradients = tape.gradient(scaled_train_loss, self.model.trainable_variables)
             gradients = self.optimizer.get_unscaled_gradients(scaled_gradients) if gpu else scaled_gradients
             self.optimizer.apply_gradients(zip(gradients, self.model.trainable_variables))
