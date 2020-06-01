@@ -39,7 +39,7 @@ class SpeechCTC:
         self.ckpt_manager = tf.train.CheckpointManager(self.ckpt, self.configs["checkpoint_dir"], max_to_keep=None)
 
     @tf.function
-    def train(self, dataset, loss, epoch, num_epochs, num_steps=0):
+    def train(self, dataset, loss, epoch, num_epochs, num_steps=0, gpu=0):
         step = tf.zeros(shape=(), dtype=tf.int64)
         for step, [features, input_length, label, label_length] in dataset.enumerate(start=0):
             start = time.time()
@@ -48,9 +48,9 @@ class SpeechCTC:
                 train_loss = loss(y_true=label, y_pred=y_pred,
                                   input_length=input_length, label_length=label_length,
                                   num_classes=self.text_featurizer.num_classes)
-                scaled_train_loss = self.optimizer.get_scaled_loss(loss)
+                scaled_train_loss = self.optimizer.get_scaled_loss(loss) if gpu else train_loss
             scaled_gradients = tape.gradient(scaled_train_loss, self.model.trainable_variables)
-            gradients = self.optimizer.get_unscaled_gradients(scaled_gradients)
+            gradients = self.optimizer.get_unscaled_gradients(scaled_gradients) if gpu else scaled_gradients
             self.optimizer.apply_gradients(zip(gradients, self.model.trainable_variables))
 
             sys.stdout.write("\033[K")
@@ -104,7 +104,7 @@ class SpeechCTC:
         total_cer = total_cer / cer_count
         return epoch_eval_loss, total_wer, total_cer
 
-    def train_and_eval(self, model_file=None):
+    def train_and_eval(self, model_file=None, gpu=0):
         print("Training and evaluating model ...")
         self.optimizer = tf.keras.mixed_precision.experimental.LossScaleOptimizer(self.optimizer, loss_scale="dynamic")
         self._create_checkpoints(self.model)
@@ -153,7 +153,7 @@ class SpeechCTC:
             epoch_eval_loss = None; epoch_eval_wer = None; epoch_eval_cer = None
             start = time.time()
 
-            steps = self.train(tf_train_dataset, ctc_loss, epoch, epochs, steps)
+            steps = self.train(tf_train_dataset, ctc_loss, epoch, epochs, steps, gpu)
 
             print(f"\nEnd training on epoch = {epoch}")
 

@@ -14,6 +14,8 @@ tf.get_logger().setLevel('ERROR')
 from asr.SpeechCTC import SpeechCTC
 from featurizers.SpeechFeaturizer import read_raw_audio
 
+tf.keras.backend.clear_session()
+
 gpus = tf.config.experimental.list_physical_devices('GPU')
 if gpus:
     try:
@@ -27,10 +29,8 @@ if gpus:
         # Memory growth must be set before GPUs have been initialized
         print(e)
 
-tf.keras.backend.clear_session()
-
-policy = tf.keras.mixed_precision.experimental.Policy("mixed_float16")
-tf.keras.mixed_precision.experimental.set_policy(policy)
+    policy = tf.keras.mixed_precision.experimental.Policy("mixed_float16")
+    tf.keras.mixed_precision.experimental.set_policy(policy)
 
 modes = ["train", "train_builtin", "test", "infer", "infer_single",
          "convert_to_tflite", "infer_interpreter",
@@ -70,7 +70,7 @@ def main():
     asr = SpeechCTC(configs_path=args.config)
 
     if args.mode == "train":
-        asr.train_and_eval(model_file=args.export_file)
+        asr.train_and_eval(model_file=args.export_file, gpu=len(gpus))
 
     elif args.mode == "train_builtin":
         asr.train_and_eval_builtin(model_file=args.export_file)
