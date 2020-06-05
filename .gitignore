@@ -2,6 +2,7 @@ tensorflow
 beamsearch_with_lm
 warp-transducer
 semetrics
+externals
 coc-settings.json
 .session.vim
 .idea

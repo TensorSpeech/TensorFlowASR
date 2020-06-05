@@ -1,3 +1,16 @@
+# Copyright 2020 Huy Le Nguyen (@usimarit)
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 from __future__ import absolute_import
 
 import os
@@ -11,9 +24,8 @@ import tensorflow as tf
 
 tf.get_logger().setLevel('ERROR')
 
-from featurizers.SpeechFeaturizer import read_raw_audio
-from asr.SEGAN import SEGAN
-from asr.SpeechCTC import SpeechCTC
+from scripts.run_ctc import main as main_ctc
+from scripts.run_segan import main as main_segan
 
 gpus = tf.config.experimental.list_physical_devices('GPU')
 if gpus:
@@ -28,57 +40,26 @@ if gpus:
         # Memory growth must be set before GPUs have been initialized
         print(e)
 
-tf.keras.backend.clear_session()
-
-modes = ["test", "infer_single"]
-
-parser = argparse.ArgumentParser(description="Script to run both SEGAN and ASR")
-
-parser.add_argument("--mode", "-m", type=str, default="test",
-                    help=f"Mode in {modes}")
-
-parser.add_argument("--segan_config", "-s", type=str, default=None,
-                    help="The file path of segan configuration file")
-
-parser.add_argument("--asr_config", "-a", type=str, default=None,
-                    help="The file path of asr configuration file")
-
-parser.add_argument("--input_file_path", "-i", type=str, default=None,
-                    help="Path to input file")
-
-parser.add_argument("--output_file_path", "-o", type=str, default=None,
-                    help="Path to output file")
-
-parser.add_argument("--saved_segan", type=str, default=None,
-                    help="Path to the saved segan weights")
-
-parser.add_argument("--saved_asr", type=str, default=None,
-                    help="Path to the saved asr model")
-
-args = parser.parse_args()
-
 
 def main():
-    assert args.mode in modes, f"Mode must in {modes}"
+    tf.keras.backend.clear_session()
 
-    tf.random.set_seed(0)
+    parser = argparse.ArgumentParser(prog="ASR")
 
-    segan = SEGAN(config_path=args.segan_config, training=False)
-    segan.load_model(args.saved_segan)
+    subparsers = parser.add_subparsers(help='Commands for training or testing models')
 
-    asr = SpeechCTC(configs_path=args.asr_config, noise_filter=segan)
+    # Create parser for ctc
+    parser_ctc = subparsers.add_parser("ctc", help="Run ctc model")
+    run_ctc = main_ctc(parser_ctc)
+    parser_ctc.set_defaults(func=run_ctc)
 
-    if args.mode == "test":
-        assert args.output_file_path
-        asr.test_with_noise_filter(model_file=args.saved_asr,
-                                   output_file_path=args.output_file_path)
+    # Create parser for segan
+    parser_segan = subparsers.add_parser("segan", help="Run segan model")
+    run_segan = main_segan(parser_segan)
+    parser_segan.set_defaults(func=run_segan)
 
-    elif args.mode == "infer_single":
-        assert args.input_file_path
-        asr.load_model(args.saved_asr)
-        signal = read_raw_audio(args.input_file_path, 16000)
-        pred = asr.infer_single(signal)
-        print(pred)
+    args = parser.parse_args()
+    args.func(args)
 
 
 if __name__ == "__main__":

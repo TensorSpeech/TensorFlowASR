@@ -10,9 +10,15 @@ This code is NOT applied for distributed training YET.
 
 Collected from many sources:
 
-1. Vivos: 15hrs from [ailab.hcmus.edu.vn/vivos](https://ailab.hcmus.edu.vn/vivos)
+1. VIVOS: 15hrs from [ailab.hcmus.edu.vn/vivos](https://ailab.hcmus.edu.vn/vivos)
 2. InfoRe: 25hrs Single Person + ~415hrs from [facebook](https://www.facebook.com/groups/j2team.community/permalink/1010834009248719/)
 3. VLSP: ~415hrs (the same as InfoRe 415hrs)
+
+## Results
+
+1. DS2 (logfbank, 3 first feat_dims, 3 conv, 5 blstm, 1 fc), on VIVOS test set, 20 epochs trained on VIVOS trainset with no augmentations, using Beam Search size 500 with KenLM gives ```WER = 11.1888%, CER = 6.9391%```
+
+![DS2_VIVOS_NOAUG](./images/test_vivos_noaug.png)
 
 ## Requirements
 
@@ -67,11 +73,7 @@ chmod a+x setup.sh && chown $USER:$USER setup.sh && ./setup.sh # Install depende
 python $SCRIPT --help # Where $SCRIPT is one of the run_*.py files, --help to see the flags
 ```
 
-## Tensorflow Lite
-
-Install ```tf-nightly``` to use tflite (due to error ```Quantize weights transformation failed``` in tensorflow 2.2.0)
-
-## References
+## References & Credits
 
 1. [https://arxiv.org/abs/1512.02595](https://arxiv.org/abs/1512.02595)
 2. [https://github.com/NVIDIA/OpenSeq2Seq](https://github.com/NVIDIA/OpenSeq2Seq)

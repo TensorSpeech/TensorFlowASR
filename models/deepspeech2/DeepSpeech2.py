@@ -1,3 +1,16 @@
+# Copyright 2020 Huy Le Nguyen (@usimarit)
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 """
 Read https://www.tensorflow.org/api_docs/python/tf/keras/layers/LSTM
 to use cuDNN-LSTM
@@ -6,6 +19,8 @@ from __future__ import absolute_import
 
 import numpy as np
 import tensorflow as tf
+
+from utils.utils import append_default_keys_dict
 from models.deepspeech2.RowConv1D import RowConv1D
 from models.deepspeech2.SequenceBatchNorm import SequenceBatchNorm
 
@@ -34,24 +49,15 @@ DEFAULT_FC = {
 }
 
 
-def append_default_keys_dict(default_dict, dest_dict):
-    for key in default_dict.keys():
-        if key not in dest_dict.keys():
-            dest_dict[key] = default_dict[key]
-    return dest_dict
-
-
 class DeepSpeech2:
-    def __init__(self, conv_conf=DEFAULT_CONV, rnn_conf=DEFAULT_RNN, fc_conf=DEFAULT_FC,
-                 optimizer=tf.keras.optimizers.SGD(lr=0.0002, momentum=0.99, nesterov=True)):
-        self.optimizer = optimizer
-        self.conv_conf = append_default_keys_dict(DEFAULT_CONV, conv_conf)
-        self.rnn_conf = append_default_keys_dict(DEFAULT_RNN, rnn_conf)
-        self.fc_conf = append_default_keys_dict(DEFAULT_FC, fc_conf)
-        assert len(conv_conf["conv_strides"]) == len(conv_conf["conv_filters"]) == len(conv_conf["conv_kernels"])
-        assert conv_conf["conv_type"] in [1, 2]
-        assert rnn_conf["rnn_type"] in ["lstm", "gru", "rnn"]
-        assert conv_conf["conv_dropout"] >= 0.0 and rnn_conf["rnn_dropout"] >= 0.0
+    def __init__(self, arch_config: dict):
+        self.conv_conf = append_default_keys_dict(DEFAULT_CONV, arch_config.get("conv_conf", {}))
+        self.rnn_conf = append_default_keys_dict(DEFAULT_RNN, arch_config.get("rnn_conf", {}))
+        self.fc_conf = append_default_keys_dict(DEFAULT_FC, arch_config.get("fc_conf", {}))
+        assert len(self.conv_conf["conv_strides"]) == len(self.conv_conf["conv_filters"]) == len(self.conv_conf["conv_kernels"])
+        assert self.conv_conf["conv_type"] in [1, 2]
+        assert self.rnn_conf["rnn_type"] in ["lstm", "gru", "rnn"]
+        assert self.conv_conf["conv_dropout"] >= 0.0 and self.rnn_conf["rnn_dropout"] >= 0.0
 
     @staticmethod
     def merge_filter_to_channel(x):
