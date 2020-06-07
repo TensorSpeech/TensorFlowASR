@@ -70,7 +70,7 @@ def main(parser):
                 config["learning_config"]["dataset_config"]["tfrecords_dir"],
                 speech_featurizer, text_featurizer, "train",
                 augmentations=config["learning_config"]["augmentations"], shuffle=True,
-            ).create(config["learning_config"]["dataset_config"]["batch_size"]).take(5)
+            ).create(config["learning_config"]["dataset_config"]["batch_size"])
 
             eval_dataset = ASRTFRecordDataset(
                 config["learning_config"]["dataset_config"]["eval_paths"],
