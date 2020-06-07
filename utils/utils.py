@@ -14,9 +14,22 @@
 from __future__ import absolute_import
 
 import os
+import sys
 import math
 import numpy as np
 import tensorflow as tf
+
+
+def float_feature(list_of_floats):
+    return tf.train.Feature(float_list=tf.train.FloatList(value=list_of_floats))
+
+
+def int64_feature(list_of_ints):
+    return tf.train.Feature(int64_list=tf.train.Int64List(value=list_of_ints))
+
+
+def bytestring_feature(list_of_bytestrings):
+    return tf.train.Feature(bytes_list=tf.train.BytesList(value=list_of_bytestrings))
 
 
 def append_default_keys_dict(default_dict, dest_dict):
@@ -35,7 +48,7 @@ def check_key_in_dict(dictionary, keys):
 def preprocess_paths(paths):
     if isinstance(paths, list):
         return [os.path.abspath(os.path.expanduser(path)) for path in paths]
-    return os.path.abspath(os.path.expanduser(paths))
+    return os.path.abspath(os.path.expanduser(paths)) if paths else None
 
 
 def mask_nan(x):
@@ -77,13 +90,6 @@ def get_steps_per_epoch(samples, batch_size):
     return math.ceil(samples / batch_size)
 
 
-def float_feature(list_of_floats):
-    return tf.train.Feature(float_list=tf.train.FloatList(value=list_of_floats))
-
-
-def int64_feature(list_of_ints):
-    return tf.train.Feature(int64_list=tf.train.Int64List(value=list_of_ints))
-
-
-def bytestring_feature(list_of_bytestrings):
-    return tf.train.Feature(bytes_list=tf.train.BytesList(value=list_of_bytestrings))
+def update_total(tqdm_bar, total):
+    tqdm_bar.total = total
+    tqdm_bar.refresh()

@@ -14,16 +14,15 @@
 from __future__ import absolute_import
 
 import os
-import logging
-from tqdm import tqdm
+
 import tensorflow as tf
 
-from runners.base_runners import BaseTrainer, BaseTester, BaseInferencer
+from decoders.ctc_decoders import CTCDecoder
 from featurizers.speech_featurizers import SpeechFeaturizer, read_raw_audio
 from featurizers.text_featurizers import TextFeaturizer
-from decoders.ctc_decoders import CTCDecoder
-from models.ctc_models import create_ctc_model
 from losses.ctc_losses import ctc_loss
+from models.ctc_models import create_ctc_model
+from runners.base_runners import BaseTrainer, BaseTester, BaseInferencer
 from utils.metrics import ErrorRate, wer, cer
 from utils.utils import bytes_to_string
 
@@ -35,10 +34,9 @@ class CTCTrainer(BaseTrainer):
                  speech_featurizer: SpeechFeaturizer,
                  text_featurizer: TextFeaturizer,
                  decoder: CTCDecoder,
-                 train_steps_per_epoch: int,
                  config: dict,
                  is_mixed_precision: bool = False):
-        super(CTCTrainer, self).__init__(train_steps_per_epoch, config)
+        super(CTCTrainer, self).__init__(config)
         self.speech_featurizer = speech_featurizer
         self.text_featurizer = text_featurizer
         self.decoder = decoder
@@ -75,21 +73,22 @@ class CTCTrainer(BaseTrainer):
 
         self.train_metrics["ctc_loss"].update_state(train_loss)
 
-    def _post_train_step(self):
-        self.tqdm.set_postfix_str(f"train_ctc_loss = {self.train_metrics['ctc_loss'].result():.4f}")
+        tf.py_function(lambda: self.tqdm.set_postfix_str(f"train_ctc_loss = {self.train_metrics['ctc_loss'].result().numpy():.4f}"), [], [])
 
+    @tf.function
     def _eval_epoch(self):
         if not self.eval_data_loader: return
-        eval_steps_per_epoch = 0
-        eval_dataset = tqdm(self.eval_data_loader, desc="[eval]")
-        for eval_steps_per_epoch, batch in enumerate(eval_dataset, 1):
-            self._eval_step(batch)
-            eval_dataset.set_postfix_str(f"eval_loss = {self.eval_metrics['ctc_loss'].result():.4f}")
 
-        logging.info(f"Finished evaluation ({eval_steps_per_epoch} steps per epoch) "
-                     f"at step {self.steps.numpy()} gives eval_ctc_loss = {self.eval_metrics['ctc_loss'].result():.4f}, "
-                     f"eval_wer = {self.eval_metrics['wer'].result():.4f}, "
-                     f"eval_cer = {self.eval_metrics['cer'].result():.4f}")
+        tf.print("Validating ...")
+
+        for eval_step, batch in self.eval_data_loader.enumerate(start=1):
+            self._eval_step(batch)
+            tf.print("\rEval steps:", eval_step, end=" ")
+
+        tf.print("Finished evaluation at step", self.steps,
+                 "gives eval_ctc_loss =", self.eval_metrics["ctc_loss"].result(),
+                 "eval_wer =", self.eval_metrics["wer"].result(),
+                 "eval_cer =", self.eval_metrics["cer"].result())
         # Write to tensorboard
         self._write_to_tensorboard(self.eval_metrics, self.steps, stage="eval")
         # Reset
@@ -112,10 +111,11 @@ class CTCTrainer(BaseTrainer):
         self.eval_metrics["wer"].update_state(pred, labels)
         self.eval_metrics["cer"].update_state(pred, labels)
 
-    def _check_log_interval(self):
-        if (self.steps % self.config["log_interval_steps"] == 0) \
-                or (self.steps >= self.max_global_steps):
-            self._write_to_tensorboard(self.train_metrics, self.steps, stage="train")
+    def _exec_log_interval(self):
+        self._write_to_tensorboard(self.train_metrics, self.steps, stage="train")
+        """Reset train metrics after save it to tensorboard."""
+        for metric in self.train_metrics.keys():
+            self.train_metrics[metric].reset_states()
 
     def _save_model_architecture(self):
         with open(os.path.join(self.config["outdir"], "model.yaml"), "w") as f:
@@ -123,7 +123,7 @@ class CTCTrainer(BaseTrainer):
 
     def compile(self, model_config: dict, optimizer_config: dict):
         self.model = create_ctc_model(model_config, self.speech_featurizer, self.text_featurizer)
-        logging.info(self.model.summary())
+        tf.print(self.model.summary())
         self._save_model_architecture()
         self.optimizer = tf.keras.optimizers.get(optimizer_config)
         if self.is_mixed_precision:
@@ -181,7 +181,7 @@ class CTCTester(BaseTester):
         self.test_metrics["cer"].update_state(pred, labels)
 
     def finish(self):
-        logging.info(f"Test results: {self._get_metrics()}")
+        print(f"Test results: {self._get_metrics()}")
 
 
 class CTCInferencer(BaseInferencer):
@@ -208,4 +208,9 @@ class CTCInferencer(BaseInferencer):
 
     def infer(self, audio):
         features, input_length = self.preprocess(audio)
-        return self.postprocess(self.model(features, training=False), input_length)
+
+        @tf.function
+        def predict(features):
+            return self.model(features, training=False)
+
+        return self.postprocess(predict(features), input_length)

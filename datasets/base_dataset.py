@@ -14,8 +14,9 @@
 from __future__ import absolute_import
 
 import abc
-from utils.utils import preprocess_paths
+
 from augmentations.augments import UserAugmentation
+from utils.utils import preprocess_paths
 
 
 class BaseDataset(metaclass=abc.ABCMeta):
@@ -23,17 +24,16 @@ class BaseDataset(metaclass=abc.ABCMeta):
 
     def __init__(self,
                  data_paths: list,
-                 augmentations: dict,
+                 augmentations: dict = None,
                  shuffle: bool = False,
                  stage: str = "train"):
-        self.data_paths = preprocess_paths(data_paths)
+        self.data_paths = preprocess_paths(data_paths) if data_paths else []
         self.augmentations = UserAugmentation(augmentations)
         self.shuffle = shuffle
         self.stage = stage
-        self.num_samples = 0
 
     @abc.abstractmethod
-    def parse(self, record, augment=False):
+    def parse(self, *args, **kwargs):
         pass
 
     @abc.abstractmethod

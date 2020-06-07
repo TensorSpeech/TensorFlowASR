@@ -75,7 +75,7 @@ learning_config:
         batch_size:        8
         train_paths:
             - /mnt/Data/ML/ASR/Preprocessed/Vivos/train/transcripts.tsv
-        eval_paths: []
+        eval_paths:        null
         test_paths:
             - /mnt/Data/ML/ASR/Preprocessed/Vivos/test/transcripts.tsv
         tfrecords_dir:     /mnt/Data/ML/ASR/Preprocessed/Vivos/TFRecords
@@ -88,7 +88,6 @@ learning_config:
     running_config:
         num_epochs:          20
         outdir:              /mnt/Projects/asrk16/trained/local/vivos
-        log_interval_steps:  500
-        eval_interval_steps: 500
-        save_interval_steps: 1000
-        time_interval_steps: 500
+        log_interval_steps:  2
+        eval_interval_steps: 2
+        save_interval_steps: 2

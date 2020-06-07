@@ -20,5 +20,5 @@ from warprnnt_tensorflow import rnnt_loss
 
 @tf.function
 def rnn_tranducer_loss(y_true, y_pred, input_length, label_length):
-    y_pred = tf.nn.log(y_pred)
+    y_pred = tf.nn.log_softmax(y_pred)
     return rnnt_loss(y_pred, y_true, input_length, label_length - 1)

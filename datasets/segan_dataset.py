@@ -15,49 +15,56 @@ from __future__ import absolute_import
 
 import glob
 import os
+
 import tensorflow as tf
-from utils.utils import slice_signal, append_default_keys_dict
+
+from augmentations.augments import Noise
+from datasets.base_dataset import BaseDataset
 from featurizers.speech_featurizers import preemphasis, read_raw_audio
-from augmentations.noise_augment import add_noise
+from utils.utils import slice_signal, append_default_keys_dict
 
 DEFAULT_NOISE_CONF = {
-    "snr": (-1, 0, 5, 10, 15),
+    "snr_list":   (-1, 0, 5, 10, 15),
     "max_noises": 3,
 }
 
 
-class SeganDataset:
-    def __init__(self, clean_data_dir, noises_dir, noise_conf=DEFAULT_NOISE_CONF, window_size=2 ** 14, stride=0.5):
-        assert os.path.exists(clean_data_dir) and os.path.exists(noises_dir)
-        self.clean_data_dir = clean_data_dir
-        self.noises_dir = glob.glob(os.path.join(noises_dir, "**", "*.wav"), recursive=True)
-        self.window_size = window_size
-        self.stride = stride
-        self.noise_conf = append_default_keys_dict(DEFAULT_NOISE_CONF, noise_conf)
+class SeganDataset(BaseDataset):
+    def __init__(self,
+                 stage: str,
+                 data_paths: list,
+                 noises_config: dict,
+                 speech_config: dict,
+                 shuffle: bool = False):
+        self.noises = Noise(append_default_keys_dict(DEFAULT_NOISE_CONF, noises_config))
+        self.speech_config = speech_config
+        super(SeganDataset, self).__init__(data_paths, {}, shuffle, stage)
 
-    def create(self, batch_size, coeff=0.97, sample_rate=16000, shuffle=True):
-        assert os.path.isdir(self.clean_data_dir)
+    def _merge_dirs(self):
+        dirs = []
+        for paths in self.data_paths:
+            dirs.append(glob.glob(os.path.join(paths, "**", "*.wav"), recursive=True))
+        return dirs
 
+    def parse(self, record):
+        clean_wav = record
+        noisy_wav = self.noises(clean_wav, sample_rate=self.speech_config["sample_rate"])
+
+        clean_wav = preemphasis(clean_wav, self.speech_config["preemphasis"])
+        noisy_wav = preemphasis(noisy_wav, self.speech_config["preemphasis"])
+
+        clean_slices = slice_signal(clean_wav, self.speech_config["window_size"], self.speech_config["stride"])
+        noisy_slices = slice_signal(noisy_wav, self.speech_config["window_size"], self.speech_config["stride"])
+
+        return clean_slices, noisy_slices
+
+    def create(self, batch_size):
         def _gen_data():
-            for clean_wav_path in glob.iglob(os.path.join(self.clean_data_dir, "**", "*.wav"), recursive=True):
-                # clean_split = clean_wav_path.split('/')
-                # noisy_split = self.noisy_data_dir.split('/')
-                # clean_split = clean_split[len(noisy_split):]
-                # noisy_split = noisy_split + clean_split
-                # noisy_wav_path = '/' + os.path.join(*noisy_split)
-
-                clean_wav = read_raw_audio(clean_wav_path, sample_rate=sample_rate)
-                clean_slices = slice_signal(clean_wav, self.window_size, self.stride)
-
-                # noisy_wav = read_raw_audio(noisy_wav_path, sample_rate=16000)
-                noisy_wav = add_noise(clean_wav, self.noises_dir, snr_list=self.noise_conf["snr"],
-                                      max_noises=self.noise_conf["max_noises"], sample_rate=sample_rate)
-                noisy_slices = slice_signal(noisy_wav, self.window_size, self.stride)
-
-                for clean_slice, noisy_slice in zip(clean_slices, noisy_slices):
-                    if len(clean_slice) == 0:
-                        continue
-                    yield preemphasis(clean_slice, coeff), preemphasis(noisy_slice, coeff)
+            for clean_wav_path in self._merge_dirs():
+                clean_wav = read_raw_audio(clean_wav_path, sample_rate=self.speech_config["sample_rate"])
+                clean_slices, noisy_slices = self.parse(clean_wav)
+                for clean, noisy in zip(clean_slices, noisy_slices):
+                    yield clean, noisy
 
         dataset = tf.data.Dataset.from_generator(
             _gen_data,
@@ -66,48 +73,13 @@ class SeganDataset:
                 tf.float32
             ),
             output_shapes=(
-                tf.TensorShape([self.window_size]),
-                tf.TensorShape([self.window_size])
+                tf.TensorShape([self.speech_config["window_size"]]),
+                tf.TensorShape([self.speech_config["window_size"]])
             )
         )
-        if shuffle:
-            dataset = dataset.shuffle(3, reshuffle_each_iteration=True)
+        if self.shuffle:
+            dataset = dataset.shuffle(16, reshuffle_each_iteration=True)
         dataset = dataset.batch(batch_size)
         # Prefetch to improve speed of input length
-        dataset = dataset.prefetch(tf.data.experimental.AUTOTUNE)
-        return dataset
-
-    def create_test(self, sample_rate=16000):
-        if os.path.isdir(self.clean_data_dir):
-            def _gen_data():
-                for clean_wav_path in glob.iglob(os.path.join(self.clean_data_dir, "**", "*.wav"), recursive=True):
-                    clean_wav = read_raw_audio(clean_wav_path, sample_rate=sample_rate)
-                    noisy_wav = add_noise(clean_wav, self.noises_dir, snr_list=self.noise_conf["snr"],
-                                          max_noises=self.noise_conf["max_noises"], sample_rate=sample_rate)
-                    yield clean_wav, noisy_wav
-        else:
-            with open(self.clean_data_dir, "r", encoding="utf-8") as en:
-                entries = en.read().splitlines()
-                entries = entries[1:]
-
-            def _gen_data():
-                for clean_wav_path in entries:
-                    clean_wav_path = clean_wav_path.split("\t")[0]
-                    clean_wav = read_raw_audio(clean_wav_path, sample_rate=sample_rate)
-                    noisy_wav = add_noise(clean_wav, self.noises_dir, snr_list=self.noise_conf["snr"],
-                                          max_noises=self.noise_conf["max_noises"], sample_rate=sample_rate)
-                    yield clean_wav, noisy_wav
-
-        dataset = tf.data.Dataset.from_generator(
-            _gen_data,
-            output_types=(
-                tf.float32,
-                tf.float32
-            ),
-            output_shapes=(
-                tf.TensorShape([None]),
-                tf.TensorShape([None])
-            )
-        )
         dataset = dataset.prefetch(tf.data.experimental.AUTOTUNE)
         return dataset

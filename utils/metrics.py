@@ -61,5 +61,5 @@ class ErrorRate(tf.keras.metrics.Metric):
         self.denominator.assign_add(d)
 
     def result(self):
-        if self.denominator == 0: return 0
+        if self.denominator == 0: return 0.0
         return (self.numerator / self.denominator) * 100

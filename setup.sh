@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-pip install -r requirements.txt
+pip install -U -r requirements.txt
 
 mkdir externals || return
 cd ./externals || exit

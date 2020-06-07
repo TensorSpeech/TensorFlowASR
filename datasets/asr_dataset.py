@@ -13,19 +13,20 @@
 # limitations under the License.
 from __future__ import absolute_import
 
+import abc
+import functools
+import glob
+import multiprocessing
 import os
 import sys
-import abc
-import glob
-import functools
-import multiprocessing
+
 import numpy as np
 import tensorflow as tf
 
-from utils.utils import bytestring_feature, get_steps_per_epoch
+from datasets.base_dataset import BaseDataset
 from featurizers.speech_featurizers import read_raw_audio, SpeechFeaturizer
 from featurizers.text_featurizers import TextFeaturizer
-from datasets.base_dataset import BaseDataset
+from utils.utils import bytestring_feature
 
 AUTOTUNE = tf.data.experimental.AUTOTUNE
 TFRECORD_SHARDS = 16
@@ -58,7 +59,7 @@ class ASRDataset(BaseDataset):
                  speech_featurizer: SpeechFeaturizer,
                  text_featurizer: TextFeaturizer,
                  data_paths: list,
-                 augmentations: dict,
+                 augmentations: dict = None,
                  shuffle: bool = False):
         super(ASRDataset, self).__init__(data_paths, augmentations, shuffle, stage)
         self.speech_featurizer = speech_featurizer
@@ -74,7 +75,6 @@ class ASRDataset(BaseDataset):
         # The files is "\t" seperated
         lines = [line.split("\t", 2) for line in lines]
         lines = np.array(lines)
-        self.num_samples = len(lines)
         return lines
 
     def preprocess(self, audio, transcript, with_augment=False):
@@ -101,12 +101,11 @@ class ASRDataset(BaseDataset):
             augmented_dataset = dataset.map(functools.partial(self.parse, augment=True), num_parallel_calls=AUTOTUNE)
             dataset = dataset.map(functools.partial(self.parse, augment=False), num_parallel_calls=AUTOTUNE)
             dataset = dataset.concatenate(augmented_dataset)
-            self.num_samples *= 2
         else:
             dataset = dataset.map(functools.partial(self.parse, augment=True), num_parallel_calls=AUTOTUNE)
         # SHUFFLE unbatched dataset (shuffle the elements with each other) if not using sortagrad
         if self.shuffle:
-            dataset = dataset.shuffle(TFRECORD_SHARDS)
+            dataset = dataset.shuffle(TFRECORD_SHARDS, reshuffle_each_iteration=True)
 
         # PADDED BATCH the dataset
         feature_dim, channel_dim = self.speech_featurizer.compute_feature_dim()
@@ -120,7 +119,7 @@ class ASRDataset(BaseDataset):
 
         # PREFETCH to improve speed of input length
         dataset = dataset.prefetch(AUTOTUNE)
-        return dataset, get_steps_per_epoch(self.num_samples, batch_size)
+        return dataset
 
     @abc.abstractmethod
     def parse(self, record, augment=False):
@@ -140,7 +139,7 @@ class ASRTFRecordDataset(ASRDataset):
                  speech_featurizer: SpeechFeaturizer,
                  text_featurizer: TextFeaturizer,
                  stage: str,
-                 augmentations: dict,
+                 augmentations: dict = None,
                  shuffle: bool = False):
         super(ASRTFRecordDataset, self).__init__(stage, speech_featurizer, text_featurizer,
                                                  data_paths, augmentations, shuffle)
@@ -149,14 +148,17 @@ class ASRTFRecordDataset(ASRDataset):
             os.makedirs(self.tfrecords_dir)
 
     def create_tfrecords(self):
-        entries = self.read_entries()
-        if len(entries) == 0: return
-        print(f"Creating {self.stage}.tfrecord ...")
         if not os.path.exists(self.tfrecords_dir):
             os.makedirs(self.tfrecords_dir)
+
         if glob.glob(os.path.join(self.tfrecords_dir, f"{self.stage}*.tfrecord")):
             print(f"TFRecords're already existed: {self.stage}")
-            return
+            return True
+
+        entries = self.read_entries()
+        if len(entries) <= 0: return False
+
+        print(f"Creating {self.stage}.tfrecord ...")
 
         def get_shard_path(shard_id):
             return os.path.join(self.tfrecords_dir, f"{self.stage}_{shard_id}.tfrecord")
@@ -183,9 +185,9 @@ class ASRTFRecordDataset(ASRDataset):
 
     def create(self, batch_size):
         # Create TFRecords dataset
-        self.create_tfrecords()
+        if not self.create_tfrecords(): return None
+
         pattern = os.path.join(self.tfrecords_dir, f"{self.stage}*.tfrecord")
-        if not glob.glob(pattern): return None, 0
         files_ds = tf.data.Dataset.list_files(pattern)
         ignore_order = tf.data.Options()
         ignore_order.experimental_deterministic = False
@@ -211,7 +213,7 @@ class ASRGeneratorDataset(ASRDataset):
         # Create Generator dataset
 
         entries = self.read_entries()
-        if len(entries) == 0: return None, 0
+        if len(entries) == 0: return None
 
         def gen():
             for audio_path, _, transcript in entries:

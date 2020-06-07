@@ -13,14 +13,16 @@
 # limitations under the License.
 from __future__ import absolute_import
 
-import os
 import abc
 import glob
-import librosa
+import os
 import random
 from collections import UserDict
-from augmentations.spec_augment import time_masking, freq_masking
+
+import librosa
+
 from augmentations.noise_augment import add_noise, add_white_noise, add_realworld_noise
+from augmentations.spec_augment import time_masking, freq_masking
 
 
 class Augmentation(metaclass=abc.ABCMeta):
@@ -107,11 +109,15 @@ AUGMENTATIONS = {
 
 
 class UserAugmentation(UserDict):
-    def __init__(self, config: dict):
+    def __init__(self, config: dict = None):
+        if not config: config = {}
         config["before"] = self.parse(config.get("before", {}))
         config["after"] = self.parse(config.get("after", {}))
         config["include_original"] = config.get("include_original", False)
         super(UserAugmentation, self).__init__(config)
+
+    def __missing__(self, key):
+        return None
 
     @staticmethod
     def parse(config: dict) -> list:

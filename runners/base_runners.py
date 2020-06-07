@@ -16,15 +16,14 @@
 
 from __future__ import absolute_import
 
-import os
 import abc
+import os
 import time
-import logging
-from tqdm import tqdm
 
 import tensorflow as tf
+from tqdm import tqdm
 
-from utils.utils import preprocess_paths
+from utils.utils import preprocess_paths, update_total
 
 
 class BaseRunner(metaclass=abc.ABCMeta):
@@ -60,17 +59,14 @@ class BaseRunner(metaclass=abc.ABCMeta):
 class BaseTrainer(BaseRunner):
     """Customized trainer module for all models."""
 
-    def __init__(self,
-                 train_steps_per_epoch: int,
-                 config: dict):
+    def __init__(self, config: dict):
         # Configurations
-        # train_steps_per_epoch = math.ceil(num_samples / batch_size)
         super(BaseTrainer, self).__init__(config)
         # Steps and Epochs start from 0
         self.steps = tf.Variable(0, dtype=tf.int64)
-        self.epochs = tf.Variable(0, dtype=tf.int32)
-        self.train_steps_per_epoch = train_steps_per_epoch
-        self.max_global_steps = int(config["num_epochs"]) * train_steps_per_epoch
+        self.epochs = tf.Variable(0)
+        self.train_steps_per_epoch = tf.Variable(0, dtype=tf.int64)
+        self.finish_training = tf.Variable(False, dtype=tf.bool)
         # Time metric
         self.time_metrics = {
             "training_hours": tf.keras.metrics.Sum("training_hours", dtype=tf.float32)
@@ -101,12 +97,21 @@ class BaseTrainer(BaseRunner):
 
     def run(self):
         """Run training."""
-        self.tqdm = tqdm(initial=self.steps.numpy(), total=self.max_global_steps, desc="[train]")
-        while self.steps.numpy() < self.max_global_steps:
+        if self.steps.numpy() > 0: tf.print("Resume training ...")
+
+        self.tqdm = tqdm(initial=self.steps.numpy(), total=None, desc="[train]", unit="step")
+
+        while True:
+            if self.finish_training.numpy(): break
+            start = time.time()
             self._train_epoch()
+            self.time_metrics["training_hours"].update_state((time.time() - start) / 3600)
+            self._write_to_tensorboard(self.time_metrics, self.steps, stage="train")
+            update_total(self.tqdm, self.config["num_epochs"] * self.train_steps_per_epoch.numpy())
 
         self.tqdm.close()
-        logging.info("Finish training.")
+
+        tf.print("Finish training.")
 
     def create_checkpoint_manager(self,
                                   max_to_keep=10,
@@ -120,42 +125,40 @@ class BaseTrainer(BaseRunner):
 
     def save_checkpoint(self):
         """Save checkpoint."""
-        self.ckpt_manager.save()
+        tf.py_function(self.ckpt_manager.save, [], [tf.string])
+        tf.print("Successfully saved checkpoint at", self.steps, "steps.")
 
     def load_checkpoint(self):
         """Load checkpoint."""
         if self.ckpt_manager.latest_checkpoint:
             self.ckpt.restore(self.ckpt_manager.latest_checkpoint)
 
-    def _update_time_metrics(self, start, end):
-        self.time_metrics["training_hours"].update_state((end - start) / 3600)
-
+    @tf.function
     def _train_epoch(self):
         """Train model one epoch."""
-        for batch in self.train_data_loader:
+        for spe, batch in self.train_data_loader.enumerate(start=1):
             # one step training
-            start = time.time()
             self._train_step(batch)
-            self._post_train_step()
 
             # Update steps
             self.steps.assign_add(1)
-            self.tqdm.update(1)
+            self.train_steps_per_epoch.assign(spe)
+            tf.py_function(lambda: self.tqdm.update(1), [], [])
 
-            # check interval
+            # check interval, must pass updated steps due to unrecognized updated self attributes
             self._check_log_interval()
-            self._check_eval_interval()
             self._check_save_interval()
-            self._update_time_metrics(start, time.time())
-            self._check_time_interval()
+            self._check_eval_interval()
 
         # Update
         self.epochs.assign_add(1)
-        logging.info(f"(Steps: {self.steps.numpy()}) "
-                     f"Finished {self.epochs.numpy()} epoch training "
-                     f"({self.train_steps_per_epoch} steps per epoch).")
+        if self.steps >= self.config["num_epochs"] * self.train_steps_per_epoch: self.finish_training.assign(True)
+        # Logging
+        tf.print("Finish epochs", self.epochs, "at steps", self.steps, "with", self.train_steps_per_epoch, "steps per epoch")
 
-    def _post_train_step(self):
+    @abc.abstractmethod
+    def _train_step(self, batch):
+        """One step training."""
         pass
 
     @abc.abstractmethod
@@ -164,45 +167,45 @@ class BaseTrainer(BaseRunner):
         pass
 
     @abc.abstractmethod
-    def _train_step(self, batch):
-        """One step training."""
-        pass
-
-    @abc.abstractmethod
     def _eval_step(self, batch):
         """One eval step."""
         pass
 
     @abc.abstractmethod
-    def compile(self, model, optimizer):
+    def compile(self, *args, **kwargs):
+        """ Function to initialize models and optimizers """
         pass
 
     @abc.abstractmethod
-    def fit(self, train_dataset, eval_dataset, max_to_keep=10):
+    def fit(self, *args, **kwargs):
+        """ Function run start training, including executing "run" func """
         pass
 
     @abc.abstractmethod
-    def _check_log_interval(self):
+    def _exec_log_interval(self):
         """Save log interval."""
         pass
 
+    def _check_log_interval(self):
+        """Save log interval."""
+        if tf.logical_or(
+                tf.equal(tf.math.mod(self.steps, self.config["log_interval_steps"]), 0),
+                self.finish_training):
+            self._exec_log_interval()
+
     def _check_eval_interval(self):
-        """Evaluation interval step."""
-        if (self.steps % self.config["eval_interval_steps"] == 0) \
-                or (self.steps.numpy() >= self.max_global_steps):
+        """Save interval checkpoint."""
+        if tf.logical_or(
+                tf.equal(tf.math.mod(self.steps, self.config["eval_interval_steps"]), 0),
+                self.finish_training):
             self._eval_epoch()
 
     def _check_save_interval(self):
         """Save interval checkpoint."""
-        if (self.steps % self.config["save_interval_steps"] == 0) \
-                or (self.steps.numpy() >= self.max_global_steps):
+        if tf.logical_or(
+                tf.equal(tf.math.mod(self.steps, self.config["save_interval_steps"]), 0),
+                self.finish_training):
             self.save_checkpoint()
-            logging.info(f"Successfully saved checkpoint @ {self.steps.numpy()} steps.")
-
-    def _check_time_interval(self):
-        if (self.steps % self.config["time_interval_steps"] == 0) \
-                or (self.steps.numpy() >= self.max_global_steps):
-            self._write_to_tensorboard(self.time_metrics, self.steps, stage="train")
 
 
 class BaseLoader(metaclass=abc.ABCMeta):
@@ -267,7 +270,7 @@ class BaseTester(BaseLoader, BaseRunner):
             # Print postfix
             self._post_process_step()
 
-        logging.info(f"Finished testing ({self.test_steps_per_epoch} steps per epoch).")
+        tf.print("Finished testing with", self.test_steps_per_epoch, "steps per epoch.")
         self.finish()
 
     @abc.abstractmethod

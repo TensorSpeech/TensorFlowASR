@@ -13,9 +13,11 @@
 # limitations under the License.
 from __future__ import absolute_import
 
-import yaml
 from collections import UserDict
-from utils.utils import preprocess_paths
+
+import yaml
+
+from utils.utils import preprocess_paths, append_default_keys_dict
 
 
 def load_yaml(path):
@@ -23,15 +25,15 @@ def load_yaml(path):
         return yaml.load(file, Loader=yaml.FullLoader)
 
 
-def fill_missing(default: dict, custom: dict, level: int = 0):
-    if level > 1:  # Only fill default value up to level 1 from 0 of config dict
-        return custom
-    for key, value in default.items():
-        if not custom.get(key, None):
-            custom[key] = value
-        elif isinstance(value, dict):
-            custom[key] = fill_missing(value, custom[key], level + 1)
-    return custom
+# def fill_missing(default: dict, custom: dict, level: int = 0):
+#     if level > 1:  # Only fill default value up to level 1 from 0 of config dict
+#         return custom
+#     for key, value in default.items():
+#         if not custom.get(key, None):
+#             custom[key] = value
+#         elif isinstance(value, dict):
+#             custom[key] = fill_missing(value, custom[key], level + 1)
+#     return custom
 
 
 class UserConfig(UserDict):
@@ -40,7 +42,7 @@ class UserConfig(UserDict):
     def __init__(self, default: str, custom: str, learning: bool = True):
         assert default, "Default dict for config must be set"
         default = load_yaml(default)
-        custom = fill_missing(default, load_yaml(custom))
+        custom = append_default_keys_dict(default, load_yaml(custom))
         super(UserConfig, self).__init__(custom)
         if not learning:  # No need to have learning_config on Inferencer
             del self.data["learning_config"]

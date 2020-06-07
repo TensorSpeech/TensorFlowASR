@@ -50,10 +50,3 @@ def create_discriminator(d_num_fmaps, window_size, kwidth=31, ratio=2, noise_std
         "clean": clean_signal,
         "noisy": noisy_signal,
     }, outputs=hi, name="segan_disc")
-
-
-@tf.function
-def discriminator_loss(d_real_logit, d_fake_logit):
-    real_loss = tf.reduce_mean(tf.math.squared_difference(d_real_logit, 1.))
-    fake_loss = tf.reduce_mean(tf.math.squared_difference(d_fake_logit, 0.))
-    return real_loss + fake_loss
