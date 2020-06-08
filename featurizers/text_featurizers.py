@@ -15,6 +15,8 @@ from __future__ import absolute_import
 
 import codecs
 import unicodedata
+import numpy as np
+import multiprocessing
 import tensorflow as tf
 from utils.utils import preprocess_paths
 
@@ -57,10 +59,17 @@ class TextFeaturizer:
         feats = [self.token_to_index[token] for token in tokens]
         return tf.convert_to_tensor(feats, dtype=tf.int32)
 
-    def iextract(self, feat: tf.Tensor) -> str:
+    def iextract(self, feat: tf.Tensor) -> tf.Tensor:
         feat = feat.numpy()
-        feat = feat[feat != self.num_classes - 1]
-        return "".join([self.index_to_token[i] for i in feat])
+
+        with multiprocessing.Pool(len(feat)) as pool:
+            results = pool.map(self._idx_to_char, feat)
+
+        return tf.convert_to_tensor(np.concatenate(results), dtype=tf.string)
+
+    def _idx_to_char(self, arr: np.ndarray) -> np.ndarray:
+        arr = arr[arr != self.num_classes - 1]
+        return np.array(["".join([self.index_to_token[i] for i in arr])])
 
 # class UnicodeFeaturizer:
 #     def __init__(self)

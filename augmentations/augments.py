@@ -62,7 +62,7 @@ class Noise(Augmentation):
         params["snr_list"] = list(params["snr_list"])
         if not any([i < 0 for i in params["snr_list"]]):
             params["snr_list"].append(-1)
-        params["noise_dir"] = glob.glob(os.path.join(params["noise_dir"], "**", "*.wav"), recursive=True)
+        params["noises"] = glob.glob(os.path.join(params["noises"], "**", "*.wav"), recursive=True)
         super(Noise, self).__init__(params)
 
     def func(self, *args, **kwargs):
@@ -85,7 +85,7 @@ class RealWorldNoise(Augmentation):
         params["snr_list"] = list(params["snr_list"])
         if not any([i < 0 for i in params["snr_list"]]):
             params["snr_list"].append(-1)
-        params["noise_dir"] = glob.glob(os.path.join(params["noise_dir"], "**", "*.wav"), recursive=True)
+        params["noises"] = glob.glob(os.path.join(params["noises"], "**", "*.wav"), recursive=True)
         super(RealWorldNoise, self).__init__(params)
 
     def func(self, *args, **kwargs):

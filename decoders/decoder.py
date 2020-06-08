@@ -31,8 +31,7 @@ class Decoder(metaclass=abc.ABCMeta):
     @tf.function
     def convert_to_string(self, batch: tf.Tensor) -> tf.Tensor:
         # Convert to string
-        _map = lambda x: tf.py_function(self.text_featurizer.iextract, inp=[x], Tout=tf.string)
-        return tf.map_fn(_map, batch, dtype=tf.string)
+        return tf.py_function(self.text_featurizer.iextract, inp=[batch], Tout=tf.string)
 
     @tf.function
     def decode(self, probs, input_length):

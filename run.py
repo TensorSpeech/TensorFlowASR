@@ -26,6 +26,7 @@ tf.get_logger().setLevel('ERROR')
 
 from scripts.run_ctc import main as main_ctc
 from scripts.run_segan import main as main_segan
+from scripts.create_tfrecords import main as main_stt_tfrecords
 
 gpus = tf.config.experimental.list_physical_devices('GPU')
 if gpus:
@@ -41,14 +42,16 @@ if gpus:
         print(e)
 
 
-
-
 def main():
     tf.keras.backend.clear_session()
 
     parser = argparse.ArgumentParser(prog="ASR")
 
     subparsers = parser.add_subparsers(help='Commands for training or testing models')
+
+    parser_tfrecords = subparsers.add_parser("stt_tfrecords", help="Create stt tfrecords")
+    run_stt_tfrecords = main_stt_tfrecords(parser_tfrecords)
+    parser_tfrecords.set_defaults(func=run_stt_tfrecords)
 
     # Create parser for ctc
     parser_ctc = subparsers.add_parser("ctc", help="Run ctc model")

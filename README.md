@@ -16,9 +16,25 @@ Collected from many sources:
 
 ## Results
 
-1. DS2 (logfbank, 3 first feat_dims, 3 conv, 5 blstm, 1 fc), on VIVOS test set, 20 epochs trained on VIVOS trainset with no augmentations, using Beam Search size 500 with KenLM gives ```WER = 11.1888%, CER = 6.9391%```
+### Features, Model and Decoder
 
-![DS2_VIVOS_NOAUG](./images/test_vivos_noaug.png)
+* Features: 80 ```Log mel spectrogram```, ```Delta``` and ```Delta_delta```
+* Model: Based Deep Speech 2
+    * 3 Conv with kernels ```[11, 41], [11, 21], [11, 11]```, strides ```[2,2], [1, 2], [1, 2]``` and filters ```32, 32, 96```
+    * 5 BLSTM with ```1024``` units total
+    * 1 FC Softmax
+* Decoder: BeamSearch with 5-gram KenLM, beam width ```500```, alpha ```2.0``` and beta ```1.0```
+
+### Test results
+
+1. Train set: VIVOS train | Test set: VIVOS test | No augmentations | Results: ```WER = 11.1888%, CER = 6.9391%```
+
+    ![DS2_VIVOS_NOAUG](./images/test_vivos_noaug.png)
+
+3. Train set: VIVOS train, 80% VLSP, Private dataset | Test set: VIVOS test, InfoRe 25hrs, 20% VLSP | White noise, real world noises, time stretch, freq masking, time masking | Results: ```WER = %, CER = %```
+
+    ![DS2_ALL](./images/test_all.png)
+
 
 ## Requirements
 
@@ -55,22 +71,20 @@ There're 3 main models in this repo: CTCModel, SEGAN and RNNTransducer
 
 ## Training
 
-There're 2 training methods for the ASR:
-
-1. Train using ```tf.GradientTape``` with ```tf.data.Dataset.from_generator``` or ```tf.data.TFRecordDataset```.
-2. Train using keras built-in function ```fit``` with ```tf.data.Dataset.from_generator``` or ```tf.data.TFRecordDataset```.
+Train using ```tf.GradientTape``` with ```tf.data.Dataset.from_generator``` or ```tf.data.TFRecordDataset```.
 
 ## Evaluation Metrics
 
-*Word Error Rate (WER)* and *Character Error Rate (CER)* are used.
+* STT: *Word Error Rate (WER)* and *Character Error Rate (CER)* are used.
+* SEGAN: [https://github.com/usimarit/semetrics](https://github.com/usimarit/semetrics)
 
 ## Running
 
-Example config file can be found in directory ```configs```.
+Default config files can be found in directory ```configs```. Make sure your custom config has the same structure.
 
 ```bash
 chmod a+x setup.sh && chown $USER:$USER setup.sh && ./setup.sh # Install dependencies
-python $SCRIPT --help # Where $SCRIPT is one of the run_*.py files, --help to see the flags
+python run.py --help # --help to see the flags
 ```
 
 ## References & Credits

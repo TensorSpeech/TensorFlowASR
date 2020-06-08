@@ -24,7 +24,7 @@ from losses.ctc_losses import ctc_loss
 from models.ctc_models import create_ctc_model
 from runners.base_runners import BaseTrainer, BaseTester, BaseInferencer
 from utils.metrics import ErrorRate, wer, cer
-from utils.utils import bytes_to_string
+from utils.utils import bytes_to_string, print_one_line
 
 
 class CTCTrainer(BaseTrainer):
@@ -79,11 +79,11 @@ class CTCTrainer(BaseTrainer):
     def _eval_epoch(self):
         if not self.eval_data_loader: return
 
-        tf.print("Validating ...")
+        tf.print("Evaluating ...")
 
         for eval_step, batch in self.eval_data_loader.enumerate(start=1):
             self._eval_step(batch)
-            tf.print("\rEval steps:", eval_step, end=" ")
+            print_one_line("Eval steps:", eval_step)
 
         tf.print("Finished evaluation at step", self.steps,
                  "gives eval_ctc_loss =", self.eval_metrics["ctc_loss"].result(),

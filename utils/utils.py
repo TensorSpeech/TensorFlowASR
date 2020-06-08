@@ -93,3 +93,9 @@ def get_steps_per_epoch(samples, batch_size):
 def update_total(tqdm_bar, total):
     tqdm_bar.total = total
     tqdm_bar.refresh()
+
+
+def print_one_line(*args, **kwargs):
+    sys.stdout.write("\033[K")
+    tf.print("\r", *args, **kwargs, end=" ")
+    sys.stdout.flush()

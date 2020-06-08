@@ -99,7 +99,7 @@ class BaseTrainer(BaseRunner):
         """Run training."""
         if self.steps.numpy() > 0: tf.print("Resume training ...")
 
-        self.tqdm = tqdm(initial=self.steps.numpy(), total=None, desc="[train]", unit="step")
+        self.tqdm = tqdm(initial=self.steps.numpy(), total=None, desc="[train]", unit="step", maxinterval=None)
 
         while True:
             if self.finish_training.numpy(): break
@@ -234,7 +234,7 @@ class BaseLoader(metaclass=abc.ABCMeta):
         except Exception as e:
             raise Exception(e)
 
-    def compile(self):
+    def compile(self, *args, **kwargs):
         if self.from_weights:
             self.load_model_from_weights()
         else:
@@ -255,7 +255,7 @@ class BaseTester(BaseLoader, BaseRunner):
 
     def set_test_data_loader(self, test_dataset):
         """Set train data loader (MUST)."""
-        self.test_data_loader = tqdm(test_dataset, desc="[test]")
+        self.test_data_loader = tqdm(test_dataset, desc="[test]", unit="batch", maxinterval=None)
 
     def get_test_data_loader(self):
         """Get train data loader."""

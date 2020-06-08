@@ -57,7 +57,7 @@ learning_config:
                 snr_list: [0, 5, 10, 15]
             real_world_noise:
                 snr_list: [0, 5, 10, 15]
-                noise_dir:  /mnt/Data/ML/ASR/Preprocessed/Noises
+                noises:     /mnt/Data/ML/ASR/Preprocessed/Noises
                 max_noises: 3
             time_stretch:
                 min_ratio: 0.5
@@ -71,8 +71,9 @@ learning_config:
                 num_freq_mask:   1
                 freq_mask_param: 22
 
+    batch_size:        8
+
     dataset_config:
-        batch_size:        8
         train_paths:
             - /mnt/Data/ML/ASR/Preprocessed/Vivos/train/transcripts.tsv
         eval_paths:        null

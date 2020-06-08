@@ -66,7 +66,7 @@ class CTCDecoder(Decoder):
 
         return np.concatenate(decoded)
 
-    def _perform_beamsearch(self, probs, input_length):
+    def _perform_beamsearch(self, probs, *args, **kwargs):
         decoded = ctc_beam_search_decoder_batch(probs_split=probs.numpy(),
                                                 vocabulary=self.text_featurizer.vocab_array,
                                                 beam_size=self.decoder_config["beam_width"],

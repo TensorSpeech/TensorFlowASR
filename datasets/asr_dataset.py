@@ -26,7 +26,7 @@ import tensorflow as tf
 from datasets.base_dataset import BaseDataset
 from featurizers.speech_featurizers import read_raw_audio, SpeechFeaturizer
 from featurizers.text_featurizers import TextFeaturizer
-from utils.utils import bytestring_feature
+from utils.utils import bytestring_feature, print_one_line
 
 AUTOTUNE = tf.data.experimental.AUTOTUNE
 TFRECORD_SHARDS = 16
@@ -48,8 +48,7 @@ def write_tfrecord_file(splitted_entries):
                 audio = f.read()
             example = to_tfrecord(audio, bytes(transcript, "utf-8"))
             out.write(example.SerializeToString())
-            sys.stdout.write("\033[K")
-            print(f"\rProcessed: {audio_file}", end="")
+            print_one_line("Processed:", audio_file)
     print(f"\nCreated {shard_path}")
 
 
@@ -68,6 +67,7 @@ class ASRDataset(BaseDataset):
     def read_entries(self):
         lines = []
         for file_path in self.data_paths:
+            print(f"Reading {file_path} ...")
             with tf.io.gfile.GFile(file_path, "r") as f:
                 temp_lines = f.read().splitlines()
                 # Skip the header of tsv file
@@ -75,6 +75,7 @@ class ASRDataset(BaseDataset):
         # The files is "\t" seperated
         lines = [line.split("\t", 2) for line in lines]
         lines = np.array(lines)
+        if len(self.data_paths) > 1: np.random.shuffle(lines)  # Mix transcripts.tsv
         return lines
 
     def preprocess(self, audio, transcript, with_augment=False):

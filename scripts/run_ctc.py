@@ -29,7 +29,7 @@ DEFAULT_YAML = os.path.join(os.path.abspath(os.path.dirname(config.__file__)), "
 
 
 def main(parser):
-    modes = ["train", "test", "create_tfrecords"]
+    modes = ["train", "test"]
 
     parser.add_argument("--mode", "-m", type=str, default=None,
                         help=f"Mode in {modes}")
@@ -70,13 +70,13 @@ def main(parser):
                 config["learning_config"]["dataset_config"]["tfrecords_dir"],
                 speech_featurizer, text_featurizer, "train",
                 augmentations=config["learning_config"]["augmentations"], shuffle=True,
-            ).create(config["learning_config"]["dataset_config"]["batch_size"])
+            ).create(config["learning_config"]["batch_size"])
 
             eval_dataset = ASRTFRecordDataset(
                 config["learning_config"]["dataset_config"]["eval_paths"],
                 config["learning_config"]["dataset_config"]["tfrecords_dir"],
                 speech_featurizer, text_featurizer, "eval", shuffle=False
-            ).create(config["learning_config"]["dataset_config"]["batch_size"])
+            ).create(config["learning_config"]["batch_size"])
 
             ctc_trainer = CTCTrainer(speech_featurizer, text_featurizer, decoder,
                                      config["learning_config"]["running_config"], args.mixed_precision)
@@ -93,7 +93,7 @@ def main(parser):
                 else:
                     ctc_trainer.model.save(args.export)
 
-        elif args.mode == "test":
+        else:
             tf.random.set_seed(0)
             assert args.export is not None
 
@@ -101,31 +101,11 @@ def main(parser):
                 config["learning_config"]["dataset_config"]["test_paths"],
                 config["learning_config"]["dataset_config"]["tfrecords_dir"],
                 speech_featurizer, text_featurizer, "test", shuffle=False
-            ).create(config["learning_config"]["dataset_config"]["batch_size"])
+            ).create(config["learning_config"]["batch_size"])
 
             ctc_tester = CTCTester(text_featurizer, decoder, config["learning_config"]["running_config"],
                                    args.export, args.arch, from_weights=args.from_weights)
             ctc_tester.compile()
             ctc_tester.run(test_dataset)
-
-        else:
-            ASRTFRecordDataset(
-                config["learning_config"]["dataset_config"]["train_paths"],
-                config["learning_config"]["dataset_config"]["tfrecords_dir"],
-                speech_featurizer, text_featurizer, "train",
-                augmentations=config["learning_config"]["augmentations"], shuffle=True,
-            ).create_tfrecords()
-
-            ASRTFRecordDataset(
-                config["learning_config"]["dataset_config"]["eval_paths"],
-                config["learning_config"]["dataset_config"]["tfrecords_dir"],
-                speech_featurizer, text_featurizer, "eval", shuffle=False
-            ).create_tfrecords()
-
-            ASRTFRecordDataset(
-                config["learning_config"]["dataset_config"]["test_paths"],
-                config["learning_config"]["dataset_config"]["tfrecords_dir"],
-                speech_featurizer, text_featurizer, "test", shuffle=False
-            ).create_tfrecords()
 
     return run

@@ -29,6 +29,17 @@ class Z(tf.keras.layers.Layer):
                              name="z", mean=self.mean, stddev=self.stddev)
         return tf.keras.layers.Concatenate(axis=3)([z, inputs])
 
+    def get_config(self):
+        config = super(Z, self).get_config()
+        config.update({
+            "mean":   self.mean,
+            "stddev": self.stddev
+        })
+        return config
+
+    def from_config(self, config):
+        return self(**config)
+
 
 def create_generator(g_enc_depths, window_size, kwidth=31, ratio=2):
     g_dec_depths = g_enc_depths.copy()

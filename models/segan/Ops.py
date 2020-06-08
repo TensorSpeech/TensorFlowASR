@@ -26,7 +26,7 @@ class DownConv(tf.keras.layers.Layer):
             padding="same",
             use_bias=True,
             kernel_initializer=tf.keras.initializers.TruncatedNormal(stddev=0.02),
-            bias_initializer=tf.keras.initializers.zeros
+            bias_initializer=tf.keras.initializers.Zeros()
         )
 
     def call(self, inputs, training=False):
@@ -51,7 +51,7 @@ class DeConv(tf.keras.layers.Layer):
             padding="same",
             use_bias=True,
             kernel_initializer=tf.keras.initializers.TruncatedNormal(stddev=0.02),
-            bias_initializer=tf.keras.initializers.zeros
+            bias_initializer=tf.keras.initializers.Zeros()
         )
 
     def call(self, inputs, training=False):
@@ -114,9 +114,8 @@ class Reshape1to3(tf.keras.layers.Layer):
         super(Reshape1to3, self).__init__(trainable=False, name=name, **kwargs)
 
     def call(self, inputs, training=False):
-        batch_size = tf.shape(inputs)[0]
         width = inputs.get_shape().as_list()[1]
-        return tf.reshape(inputs, [batch_size, width, 1, 1])
+        return tf.reshape(inputs, [-1, width, 1, 1])
 
     def get_config(self):
         config = super(Reshape1to3, self).get_config()
@@ -131,9 +130,8 @@ class Reshape3to1(tf.keras.layers.Layer):
         super(Reshape3to1, self).__init__(trainable=False, name=name, **kwargs)
 
     def call(self, inputs, training=False):
-        batch_size = tf.shape(inputs)[0]
         width = inputs.get_shape().as_list()[1]
-        return tf.reshape(inputs, [batch_size, width])
+        return tf.reshape(inputs, [-1, width])
 
     def get_config(self):
         config = super(Reshape3to1, self).get_config()

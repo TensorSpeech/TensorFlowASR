@@ -13,7 +13,7 @@
 # limitations under the License.
 
 speech_config:
-    sample_rate: 16384
+    sample_rate: 16000
     stride:      0.5
     preemphasis: 0.95
     window_size: 16384
@@ -25,18 +25,17 @@ model_config:
     ratio:            2
 
 learning_config:
+    batch_size: 8
+
     dataset_config:
         noise_config:
-            snr_list: [-1, 2.5, 7.5, 12.5, 17.5]
+            snr_list: [2.5, 7.5, 12.5, 17.5]
             max_noises: 3
-            noise_dir:  /mnt/Data/ML/ASR/Preprocessed/Noises
-        batch_size: 32
+            noises:     /mnt/Data/ML/ASR/Preprocessed/Noises
         train_paths:
             - /mnt/Data/ML/ASR/Preprocessed/Vivos/train
-        eval_paths:
-            - /mnt/Data/ML/ASR/Preprocessed/Vivos/test
         test_paths:
-            - /mnt/Data/ML/ASR/Preprocessed/Vivos/test/transcripts.tsv
+            - /mnt/Data/ML/ASR/Preprocessed/Vivos/test
 
     optimizer:
         generator:
