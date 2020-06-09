@@ -1,10 +1,11 @@
+build
+dist
+*.egg-info
 tensorflow
-beamsearch_with_lm
-warp-transducer
-semetrics
 externals
 coc-settings.json
 .session.vim
+octave-workspace
 .idea
 .vscode
 __pycache__

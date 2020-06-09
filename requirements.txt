@@ -1,9 +1,0 @@
-numpy
-nltk
-sox
-soundfile
-librosa
-tensorflow-addons
-matplotlib
-tqdm
-pyyaml

@@ -80,12 +80,16 @@ Train using ```tf.GradientTape``` with ```tf.data.Dataset.from_generator``` or `
 
 ## Running
 
-Default config files can be found in directory ```configs```. Make sure your custom config has the same structure.
+Default config files can be found in directory ```tiramisu_asr/configs```. Make sure your custom config has the same structure.
 
 ```bash
-chmod a+x setup.sh && chown $USER:$USER setup.sh && ./setup.sh # Install dependencies
-python run.py --help # --help to see the flags
+./setup.sh # for installing external pip packages
+python -m tiramisu_asr.run --help
 ```
+
+## Testing
+
+For SEGAN, must do ```apt install octave```
 
 ## References & Credits
 

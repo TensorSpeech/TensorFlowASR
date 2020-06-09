@@ -1,7 +1,5 @@
 #!/usr/bin/env bash
 
-pip install -U -r requirements.txt
-
 mkdir externals || return
 cd ./externals || exit
 
@@ -34,18 +32,16 @@ if [ ! -d warp-transducer ]; then
 fi
 
 
-if [ "$1" = "semetrics" ]; then
-
-    if [ ! -d semetrics ]; then
-        git clone https://github.com/usimarit/semetrics
-    fi
+if [ ! -d semetrics ]; then
+    git clone https://github.com/usimarit/semetrics
 
     cd semetrics || exit
-    chmod a+x setup.sh
-    chown "$USER":"$USER" setup.sh
-    ./setup.sh
+    python setup.py install
 
     cd ..
 
 fi
 
+cd ..
+
+python setup.py install
