@@ -57,6 +57,4 @@ learning_config:
         num_epochs:          86
         outdir:              /mnt/Projects/asrk16/trained/local/segan
         log_interval_steps:  500
-        eval_interval_steps: 500
         save_interval_steps: 1000
-        time_interval_steps: 500

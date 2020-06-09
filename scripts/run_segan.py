@@ -39,6 +39,9 @@ def main(parser):
     parser.add_argument("--mixed_precision", type=bool, default=False,
                         help="Whether to use mixed precision training")
 
+    parser.add_argument("--from_weights", type=bool, default=False,
+                        help="Whether to save or load only weights")
+
     def run(args):
         assert args.mode in modes, f"Mode must in {modes}"
 
@@ -46,6 +49,11 @@ def main(parser):
 
         if args.mode == "train":
             tf.random.set_seed(2020)
+
+            if args.mixed_precision:
+                policy = tf.keras.mixed_precision.experimental.Policy("mixed_float16")
+                tf.keras.mixed_precision.experimental.set_policy(policy)
+                print("Enabled mixed precision training")
 
             dataset = SeganDataset("train", config["learning_config"]["dataset_config"]["train_paths"],
                                    config["learning_config"]["dataset_config"]["noise_config"],
@@ -57,16 +65,20 @@ def main(parser):
             segan_trainer.fit(dataset, max_to_keep=10)
 
             if args.export:
-                segan_trainer.generator.save_weights(args.export)
+                if args.from_weights:
+                    segan_trainer.generator.save_weights(args.export)
+                else:
+                    segan_trainer.generator.save(args.export)
         else:
             tf.random.set_seed(0)
+            assert args.export
 
             dataset = SeganDataset("test", config["learning_config"]["dataset_config"]["test_paths"],
                                    config["learning_config"]["dataset_config"]["noise_config"],
                                    config["speech_config"], shuffle=False).create_test()
 
             segan_tester = SeganTester(config["speech_config"], config["learning_config"]["running_config"],
-                                       args.export, from_weights=True)
+                                       args.export, from_weights=args.from_weights)
 
             segan_tester.compile(config["model_config"])
             segan_tester.run(dataset)

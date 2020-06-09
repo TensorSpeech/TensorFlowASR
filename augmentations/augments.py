@@ -95,7 +95,7 @@ class RealWorldNoise(Augmentation):
 class TimeStretch(Augmentation):
     def func(self, *args, **kwargs):
         rate = random.uniform(kwargs["min_ratio"], kwargs["max_ratio"])
-        return librosa.effects.time_stretch(args[0], rate)
+        return librosa.effects.time_stretch(kwargs["signal"], rate)
 
 
 AUGMENTATIONS = {

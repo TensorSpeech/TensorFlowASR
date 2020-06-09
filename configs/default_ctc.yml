@@ -90,5 +90,4 @@ learning_config:
         num_epochs:          20
         outdir:              /mnt/Projects/asrk16/trained/local/vivos
         log_interval_steps:  2
-        eval_interval_steps: 2
         save_interval_steps: 2

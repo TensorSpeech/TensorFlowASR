@@ -105,6 +105,7 @@ class BaseTrainer(BaseRunner):
             if self.finish_training.numpy(): break
             start = time.time()
             self._train_epoch()
+            self._eval_epoch()
             self.time_metrics["training_hours"].update_state((time.time() - start) / 3600)
             self._write_to_tensorboard(self.time_metrics, self.steps, stage="train")
             update_total(self.tqdm, self.config["num_epochs"] * self.train_steps_per_epoch.numpy())
@@ -148,7 +149,6 @@ class BaseTrainer(BaseRunner):
             # check interval, must pass updated steps due to unrecognized updated self attributes
             self._check_log_interval()
             self._check_save_interval()
-            self._check_eval_interval()
 
         # Update
         self.epochs.assign_add(1)
@@ -192,13 +192,6 @@ class BaseTrainer(BaseRunner):
                 tf.equal(tf.math.mod(self.steps, self.config["log_interval_steps"]), 0),
                 self.finish_training):
             self._exec_log_interval()
-
-    def _check_eval_interval(self):
-        """Save interval checkpoint."""
-        if tf.logical_or(
-                tf.equal(tf.math.mod(self.steps, self.config["eval_interval_steps"]), 0),
-                self.finish_training):
-            self._eval_epoch()
 
     def _check_save_interval(self):
         """Save interval checkpoint."""
@@ -255,26 +248,29 @@ class BaseTester(BaseLoader, BaseRunner):
 
     def set_test_data_loader(self, test_dataset):
         """Set train data loader (MUST)."""
-        self.test_data_loader = tqdm(test_dataset, desc="[test]", unit="batch", maxinterval=None)
+        self.test_data_loader = test_dataset
 
     def get_test_data_loader(self):
         """Get train data loader."""
         return self.test_data_loader
 
+    @tf.function
+    def _test_epoch(self):
+        for idx, batch in self.test_data_loader.enumerate(start=1):
+            self._test_step(batch)
+            tf.py_function(lambda: self.tqdm.update(1), [], [])
+            self._log_test(idx)
+
     def run(self, test_dataset):
         self.set_test_data_loader(test_dataset)
+        self.tqdm = tqdm(initial=0, total=None, desc="[test]", unit="batch", maxinterval=None)
         """ Run testing """
-        self.test_steps_per_epoch = 0
-        for self.test_steps_per_epoch, batch in enumerate(self.test_data_loader, 1):
-            self._test_step(batch)
-            # Print postfix
-            self._post_process_step()
-
-        tf.print("Finished testing with", self.test_steps_per_epoch, "steps per epoch.")
+        self._test_epoch()
+        self.tqdm.close()
         self.finish()
 
     @abc.abstractmethod
-    def _post_process_step(self):
+    def _log_test(self, step):
         pass
 
     @abc.abstractmethod

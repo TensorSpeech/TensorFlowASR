@@ -173,7 +173,6 @@ class SeganTester(BaseTester):
             self.load_model_from_weights()
         else:
             self.load_model()
-        print(self.model.summary())
 
     def _get_metrics(self):
         return f"pesq = {self.test_metrics['g_pesq'].result():.4f}, " \
@@ -182,9 +181,9 @@ class SeganTester(BaseTester):
                f"covl = {self.test_metrics['g_covl'].result():.4f}, " \
                f"ssnr = {self.test_metrics['g_ssnr'].result():.4f}"
 
-    def _post_process_step(self):
-        self._write_to_tensorboard(self.test_metrics, self.test_steps_per_epoch, stage="test")
-        self.test_data_loader.set_postfix_str(self._get_metrics())
+    def _log_test(self, step):
+        self._write_to_tensorboard(self.test_metrics, step, stage="test")
+        tf.py_function(lambda: self.tqdm.set_postfix_str(self._get_metrics()), [], [])
 
     @tf.function
     def _test_step(self, batch):

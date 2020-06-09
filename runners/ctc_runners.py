@@ -81,9 +81,9 @@ class CTCTrainer(BaseTrainer):
 
         tf.print("Evaluating ...")
 
-        for eval_step, batch in self.eval_data_loader.enumerate(start=1):
+        for eval_batch, batch in self.eval_data_loader.enumerate(start=1):
             self._eval_step(batch)
-            print_one_line("Eval steps:", eval_step)
+            print_one_line("Eval batch:", eval_batch, ", ctc_loss =", self.eval_metrics["ctc_loss"].result())
 
         tf.print("Finished evaluation at step", self.steps,
                  "gives eval_ctc_loss =", self.eval_metrics["ctc_loss"].result(),
@@ -157,13 +157,13 @@ class CTCTester(BaseTester):
         }
 
     def _get_metrics(self):
-        return (f"test_ctc_loss = {self.test_metrics['ctc_loss'].result():.4f}, "
-                f"test_wer = {self.test_metrics['wer'].result():.4f}%, "
-                f"test_cer = {self.test_metrics['cer'].result():.4f}%")
+        return f"test_ctc_loss = {self.test_metrics['ctc_loss'].result():.4f}, " \
+               f"test_wer = {self.test_metrics['wer'].result():.4f}%, " \
+               f"test_cer = {self.test_metrics['cer'].result():.4f}%"
 
-    def _post_process_step(self):
-        self._write_to_tensorboard(self.test_metrics, self.test_steps_per_epoch, stage=f"test_{self.decoder.name}")
-        self.test_data_loader.set_postfix_str(self._get_metrics())
+    def _log_test(self, step):
+        self._write_to_tensorboard(self.test_metrics, step, stage="test_" + self.decoder.name)
+        tf.py_function(lambda: self.tqdm.set_postfix_str(self._get_metrics()), [], [])
 
     @tf.function
     def _test_step(self, batch):
