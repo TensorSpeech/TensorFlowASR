@@ -1,0 +1,508 @@
+# This implementation is inspired from
+# https://github.com/dathudeptrai/TensorflowTTS/blob/master/tensorflow_tts/trainers/base_trainer.py
+# Copyright 2020 Minh Nguyen (@dathudeptrai) Copyright 2020 Huy Le Nguyen (@usimarit)
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+import abc
+import os
+from tqdm.auto import tqdm
+from colorama import Fore
+
+import numpy as np
+import tensorflow as tf
+
+from ..featurizers.text_featurizers import TextFeaturizer
+from ..utils.utils import preprocess_paths, get_num_batches, bytes_to_string
+from ..utils.metrics import ErrorRate, wer, cer
+
+
+class BaseRunner(metaclass=abc.ABCMeta):
+    """ Customized runner module for all models """
+
+    def __init__(self, config: dict):
+        """
+        running_config:
+            batch_size: 8
+            num_epochs:          20
+            outdir:              ...
+            log_interval_steps:  200
+            eval_interval_steps: 200
+            save_interval_steps: 200
+        """
+        self.config = config
+        self.config["outdir"] = preprocess_paths(self.config["outdir"])
+        # Writers
+        self.train_writer = tf.summary.create_file_writer(
+            os.path.join(config["outdir"], "tensorboard", "train")
+        )
+        self.eval_writer = tf.summary.create_file_writer(
+            os.path.join(config["outdir"], "tensorboard", "eval")
+        )
+
+    def _write_to_tensorboard(self,
+                              list_metrics: dict,
+                              step: any,
+                              stage: str = "train"):
+        """Write variables to tensorboard."""
+        assert stage in ["train", "eval"]
+        if stage == "train":
+            writer = self.train_writer
+        else:
+            writer = self.eval_writer
+        with writer.as_default():
+            for key, value in list_metrics.items():
+                tf.summary.scalar(key, value.result(), step=step)
+                writer.flush()
+
+
+class BaseTrainer(BaseRunner):
+    """Customized trainer module for all models."""
+
+    def __init__(self,
+                 config: dict,
+                 strategy=None):
+        """
+        Args:
+            config: the 'learning_config' part in YAML config file
+        """
+        # Configurations
+        super(BaseTrainer, self).__init__(config)
+        self.set_strategy(strategy)
+        # Steps and Epochs start from 0
+        self.steps = tf.Variable(0, dtype=tf.int64)  # Step must be int64 to use tf.summary
+        self.epochs = tf.Variable(1)
+        self.train_steps_per_epoch = None
+        self.eval_steps_per_epoch = None
+        # Dataset
+        self.train_data_loader = None
+        self.eval_data_loader = None
+
+        with self.strategy.scope():
+            self.set_train_metrics()
+            self.set_eval_metrics()
+
+    # -------------------------------- GET SET -------------------------------------
+
+    @abc.abstractmethod
+    def set_train_metrics(self):
+        self.train_metrics = {}
+        raise NotImplementedError()
+
+    @abc.abstractmethod
+    def set_eval_metrics(self):
+        self.eval_metrics = {}
+        raise NotImplementedError()
+
+    def set_strategy(self, strategy=None):
+        if not strategy:
+            gpus = tf.config.experimental.list_physical_devices('GPU')
+            self.strategy = tf.distribute.OneDeviceStrategy("/GPU:0") if gpus else \
+                tf.distribute.OneDeviceStrategy("/CPU:0")
+        else:
+            self.strategy = strategy
+        self.global_batch_size = self.config["batch_size"] * self.strategy.num_replicas_in_sync
+
+    def set_train_data_loader(self, train_dataset):
+        """ Set train data loader (MUST). """
+        train_data = train_dataset.create(self.global_batch_size)
+        self.train_data_loader = self.strategy.experimental_distribute_dataset(train_data)
+
+    def set_eval_data_loader(self, eval_dataset, eval_train_ratio=1):
+        """ Set eval data loader (MUST).
+        Eval batch might be significantly greater than train batch """
+        if eval_dataset is None:
+            self.eval_data_loader = None
+        else:
+            eval_data = eval_dataset.create(self.global_batch_size * eval_train_ratio)
+            self.eval_data_loader = self.strategy.experimental_distribute_dataset(eval_data)
+
+    # -------------------------------- CHECKPOINTS -------------------------------------
+
+    def create_checkpoint_manager(self, max_to_keep=10, **kwargs):
+        """Create checkpoint management."""
+        with self.strategy.scope():
+            self.ckpt = tf.train.Checkpoint(steps=self.steps, epochs=self.epochs, **kwargs)
+            checkpoint_dir = os.path.join(self.config["outdir"], "checkpoints")
+            if not os.path.exists(checkpoint_dir):
+                os.makedirs(checkpoint_dir)
+            self.ckpt_manager = tf.train.CheckpointManager(
+                self.ckpt, checkpoint_dir, max_to_keep=max_to_keep)
+
+    def save_checkpoint(self):
+        """Save checkpoint."""
+        with self.strategy.scope():
+            self.ckpt_manager.save()
+            tf.print("\n> Successfully saved checkpoint at step", self.steps)
+
+    def load_checkpoint(self):
+        """Load checkpoint."""
+        with self.strategy.scope():
+            if self.ckpt_manager.latest_checkpoint:
+                self.ckpt.restore(self.ckpt_manager.latest_checkpoint)
+
+    # -------------------------------- RUNNING -------------------------------------
+
+    def run(self):
+        """Run training."""
+        if self.steps.numpy() > 0: tf.print("Resume training ...")
+
+        while self.epochs.numpy() <= self.config["num_epochs"]:
+            self._train_epoch()
+
+        tf.print("Finish training.")
+
+    def _train_epoch(self):
+        """Train model one epoch."""
+        self.train_progbar = tqdm(
+            initial=0, total=self.train_steps_per_epoch, unit="batch", position=0,
+            bar_format="{desc}: |%s{bar:20}%s{r_bar}" % (Fore.GREEN, Fore.RESET),
+            desc=f"[Train] [Epoch {self.epochs.numpy()}/{self.config['num_epochs']}]"
+        )
+        train_iterator = iter(self.train_data_loader)
+        train_steps = 0
+        while True:
+            # Run train step
+            try:
+                self._train_function(train_iterator)
+            except StopIteration:
+                break
+            except tf.errors.OutOfRangeError:
+                break
+
+            # Update steps
+            self.steps.assign_add(1)
+            self.train_progbar.update(1)
+            train_steps += 1
+
+            # Print train info to progress bar
+            self._print_train_metrics(self.train_progbar)
+
+            # Run logging
+            self._check_log_interval()
+            self._check_save_interval()
+            self._check_eval_interval()
+
+        # Update epoch variable
+        self.epochs.assign_add(1)
+        self.train_steps_per_epoch = train_steps
+        self.train_progbar.close()
+
+    @tf.function(experimental_relax_shapes=True)
+    def _train_function(self, iterator):
+        batch = next(iterator)
+        self.strategy.run(self._train_step, args=(batch,))
+
+    @abc.abstractmethod
+    def _train_step(self, batch):
+        """ One step training. Does not return anything"""
+        raise NotImplementedError()
+
+    def _eval_epoch(self):
+        """One epoch evaluation."""
+        if not self.eval_data_loader: return
+
+        for metric in self.eval_metrics.keys():
+            self.eval_metrics[metric].reset_states()
+
+        eval_progbar = tqdm(
+            initial=0, total=self.eval_steps_per_epoch, unit="batch", position=1, leave=False,
+            bar_format="{desc}: |%s{bar:20}%s{r_bar}" % (Fore.BLUE, Fore.RESET),
+            desc=f"[Eval] [Step {self.steps.numpy()}]"
+        )
+        eval_iterator = iter(self.eval_data_loader)
+        eval_steps = 0
+
+        while True:
+            # Run eval step
+            try:
+                self._eval_function(eval_iterator)
+            except StopIteration:
+                break
+            except tf.errors.OutOfRangeError:
+                break
+
+            # Update steps
+            eval_progbar.update(1)
+            eval_steps += 1
+
+            # Print eval info to progress bar
+            self._print_eval_metrics(eval_progbar)
+
+        self.eval_steps_per_epoch = eval_steps
+        eval_progbar.close()
+        # Write to tensorboard
+        self._write_to_tensorboard(self.eval_metrics, self.steps, stage="eval")
+
+    @tf.function(experimental_relax_shapes=True)
+    def _eval_function(self, iterator):
+        batch = next(iterator)
+        self.strategy.run(self._eval_step, args=(batch,))
+
+    @abc.abstractmethod
+    def _eval_step(self, batch):
+        """One eval step. Does not return anything"""
+        raise NotImplementedError()
+
+    @abc.abstractmethod
+    def compile(self, *args, **kwargs):
+        """ Function to initialize models and optimizers """
+        raise NotImplementedError()
+
+    @abc.abstractmethod
+    def fit(self, *args, **kwargs):
+        """ Function run start training, including executing "run" func """
+        raise NotImplementedError()
+
+    # -------------------------------- LOGGING -------------------------------------
+
+    def _check_log_interval(self):
+        """Save log interval."""
+        if self.steps % self.config["log_interval_steps"] == 0:
+            self._write_to_tensorboard(self.train_metrics, self.steps, stage="train")
+            """Reset train metrics after save it to tensorboard."""
+            for metric in self.train_metrics.keys():
+                self.train_metrics[metric].reset_states()
+
+    def _check_save_interval(self):
+        """Save log interval."""
+        if self.steps % self.config["save_interval_steps"] == 0:
+            self.save_checkpoint()
+
+    def _check_eval_interval(self):
+        """Save log interval."""
+        if self.steps % self.config["eval_interval_steps"] == 0:
+            self._eval_epoch()
+
+    # -------------------------------- UTILS -------------------------------------
+
+    def _print_train_metrics(self, progbar):
+        result_dict = {}
+        for key, value in self.train_metrics.items():
+            result_dict[f"train_{key}"] = float(value.result().numpy())
+        for key, value in self.eval_metrics.items():
+            result_dict[f"eval_{key}"] = float(value.result().numpy())
+        progbar.set_postfix(result_dict)
+
+    def _print_eval_metrics(self, progbar):
+        result_dict = {}
+        for key, value in self.eval_metrics.items():
+            result_dict[f"eval_{key}"] = float(value.result().numpy())
+        progbar.set_postfix(result_dict)
+
+    # -------------------------------- END -------------------------------------
+
+
+class BaseLoader(metaclass=abc.ABCMeta):
+    """ Based class for loading saved model """
+
+    def __init__(self,
+                 saved_path: str,
+                 from_weights: bool = False):
+        self.saved_path = preprocess_paths(saved_path)
+        self.from_weights = from_weights
+
+    def load_model(self):
+        try:
+            self.model = tf.saved_model.load(self.saved_path)
+            print("Model loaded")
+        except Exception as e:
+            raise Exception(e)
+
+    def load_model_from_weights(self):
+        try:
+            self.model.load_weights(self.saved_path)
+        except Exception as e:
+            raise Exception(e)
+
+    @abc.abstractmethod
+    def compile(self, *args, **kwargs):
+        """ Define a way to create model and load model """
+        raise NotImplementedError()
+
+
+class BaseTester(BaseLoader, BaseRunner):
+    """ Customized tester module for all models
+    This tester model will write results to test.tsv file in outdir
+    After writing finished, it will calculate testing metrics
+    """
+
+    def __init__(self,
+                 config: dict,
+                 saved_path: str,
+                 from_weights: bool = False):
+        """
+        Args:
+            config: the 'learning_config' part in YAML config file
+            saved_path: path to exported weights or model
+            from_weights: choose to load from weights or from whole model
+        """
+        BaseLoader.__init__(self, saved_path, from_weights)
+        BaseRunner.__init__(self, config)
+        self.test_data_loader = None
+        self.processed_records = 0
+
+        self.output_file_path = os.path.join(self.config["outdir"], "test.tsv")
+        self.test_metrics = {
+            "beam_wer": ErrorRate(func=wer, name="test_beam_wer", dtype=tf.float32),
+            "beam_cer": ErrorRate(func=cer, name="test_beam_cer", dtype=tf.float32),
+            "beam_lm_wer": ErrorRate(func=wer, name="test_beam_lm_wer", dtype=tf.float32),
+            "beam_lm_cer": ErrorRate(func=cer, name="test_beam_lm_cer", dtype=tf.float32),
+            "greed_wer": ErrorRate(func=wer, name="test_greed_wer", dtype=tf.float32),
+            "greed_cer": ErrorRate(func=cer, name="test_greed_cer", dtype=tf.float32)
+        }
+
+        if os.path.exists(self.output_file_path):
+            with open(self.output_file_path, "r", encoding="utf-8") as out:
+                self.processed_records = get_num_batches(len(out.read().splitlines()) - 1,
+                                                         self.config["batch_size"])
+        else:
+            with open(self.output_file_path, "w") as out:
+                out.write("PATH\tGROUNDTRUTH\tGREEDY\tBEAMSEARCH\tBEAMSEARCHLM\n")
+
+    def set_test_data_loader(self, test_dataset):
+        """Set train data loader (MUST)."""
+        self.test_data_loader = test_dataset
+
+    # -------------------------------- RUNNING -------------------------------------
+
+    def compile(self,
+                builtmodel: tf.keras.Model,
+                speech_featurizer: any,
+                text_featurizer: TextFeaturizer):
+        self.model = builtmodel
+        if not self.from_weights:
+            saved_model = tf.keras.models.load_model(self.saved_path)
+            self.model.set_weights(saved_model.get_weights())
+        else:
+            self.model.load_weights(self.saved_path)
+        self.model.add_featurizers(
+            speech_featurizer=speech_featurizer,
+            text_featurizer=text_featurizer
+        )
+
+    def run(self, test_dataset):
+        self.set_test_data_loader(test_dataset)
+        """ Run testing """
+        self._test_epoch()
+        self._finish()
+
+    def _test_epoch(self):
+        if self.processed_records > 0:
+            self.test_data_loader = self.test_data_loader.skip(self.processed_records)
+        progbar = tqdm(initial=self.processed_records, total=None,
+                       unit="batch", position=0, desc="[Test]")
+        test_iter = iter(self.test_data_loader)
+        while True:
+            try:
+                decoded = self._test_function(test_iter)
+            except StopIteration:
+                break
+            except tf.errors.OutOfRangeError:
+                break
+
+            decoded = [d.numpy() for d in decoded]
+            self._append_to_file(*decoded)
+            progbar.update(1)
+
+        progbar.close()
+
+    @tf.function(experimental_relax_shapes=True)
+    def _test_function(self, iterator):
+        batch = next(iterator)
+        return self._test_step(batch)
+
+    @tf.function(experimental_relax_shapes=True)
+    def _test_step(self, batch):
+        """
+        One testing step
+        Args:
+            batch: a step fed from test dataset
+
+        Returns:
+            (file_paths, groundtruth, greedy, beamsearch, beamsearch_lm) each has shape [B]
+        """
+        file_paths, features, _, labels, _, _ = batch
+
+        labels = self.model.text_featurizer.iextract(labels)
+        greed_pred = self.model.recognize(features)
+        beam_pred = self.model.recognize_beam(features=features, lm=False)
+        beam_lm_pred = self.model.recognize_beam(features=features, lm=True)
+
+        return file_paths, labels, greed_pred, beam_pred, beam_lm_pred
+
+    # -------------------------------- UTILS -------------------------------------
+
+    def _finish(self):
+        tf.print("\n> Calculating evaluation metrics ...")
+        with open(self.output_file_path, "r", encoding="utf-8") as out:
+            lines = out.read().splitlines()
+
+        for line in lines:
+            line = line.split("\t")
+            labels, greed_pred, beam_pred, beam_lm_pred = line[1], line[2], line[3], line[4]
+            labels = tf.convert_to_tensor([labels], dtype=tf.string)
+            greed_pred = tf.convert_to_tensor([greed_pred], dtype=tf.string)
+            beam_pred = tf.convert_to_tensor([beam_pred], dtype=tf.string)
+            beam_lm_pred = tf.convert_to_tensor([beam_lm_pred], dtype=tf.string)
+            # Update metrics
+            self.test_metrics["greed_wer"].update_state(greed_pred, labels)
+            self.test_metrics["greed_cer"].update_state(greed_pred, labels)
+            self.test_metrics["beam_wer"].update_state(beam_pred, labels)
+            self.test_metrics["beam_cer"].update_state(beam_pred, labels)
+            self.test_metrics["beam_lm_wer"].update_state(beam_lm_pred, labels)
+            self.test_metrics["beam_lm_cer"].update_state(beam_lm_pred, labels)
+
+        tf.print("Test results:")
+        tf.print("G_WER =", self.test_metrics["greed_wer"].result())
+        tf.print("G_CER =", self.test_metrics["greed_cer"].result())
+        tf.print("B_WER =", self.test_metrics["beam_wer"].result())
+        tf.print("B_CER =", self.test_metrics["beam_cer"].result())
+        tf.print("BLM_WER =", self.test_metrics["beam_lm_wer"].result())
+        tf.print("BLM_CER =", self.test_metrics["beam_lm_cer"].result())
+
+    def _append_to_file(self,
+                        file_path: np.ndarray,
+                        groundtruth: np.ndarray,
+                        greedy: np.ndarray,
+                        beamsearch: np.ndarray,
+                        beamsearch_lm: np.ndarray):
+        file_path = bytes_to_string(file_path)
+        groundtruth = bytes_to_string(groundtruth)
+        greedy = bytes_to_string(greedy)
+        beamsearch = bytes_to_string(beamsearch)
+        beamsearch_lm = bytes_to_string(beamsearch_lm)
+        with open(self.output_file_path, "a", encoding="utf-8") as out:
+            for i, path in enumerate(file_path):
+                line = f"{groundtruth[i]}\t{greedy[i]}\t{beamsearch[i]}\t{beamsearch_lm[i]}"
+                out.write(f"{path.strip()}\t{line}\n")
+
+    # -------------------------------- END -------------------------------------
+
+
+class BaseInferencer(BaseLoader):
+    """ Customized inferencer module for all models """
+
+    @abc.abstractmethod
+    def preprocess(self, *args, **kwargs):
+        """ Preprocessing stage """
+        raise NotImplementedError()
+
+    @abc.abstractmethod
+    def postprocess(self, *args, **kwargs):
+        """ Postprocessing stage """
+        raise NotImplementedError()
+
+    @abc.abstractmethod
+    def infer(self, inputs):
+        """ Function for infering result """
+        raise NotImplementedError()
