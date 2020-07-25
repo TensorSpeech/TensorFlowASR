@@ -373,26 +373,26 @@ class TFSpeechFeaturizer:
         Returns:
             features: tf.Tensor with shape [T, F, 1]
         """
-        with tf.device("/CPU:0"):  # Use in tf.data => avoid error copying
-            if self.normalize_signal:
-                signal = tf_normalize_signal(signal)
-            signal = tf_preemphasis(signal, self.preemphasis)
+        if self.normalize_signal:
+            signal = tf_normalize_signal(signal)
+        signal = tf_preemphasis(signal, self.preemphasis)
 
-            if self.feature_type == "mfcc":
-                features = self.compute_tf_mfcc_features(signal)
-            elif self.feature_type == "spectrogram":
-                features = self.compute_tf_spectrogram_features(signal)
-            elif self.feature_type == "logfbank":
-                features = self.compute_tf_logfbank_features(signal)
+        if self.feature_type == "mfcc":
+            features = self.compute_tf_mfcc_features(signal)
+        elif self.feature_type == "spectrogram":
+            features = self.compute_tf_spectrogram_features(signal)
+        elif self.feature_type == "logfbank":
+            features = self.compute_tf_logfbank_features(signal)
 
-            if self.normalize_feature:
-                features = tf_normalize_audio_features(
-                    features, per_feature=self.normalize_per_feature)
+        if self.normalize_feature:
+            features = tf_normalize_audio_features(
+                features, per_feature=self.normalize_per_feature)
 
-            return features
+        return features
 
     def extract(self, signal: np.ndarray) -> np.ndarray:
-        features = self.tf_extract(tf.convert_to_tensor(signal, dtype=tf.float32))
+        with tf.device("/CPU:0"):  # Use in tf.data => avoid error copying
+            features = self.tf_extract(tf.convert_to_tensor(signal, dtype=tf.float32))
         return features.numpy()
 
 
