@@ -16,7 +16,7 @@ import os
 import collections
 import tensorflow as tf
 
-from ..utils.utils import shape_list, get_shape_invariants
+from ..utils.utils import shape_list, get_shape_invariants, merge_repeated
 from ..featurizers.speech_featurizers import TFSpeechFeaturizer
 from ..featurizers.text_featurizers import TextFeaturizer
 
@@ -37,7 +37,7 @@ class TransducerPrediction(tf.keras.Model):
                  **kwargs):
         super(TransducerPrediction, self).__init__(name=name, **kwargs)
         self.embed = tf.keras.layers.Embedding(
-            input_dim=vocabulary_size, output_dim=embed_dim)  # Include blank index
+            input_dim=vocabulary_size, output_dim=embed_dim, mask_zero=True)
         self.do = tf.keras.layers.Dropout(embed_dropout)
         self.lstms = []
         # lstms units must equal (for using beam search)
@@ -213,8 +213,8 @@ class Transducer(tf.keras.Model):
         Return:
             transcript: tf.Tensor of Unicode Code Points with shape [None] and dtype tf.int32
         """
-        signal = tf.expand_dims(signal, axis=0)
         features = self.speech_featurizer.tf_extract(signal)
+        features = tf.expand_dims(features, axis=0)
         indices = self.perform_greedy(features, streaming=True)
         transcript = self.text_featurizer.index2upoints(indices)
         return tf.squeeze(transcript, axis=0)
@@ -257,9 +257,12 @@ class Transducer(tf.keras.Model):
             indices = tf.stack([tf.range(B, dtype=tf.int32),
                                 tf.squeeze(n_predict, axis=-1)], axis=-1)  # [B, 2]
 
+            yseq = tf.concat([new_hyps[1], n_predict], axis=-1)
+            yseq = merge_repeated(yseq, self.text_featurizer.blank)
+
             hyps = Hypotheses(
                 new_hyps[0] + tf.gather_nd(ytu, indices),
-                tf.concat([new_hyps[1], n_predict], axis=-1),
+                yseq,
                 n_memory_states,
             )
 
