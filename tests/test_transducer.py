@@ -22,7 +22,7 @@ from tiramisu_asr.utils.utils import merge_features_to_channels
 text_featurizer = TextFeaturizer({
     "vocabulary": None,
     "blank_at_zero": True,
-    "beam_width": 1,
+    "beam_width": 5,
     "norm_score": True
 })
 
@@ -71,11 +71,11 @@ print(hyps)
 
 signal = read_raw_audio("/home/nlhuy/Desktop/test/11003.wav", speech_featurizer.sample_rate)
 
-hyps = model.recognize_tflite(signal)
+# hyps = model.recognize_tflite(signal)
+#
+# print(hyps)
 
-print(hyps)
-
-hyps = model.recognize_beam(features)
+# hyps = model.recognize_beam(tf.expand_dims(speech_featurizer.tf_extract(signal), 0))
 
 print(hyps)
 

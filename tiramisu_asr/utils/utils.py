@@ -143,36 +143,32 @@ def shape_list(x):
 
 def get_shape_invariants(tensor):
     shapes = shape_list(tensor)
-    shapes[0] = None
-    return tf.TensorShape(shapes)
+    return tf.TensorShape([i if isinstance(i, int) else None for i in shapes])
 
 
-def merge_repeated(sequences: tf.Tensor, blank=0):
-    def map_fn(yseqs):
-        result = tf.reshape(yseqs[0], [1])
+def merge_repeated(yseqs, blank=0):
+    result = tf.reshape(yseqs[0], [1])
 
-        U = shape_list(yseqs)[0]
-        i = tf.constant(1, dtype=tf.int32)
+    U = shape_list(yseqs)[0]
+    i = tf.constant(1, dtype=tf.int32)
 
-        def _cond(i, result, yseqs, U): return tf.less(i, U)
+    def _cond(i, result, yseqs, U): return tf.less(i, U)
 
-        def _body(i, result, yseqs, U):
-            if yseqs[i] != result[-1]:
-                result = tf.concat([result, [yseqs[i]]], axis=-1)
-            return i + 1, result, yseqs, U
+    def _body(i, result, yseqs, U):
+        if yseqs[i] != result[-1]:
+            result = tf.concat([result, [yseqs[i]]], axis=-1)
+        return i + 1, result, yseqs, U
 
-        _, result, _, _ = tf.while_loop(
-            _cond,
-            _body,
-            loop_vars=(i, result, yseqs, U),
-            shape_invariants=(
-                tf.TensorShape([]),
-                tf.TensorShape([None]),
-                tf.TensorShape([None]),
-                tf.TensorShape([])
-            )
+    _, result, _, _ = tf.while_loop(
+        _cond,
+        _body,
+        loop_vars=(i, result, yseqs, U),
+        shape_invariants=(
+            tf.TensorShape([]),
+            tf.TensorShape([None]),
+            tf.TensorShape([None]),
+            tf.TensorShape([])
         )
+    )
 
-        return tf.pad(result, [[U - shape_list(result)[0], 0]], constant_values=blank)
-
-    return tf.map_fn(map_fn, sequences, dtype=tf.int32)
+    return tf.pad(result, [[U - shape_list(result)[0], 0]], constant_values=blank)

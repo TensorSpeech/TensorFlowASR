@@ -56,7 +56,7 @@ class TransducerTrainer(BaseTrainer):
             tape.watch(logits)
             per_train_loss = rnnt_loss(
                 logits=logits, labels=labels, label_length=label_length,
-                logit_length=(input_length // self.time_reduction_factor),
+                logit_length=(input_length // self.model.time_reduction_factor),
                 blank=self.text_featurizer.blank
             )
             train_loss = tf.nn.compute_average_loss(per_train_loss,
@@ -81,7 +81,7 @@ class TransducerTrainer(BaseTrainer):
         logits = self.model([features, pred_inp], training=False)
         eval_loss = rnnt_loss(
             logits=logits, labels=labels, label_length=label_length,
-            logit_length=(input_length // self.time_reduction_factor),
+            logit_length=(input_length // self.model.time_reduction_factor),
             blank=self.text_featurizer.blank
         )
 
@@ -90,13 +90,11 @@ class TransducerTrainer(BaseTrainer):
     def compile(self,
                 model: Transducer,
                 optimizer: any,
-                time_reduction_factor: int = 1,
                 max_to_keep: int = 10):
         with self.strategy.scope():
             self.model = model
             self.model.summary(line_length=100)
             self.optimizer = tf.keras.optimizers.get(optimizer)
-            self.time_reduction_factor = time_reduction_factor
             if self.is_mixed_precision:
                 self.optimizer = mixed_precision.LossScaleOptimizer(self.optimizer, "dynamic")
         self.create_checkpoint_manager(max_to_keep, model=self.model, optimizer=self.optimizer)
@@ -106,105 +104,3 @@ class TransducerTrainer(BaseTrainer):
         self.set_eval_data_loader(eval_dataset, eval_train_ratio)
         self.load_checkpoint()
         self.run()
-
-# class TransducerTFLite(BaseInferencer):
-#     def __init__(self,
-#                  speech_config: dict,
-#                  decoder_config: dict,
-#                  saved_path: str):
-#         super(TransducerTFLite, self).__init__(saved_path=saved_path, from_weights=False)
-#         self.speech_featurizer = SpeechFeaturizer(speech_config)
-#         self.decoder_config = decoder_config
-#         self.text_featurizer = TextFeaturizer(self.decoder_config["vocabulary"])
-#         self.hyps = None
-#         self.scorer = None
-#
-#     def clear(self):
-#         self.hyps = None
-#         self.encoder.reset_all_variables()
-#         self.prediction.reset_all_variables()
-#         self.joint.reset_all_variables()
-#
-#     def load_model(self):
-#         try:
-#             self.encoder = tf.lite.Interpreter(os.path.join(self.saved_path, "encoder.tflite"))
-#             self.prediction = tf.lite.Interpreter(os.path.join(self.saved_path, "prediction.tflite"))
-#             self.joint = tf.lite.Interpreter(os.path.join(self.saved_path, "joint.tflite"))
-#             print("Transducer loaded")
-#         except Exception as e:
-#             raise Exception(e)
-#
-#     def convert_saved_model_to_tflite(self,
-#                                       saved_model_path: str,
-#                                       tflite_path: str):
-#         print("Loading saved model ...")
-#         try:
-#             saved_model = tf.saved_model.load(saved_model_path)
-#         except Exception as e:
-#             raise Exception(e)
-#
-#         print("Converting to tflite ...")
-#
-#         # See: https://stackoverflow.com/a/55732431/11037553
-#         # The time dimension can be resize using tf.lite.Interpreter.resize_tensor_input
-#         concrete_func = saved_model.signatures[tf.saved_model.DEFAULT_SERVING_SIGNATURE_DEF_KEY]
-#         f, c = self.speech_featurizer.compute_feature_dim()
-#         concrete_func.inputs[0].set_shape([None, None, f, c])
-#         concrete_func.inputs[1].set_shape([None, None])
-#         # Convert to tflite
-#         converter = tf.lite.TFLiteConverter.from_concrete_functions([concrete_func])
-#         converter.experimental_new_converter = True
-#         converter.optimizations = [tf.lite.Optimize.DEFAULT]
-#         converter.target_spec.supported_ops = [tf.lite.OpsSet.TFLITE_BUILTINS, tf.lite.OpsSet.SELECT_TF_OPS]
-#         tflite_model = converter.convert()
-#
-#         print("Writing to file ...")
-#         if not os.path.exists(os.path.dirname(tflite_path)): os.makedirs(os.path.dirname(tflite_path))
-#         with open(tflite_path, "wb") as tflite_out:
-#             tflite_out.write(tflite_model)
-#
-#         print(f"Done converting to {tflite_path}")
-#
-#     def compile(self, duration: float, *args, **kwargs):
-#         f, c = self.speech_featurizer.compute_feature_dim()
-#         self.t = self.speech_featurizer.compute_time_dim(duration)
-#         self.encoder.resize_tensor_input(self.encoder.get_input_details()[0]["index"], [1, self.t, f, c])
-#         self.encoder.allocate_tensors()
-#         self.prediction.resize_tensor_input(self.prediction.get_input_details()[0]["index"], [1, 1])
-#         self.prediction.allocate_tensors()
-#
-#         self.encoder.set_tensor(self.encoder.get_input_details()[0]["index"], tf.random.normal(shape=[1, self.t, f, c]))
-#         self.encoder.invoke()
-#         enc_out = self.encoder.get_tensor(self.encoder.get_output_details()[0]["index"])
-#         self.joint.resize_tensor_input(self.joint.get_input_details()[0]["index"], enc_out.shape)
-#         self.encoder.reset_all_variables()
-#
-#         self.prediction.set_tensor(self.prediction.get_input_details()[0]["index"], tf.random.normal(shape=[1, 1], dtype=tf.int32))
-#         self.prediction.invoke()
-#         pred_out = self.prediction.get_tensor(self.prediction.get_output_details()[0]["index"])
-#         self.joint.resize_tensor_input(self.joint.get_input_details()[1]["index"], pred_out.shape)
-#         self.prediction.reset_all_variables()
-#
-#         self.joint.allocate_tensors()
-#
-#     def preprocess(self, audio):
-#         signal = read_raw_audio(audio, self.speech_featurizer.sample_rate)
-#         features = self.speech_featurizer.extract(signal)
-#         return np.expand_dims(features, axis=0)
-#
-#     def postprocess(self, predicted_hyps):
-#         return self.text_featurizer._idx_to_char(predicted_hyps[0]["yseq"])
-#
-#     def infer(self, audio, streaming=False):
-#         features = self.preprocess(audio)
-#         return self.call(features, streaming)
-#
-#     def call(self, features, streaming):
-#         predicted_hyps = self.recognize_beam(features, self.decoder_config["beam_width"],
-#                                              nbest=1, norm_score=True, kept_hyps=self.hyps)
-#         if streaming:
-#             self.hyps = predicted_hyps
-#         else:
-#             self.clear()
-#
-#         return self.postprocess(predicted_hyps)

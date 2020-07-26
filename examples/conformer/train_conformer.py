@@ -125,7 +125,6 @@ def main():
             )
 
         conformer_trainer.compile(model=conformer, optimizer=optimizer,
-                                  time_reduction_factor=conformer.time_reduction_factor,
                                   max_to_keep=args.max_ckpts)
 
         conformer_trainer.fit(train_dataset, eval_dataset, args.eval_train_ratio)
