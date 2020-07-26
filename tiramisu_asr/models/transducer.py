@@ -16,7 +16,7 @@ import os
 import collections
 import tensorflow as tf
 
-from ..utils.utils import shape_list, get_shape_invariants, merge_repeated
+from ..utils.utils import shape_list, get_shape_invariants
 from ..featurizers.speech_featurizers import TFSpeechFeaturizer
 from ..featurizers.text_featurizers import TextFeaturizer
 
@@ -194,8 +194,35 @@ class Transducer(tf.keras.Model):
 
     @tf.function(experimental_relax_shapes=True)
     def recognize(self, features: tf.Tensor) -> tf.Tensor:
-        decoded = self.perform_greedy(features, streaming=False)
-        return self.text_featurizer.iextract(decoded)
+        b_i = tf.constant(0, dtype=tf.int32)
+
+        B = shape_list(features)[0]
+
+        decoded = tf.constant([], dtype=tf.string)
+
+        def _cond(b_i, B, features, decoded): return tf.less(b_i, B)
+
+        def _body(b_i, B, features, decoded):
+            yseq = self.perform_greedy(tf.expand_dims(features[b_i], axis=0),
+                                       streaming=False)
+            # yseq = merge_repeated(yseq, self.text_featurizer.blank)
+            yseq = self.text_featurizer.iextract(yseq)
+            decoded = tf.concat([decoded, yseq], axis=0)
+            return b_i + 1, B, features, decoded
+
+        _, _, _, decoded = tf.while_loop(
+            _cond,
+            _body,
+            loop_vars=(b_i, B, features, decoded),
+            shape_invariants=(
+                tf.TensorShape([]),
+                tf.TensorShape([]),
+                get_shape_invariants(features),
+                tf.TensorShape([None])
+            )
+        )
+
+        return decoded
 
     @tf.function(
         experimental_relax_shapes=True,
@@ -223,71 +250,70 @@ class Transducer(tf.keras.Model):
     def perform_greedy(self,
                        features: tf.Tensor,
                        streaming: bool = False) -> tf.Tensor:
-        B = shape_list(features)[0]
+        new_hyps = Hypotheses(
+            tf.constant(0.0, dtype=tf.float32),
+            self.text_featurizer.blank * tf.ones([1], dtype=tf.int32),
+            self.predict_net.get_initial_state(1)
+        )
 
-        if self.kept_hyps is None:
-            new_hyps = Hypotheses(
-                tf.zeros([B], dtype=tf.float32),
-                self.text_featurizer.blank * tf.ones([B, 1], dtype=tf.int32),
-                self.predict_net.get_initial_state(B)
-            )
-        else:
+        if self.kept_hyps is not None:
             new_hyps = self.kept_hyps
 
-        enc = self.encoder(features, training=False)  # [B, T, E]
+        enc = self.encoder(features, training=False)  # [1, T, E]
+        enc = tf.squeeze(enc, axis=0)  # [T, E]
 
-        T = tf.cast(shape_list(enc)[1], dtype=tf.int32)
+        T = tf.cast(shape_list(enc)[0], dtype=tf.int32)
 
         i = tf.constant(0, dtype=tf.int32)
 
-        def _cond(enc, i, new_hyps, T, B): return tf.less(i, T)
+        def _cond(enc, i, new_hyps, T): return tf.less(i, T)
 
-        def _body(enc, i, new_hyps, T, B):
-            hi = tf.reshape(enc[:, i], [B, 1, -1])  # [B, 1, E]
+        def _body(enc, i, new_hyps, T):
+            hi = tf.reshape(enc[i], [1, 1, -1])  # [1, 1, E]
             y, n_memory_states = self.predict_net(
-                inputs=tf.reshape(new_hyps[1][:, -1], [B, 1]),  # [B, 1]
+                inputs=tf.reshape(new_hyps[1][-1], [1, 1]),  # [1, 1]
                 p_memory_states=new_hyps[2],
                 training=False
-            )  # [B, 1, P], [B, P], [B, P]
-            # [B, 1, E] + [B, 1, P] => [B, 1, 1, V]
+            )  # [1, 1, P], [1, P], [1, P]
+            # [1, 1, E] + [1, 1, P] => [1, 1, 1, V]
             ytu = tf.nn.log_softmax(self.joint_net([hi, y], training=False))
-            ytu = tf.squeeze(ytu, axis=1)  # [B, 1, 1, V] => [B, 1, V]
-            n_predict = tf.argmax(ytu, axis=-1, output_type=tf.int32)  # => argmax [B, 1]
-            ytu = tf.squeeze(ytu, axis=1)  # [B, V]
-            indices = tf.stack([tf.range(B, dtype=tf.int32),
-                                tf.squeeze(n_predict, axis=-1)], axis=-1)  # [B, 2]
+            ytu = tf.squeeze(ytu, axis=None)  # [1, 1, 1, V] => [V]
+            n_predict = tf.argmax(ytu, axis=-1, output_type=tf.int32)  # => argmax []
 
-            yseq = tf.concat([new_hyps[1], n_predict], axis=-1)
-            yseq = merge_repeated(yseq, self.text_featurizer.blank)
+            def return_no_blank():
+                return Hypotheses(
+                    new_hyps[0] + ytu[n_predict],
+                    tf.concat([new_hyps[1], [n_predict]], axis=0),
+                    n_memory_states,
+                )
 
-            hyps = Hypotheses(
-                new_hyps[0] + tf.gather_nd(ytu, indices),
-                yseq,
-                n_memory_states,
+            hyps = tf.cond(
+                n_predict != self.text_featurizer.blank,
+                true_fn=return_no_blank,
+                false_fn=lambda: new_hyps
             )
 
-            return enc, i + 1, hyps, T, B
+            return enc, i + 1, hyps, T
 
-        _, _, new_hyps, _, _ = tf.while_loop(
+        _, _, new_hyps, _ = tf.while_loop(
             _cond,
             _body,
-            loop_vars=(enc, i, new_hyps, T, B),
+            loop_vars=(enc, i, new_hyps, T),
             shape_invariants=(
-                tf.TensorShape([None, None, None]),
+                tf.TensorShape([None, None]),
                 tf.TensorShape([]),
                 Hypotheses(
+                    tf.TensorShape([]),
                     tf.TensorShape([None]),
-                    tf.TensorShape([None, None]),
                     tf.nest.map_structure(get_shape_invariants, new_hyps[-1])
                 ),
-                tf.TensorShape([]),
                 tf.TensorShape([])
             )
         )
 
         if streaming: self.kept_hyps = new_hyps
 
-        return new_hyps[1]
+        return tf.expand_dims(new_hyps[1], axis=0)
 
     @tf.function(
         experimental_relax_shapes=True,
@@ -301,7 +327,6 @@ class Transducer(tf.keras.Model):
                        features: tf.Tensor,
                        lm: bool = False,
                        streaming: bool = False) -> tf.Tensor:
-        # return self.recognize(features)
         def map_fn(elem):
             return tf.py_function(
                 self.perform_beam_search,
@@ -363,33 +388,37 @@ class Transducer(tf.keras.Model):
 
         enc = tf.squeeze(self.encoder(features, training=False), axis=0)  # [T, E]
 
-        kept_hyps = self.kept_hyps
+        B = self.kept_hyps
 
         for i in range(shape_list(enc)[0]):  # [E]
             hi = tf.reshape(enc[i], [1, 1, -1])  # [1, 1, E]
-            hyps = kept_hyps  # A = hyps
-            kept_hyps = []
+            A = B  # A = hyps
+            B = []
 
             while True:
-                new_hyps = max(hyps, key=lambda x: x["score"])
-                hyps.remove(new_hyps)
+                y_hat = max(A, key=lambda x: x["score"])
+                A.remove(y_hat)
 
                 y, n_memory_states = self.predict_net(
-                    inputs=tf.reshape(new_hyps["yseq"][-1], [1, 1]),
-                    p_memory_states=new_hyps["p_memory_states"],
+                    inputs=tf.reshape(y_hat["yseq"][-1], [1, 1]),
+                    p_memory_states=y_hat["p_memory_states"],
                     training=False
                 )
                 ytu = tf.nn.log_softmax(self.joint_net([hi, y], training=False))  # [1, 1, 1, V]
 
                 if lm and self.text_featurizer.scorer:
-                    lm_state, lm_score = self.text_featurizer.scorer(new_hyps)
+                    lm_state, lm_score = self.text_featurizer.scorer(y_hat)
 
                 for k in range(self.text_featurizer.num_classes):
-                    beam_hyp = new_hyps
-                    beam_hyp["score"] += tf.squeeze(ytu)[k].numpy()
+                    beam_hyp = {
+                        "score": y_hat["score"] + tf.squeeze(ytu)[k].numpy(),
+                        "yseq": y_hat["yseq"],
+                        "p_memory_states": y_hat["p_memory_states"],
+                        "lm_state": y_hat["lm_state"]
+                    }
 
                     if k == self.text_featurizer.blank:
-                        kept_hyps.append(beam_hyp)
+                        B.append(beam_hyp)
                     else:
                         beam_hyp["yseq"] += [int(k)]
                         beam_hyp["p_memory_states"] = n_memory_states
@@ -398,19 +427,19 @@ class Transducer(tf.keras.Model):
                             beam_hyp["lm_state"] = lm_state
                             beam_hyp["score"] += lm_score
 
-                        hyps.append(beam_hyp)
+                        A.append(beam_hyp)
 
-                if len(kept_hyps) >= beam_width:
+                if len(B) >= beam_width:
                     break
 
         # get nbest hyp using quick sort
         if norm_score:
             kept_hyps = sorted(
-                kept_hyps, key=lambda x: x["score"] / len(x["yseq"]),
+                B, key=lambda x: x["score"] / len(x["yseq"]),
                 reverse=True)[:beam_width]
         else:
             kept_hyps = sorted(
-                kept_hyps, key=lambda x: x["score"],
+                B, key=lambda x: x["score"],
                 reverse=True)[:beam_width]
 
         if streaming: self.kept_hyps = kept_hyps

@@ -107,7 +107,6 @@ def main():
         ds2_model._build([1, 50, f, c])
     # Compile
     ctc_trainer.compile(ds2_model, config["learning_config"]["optimizer_config"],
-                        time_reduction_factor=ds2_model.time_reduction_factor,
                         max_to_keep=args.max_ckpts)
 
     ctc_trainer.fit(train_dataset, eval_dataset, args.eval_train_ratio)

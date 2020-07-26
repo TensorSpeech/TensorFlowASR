@@ -159,6 +159,8 @@ class BaseTrainer(BaseRunner):
         while self.epochs.numpy() <= self.config["num_epochs"]:
             self._train_epoch()
 
+        self.save_checkpoint()
+
         tf.print("Finish training.")
 
     def _train_epoch(self):

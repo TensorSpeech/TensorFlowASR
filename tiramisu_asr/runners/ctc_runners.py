@@ -55,10 +55,12 @@ class CTCTrainer(BaseTrainer):
         with tf.GradientTape() as tape:
             y_pred = self.model(features, training=True)
             tape.watch(y_pred)
-            per_train_loss = ctc_loss(y_true=labels, y_pred=y_pred,
-                                      input_length=(input_length // self.time_reduction_factor),
-                                      label_length=label_length,
-                                      blank=self.text_featurizer.blank)
+            per_train_loss = ctc_loss(
+                y_true=labels, y_pred=y_pred,
+                input_length=(input_length // self.model.time_reduction_factor),
+                label_length=label_length,
+                blank=self.text_featurizer.blank
+            )
             train_loss = tf.nn.compute_average_loss(per_train_loss,
                                                     global_batch_size=self.global_batch_size)
 
@@ -80,23 +82,23 @@ class CTCTrainer(BaseTrainer):
 
         logits = self.model(features, training=False)
 
-        per_eval_loss = ctc_loss(y_true=labels, y_pred=logits,
-                                 input_length=(input_length // self.time_reduction_factor),
-                                 label_length=label_length,
-                                 blank=self.text_featurizer.blank)
+        per_eval_loss = ctc_loss(
+            y_true=labels, y_pred=logits,
+            input_length=(input_length // self.model.time_reduction_factor),
+            label_length=label_length,
+            blank=self.text_featurizer.blank
+        )
 
         # Update metrics
         self.eval_metrics["ctc_loss"].update_state(per_eval_loss)
 
     def compile(self, model: tf.keras.Model,
                 optimizer: any,
-                time_reduction_factor: int = 1,
                 max_to_keep: int = 10):
         with self.strategy.scope():
             self.model = model
             self.model.summary(line_length=100)
             self.optimizer = tf.keras.optimizers.get(optimizer)
-            self.time_reduction_factor = time_reduction_factor
             if self.is_mixed_precision:
                 self.optimizer = mixed_precision.LossScaleOptimizer(self.optimizer, "dynamic")
         self.create_checkpoint_manager(max_to_keep, model=self.model, optimizer=self.optimizer)

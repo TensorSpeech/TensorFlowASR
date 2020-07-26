@@ -121,21 +121,15 @@ def main():
                                                   arch_config=config["model_config"],
                                                   num_classes=text_featurizer.num_classes)
                 satt_ds2_model._build([1, 50, f, c])
-                satt_ds2_model.summary(line_length=100)
                 optimizer = create_optimizer(
                     name=config["learning_config"]["optimizer_config"]["name"],
                     d_model=config["model_config"]["att"]["head_size"],
                     **config["learning_config"]["optimizer_config"]["config"]
                 )
             # Compile
-            ctc_trainer.compile(satt_ds2_model, optimizer,
-                                time_reduction_factor=satt_ds2_model.time_reduction_factor,
-                                max_to_keep=args.max_ckpts)
+            ctc_trainer.compile(satt_ds2_model, optimizer, max_to_keep=args.max_ckpts)
 
-            try:
-                ctc_trainer.fit(train_dataset, eval_dataset, args.eval_train_ratio)
-            except KeyboardInterrupt:
-                ctc_trainer.save_checkpoint()
+            ctc_trainer.fit(train_dataset, eval_dataset, args.eval_train_ratio)
 
             if args.export:
                 if args.from_weights:
@@ -196,7 +190,6 @@ def main():
                                               arch_config=config["model_config"],
                                               num_classes=text_featurizer.num_classes)
             satt_ds2_model._build([1, 50, f, c])
-            satt_ds2_model.summary(line_length=100)
             optimizer = create_optimizer(
                 name=config["learning_config"]["optimizer_config"]["name"],
                 d_model=config["model_config"]["att"]["head_size"],
