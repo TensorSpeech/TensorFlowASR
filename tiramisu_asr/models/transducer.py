@@ -37,7 +37,7 @@ class TransducerPrediction(tf.keras.Model):
                  **kwargs):
         super(TransducerPrediction, self).__init__(name=name, **kwargs)
         self.embed = tf.keras.layers.Embedding(
-            input_dim=vocabulary_size, output_dim=embed_dim, mask_zero=True)
+            input_dim=vocabulary_size, output_dim=embed_dim, mask_zero=False)
         self.do = tf.keras.layers.Dropout(embed_dropout)
         self.lstms = []
         # lstms units must equal (for using beam search)
@@ -327,15 +327,16 @@ class Transducer(tf.keras.Model):
                        features: tf.Tensor,
                        lm: bool = False,
                        streaming: bool = False) -> tf.Tensor:
-        def map_fn(elem):
-            return tf.py_function(
-                self.perform_beam_search,
-                inp=[tf.expand_dims(elem, axis=0), lm, streaming],
-                Tout=tf.int32
-            )
-
-        decoded = tf.map_fn(map_fn, features, dtype=tf.int32)
-        return self.text_featurizer.iextract(decoded)
+        return self.recognize(features)
+        # def map_fn(elem):
+        #     return tf.py_function(
+        #         self.perform_beam_search,
+        #         inp=[tf.expand_dims(elem, axis=0), lm, streaming],
+        #         Tout=tf.int32
+        #     )
+        #
+        # decoded = tf.map_fn(map_fn, features, dtype=tf.int32)
+        # return self.text_featurizer.iextract(decoded)
 
 #    @tf.function(
 #        experimental_relax_shapes=True,
