@@ -64,13 +64,20 @@ def main():
                 tf.keras.mixed_precision.experimental.set_policy(policy)
                 print("Enabled mixed precision training")
 
-            dataset = SeganDataset("train", config["learning_config"]["dataset_config"]["train_paths"],
-                                   config["learning_config"]["dataset_config"]["noise_config"],
-                                   config["speech_config"], shuffle=True)
+            dataset = SeganDataset(
+                "train", config["learning_config"]["dataset_config"]["train_paths"],
+                config["learning_config"]["dataset_config"]["noise_config"],
+                config["speech_config"], shuffle=True
+            )
 
-            segan_trainer = SeganTrainer(config["speech_config"], config["learning_config"]["running_config"], args.mixed_precision)
+            segan_trainer = SeganTrainer(
+                config["speech_config"],
+                config["learning_config"]["running_config"],
+                args.mixed_precision
+            )
 
-            segan_trainer.compile(config["model_config"], config["learning_config"]["optimizer_config"],
+            segan_trainer.compile(config["model_config"],
+                                  config["learning_config"]["optimizer_config"],
                                   max_to_keep=args.max_ckpts)
             segan_trainer.fit(train_dataset=dataset)
 
@@ -83,20 +90,25 @@ def main():
             tf.random.set_seed(0)
             assert args.export
 
-            dataset = SeganDataset("test", config["learning_config"]["dataset_config"]["test_paths"],
-                                   config["learning_config"]["dataset_config"]["noise_config"],
-                                   config["speech_config"], shuffle=False).create_test()
+            dataset = SeganDataset(
+                "test", config["learning_config"]["dataset_config"]["test_paths"],
+                config["learning_config"]["dataset_config"]["noise_config"],
+                config["speech_config"], shuffle=False).create_test()
 
-            segan_tester = SeganTester(config["speech_config"], config["learning_config"]["running_config"],
-                                       args.export, from_weights=args.from_weights)
+            segan_tester = SeganTester(
+                config["speech_config"], config["learning_config"]["running_config"],
+                args.export, from_weights=args.from_weights)
 
             segan_tester.compile(config["model_config"])
             segan_tester.run(dataset)
 
         else:
             assert args.export
-            segan_trainer = SeganTrainer(config["speech_config"], config["learning_config"]["running_config"], args.mixed_precision)
-            segan_trainer.compile(config["model_config"], config["learning_config"]["optimizer_config"])
+            segan_trainer = SeganTrainer(
+                config["speech_config"],
+                config["learning_config"]["running_config"], args.mixed_precision)
+            segan_trainer.compile(config["model_config"],
+                                  config["learning_config"]["optimizer_config"])
             segan_trainer.load_checkpoint()
 
             if args.from_weights:

@@ -13,51 +13,52 @@
 # limitations under the License.
 
 speech_config:
-    sample_rate: 16000
-    stride: 0.5
-    preemphasis: 0.95
-    window_size: 16384
+  sample_rate: 16000
+  stride: 0.5
+  preemphasis: 0.95
+  window_size: 16384
 
 model_config:
-    g_enc_depths: [16, 32, 32, 64, 64, 128, 128, 256, 256, 512, 1024]
-    d_num_fmaps: [16, 32, 32, 64, 64, 128, 128, 256, 256, 512, 1024]
-    kwidth: 31
-    ratio: 2
+  g_enc_depths: [16, 32, 32, 64, 64, 128, 128, 256, 256, 512, 1024]
+  d_num_fmaps: [16, 32, 32, 64, 64, 128, 128, 256, 256, 512, 1024]
+  kwidth: 31
+  ratio: 2
 
 learning_config:
-    augmentations: null
+  augmentations: null
 
-    dataset_config:
-        noise_config:
-            snr_list: [0, 5, 10, 15]
-            max_noises: 3
-            noises: /mnt/Data/ML/ASR/Preprocessed/Noises
-        train_paths:
-            - /mnt/Data/ML/ASR/Preprocessed/Vivos/train
-        test_paths:
-            - /mnt/Data/ML/ASR/Preprocessed/Vivos/test
+  dataset_config:
+    noise_config:
+      snr_list: [0, 5, 10, 15]
+      max_noises: 3
+      noises: /mnt/Data/ML/ASR/Preprocessed/Noises
+    train_paths:
+      - /mnt/Data/ML/ASR/Preprocessed/Vivos/train
+    eval_paths: null
+    test_paths:
+      - /mnt/Data/ML/ASR/Preprocessed/Vivos/test
 
-    optimizer_config:
-        generator:
-            class_name: rmsprop
-            config:
-                learning_rate: 0.0002
-        discriminator:
-            class_name: rmsprop
-            config:
-                learning_rate: 0.0002
+  optimizer_config:
+    generator:
+      class_name: rmsprop
+      config:
+        learning_rate: 0.0002
+    discriminator:
+      class_name: rmsprop
+      config:
+        learning_rate: 0.0002
 
-    running_config:
-        batch_size: 8
+  running_config:
+    batch_size: 8
 
-        noise_std: 0.0
-        denoise_epoch: 5
-        noise_decay: 0.9
-        noise_std_lbound: 0.0
-        l1_lambda: 100.0
+    noise_std: 0.0
+    denoise_epoch: 5
+    noise_decay: 0.9
+    noise_std_lbound: 0.0
+    l1_lambda: 100.0
 
-        num_epochs: 86
-        outdir: /mnt/Projects/asrk16/trained/local/segan
-        log_interval_steps: 500
-        eval_interval_steps: 1000
-        save_interval_steps: 500
+    num_epochs: 86
+    outdir: /mnt/Projects/asrk16/trained/local/segan
+    log_interval_steps: 500
+    eval_interval_steps: 1000
+    save_interval_steps: 500
