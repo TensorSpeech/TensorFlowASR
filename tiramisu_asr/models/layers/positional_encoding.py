@@ -23,9 +23,11 @@ def positional_encoding(max_len, size):
     pe = pos * (1 / tf.pow(10000.0, (2 * (index // 2)) / size))
 
     # Sin cos will be [max_len, size // 2], we add 0 between number by using padding and reshape
-    sin = tf.pad(tf.expand_dims(tf.sin(pe[:, 0::2]), -1), [[0, 0], [0, 0], [0, 1]], mode="CONSTANT", constant_values=0)
+    sin = tf.pad(tf.expand_dims(tf.sin(pe[:, 0::2]), -1),
+                 [[0, 0], [0, 0], [0, 1]], mode="CONSTANT", constant_values=0)
     sin = tf.reshape(sin, [max_len, size])
-    cos = tf.pad(tf.expand_dims(tf.cos(pe[:, 1::2]), -1), [[0, 0], [0, 0], [1, 0]], mode="CONSTANT", constant_values=0)
+    cos = tf.pad(tf.expand_dims(tf.cos(pe[:, 1::2]), -1),
+                 [[0, 0], [0, 0], [1, 0]], mode="CONSTANT", constant_values=0)
     cos = tf.reshape(cos, [max_len, size])
     # Then add sin and cos
     pe = tf.add(sin, cos)

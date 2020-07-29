@@ -46,10 +46,15 @@ class TransducerPrediction(tf.keras.Model):
                                         return_sequences=True, return_state=True)
             self.lstms.append(lstm)
 
-    def get_initial_state(self, batch_size):
+    def get_initial_state(self, input_sample):
+        B = shape_list(input_sample)[0]
         memory_states = []
         for i in range(len(self.lstms)):
-            memory_states.append(self.lstms[i].get_initial_state(tf.zeros([batch_size, 1, 1])))
+            memory_states.append(
+                self.lstms[i].get_initial_state(
+                    tf.zeros([B, 1, 1], dtype=input_sample.dtype)
+                )
+            )
         return memory_states
 
     @tf.function(experimental_relax_shapes=True)
@@ -62,7 +67,7 @@ class TransducerPrediction(tf.keras.Model):
         outputs = self.embed(inputs, training=training)
         outputs = self.do(outputs, training=training)
         if p_memory_states is None:  # Zeros mean no initial_state
-            p_memory_states = self.get_initial_state(shape_list(outputs)[0])
+            p_memory_states = self.get_initial_state(outputs)
         n_memory_states = []
         for i, lstm in enumerate(self.lstms):
             outputs = lstm(outputs, training=training, initial_state=p_memory_states[i])
@@ -253,7 +258,7 @@ class Transducer(tf.keras.Model):
         new_hyps = Hypotheses(
             tf.constant(0.0, dtype=tf.float32),
             self.text_featurizer.blank * tf.ones([1], dtype=tf.int32),
-            self.predict_net.get_initial_state(1)
+            self.predict_net.get_initial_state(features)
         )
 
         if self.kept_hyps is not None:
