@@ -21,9 +21,43 @@ from .layers.positional_encoding import PositionalEncoding
 from .layers.multihead_attention import MultiHeadAttention
 
 
+class Conv2DSubsampling(tf.keras.layers.Layer):
+    def __init__(self,
+                 odim: int,
+                 reduction_factor: int,
+                 name="conv2dsubsampling",
+                 **kwargs):
+        super(Conv2DSubsampling, self).__init__(name=name, **kwargs)
+        assert reduction_factor % 2 == 0, "reduction_factor must be divisible by 2"
+        strides = (reduction_factor // 2, reduction_factor // 2)
+        self.conv1 = tf.keras.layers.Conv2D(filters=odim, kernel_size=(3, 3),
+                                            strides=strides, padding="same")
+        self.relu1 = tf.keras.layers.ReLU()
+        self.conv2 = tf.keras.layers.Conv2D(filters=odim, kernel_size=(3, 3),
+                                            strides=strides, padding="same")
+        self.relu2 = tf.keras.layers.ReLU()
+        self.linear = tf.keras.layers.Dense(odim)
+
+    def call(self, inputs, training=False, **kwargs):
+        outputs = self.conv1(inputs, training=training)
+        outputs = self.relu1(outputs)
+        outputs = self.conv2(inputs, training=training)
+        outputs = self.relu2(outputs)
+        outputs = merge_two_last_dims(outputs)
+        return self.linear(outputs, training=training)
+
+    def get_config(self):
+        conf = super(Conv2DSubsampling, self).get_config()
+        conf.update(self.conv1.get_config())
+        conf.update(self.relu1.get_config())
+        conf.update(self.conv2.get_config())
+        conf.update(self.relu2.get_config())
+        conf.update(self.linear.get_config())
+        return conf
+
+
 class FFModule(tf.keras.layers.Layer):
     def __init__(self,
-                 dim,
                  input_dim,
                  dropout=0.0,
                  fc_factor=0.5,
@@ -32,7 +66,7 @@ class FFModule(tf.keras.layers.Layer):
         super(FFModule, self).__init__(name=name, **kwargs)
         self.fc_factor = fc_factor
         self.ln = tf.keras.layers.LayerNormalization()
-        self.ffn1 = tf.keras.layers.Dense(dim)
+        self.ffn1 = tf.keras.layers.Dense(4 * input_dim)
         self.swish = tf.keras.layers.Activation(
             tf.keras.activations.swish, name="swish_activation")
         self.do1 = tf.keras.layers.Dropout(dropout)
@@ -150,7 +184,6 @@ class ConvModule(tf.keras.layers.Layer):
 class ConformerBlock(tf.keras.layers.Layer):
     def __init__(self,
                  input_dim,
-                 ffm_dim,
                  dropout=0.0,
                  fc_factor=0.5,
                  head_size=144,
@@ -159,14 +192,14 @@ class ConformerBlock(tf.keras.layers.Layer):
                  name="conformer_block",
                  **kwargs):
         super(ConformerBlock, self).__init__(name=name, **kwargs)
-        self.ffm1 = FFModule(dim=ffm_dim, input_dim=input_dim,
+        self.ffm1 = FFModule(input_dim=input_dim,
                              dropout=dropout, fc_factor=fc_factor,
                              name="ff_module_1")
         self.mhsam = MHSAModule(head_size=head_size, num_heads=num_heads,
                                 dropout=dropout)
         self.convm = ConvModule(input_dim=input_dim, kernel_size=kernel_size,
                                 dropout=dropout)
-        self.ffm2 = FFModule(dim=ffm_dim, input_dim=input_dim,
+        self.ffm2 = FFModule(input_dim=input_dim,
                              dropout=dropout, fc_factor=fc_factor,
                              name="ff_module_2")
         self.ln = tf.keras.layers.LayerNormalization()
@@ -191,13 +224,10 @@ class ConformerBlock(tf.keras.layers.Layer):
 
 class ConformerEncoder(tf.keras.Model):
     def __init__(self,
-                 ffm_dim,
-                 subsampling_kernel_size=32,
-                 subsampling_filters=144,
-                 subsampling_strides=2,
-                 subsampling_dropout=0.0,
+                 dmodel=144,
+                 reduction_factor=4,
                  num_blocks=16,
-                 head_size=144,
+                 head_size=36,
                  num_heads=4,
                  kernel_size=32,
                  fc_factor=0.5,
@@ -205,19 +235,13 @@ class ConformerEncoder(tf.keras.Model):
                  name="conformer_encoder",
                  **kwargs):
         super(ConformerEncoder, self).__init__(name=name, **kwargs)
-        self.conv_subsampling = tf.keras.layers.Conv1D(
-            filters=subsampling_filters,
-            kernel_size=subsampling_kernel_size,
-            strides=subsampling_strides,
-            name="conv_subsampling",
-            padding="same"
-        )
-        self.do = tf.keras.layers.Dropout(subsampling_dropout)
+        self.conv_subsampling = Conv2DSubsampling(
+            odim=dmodel, reduction_factor=reduction_factor)
+        self.do = tf.keras.layers.Dropout(dropout)
         self.conformer_blocks = []
         for i in range(num_blocks):
             conformer_block = ConformerBlock(
-                input_dim=subsampling_filters,
-                ffm_dim=ffm_dim,
+                input_dim=dmodel,
                 dropout=dropout,
                 fc_factor=fc_factor,
                 head_size=head_size,
@@ -229,8 +253,7 @@ class ConformerEncoder(tf.keras.Model):
 
     def call(self, inputs, training=False, **kwargs):
         # input with shape [B, T, V1, V2]
-        outputs = merge_two_last_dims(inputs)  # => [B, T, V]
-        outputs = self.conv_subsampling(outputs, training=training)
+        outputs = self.conv_subsampling(inputs, training=training)
         outputs = self.do(outputs, training=training)
         for cblock in self.conformer_blocks:
             outputs = cblock(outputs, training=training)
@@ -247,14 +270,11 @@ class ConformerEncoder(tf.keras.Model):
 
 class Conformer(Transducer):
     def __init__(self,
+                 dmodel: int,
+                 reduction_factor: int,
                  vocabulary_size: int,
-                 ffm_dim: int,
-                 subsampling_kernel_size: int = 32,
-                 subsampling_filters: int = 144,
-                 subsampling_strides: int = 2,
-                 subsampling_dropout: float = 0,
                  num_blocks: int = 16,
-                 head_size: int = 144,
+                 head_size: int = 36,
                  num_heads: int = 4,
                  kernel_size: int = 32,
                  fc_factor: float = 0.5,
@@ -268,11 +288,8 @@ class Conformer(Transducer):
                  **kwargs):
         super(Conformer, self).__init__(
             encoder=ConformerEncoder(
-                ffm_dim=ffm_dim,
-                subsampling_kernel_size=subsampling_kernel_size,
-                subsampling_filters=subsampling_filters,
-                subsampling_strides=subsampling_strides,
-                subsampling_dropout=subsampling_dropout,
+                dmodel=dmodel,
+                reduction_factor=reduction_factor,
                 num_blocks=num_blocks,
                 head_size=head_size,
                 num_heads=num_heads,
@@ -288,4 +305,4 @@ class Conformer(Transducer):
             joint_dim=joint_dim,
             name=name, **kwargs
         )
-        self.time_reduction_factor = subsampling_strides
+        self.time_reduction_factor = reduction_factor

@@ -107,17 +107,17 @@ def main():
             # build model
             f, c = speech_featurizer.compute_feature_dim()
             conformer = Conformer(
-                vocabulary_size=text_featurizer.num_classes,
-                **config["model_config"]
+                **config["model_config"],
+                vocabulary_size=text_featurizer.num_classes
             )
             conformer._build([1, 50, f, c])
 
             optimizer_config = config["learning_config"]["optimizer_config"]
             optimizer = tf.keras.optimizers.Adam(
                 TransformerSchedule(
-                    d_model=config["model_config"]["subsampling_filters"],
+                    d_model=config["model_config"]["dmodel"],
                     warmup_steps=optimizer_config["warmup_steps"],
-                    max_lr=(0.05 / math.sqrt(config["model_config"]["subsampling_filters"]))
+                    max_lr=(0.05 / math.sqrt(config["model_config"]["dmodel"]))
                 ),
                 beta_1=float(optimizer_config["beta1"]),
                 beta_2=float(optimizer_config["beta2"]),
