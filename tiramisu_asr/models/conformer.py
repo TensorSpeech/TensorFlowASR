@@ -13,12 +13,12 @@
 # limitations under the License.
 
 import tensorflow as tf
-import tensorflow_addons as tfa
 
 from .activations import GLU
 from .transducer import Transducer
 from ..utils.utils import merge_two_last_dims
 from .layers.positional_encoding import PositionalEncoding
+from .layers.multihead_attention import MultiHeadAttention
 
 
 class FFModule(tf.keras.layers.Layer):
@@ -73,14 +73,14 @@ class MHSAModule(tf.keras.layers.Layer):
         super(MHSAModule, self).__init__(name=name, **kwargs)
         self.pc = PositionalEncoding()
         self.ln = tf.keras.layers.LayerNormalization()
-        self.mha = tfa.layers.MultiHeadAttention(head_size=head_size, num_heads=num_heads)
+        self.mha = MultiHeadAttention(head_size=head_size, num_heads=num_heads)
         self.do = tf.keras.layers.Dropout(dropout)
         self.res_add = tf.keras.layers.Add()
 
     def call(self, inputs, training=False, **kwargs):
         outputs = self.pc(inputs)
         outputs = self.ln(outputs, training=training)
-        outputs = self.mha([outputs, outputs], training=training)
+        outputs = self.mha([outputs, outputs, outputs], training=training)
         outputs = self.do(outputs, training=training)
         outputs = self.res_add([inputs, outputs])
         return outputs
