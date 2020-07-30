@@ -19,8 +19,7 @@ import tensorflow.keras.mixed_precision.experimental as mixed_precision
 
 from ..featurizers.speech_featurizers import deemphasis, read_raw_audio
 from ..losses.segan_losses import generator_loss, discriminator_loss
-from ..models.segan import Discriminator, Generator, make_z_as_input, create_generator, \
-    create_discriminator
+from ..models.segan import Discriminator, Generator, make_z_as_input
 from .base_runners import BaseTrainer, BaseTester, BaseInferencer
 from ..utils.utils import slice_signal, merge_slices, print_test_info, shape_list
 
@@ -135,7 +134,7 @@ class SeganTrainer(BaseTrainer):
             self.generator._build()
             self.generator.summary(line_length=100)
             self.generator_optimizer = tf.keras.optimizers.get(optimizer_config["generator"])
-            self.discriminator = create_discriminator(
+            self.discriminator = Discriminator(
                 d_num_fmaps=model_config["d_num_fmaps"],
                 window_size=self.speech_config["window_size"],
                 kwidth=model_config["kwidth"], ratio=model_config["ratio"]
@@ -196,11 +195,12 @@ class SeganTester(BaseTester):
         }
 
     def compile(self, model_config: dict):
-        self.model = create_generator(
+        self.model = Generator(
             g_enc_depths=model_config["g_enc_depths"],
             window_size=self.speech_config["window_size"],
             kwidth=model_config["kwidth"], ratio=model_config["ratio"]
         )
+        self.model._build()
         if self.from_weights:
             self.load_model_from_weights()
         else:
@@ -298,11 +298,12 @@ class SeganInferencer(BaseInferencer):
 
     def compile(self, *args, **kwargs):
         if self.from_weights:
-            self.model = create_generator(
+            self.model = Generator(
                 g_enc_depths=self.model_config["g_enc_depths"],
                 window_size=self.speech_config["window_size"],
                 kwidth=self.model_config["kwidth"], ratio=self.model_config["ratio"]
             )
+            self.model._build()
             self.load_model_from_weights()
         else:
             self.load_model()

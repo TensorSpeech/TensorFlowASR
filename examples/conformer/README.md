@@ -20,22 +20,19 @@ speech_config:
 
 model_config:
     name: conformer
-    ffm_dim: 1024
-    subsampling_kernel_size: 32
-    subsampling_filters: 144
-    subsampling_strides: 2
-    subsampling_dropout: 0.1
+    dmodel: 144
+    reduction_factor: 4
     num_blocks: 16
     head_size: 36
     num_heads: 4
     kernel_size: 32
     fc_factor: 0.5
     dropout: 0.1
-    embed_dim: 256
+    embed_dim: 144
     embed_dropout: 0.0
     num_lstms: 1
     lstm_units: 320
-    joint_dim: 256
+    joint_dim: 144
 
 learning_config:
     augmentations:

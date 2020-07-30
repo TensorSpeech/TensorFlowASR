@@ -379,7 +379,7 @@ class Discriminator(tf.keras.Model):
         for block_idx, nfmaps in enumerate(d_num_fmaps):
             dc = DownConv(depth=nfmaps, kwidth=kwidth, pool=ratio,
                           name=f"segan_d_downconv_{block_idx}")
-            vbn = None
+            vbn = tf.keras.layers.BatchNormalization()
             leaky = tf.keras.layers.LeakyReLU(
                 alpha=0.3, name=f"segan_d_leakyrelu_{block_idx}")
             self.blocks.append([dc, vbn, leaky])
@@ -404,8 +404,6 @@ class Discriminator(tf.keras.Model):
         outputs = self.gauss(outputs)
         for i in range(len(self.blocks)):
             outputs = self.blocks[i][0](outputs, training=training)
-            if self.blocks[i][1] is None:
-                self.blocks[i][1] = VirtualBatchNorm(outputs)
             outputs = self.blocks[i][1](outputs)
             outputs = self.blocks[i][2](outputs, training=training)
         outputs = tf.squeeze(outputs, axis=2)
