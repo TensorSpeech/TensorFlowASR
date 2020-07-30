@@ -19,9 +19,9 @@ import tensorflow.keras.mixed_precision.experimental as mixed_precision
 
 from ..featurizers.speech_featurizers import deemphasis, read_raw_audio
 from ..losses.segan_losses import generator_loss, discriminator_loss
-from ..models.segan import create_discriminator, create_generator, make_z_as_input
+from ..models.segan import Discriminator, Generator, make_z_as_input
 from .base_runners import BaseTrainer, BaseTester, BaseInferencer
-from ..utils.utils import slice_signal, merge_slices, print_test_info
+from ..utils.utils import slice_signal, merge_slices, print_test_info, shape_list
 
 
 class SeganTrainer(BaseTrainer):
@@ -52,16 +52,11 @@ class SeganTrainer(BaseTrainer):
     def _train_step(self, batch):
         clean_wavs, noisy_wavs = batch
         with tf.GradientTape() as gen_tape, tf.GradientTape() as disc_tape:
-            g_clean_wavs = self.generator(noisy_wavs, training=True)
+            z = self.generator.get_z(shape_list(clean_wavs)[0])
+            g_clean_wavs = self.generator([noisy_wavs, z], training=True)
 
-            d_real_logit = self.discriminator({
-                "clean": clean_wavs,
-                "noisy": noisy_wavs,
-            }, training=True)
-            d_fake_logit = self.discriminator({
-                "clean": g_clean_wavs,
-                "noisy": noisy_wavs,
-            }, training=True)
+            d_real_logit = self.discriminator([clean_wavs, noisy_wavs], training=True)
+            d_fake_logit = self.discriminator([g_clean_wavs, noisy_wavs], training=True)
 
             gen_tape.watch(g_clean_wavs)
             disc_tape.watch([d_real_logit, d_fake_logit])
@@ -112,16 +107,11 @@ class SeganTrainer(BaseTrainer):
     def _eval_step(self, batch):
         clean_wavs, noisy_wavs = batch
 
-        g_clean_wavs = self.generator(noisy_wavs, training=False)
+        z = self.generator.get_z(shape_list(clean_wavs)[0])
+        g_clean_wavs = self.generator([noisy_wavs, z], training=False)
 
-        d_real_logit = self.discriminator({
-            "clean": clean_wavs,
-            "noisy": noisy_wavs,
-        }, training=False)
-        d_fake_logit = self.discriminator({
-            "clean": g_clean_wavs,
-            "noisy": noisy_wavs,
-        }, training=False)
+        d_real_logit = self.discriminator([clean_wavs, noisy_wavs], training=False)
+        d_fake_logit = self.discriminator([g_clean_wavs, noisy_wavs], training=False)
 
         _gen_l1_loss, _gen_adv_loss = generator_loss(y_true=clean_wavs,
                                                      y_pred=g_clean_wavs,
@@ -136,18 +126,20 @@ class SeganTrainer(BaseTrainer):
 
     def compile(self, model_config: dict, optimizer_config: dict, max_to_keep: int = 10):
         with self.strategy.scope():
-            self.generator = create_generator(
+            self.generator = Generator(
                 g_enc_depths=model_config["g_enc_depths"],
                 window_size=self.speech_config["window_size"],
                 kwidth=model_config["kwidth"], ratio=model_config["ratio"]
             )
-            self.discriminator = create_discriminator(
+            self.generator._build()
+            self.generator.summary(line_length=100)
+            self.generator_optimizer = tf.keras.optimizers.get(optimizer_config["generator"])
+            self.discriminator = Discriminator(
                 d_num_fmaps=model_config["d_num_fmaps"],
                 window_size=self.speech_config["window_size"],
                 kwidth=model_config["kwidth"], ratio=model_config["ratio"]
             )
-            self.generator.summary(line_length=150)
-            self.generator_optimizer = tf.keras.optimizers.get(optimizer_config["generator"])
+            self.discriminator._build()
             self.discriminator_optimizer = tf.keras.optimizers.get(
                 optimizer_config["discriminator"])
             if self.is_mixed_precision:
@@ -203,11 +195,12 @@ class SeganTester(BaseTester):
         }
 
     def compile(self, model_config: dict):
-        self.model = create_generator(
+        self.model = Generator(
             g_enc_depths=model_config["g_enc_depths"],
             window_size=self.speech_config["window_size"],
             kwidth=model_config["kwidth"], ratio=model_config["ratio"]
         )
+        self.model._build()
         if self.from_weights:
             self.load_model_from_weights()
         else:
@@ -305,11 +298,12 @@ class SeganInferencer(BaseInferencer):
 
     def compile(self, *args, **kwargs):
         if self.from_weights:
-            self.model = create_generator(
+            self.model = Generator(
                 g_enc_depths=self.model_config["g_enc_depths"],
                 window_size=self.speech_config["window_size"],
                 kwidth=self.model_config["kwidth"], ratio=self.model_config["ratio"]
             )
+            self.model._build()
             self.load_model_from_weights()
         else:
             self.load_model()
