@@ -90,7 +90,7 @@ def merge_slices_numpy(slices: np.ndarray):
 
 
 def get_num_batches(samples, batch_size):
-    return math.ceil(samples / batch_size)
+    return math.ceil(float(samples) / float(batch_size))
 
 
 def merge_features_to_channels(x):

@@ -29,6 +29,7 @@ class BaseDataset(metaclass=abc.ABCMeta):
         self.augmentations = UserAugmentation(augmentations)
         self.shuffle = shuffle
         self.stage = stage
+        self.total_steps = None
 
     @abc.abstractmethod
     def parse(self, *args, **kwargs):

@@ -24,7 +24,7 @@ import tensorflow as tf
 from .base_dataset import BaseDataset
 from ..featurizers.speech_featurizers import read_raw_audio, SpeechFeaturizer
 from ..featurizers.text_featurizers import TextFeaturizer
-from ..utils.utils import bytestring_feature, print_one_line, read_bytes
+from ..utils.utils import bytestring_feature, print_one_line, read_bytes, get_num_batches
 from ..augmentations.augments import SeganAugment
 
 AUTOTUNE = tf.data.experimental.AUTOTUNE
@@ -81,6 +81,7 @@ class ASRDataset(BaseDataset):
         lines = np.array(lines)
         if self.shuffle:
             np.random.shuffle(lines)  # Mix transcripts.tsv
+        self.total_steps = len(lines)
         return lines
 
     def preprocess(self, audio, transcript, with_augment=False):
@@ -139,6 +140,7 @@ class ASRDataset(BaseDataset):
 
         # PREFETCH to improve speed of input length
         dataset = dataset.prefetch(AUTOTUNE)
+        self.total_steps = get_num_batches(self.total_steps, batch_size)
         return dataset
 
     @abc.abstractmethod
@@ -175,13 +177,13 @@ class ASRTFRecordDataset(ASRDataset):
         if not os.path.exists(self.tfrecords_dir):
             os.makedirs(self.tfrecords_dir)
 
-        if glob.glob(os.path.join(self.tfrecords_dir, f"{self.stage}*.tfrecord")):
-            print(f"TFRecords're already existed: {self.stage}")
-            return True
-
         entries = self.read_entries()
         if len(entries) <= 0:
             return False
+
+        if glob.glob(os.path.join(self.tfrecords_dir, f"{self.stage}*.tfrecord")):
+            print(f"TFRecords're already existed: {self.stage}")
+            return True
 
         print(f"Creating {self.stage}.tfrecord ...")
 

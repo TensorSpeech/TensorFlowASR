@@ -22,7 +22,7 @@ from ..featurizers.speech_featurizers import preemphasis, read_raw_audio
 from ..utils.utils import slice_signal, append_default_keys_dict, merge_slices
 
 DEFAULT_NOISE_CONF = {
-    "snr_list":   (0, 5, 10, 15),
+    "snr_list": (0, 5, 10, 15),
     "max_noises": 3,
     "include_original": True
 }
@@ -60,7 +60,8 @@ class SeganDataset(BaseDataset):
     def create(self, batch_size):
         def _gen_data():
             for clean_wav_path in self._merge_dirs():
-                clean_wav = read_raw_audio(clean_wav_path, sample_rate=self.speech_config["sample_rate"])
+                clean_wav = read_raw_audio(
+                    clean_wav_path, sample_rate=self.speech_config["sample_rate"])
                 clean_slices, noisy_slices = self.parse(clean_wav, self.speech_config["stride"])
                 for clean, noisy in zip(clean_slices, noisy_slices):
                     yield clean, noisy
@@ -86,14 +87,16 @@ class SeganDataset(BaseDataset):
     def create_test(self):
         def _gen_data():
             for clean_wav_path in self._merge_dirs():
-                clean_wav = read_raw_audio(clean_wav_path, sample_rate=self.speech_config["sample_rate"])
+                clean_wav = read_raw_audio(
+                    clean_wav_path, sample_rate=self.speech_config["sample_rate"])
                 clean_slices, noisy_slices = self.parse(clean_wav, 1)
                 yield os.path.basename(clean_wav_path), merge_slices(clean_slices), noisy_slices
 
         dataset = tf.data.Dataset.from_generator(
             _gen_data,
             output_types=(tf.string, tf.float32, tf.float32),
-            output_shapes=(tf.TensorShape([]), tf.TensorShape([None]), tf.TensorShape([None, self.speech_config["window_size"]]))
+            output_shapes=(tf.TensorShape([]), tf.TensorShape([None]),
+                           tf.TensorShape([None, self.speech_config["window_size"]]))
         )
         # Prefetch to improve speed of input length
         dataset = dataset.prefetch(tf.data.experimental.AUTOTUNE)
