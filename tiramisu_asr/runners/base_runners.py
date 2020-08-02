@@ -116,6 +116,7 @@ class BaseTrainer(BaseRunner):
         """ Set train data loader (MUST). """
         train_data = train_dataset.create(self.global_batch_size)
         self.train_data_loader = self.strategy.experimental_distribute_dataset(train_data)
+        self.train_steps_per_epoch = train_dataset.total_steps
 
     def set_eval_data_loader(self, eval_dataset, eval_train_ratio=1):
         """ Set eval data loader (MUST).
@@ -125,6 +126,7 @@ class BaseTrainer(BaseRunner):
         else:
             eval_data = eval_dataset.create(self.global_batch_size * eval_train_ratio)
             self.eval_data_loader = self.strategy.experimental_distribute_dataset(eval_data)
+            self.eval_steps_per_epoch = eval_dataset.total_steps
 
     # -------------------------------- CHECKPOINTS -------------------------------------
 
@@ -152,11 +154,24 @@ class BaseTrainer(BaseRunner):
 
     # -------------------------------- RUNNING -------------------------------------
 
+    def _finished(self):
+        if self.train_steps_per_epoch is None:
+            return False
+        return self.steps.numpy() >= (self.config["num_epochs"] * self.train_steps_per_epoch)
+
     def run(self):
         """Run training."""
-        if self.steps.numpy() > 0: tf.print("Resume training ...")
+        if self.steps.numpy() > 0:
+            tf.print("Resume training ...")
+            if self.train_steps_per_epoch is not None:
+                total_steps_in_epochs = self.epochs.numpy() * self.train_steps_per_epoch
+                self.initial = self.steps.numpy() % total_steps_in_epochs
+            else:
+                self.initial = 0
+        else:
+            self.initial = 0
 
-        while self.epochs.numpy() <= self.config["num_epochs"]:
+        while not self._finished():
             self._train_epoch()
 
         self.save_checkpoint()
@@ -165,13 +180,18 @@ class BaseTrainer(BaseRunner):
 
     def _train_epoch(self):
         """Train model one epoch."""
+        train_iterator = iter(self.train_data_loader)
+        if self.initial > 0:
+            skip = tqdm(range(self.initial), desc="[Skipping]", unit="batch",
+                        bar_format="{desc}: |%s{bar:20}%s{r_bar}" % (Fore.MAGENTA, Fore.RESET))
+            for _ in skip:
+                next(train_iterator)
         self.train_progbar = tqdm(
-            initial=0, total=self.train_steps_per_epoch, unit="batch", position=0,
+            initial=self.initial, total=self.train_steps_per_epoch, unit="batch", position=0,
             bar_format="{desc}: |%s{bar:20}%s{r_bar}" % (Fore.GREEN, Fore.RESET),
             desc=f"[Train] [Epoch {self.epochs.numpy()}/{self.config['num_epochs']}]"
         )
-        train_iterator = iter(self.train_data_loader)
-        train_steps = 0
+        train_steps = self.initial
         while True:
             # Run train step
             try:
@@ -197,6 +217,7 @@ class BaseTrainer(BaseRunner):
         # Update epoch variable
         self.epochs.assign_add(1)
         self.train_steps_per_epoch = train_steps
+        self.initial = 0
         self.train_progbar.close()
 
     @tf.function(experimental_relax_shapes=True)

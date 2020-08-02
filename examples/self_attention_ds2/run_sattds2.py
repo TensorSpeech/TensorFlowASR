@@ -165,14 +165,14 @@ def main():
                     config["learning_config"]["dataset_config"]["tfrecords_dir"],
                     speech_featurizer, text_featurizer, "test",
                     augmentations=config["learning_config"]["augmentations"], shuffle=False
-                ).create(batch_size * args.eval_batch_size_ratio)
+                ).create(batch_size * args.eval_train_ratio)
             else:
                 test_dataset = ASRSliceDataset(
                     stage="test", speech_featurizer=speech_featurizer,
                     text_featurizer=text_featurizer,
                     data_paths=config["learning_config"]["dataset_config"]["test_paths"],
                     augmentations=config["learning_config"]["augmentations"], shuffle=False
-                ).create(batch_size * args.eval_batch_size_ratio)
+                ).create(batch_size * args.eval_train_ratio)
 
             ctc_tester = BaseTester(
                 config=config["learning_config"]["running_config"],
