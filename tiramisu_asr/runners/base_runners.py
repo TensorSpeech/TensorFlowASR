@@ -144,7 +144,7 @@ class BaseTrainer(BaseRunner):
         """Save checkpoint."""
         with self.strategy.scope():
             self.ckpt_manager.save()
-            tf.print("\n> Successfully saved checkpoint at step", self.steps)
+            self.train_progbar.set_postfix_str("Successfully Saved Checkpoint")
 
     def load_checkpoint(self):
         """Load checkpoint."""
@@ -161,37 +161,32 @@ class BaseTrainer(BaseRunner):
 
     def run(self):
         """Run training."""
-        if self.steps.numpy() > 0:
-            tf.print("Resume training ...")
-            if self.train_steps_per_epoch is not None:
-                total_steps_in_epochs = self.epochs.numpy() * self.train_steps_per_epoch
-                self.initial = self.steps.numpy() % total_steps_in_epochs
-            else:
-                self.initial = 0
+        if self.steps.numpy() > 0: tf.print("Resume training ...")
+
+        if self.train_steps_per_epoch is None:
+            total_steps = None
         else:
-            self.initial = 0
+            total_steps = self.config["num_epochs"] * self.train_steps_per_epoch
+
+        self.train_progbar = tqdm(
+            initial=self.steps.numpy(), unit="batch", total=total_steps,
+            position=0, leave=True,
+            bar_format="{desc}: |%s{bar:20}%s{r_bar}" % (Fore.GREEN, Fore.RESET),
+            desc=f"[Train] [Epoch {self.epochs.numpy()}/{self.config['num_epochs']}]"
+        )
 
         while not self._finished():
             self._train_epoch()
 
         self.save_checkpoint()
 
-        tf.print("Finish training.")
+        self.train_progbar.close()
+        print("> Finish training")
 
     def _train_epoch(self):
         """Train model one epoch."""
         train_iterator = iter(self.train_data_loader)
-        if self.initial > 0:
-            skip = tqdm(range(self.initial), desc="[Skipping]", unit="batch",
-                        bar_format="{desc}: |%s{bar:20}%s{r_bar}" % (Fore.MAGENTA, Fore.RESET))
-            for _ in skip:
-                next(train_iterator)
-        self.train_progbar = tqdm(
-            initial=self.initial, total=self.train_steps_per_epoch, unit="batch", position=0,
-            bar_format="{desc}: |%s{bar:20}%s{r_bar}" % (Fore.GREEN, Fore.RESET),
-            desc=f"[Train] [Epoch {self.epochs.numpy()}/{self.config['num_epochs']}]"
-        )
-        train_steps = self.initial
+        train_steps = 0
         while True:
             # Run train step
             try:
@@ -217,8 +212,6 @@ class BaseTrainer(BaseRunner):
         # Update epoch variable
         self.epochs.assign_add(1)
         self.train_steps_per_epoch = train_steps
-        self.initial = 0
-        self.train_progbar.close()
 
     @tf.function(experimental_relax_shapes=True)
     def _train_function(self, iterator):
@@ -234,11 +227,14 @@ class BaseTrainer(BaseRunner):
         """One epoch evaluation."""
         if not self.eval_data_loader: return
 
+        print("\n> Start evaluation ...")
+
         for metric in self.eval_metrics.keys():
             self.eval_metrics[metric].reset_states()
 
         eval_progbar = tqdm(
-            initial=0, total=self.eval_steps_per_epoch, unit="batch", position=1, leave=False,
+            initial=0, total=self.eval_steps_per_epoch, unit="batch",
+            position=0, leave=True,
             bar_format="{desc}: |%s{bar:20}%s{r_bar}" % (Fore.BLUE, Fore.RESET),
             desc=f"[Eval] [Step {self.steps.numpy()}]"
         )
@@ -265,6 +261,8 @@ class BaseTrainer(BaseRunner):
         eval_progbar.close()
         # Write to tensorboard
         self._write_to_tensorboard(self.eval_metrics, self.steps, stage="eval")
+
+        print("> End evaluation ...")
 
     @tf.function(experimental_relax_shapes=True)
     def _eval_function(self, iterator):
@@ -311,15 +309,13 @@ class BaseTrainer(BaseRunner):
     def _print_train_metrics(self, progbar):
         result_dict = {}
         for key, value in self.train_metrics.items():
-            result_dict[f"train_{key}"] = float(value.result().numpy())
-        for key, value in self.eval_metrics.items():
-            result_dict[f"eval_{key}"] = float(value.result().numpy())
+            result_dict[f"{key}"] = str(value.result().numpy())
         progbar.set_postfix(result_dict)
 
     def _print_eval_metrics(self, progbar):
         result_dict = {}
         for key, value in self.eval_metrics.items():
-            result_dict[f"eval_{key}"] = float(value.result().numpy())
+            result_dict[f"{key}"] = str(value.result().numpy())
         progbar.set_postfix(result_dict)
 
     # -------------------------------- END -------------------------------------
