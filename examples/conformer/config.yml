@@ -42,7 +42,7 @@ model_config:
   embed_dropout: 0.0
   num_lstms: 1
   lstm_units: 320
-  joint_dim: 144
+  joint_dim: 1024
 
 learning_config:
   augmentations: null
