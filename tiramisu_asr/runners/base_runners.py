@@ -91,6 +91,12 @@ class BaseTrainer(BaseRunner):
             self.set_train_metrics()
             self.set_eval_metrics()
 
+    @property
+    def total_train_steps(self):
+        if self.train_steps_per_epoch is None:
+            return None
+        return self.config["num_epochs"] * self.train_steps_per_epoch
+
     # -------------------------------- GET SET -------------------------------------
 
     @abc.abstractmethod
@@ -163,16 +169,11 @@ class BaseTrainer(BaseRunner):
         """Run training."""
         if self.steps.numpy() > 0: tf.print("Resume training ...")
 
-        if self.train_steps_per_epoch is None:
-            total_steps = None
-        else:
-            total_steps = self.config["num_epochs"] * self.train_steps_per_epoch
-
         self.train_progbar = tqdm(
-            initial=self.steps.numpy(), unit="batch", total=total_steps,
+            initial=self.steps.numpy(), unit="batch", total=self.total_train_steps,
             position=0, leave=True,
-            bar_format="{desc}: |%s{bar:20}%s{r_bar}" % (Fore.GREEN, Fore.RESET),
-            desc=f"[Train] [Epoch {self.epochs.numpy()}/{self.config['num_epochs']}]"
+            bar_format="{desc} |%s{bar:20}%s{r_bar}" % (Fore.GREEN, Fore.RESET),
+            desc="[Train]"
         )
 
         while not self._finished():
@@ -185,6 +186,8 @@ class BaseTrainer(BaseRunner):
 
     def _train_epoch(self):
         """Train model one epoch."""
+        self.train_progbar.set_description_str(
+            f"[Train] [Epoch {self.epochs.numpy()}/{self.config['num_epochs']}]")
         train_iterator = iter(self.train_data_loader)
         train_steps = 0
         while True:
@@ -212,6 +215,8 @@ class BaseTrainer(BaseRunner):
         # Update epoch variable
         self.epochs.assign_add(1)
         self.train_steps_per_epoch = train_steps
+        self.train_progbar.total = self.total_train_steps
+        self.train_progbar.refresh()
 
     @tf.function(experimental_relax_shapes=True)
     def _train_function(self, iterator):
@@ -235,7 +240,7 @@ class BaseTrainer(BaseRunner):
         eval_progbar = tqdm(
             initial=0, total=self.eval_steps_per_epoch, unit="batch",
             position=0, leave=True,
-            bar_format="{desc}: |%s{bar:20}%s{r_bar}" % (Fore.BLUE, Fore.RESET),
+            bar_format="{desc} |%s{bar:20}%s{r_bar}" % (Fore.BLUE, Fore.RESET),
             desc=f"[Eval] [Step {self.steps.numpy()}]"
         )
         eval_iterator = iter(self.eval_data_loader)
