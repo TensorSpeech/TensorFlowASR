@@ -16,16 +16,10 @@ import os
 
 import tensorflow as tf
 
-from ..augmentations.augments import Noise
+from ..augmentations.augments import SignalNoise
 from ..datasets.base_dataset import BaseDataset
 from ..featurizers.speech_featurizers import preemphasis, read_raw_audio
-from ..utils.utils import slice_signal, append_default_keys_dict, merge_slices
-
-DEFAULT_NOISE_CONF = {
-    "snr_list": (0, 5, 10, 15),
-    "max_noises": 3,
-    "include_original": True
-}
+from ..utils.utils import slice_signal, merge_slices
 
 
 class SeganDataset(BaseDataset):
@@ -35,7 +29,7 @@ class SeganDataset(BaseDataset):
                  noises_config: dict,
                  speech_config: dict,
                  shuffle: bool = False):
-        self.noises = Noise(append_default_keys_dict(DEFAULT_NOISE_CONF, noises_config))
+        self.noises = SignalNoise() if noises_config is None else SignalNoise(**noises_config)
         self.speech_config = speech_config
         super(SeganDataset, self).__init__(data_paths, None, shuffle, stage)
 
@@ -47,7 +41,7 @@ class SeganDataset(BaseDataset):
 
     def parse(self, record, stride=1):
         clean_wav = record
-        noisy_wav = self.noises(clean_wav, sample_rate=self.speech_config["sample_rate"])
+        noisy_wav = self.noises.augment(clean_wav)
 
         clean_wav = preemphasis(clean_wav, self.speech_config["preemphasis"])
         noisy_wav = preemphasis(noisy_wav, self.speech_config["preemphasis"])

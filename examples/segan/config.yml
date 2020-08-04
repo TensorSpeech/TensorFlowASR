@@ -29,9 +29,7 @@ learning_config:
 
   dataset_config:
     noise_config:
-      snr_list: [0, 5, 10, 15]
-      max_noises: 3
-      noises: /mnt/Data/ML/ASR/Preprocessed/Noises
+      noises: /mnt/Data/ML/ASR/Preprocessed/Noises/train
     train_paths:
       - /mnt/Data/ML/ASR/Preprocessed/Vivos/train
     eval_paths: null
