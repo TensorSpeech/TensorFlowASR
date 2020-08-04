@@ -25,34 +25,29 @@ class Conv2DSubsampling(tf.keras.layers.Layer):
     def __init__(self,
                  odim: int,
                  reduction_factor: int,
+                 dropout: float = 0,
                  name="conv2dsubsampling",
                  **kwargs):
         super(Conv2DSubsampling, self).__init__(name=name, **kwargs)
         assert reduction_factor % 2 == 0, "reduction_factor must be divisible by 2"
-        strides = (reduction_factor // 2, reduction_factor // 2)
-        self.conv1 = tf.keras.layers.Conv2D(filters=odim, kernel_size=(3, 3),
-                                            strides=strides, padding="same")
-        self.relu1 = tf.keras.layers.ReLU()
-        self.conv2 = tf.keras.layers.Conv2D(filters=odim, kernel_size=(3, 3),
-                                            strides=strides, padding="same")
-        self.relu2 = tf.keras.layers.ReLU()
+        self.conv = tf.keras.layers.Conv2D(
+            filters=odim, kernel_size=(3, 3),
+            strides=(reduction_factor, reduction_factor), padding="same"
+        )
         self.linear = tf.keras.layers.Dense(odim)
+        self.do = tf.keras.layers.Dropout(dropout)
 
     def call(self, inputs, training=False, **kwargs):
-        outputs = self.conv1(inputs, training=training)
-        outputs = self.relu1(outputs)
-        outputs = self.conv2(inputs, training=training)
-        outputs = self.relu2(outputs)
+        outputs = self.conv(inputs, training=training)
         outputs = merge_two_last_dims(outputs)
-        return self.linear(outputs, training=training)
+        outputs = self.linear(outputs, training=training)
+        return self.do(outputs, training=training)
 
     def get_config(self):
         conf = super(Conv2DSubsampling, self).get_config()
-        conf.update(self.conv1.get_config())
-        conf.update(self.relu1.get_config())
-        conf.update(self.conv2.get_config())
-        conf.update(self.relu2.get_config())
+        conf.update(self.conv.get_config())
         conf.update(self.linear.get_config())
+        conf.update(self.do.get_config())
         return conf
 
 
@@ -236,8 +231,7 @@ class ConformerEncoder(tf.keras.Model):
                  **kwargs):
         super(ConformerEncoder, self).__init__(name=name, **kwargs)
         self.conv_subsampling = Conv2DSubsampling(
-            odim=dmodel, reduction_factor=reduction_factor)
-        self.do = tf.keras.layers.Dropout(dropout)
+            odim=dmodel, reduction_factor=reduction_factor, dropout=dropout)
         self.conformer_blocks = []
         for i in range(num_blocks):
             conformer_block = ConformerBlock(
@@ -254,7 +248,6 @@ class ConformerEncoder(tf.keras.Model):
     def call(self, inputs, training=False, **kwargs):
         # input with shape [B, T, V1, V2]
         outputs = self.conv_subsampling(inputs, training=training)
-        outputs = self.do(outputs, training=training)
         for cblock in self.conformer_blocks:
             outputs = cblock(outputs, training=training)
         return outputs
@@ -262,7 +255,6 @@ class ConformerEncoder(tf.keras.Model):
     def get_config(self):
         conf = super(ConformerEncoder, self).get_config()
         conf.update(self.conv_subsampling.get_config())
-        conf.update(self.do.get_config())
         for cblock in self.conformer_blocks:
             conf.update(cblock.get_config())
         return conf

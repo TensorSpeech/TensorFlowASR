@@ -15,7 +15,7 @@
 # limitations under the License.
 import abc
 import os
-from tqdm.auto import tqdm
+from tqdm import tqdm
 from colorama import Fore
 
 import numpy as np
