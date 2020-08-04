@@ -19,10 +19,7 @@ TiramisuASR implements some speech recognition and speech enhancement architectu
 
 ## What's New?
 
--   Add python scripts to `scripts` for processing datasets, creating vocabulary
--   Transducer is now able to convert to tflite with `recognize_tflite` function
--   Add `index2upoints` function in `TextFeaturizer` for converting classes to unicode code points
--   CTCModel is now able to convert to tflite with `recognize_*_tflite` functions
+-   Use **nlpaug** as augmentation for speech recognition and enhancement
 
 ## :yum: Supported Models
 

@@ -29,7 +29,8 @@ requirements = [
     "nltk>=3.5",
     "numba==0.49.1",
     "tqdm>=4.47.0",
-    "colorama>=0.4.3"
+    "colorama>=0.4.3",
+    "nlpaug>=0.0.14"
 ]
 
 setuptools.setup(

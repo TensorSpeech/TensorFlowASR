@@ -50,36 +50,7 @@ model_config:
     fc_units: null
 
 learning_config:
-  augmentations:
-  #    include_original:  False
-  #    before:
-  #      white_noise:
-  #        snr_list: [0, 5, 10, 15]
-  #      real_world_noise:
-  #        snr_list: [0, 5, 10, 15]
-  #        noises:     /mnt/f/ML/ASR/Preprocessed/Noises
-  #        max_noises: 3
-  #      time_stretch:
-  #        min_ratio: 0.5
-  #        max_ratio: 2
-  #      pitch_shift:
-  #        min_step: -4
-  #        max_step: 4
-  #      segan:
-  #        speech_config:
-  #          sample_rate: 16000
-  #          stride:      1
-  #          preemphasis: 0.95
-  #          window_size: 16384
-  #        saved_path: /mnt/d/asrk16/trained/segan3/segan3.tflite
-  #    after:
-  #      time_masking:
-  #        num_time_mask:   1
-  #        time_mask_param: 77
-  #        p_upperbound:    0.2
-  #      freq_masking:
-  #        num_freq_mask:   1
-  #        freq_mask_param: 22
+  augmentations: null
 
   dataset_config:
     train_paths:

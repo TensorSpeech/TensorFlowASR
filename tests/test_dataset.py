@@ -1,35 +1,65 @@
-import tensorflow as tf
+from tiramisu_asr.datasets.asr_dataset import ASRSliceDataset
+from tiramisu_asr.featurizers.speech_featurizers import TFSpeechFeaturizer
+from tiramisu_asr.featurizers.text_featurizers import TextFeaturizer
 
 
-def func():
-    for i in range(100):
-        yield ({
-                   "name": i,
-                   "value": i + 1
-               }, {
-                   "name": i,
-                   "value": None
-               })
+augments = {
+    "before": {
+        "methods": {
+            "loudness": {
+                "zone": (0.3, 0.7)
+            },
+            "speed": None,
+            "noise": {
+                "noises": "/mnt/Data/ML/ASR/Preprocessed/Noises/train"
+            }
+        },
+        "sometimes": True
+    },
+    "after": {
+        "methods": {
+            "time_masking": {
+                "mask_factor": 80
+            },
+            "freq_masking": {
+                "mask_factor": 27
+            }
+
+        },
+        "sometimes": False
+    },
+    "include_original": False,
+    "sometimes": True
+}
+
+data = "/mnt/Data/ML/ASR/Raw/LibriSpeech/train-clean-100/transcripts.tsv"
+
+text_featurizer = TextFeaturizer({
+    "vocabulary": None,
+    "blank_at_zero": True,
+    "beam_width": 5,
+    "norm_score": True
+})
+
+speech_featurizer = TFSpeechFeaturizer({
+    "sample_rate": 16000,
+    "frame_ms": 25,
+    "stride_ms": 10,
+    "num_feature_bins": 80,
+    "feature_type": "logfbank",
+    "preemphasis": 0.97,
+    # "delta": True,
+    # "delta_delta": True,
+    "normalize_signal": True,
+    "normalize_feature": True,
+    "normalize_per_feature": False,
+    # "pitch": False,
+})
 
 
-dataset = tf.data.Dataset.from_generator(
-    func,
-    output_types=({
-                      "name": tf.int32,
-                      "value": tf.int32,
-                  }, {
-                      "name": tf.int32,
-                      "value": tf.int32,
-                  }
-    ),
-    output_shapes=({
-                       "name": tf.TensorShape([]),
-                       "value": tf.TensorShape([])
-                   }, {
-                       "name": tf.TensorShape([]),
-                       "value": tf.TensorShape([None, None])
-                   }
-    )
-)
+dataset = ASRSliceDataset(stage="train", speech_featurizer=speech_featurizer,
+                          text_featurizer=text_featurizer, data_paths=[data],
+                          augmentations=augments, shuffle=True).create(4)
 
-print(dataset.element_spec)
+for i, batch in enumerate(dataset):
+    print(f"Processed batch {i}")

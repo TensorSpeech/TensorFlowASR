@@ -16,7 +16,6 @@ import functools
 import glob
 import multiprocessing
 import os
-import random
 
 import numpy as np
 import tensorflow as tf
@@ -25,7 +24,6 @@ from .base_dataset import BaseDataset
 from ..featurizers.speech_featurizers import read_raw_audio, SpeechFeaturizer
 from ..featurizers.text_featurizers import TextFeaturizer
 from ..utils.utils import bytestring_feature, print_one_line, read_bytes, get_num_batches
-from ..augmentations.augments import SeganAugment
 
 AUTOTUNE = tf.data.experimental.AUTOTUNE
 TFRECORD_SHARDS = 16
@@ -63,10 +61,6 @@ class ASRDataset(BaseDataset):
         super(ASRDataset, self).__init__(data_paths, augmentations, shuffle, stage)
         self.speech_featurizer = speech_featurizer
         self.text_featurizer = text_featurizer
-        self.segan_augment = False
-        # Check segan augmentation
-        if any([isinstance(augment, SeganAugment) for augment in self.augmentations["before"]]):
-            self.segan_augment = True
 
     def read_entries(self):
         lines = []
@@ -88,16 +82,12 @@ class ASRDataset(BaseDataset):
         signal = read_raw_audio(audio.numpy(), self.speech_featurizer.sample_rate)
 
         if with_augment:
-            augment = random.choice([None] + self.augmentations["before"])
-            if augment is not None:
-                signal = augment(signal=signal, sample_rate=self.speech_featurizer.sample_rate)
+            signal = self.augmentations["before"].augment(signal)
 
         features = self.speech_featurizer.extract(signal)
 
         if with_augment:
-            augment = random.choice([None] + self.augmentations["after"])
-            if augment is not None:
-                features = augment(features)
+            features = self.augmentations["after"].augment(features)
 
         label = self.text_featurizer.extract(transcript.numpy().decode("utf-8"))
         label_length = tf.cast(tf.shape(label)[0], tf.int32)
@@ -110,14 +100,14 @@ class ASRDataset(BaseDataset):
         if self.augmentations["include_original"]:
             augmented_dataset = dataset.map(
                 functools.partial(self.parse, augment=True),
-                num_parallel_calls=1 if self.segan_augment else AUTOTUNE
+                num_parallel_calls=AUTOTUNE
             )
             dataset = dataset.map(functools.partial(
                 self.parse, augment=False), num_parallel_calls=AUTOTUNE)
             dataset = dataset.concatenate(augmented_dataset)
         else:
             dataset = dataset.map(functools.partial(self.parse, augment=True),
-                                  num_parallel_calls=1 if self.segan_augment else AUTOTUNE)
+                                  num_parallel_calls=AUTOTUNE)
         if self.shuffle:
             dataset = dataset.shuffle(TFRECORD_SHARDS, reshuffle_each_iteration=True)
 

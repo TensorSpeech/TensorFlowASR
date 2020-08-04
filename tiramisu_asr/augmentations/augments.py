@@ -11,138 +11,141 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import abc
 import glob
 import os
-import random
 from collections import UserDict
 
 import librosa
-import tensorflow as tf
-
-from .noise_augment import add_noise, add_white_noise, add_realworld_noise
-from .spec_augment import time_masking, freq_masking
-from ..runners.segan_runners import SeganTFLite
+import nlpaug.flow as naf
+import nlpaug.augmenter.audio as naa
+import nlpaug.augmenter.spectrogram as nas
 
 
-class Augmentation(metaclass=abc.ABCMeta):
-    def __init__(self, params: dict):
-        self.params = params
-
-    def __call__(self, *args, **kwargs):
-        return self.func(*args, **kwargs, **self.params)
-
-    @abc.abstractmethod
-    def func(self, *args, **kwargs):
-        """ Function to perform augmentation """
-        pass
+class SignalCropping(naa.CropAug):
+    def __init__(self,
+                 zone=(0.2, 0.8),
+                 coverage=0.1,
+                 crop_range=(0.2, 0.8),
+                 crop_factor=2):
+        super().__init__(sampling_rate=None, zone=zone, coverage=coverage,
+                         crop_range=crop_range, crop_factor=crop_factor, duration=None)
 
 
-class FreqMasking(Augmentation):
-    def func(self, *args, **kwargs):
-        return freq_masking(*args, **kwargs)
+class SignalLoudness(naa.LoudnessAug):
+    def __init__(self,
+                 zone=(0.2, 0.8),
+                 coverage=1.,
+                 factor=(0.5, 2)):
+        super().__init__(zone=zone, coverage=coverage, factor=factor)
 
 
-class TimeMasking(Augmentation):
-    def func(self, *args, **kwargs):
-        return time_masking(*args, **kwargs)
+class SignalMask(naa.MaskAug):
+    def __init__(self,
+                 zone=(0.2, 0.8),
+                 coverage=1.,
+                 mask_range=(0.2, 0.8),
+                 mask_factor=2,
+                 mask_with_noise=True):
+        super().__init__(sampling_rate=None, zone=zone, coverage=coverage,
+                         duration=None, mask_range=mask_range, mask_factor=mask_factor,
+                         mask_with_noise=mask_with_noise)
 
 
-# class TimeWarping(Augmentation):
-#     def __init__(self, time_warp_param: int = 50):
-#         self.time_warp_param = time_warp_param
-#         super(TimeWarping, self).__init__(
-#             func=functools.partial(time_warping, time_warp_param=self.time_warp_param),
-#             is_post=True
-#         )
+class SignalNoise(naa.NoiseAug):
+    def __init__(self,
+                 sample_rate=16000,
+                 zone=(0.2, 0.8),
+                 coverage=1.,
+                 color="random",
+                 noises: str = None):
+        if noises is not None:
+            noises = glob.glob(os.path.join(noises, "**", "*.wav"), recursive=True)
+            noises = [librosa.load(n, sr=sample_rate)[0] for n in noises]
+        super().__init__(zone=zone, coverage=coverage, color=color, noises=noises)
 
 
-class Noise(Augmentation):
-    def __init__(self, params: dict):
-        params["snr_list"] = list(params["snr_list"])
-        if params.get("include_original", True):
-            if not any([i < 0 for i in params["snr_list"]]):
-                params["snr_list"].append(-1)
-        if "include_original" in params.keys():
-            del params["include_original"]
-        params["noises"] = glob.glob(os.path.join(params["noises"], "**", "*.wav"), recursive=True)
-        super(Noise, self).__init__(params)
-
-    def func(self, *args, **kwargs):
-        return add_noise(*args, **kwargs)
+class SignalPitch(naa.PitchAug):
+    def __init__(self,
+                 zone=(0.2, 0.8),
+                 coverage=1.,
+                 factor=(-10, 10)):
+        super().__init__(None, zone=zone, coverage=coverage, duration=None, factor=factor)
 
 
-class WhiteNoise(Augmentation):
-    def __init__(self, params: dict):
-        params["snr_list"] = list(params["snr_list"])
-        if not any([i < 0 for i in params["snr_list"]]):
-            params["snr_list"].append(-1)
-        super(WhiteNoise, self).__init__(params)
-
-    def func(self, *args, **kwargs):
-        return add_white_noise(*args, **kwargs)
+class SignalShift(naa.ShiftAug):
+    def __init__(self,
+                 sample_rate=16000,
+                 duration=3,
+                 direction="random"):
+        super().__init__(sample_rate, duration=duration, direction=direction)
 
 
-class RealWorldNoise(Augmentation):
-    def __init__(self, params: dict):
-        params["snr_list"] = list(params["snr_list"])
-        if not any([i < 0 for i in params["snr_list"]]):
-            params["snr_list"].append(-1)
-        params["noises"] = glob.glob(os.path.join(params["noises"], "**", "*.wav"), recursive=True)
-        super(RealWorldNoise, self).__init__(params)
-
-    def func(self, *args, **kwargs):
-        return add_realworld_noise(*args, **kwargs)
+class SignalSpeed(naa.SpeedAug):
+    def __init__(self,
+                 zone=(0.2, 0.8),
+                 coverage=1.,
+                 factor=(0.5, 2)):
+        super().__init__(zone=zone, coverage=coverage, duration=None, factor=factor)
 
 
-class TimeStretch(Augmentation):
-    def func(self, *args, **kwargs):
-        rate = random.uniform(kwargs["min_ratio"], kwargs["max_ratio"])
-        return librosa.effects.time_stretch(kwargs["signal"], rate)
+class SignalVtlp(naa.VtlpAug):
+    def __init__(self,
+                 sample_rate=16000,
+                 zone=(0.2, 0.8),
+                 coverage=0.1,
+                 fhi=4800,
+                 factor=(0.9, 1.1)):
+        super().__init__(sample_rate, zone=zone, coverage=coverage, duration=None,
+                         fhi=fhi, factor=factor)
 
-
-class PitchShift(Augmentation):
-    def func(self, *args, **kwargs):
-        n_steps = random.uniform(kwargs["min_step"], kwargs["max_step"])
-        return librosa.effects.pitch_shift(kwargs["signal"], kwargs["sample_rate"], n_steps=n_steps)
-
-
-class SeganAugment(Augmentation):
-    def __init__(self, params: dict):
-        with tf.device("/device:CPU:0"):
-            self.segan_inferencer = SeganTFLite(
-                speech_config=params["speech_config"],
-                saved_path=params["saved_path"]
-            )
-            self.segan_inferencer.compile()
-        super(SeganAugment, self).__init__({})
-
-    def func(self, *args, **kwargs):
-        if random.choice([0, 1]) == 0: return kwargs["signal"]
-        with tf.device("/device:CPU:0"):  # keep gpu for training main model
-            gen_signal = self.segan_inferencer.infer(kwargs["signal"])
-        if self.segan_inferencer.speech_config["sample_rate"] != kwargs["sample_rate"]:
-            gen_signal = librosa.resample(gen_signal, self.segan_inferencer.speech_config["sample_rate"], kwargs["sample_rate"])
-        return gen_signal
+# class SeganAugment(Augmentation):
+#     def __init__(self, params: dict):
+#         with tf.device("/device:CPU:0"):
+#             self.segan_inferencer = SeganTFLite(
+#                 speech_config=params["speech_config"],
+#                 saved_path=params["saved_path"]
+#             )
+#             self.segan_inferencer.compile()
+#         super(SeganAugment, self).__init__({})
+#
+#     def func(self, *args, **kwargs):
+#         if random.choice([0, 1]) == 0: return kwargs["signal"]
+#         with tf.device("/device:CPU:0"):  # keep gpu for training main model
+#             gen_signal = self.segan_inferencer.infer(kwargs["signal"])
+#         if self.segan_inferencer.speech_config["sample_rate"] != kwargs["sample_rate"]:
+#             gen_signal = librosa.resample(
+#                 gen_signal,
+#                 self.segan_inferencer.speech_config["sample_rate"],
+#                 kwargs["sample_rate"]
+#             )
+#         return gen_signal
 
 
 AUGMENTATIONS = {
-    "freq_masking":     FreqMasking,
-    "time_masking":     TimeMasking,
-    "noise":            Noise,
-    "white_noise":      WhiteNoise,
-    "real_world_noise": RealWorldNoise,
-    "time_stretch":     TimeStretch,
-    "pitch_shift":      PitchShift,
-    "segan":            SeganAugment
+    "freq_masking": nas.FrequencyMaskingAug,
+    "time_masking": nas.TimeMaskingAug,
+    "noise": SignalNoise,
+    "masking": SignalMask,
+    "cropping": SignalCropping,
+    "loudness": SignalLoudness,
+    "pitch": SignalPitch,
+    "shift": SignalShift,
+    "speed": SignalSpeed,
+    "vtlp": SignalVtlp
 }
 
 
 class UserAugmentation(UserDict):
     def __init__(self, config: dict = None):
         if not config: config = {}
-        config["before"] = self.parse(config.get("before", {}))
-        config["after"] = self.parse(config.get("after", {}))
+        config["before"] = self.parse(
+            config.get("before", {}).get("methods", {}),
+            sometimes=config.get("before", {}).get("sometimes", True)
+        )
+        config["after"] = self.parse(
+            config.get("after", {}).get("methods", {}),
+            sometimes=config.get("after", {}).get("sometimes", True)
+        )
         config["include_original"] = config.get("include_original", False)
         super(UserAugmentation, self).__init__(config)
 
@@ -150,11 +153,14 @@ class UserAugmentation(UserDict):
         return None
 
     @staticmethod
-    def parse(config: dict) -> list:
+    def parse(config: dict, sometimes: bool = True) -> list:
         augmentations = []
         for key, value in config.items():
             if not AUGMENTATIONS.get(key, None):
                 raise KeyError(f"No augmentation named: {key}\n"
                                f"Available augmentations: {AUGMENTATIONS.keys()}")
-            augmentations.append(AUGMENTATIONS[key](value))
-        return augmentations
+            aug = AUGMENTATIONS[key](**value) if value is not None else AUGMENTATIONS[key]()
+            augmentations.append(aug)
+        if not sometimes:
+            return naf.Sequential(augmentations)
+        return naf.Sometimes(augmentations)
