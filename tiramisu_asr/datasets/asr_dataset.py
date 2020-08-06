@@ -98,12 +98,10 @@ class ASRDataset(BaseDataset):
 
     def process(self, dataset, batch_size):
         if self.augmentations["include_original"]:
-            augmented_dataset = dataset.map(
-                functools.partial(self.parse, augment=True),
-                num_parallel_calls=AUTOTUNE
-            )
-            dataset = dataset.map(functools.partial(
-                self.parse, augment=False), num_parallel_calls=AUTOTUNE)
+            augmented_dataset = dataset.map(functools.partial(self.parse, augment=True),
+                                            num_parallel_calls=AUTOTUNE)
+            dataset = dataset.map(functools.partial(self.parse, augment=False),
+                                  num_parallel_calls=AUTOTUNE)
             dataset = dataset.concatenate(augmented_dataset)
         else:
             dataset = dataset.map(functools.partial(self.parse, augment=True),

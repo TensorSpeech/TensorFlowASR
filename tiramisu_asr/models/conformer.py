@@ -21,18 +21,18 @@ from .layers.positional_encoding import PositionalEncoding
 from .layers.multihead_attention import MultiHeadAttention
 
 
-class Conv2DSubsampling(tf.keras.layers.Layer):
+class ConvSubsampling(tf.keras.layers.Layer):
     def __init__(self,
                  odim: int,
-                 reduction_factor: int,
-                 dropout: float = 0,
-                 name="conv2dsubsampling",
+                 reduction_factor: int = 4,
+                 kernel_size: int = 32,
+                 dropout: float = 0.0,
+                 name="conv_subsampling",
                  **kwargs):
-        super(Conv2DSubsampling, self).__init__(name=name, **kwargs)
-        assert reduction_factor % 2 == 0, "reduction_factor must be divisible by 2"
+        super(ConvSubsampling, self).__init__(name=name, **kwargs)
         self.conv = tf.keras.layers.Conv2D(
-            filters=odim, kernel_size=(3, 3),
-            strides=(reduction_factor, reduction_factor), padding="same"
+            filters=odim, kernel_size=kernel_size,
+            strides=reduction_factor, padding="same"
         )
         self.linear = tf.keras.layers.Dense(odim)
         self.do = tf.keras.layers.Dropout(dropout)
@@ -44,7 +44,7 @@ class Conv2DSubsampling(tf.keras.layers.Layer):
         return self.do(outputs, training=training)
 
     def get_config(self):
-        conf = super(Conv2DSubsampling, self).get_config()
+        conf = super(ConvSubsampling, self).get_config()
         conf.update(self.conv.get_config())
         conf.update(self.linear.get_config())
         conf.update(self.do.get_config())
@@ -230,8 +230,10 @@ class ConformerEncoder(tf.keras.Model):
                  name="conformer_encoder",
                  **kwargs):
         super(ConformerEncoder, self).__init__(name=name, **kwargs)
-        self.conv_subsampling = Conv2DSubsampling(
-            odim=dmodel, reduction_factor=reduction_factor, dropout=dropout)
+        self.conv_subsampling = ConvSubsampling(
+            odim=dmodel, reduction_factor=reduction_factor,
+            kernel_size=kernel_size, dropout=dropout
+        )
         self.conformer_blocks = []
         for i in range(num_blocks):
             conformer_block = ConformerBlock(
