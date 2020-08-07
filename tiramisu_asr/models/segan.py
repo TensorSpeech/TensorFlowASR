@@ -14,6 +14,8 @@
 
 import tensorflow as tf
 
+from ..utils.utils import shape_list
+
 
 class DownConv(tf.keras.layers.Layer):
     def __init__(self, depth, kwidth=5, pool=2, name="downconv", **kwargs):
@@ -35,9 +37,6 @@ class DownConv(tf.keras.layers.Layer):
         config = super(DownConv, self).get_config()
         config.update({"layer": self.layer})
         return config
-
-    def from_config(self, config):
-        return self(**config)
 
 
 class DeConv(tf.keras.layers.Layer):
@@ -61,48 +60,59 @@ class DeConv(tf.keras.layers.Layer):
         config.update({"layer": self.layer})
         return config
 
-    def from_config(self, config):
-        return self(**config)
 
-
-class VirtualBatchNorm:
-    def __init__(self, x, epsilon=1e-5):
-        assert isinstance(epsilon, float)
+class VirtualBatchNorm(tf.keras.layers.Layer):
+    def __init__(self, epsilon: float = 1e-5, name="vbn", **kwargs):
         self.epsilon = epsilon
-        self.batch_size = tf.cast(tf.shape(x)[0], tf.float32)
+        super(VirtualBatchNorm, self).__init__(name=name, **kwargs)
+
+    def build(self, input_shape):
         self.gamma = tf.Variable(
             initial_value=tf.random_normal_initializer(1., 0.02)(
-                shape=[x.get_shape().as_list()[-1]]),
+                shape=[input_shape[-1]]),
             name="gamma", trainable=True
         )
         self.beta = tf.Variable(
             initial_value=tf.constant_initializer(0.)(
-                shape=[x.get_shape().as_list()[-1]]),
+                shape=[input_shape[-1]]),
             name="beta", trainable=True
         )
-        mean, var = tf.nn.moments(x, axes=[0, 1, 2], keepdims=False)
-        self.mean = mean
-        self.variance = var
+        self.first = True
+        self.mean = tf.Variable(
+            initial_value=tf.zeros(shape=[input_shape[-1]]),
+            name="mean", trainable=False
+        )
+        self.variance = tf.Variable(
+            initial_value=tf.zeros(shape=[input_shape[-1]]),
+            name="variance", trainable=False
+        )
 
-    def __call__(self, x):
-        new_coeff = 1. / (self.batch_size + 1.)
+    def call(self, x, training=False, **kwargs):
+        batch_size = shape_list(x)[0]
+        new_coeff = 1. / (tf.cast(batch_size, x.dtype) + 1.)
         old_coeff = 1. - new_coeff
         new_mean, new_var = tf.nn.moments(x, axes=[0, 1, 2], keepdims=False)
+
+        if self.first and training:
+            self.first = False
+            self.mean.assign(new_mean)
+            self.variance.assign(new_var)
+
         new_mean = new_coeff * new_mean + old_coeff * self.mean
         new_var = new_coeff * new_var + old_coeff * self.variance
-        return tf.nn.batch_normalization(x, mean=new_mean, variance=new_var,
-                                         offset=self.beta, scale=self.gamma,
-                                         variance_epsilon=self.epsilon)
+        normed = tf.nn.batch_normalization(x, mean=new_mean, variance=new_var,
+                                           offset=self.beta, scale=self.gamma,
+                                           variance_epsilon=self.epsilon)
+        return tf.reshape(normed, shape_list(x))
 
 
 class GaussianNoise(tf.keras.layers.Layer):
-    def __init__(self, name, noise_std, **kwargs):
+    def __init__(self, name="gaussian_noise", **kwargs):
         super(GaussianNoise, self).__init__(trainable=False, name=name, **kwargs)
-        self.noise_std = noise_std
 
-    def call(self, inputs, training=False):
+    def call(self, inputs, noise_std=0.):
         noise = tf.keras.backend.random_normal(shape=tf.shape(inputs),
-                                               mean=0.0, stddev=self.noise_std,
+                                               mean=0.0, stddev=noise_std,
                                                dtype=tf.float32)
         return inputs + noise
 
@@ -111,7 +121,7 @@ class Reshape1to3(tf.keras.layers.Layer):
     def __init__(self, name="reshape_1_to_3", **kwargs):
         super(Reshape1to3, self).__init__(trainable=False, name=name, **kwargs)
 
-    def call(self, inputs, training=False):
+    def call(self, inputs):
         width = inputs.get_shape().as_list()[1]
         return tf.reshape(inputs, [-1, width, 1, 1])
 
@@ -119,24 +129,18 @@ class Reshape1to3(tf.keras.layers.Layer):
         config = super(Reshape1to3, self).get_config()
         return config
 
-    def from_config(self, config):
-        return self(**config)
-
 
 class Reshape3to1(tf.keras.layers.Layer):
     def __init__(self, name="reshape_3_to_1", **kwargs):
         super(Reshape3to1, self).__init__(trainable=False, name=name, **kwargs)
 
-    def call(self, inputs, training=False):
+    def call(self, inputs):
         width = inputs.get_shape().as_list()[1]
         return tf.reshape(inputs, [-1, width])
 
     def get_config(self):
         config = super(Reshape3to1, self).get_config()
         return config
-
-    def from_config(self, config):
-        return self(**config)
 
 
 class SeganPrelu(tf.keras.layers.Layer):
@@ -150,7 +154,7 @@ class SeganPrelu(tf.keras.layers.Layer):
                                      dtype=tf.float32,
                                      trainable=True)
 
-    def call(self, x, training=False):
+    def call(self, x):
         pos = tf.nn.relu(x)
         neg = self.alpha * (x - tf.abs(x)) * .5
         return pos + neg
@@ -158,71 +162,6 @@ class SeganPrelu(tf.keras.layers.Layer):
     def get_config(self):
         config = super(SeganPrelu, self).get_config()
         return config
-
-    def from_config(self, config):
-        return self(**config)
-
-
-class Z(tf.keras.layers.Layer):
-    def __init__(self, mean=0., stddev=1., name="segan_z", **kwargs):
-        self.mean = mean,
-        self.stddev = stddev
-        super(Z, self).__init__(name=name, **kwargs)
-
-    def call(self, inputs, training=False):
-        z = tf.random.normal(shape=tf.shape(inputs),
-                             name="z", mean=self.mean, stddev=self.stddev)
-        return tf.keras.layers.Concatenate(axis=3)([z, inputs])
-
-    def get_config(self):
-        config = super(Z, self).get_config()
-        config.update({
-            "mean": self.mean,
-            "stddev": self.stddev
-        })
-        return config
-
-    def from_config(self, config):
-        return self(**config)
-
-
-def create_generator(g_enc_depths, window_size, kwidth=31, ratio=2):
-    g_dec_depths = g_enc_depths.copy()
-    g_dec_depths.reverse()
-    g_dec_depths = g_dec_depths[1:] + [1]
-    skips = []
-
-    # input_shape = [batch_size, 16384]
-    signal = tf.keras.Input(shape=(window_size,),
-                            name="noisy_input", dtype=tf.float32)
-    c = Reshape1to3("segan_g_reshape_input")(signal)
-    # Encoder
-    for layer_idx, layer_depth in enumerate(g_enc_depths):
-        c = DownConv(depth=layer_depth,
-                     kwidth=kwidth,
-                     pool=ratio,
-                     name=f"segan_g_downconv_{layer_idx}")(c)
-        if layer_idx < len(g_enc_depths) - 1:
-            skips.append(c)
-        c = SeganPrelu(name=f"segan_g_downconv_prelu_{layer_idx}")(c)
-    # Z
-    output = Z()(c)
-    # Decoder
-    for layer_idx, layer_depth in enumerate(g_dec_depths):
-        output = DeConv(depth=layer_depth,
-                        kwidth=kwidth,
-                        dilation=ratio,
-                        name=f"segan_g_deconv_{layer_idx}")(output)
-        output = SeganPrelu(name=f"segan_g_deconv_prelu_{layer_idx}")(output)
-        if layer_idx < len(g_dec_depths) - 1:
-            _skip = skips[-(layer_idx + 1)]
-            output = tf.keras.layers.Concatenate(
-                axis=3, name=f"concat_skip_{layer_idx}")([output, _skip])
-
-    reshape_output = Reshape3to1("segan_g_reshape_output")(output)
-    # output_shape = [batch_size, 16384]
-
-    return tf.keras.Model(inputs=signal, outputs=reshape_output, name="segan_gen")
 
 
 class Generator(tf.keras.Model):
@@ -241,7 +180,7 @@ class Generator(tf.keras.Model):
         self.g_dec_depths = g_dec_depths
         self.window_size = window_size
         self.ratio = ratio
-        self.noisy = Reshape1to3("segan_g_reshape_input")
+        self.inp = Reshape1to3("segan_g_reshape_input")
         self.enc = []
         for layer_idx, layer_depth in enumerate(g_enc_depths):
             dc = DownConv(depth=layer_depth,
@@ -249,7 +188,10 @@ class Generator(tf.keras.Model):
                           pool=ratio,
                           name=f"segan_g_downconv_{layer_idx}")
             prelu = SeganPrelu(name=f"segan_g_downconv_prelu_{layer_idx}")
-            self.enc.append([dc, prelu])
+            self.enc.append({
+                "downconv": dc,
+                "prelu": prelu
+            })
         self.z_concat = tf.keras.layers.Concatenate(axis=3)
         self.dec = []
         for layer_idx, layer_depth in enumerate(g_dec_depths):
@@ -263,8 +205,12 @@ class Generator(tf.keras.Model):
                     axis=3, name=f"concat_skip_{layer_idx}")
             else:
                 concat = None
-            self.dec.append([dc, prelu, concat])
-        self.out = Reshape3to1("segan_g_reshape_output")
+            self.dec.append({
+                "deconv": dc,
+                "prelu": prelu,
+                "concat": concat
+            })
+        self.outp = Reshape3to1("segan_g_reshape_output")
 
     def get_z(self, batch_size, mean=0., stddev=1.):
         return tf.random.normal(
@@ -276,24 +222,26 @@ class Generator(tf.keras.Model):
         z = self.get_z(1)
         self([audio, z], training=False)
 
-    @tf.function
+    @tf.function(experimental_relax_shapes=True)
     def call(self, inputs, training=False, **kwargs):
         noisy, z = inputs
-        c = self.noisy(noisy)
+        c = self.inp(noisy)
         skips = []
         for i, enc in enumerate(self.enc):
-            c = enc[0](c, training=training)
+            c = enc["downconv"](c, training=training)
             if i < len(self.enc) - 1:
                 skips.append(c)
-            c = enc[1](c, training=training)
+            c = enc["prelu"](c)
         outputs = self.z_concat([z, c])
         for i, dec in enumerate(self.dec):
-            outputs = dec[0](outputs, training=training)
-            outputs = dec[1](outputs, training=training)
+            outputs = dec["deconv"](outputs, training=training)
+            outputs = dec["prelu"](outputs, training=training)
             if i < len(self.dec) - 1:
                 _skip = skips[-(i + 1)]
-                outputs = dec[2]([outputs, _skip])
-        outputs = self.out(outputs)
+                outputs = dec["concat"]([outputs, _skip])
+            else:
+                outputs = tf.nn.tanh(outputs)
+        outputs = self.outp(outputs)
         return outputs
 
     def get_config(self):
@@ -311,62 +259,13 @@ class Generator(tf.keras.Model):
         return conf
 
 
-def create_generator_v2(g_enc_depths, window_size, kwidth=31, ratio=2):
-    g_dec_depths = g_enc_depths.copy()
-    g_dec_depths.reverse()
-    g_dec_depths = g_dec_depths[1:] + [1]
-    skips = []
-
-    # input_shape = [batch_size, 16384]
-    signal = tf.keras.Input(shape=(window_size,),
-                            name="noisy_input", dtype=tf.float32)
-    c = Reshape1to3("segan_g_reshape_input")(signal)
-    # Encoder
-    for layer_idx, layer_depth in enumerate(g_enc_depths):
-        c = DownConv(depth=layer_depth,
-                     kwidth=kwidth,
-                     pool=ratio,
-                     name=f"segan_g_downconv_{layer_idx}")(c)
-        if layer_idx < len(g_enc_depths) - 1:
-            skips.append(c)
-        c = SeganPrelu(name=f"segan_g_downconv_prelu_{layer_idx}")(c)
-    # Z
-    z = tf.keras.Input(shape=c.get_shape().as_list()[1:], dtype=tf.float32, name="z_input")
-    output = tf.keras.layers.Concatenate(axis=3)([z, c])
-    # Decoder
-    for layer_idx, layer_depth in enumerate(g_dec_depths):
-        output = DeConv(depth=layer_depth,
-                        kwidth=kwidth,
-                        dilation=ratio,
-                        name=f"segan_g_deconv_{layer_idx}")(output)
-        output = SeganPrelu(name=f"segan_g_deconv_prelu_{layer_idx}")(output)
-        if layer_idx < len(g_dec_depths) - 1:
-            _skip = skips[-(layer_idx + 1)]
-            output = tf.keras.layers.Concatenate(
-                axis=3, name=f"concat_skip_{layer_idx}")([output, _skip])
-
-    reshape_output = Reshape3to1("segan_g_reshape_output")(output)
-    # output_shape = [batch_size, 16384]
-
-    return tf.keras.Model(inputs=[signal, z], outputs=reshape_output, name="segan_gen")
-
-
-def make_z_as_input(generator: tf.keras.Model, model_config: dict, speech_config: dict):
-    generator_v2 = create_generator_v2(
-        g_enc_depths=model_config["g_enc_depths"],
-        window_size=speech_config["window_size"],
-        kwidth=model_config["kwidth"], ratio=model_config["ratio"])
-    generator_v2.set_weights(generator.get_weights())
-    return generator_v2
-
-
 class Discriminator(tf.keras.Model):
     def __init__(self,
                  d_num_fmaps,
                  window_size,
                  kwidth=31,
                  ratio=2,
-                 noise_std=0.,
+                 leakyrelu=True,
                  name="segan_disc",
                  **kwargs):
         super(Discriminator, self).__init__(name=name, **kwargs)
@@ -374,15 +273,22 @@ class Discriminator(tf.keras.Model):
         self.clean_wav = Reshape1to3("segan_d_reshape_1_to_3_clean")
         self.noisy_wav = Reshape1to3("segan_d_reshape_1_to_3_noisy")
         self.concat = tf.keras.layers.Concatenate(name="segan_d_concat_clean_noisy", axis=3)
-        self.gauss = GaussianNoise(noise_std=noise_std, name="segan_d_gaussian_noise")
+        self.gauss = GaussianNoise(name="segan_d_gaussian_noise")
         self.blocks = []
         for block_idx, nfmaps in enumerate(d_num_fmaps):
             dc = DownConv(depth=nfmaps, kwidth=kwidth, pool=ratio,
                           name=f"segan_d_downconv_{block_idx}")
-            vbn = tf.keras.layers.BatchNormalization()
-            leaky = tf.keras.layers.LeakyReLU(
-                alpha=0.3, name=f"segan_d_leakyrelu_{block_idx}")
-            self.blocks.append([dc, vbn, leaky])
+            vbn = VirtualBatchNorm(name=f"vbn_{block_idx}")
+            if leakyrelu:
+                relu = tf.keras.layers.LeakyReLU(
+                    alpha=0.3, name=f"segan_d_leakyrelu_{block_idx}")
+            else:
+                relu = tf.keras.layers.ReLU(name=f"segan_d_relu_{block_idx}")
+            self.blocks.append({
+                "downconv": dc,
+                "vbn": vbn,
+                "relu": relu
+            })
         self.conv = tf.keras.layers.Conv1D(
             filters=1, kernel_size=1, strides=1, padding="same",
             kernel_initializer=tf.keras.initializers.TruncatedNormal(stddev=0.02),
@@ -395,50 +301,18 @@ class Discriminator(tf.keras.Model):
         noisy = tf.random.normal([1, self.window_size], dtype=tf.float32)
         self([clean, noisy], training=False)
 
-    @tf.function
-    def call(self, inputs, training=False, **kwargs):
+    @tf.function(experimental_relax_shapes=True)
+    def call(self, inputs, training=False, noise_std=0., **kwargs):
         clean, noisy = inputs
         clean_out = self.clean_wav(clean)
         noisy_out = self.noisy_wav(noisy)
         outputs = self.concat([clean_out, noisy_out])
-        outputs = self.gauss(outputs)
+        outputs = self.gauss(outputs, noise_std=noise_std)
         for i in range(len(self.blocks)):
-            outputs = self.blocks[i][0](outputs, training=training)
-            outputs = self.blocks[i][1](outputs)
-            outputs = self.blocks[i][2](outputs, training=training)
+            outputs = self.blocks[i]["downconv"](outputs, training=training)
+            outputs = self.blocks[i]["vbn"](outputs, training=training)
+            outputs = self.blocks[i]["relu"](outputs, training=training)
         outputs = tf.squeeze(outputs, axis=2)
         outputs = self.conv(outputs, training=training)
         outputs = tf.squeeze(outputs, axis=-1)
         return self.dense(outputs, training=training)
-
-
-def create_discriminator(d_num_fmaps, window_size, kwidth=31, ratio=2, noise_std=0.):
-    clean_signal = tf.keras.Input(shape=(window_size,),
-                                  name="disc_clean_input", dtype=tf.float32)
-    noisy_signal = tf.keras.Input(shape=(window_size,),
-                                  name="disc_noisy_input", dtype=tf.float32)
-
-    clean_wav = Reshape1to3("segan_d_reshape_1_to_3_clean")(clean_signal)
-    noisy_wav = Reshape1to3("segan_d_reshape_1_to_3_noisy")(noisy_signal)
-    hi = tf.keras.layers.Concatenate(name="segan_d_concat_clean_noisy",
-                                     axis=3)([clean_wav, noisy_wav])
-    # after concatenation shape = [batch_size, 16384, 1, 2]
-
-    hi = GaussianNoise(noise_std=noise_std, name="segan_d_gaussian_noise")(hi)
-
-    for block_idx, nfmaps in enumerate(d_num_fmaps):
-        hi = DownConv(depth=nfmaps, kwidth=kwidth, pool=ratio,
-                      name=f"segan_d_downconv_{block_idx}")(hi)
-        hi = VirtualBatchNorm(hi)(hi)
-        hi = tf.keras.layers.LeakyReLU(alpha=0.3, name=f"segan_d_leakyrelu_{block_idx}")(hi)
-
-    hi = tf.squeeze(hi, axis=2)
-    hi = tf.keras.layers.Conv1D(filters=1, kernel_size=1,
-                                strides=1, padding="same",
-                                kernel_initializer=tf.keras.initializers.TruncatedNormal(
-                                    stddev=0.02),
-                                name="segan_d_conv1d")(hi)
-    hi = tf.squeeze(hi, axis=-1)
-    hi = tf.keras.layers.Dense(1, name="segan_d_fully_connected")(hi)
-    # output_shape = [1]
-    return tf.keras.Model(inputs=[clean_signal, noisy_signal], outputs=hi, name="segan_disc")

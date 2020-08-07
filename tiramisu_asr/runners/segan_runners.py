@@ -12,27 +12,29 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import os
+from tqdm import tqdm
+from colorama import Fore
+
 import numpy as np
 import soundfile as sf
 import tensorflow as tf
 import tensorflow.keras.mixed_precision.experimental as mixed_precision
 
-from ..featurizers.speech_featurizers import deemphasis, read_raw_audio
+from ..featurizers.speech_featurizers import deemphasis
 from ..losses.segan_losses import generator_loss, discriminator_loss
-from ..models.segan import Discriminator, Generator, make_z_as_input
-from .base_runners import BaseTrainer, BaseTester, BaseInferencer
-from ..utils.utils import slice_signal, merge_slices, print_test_info, shape_list
+from .base_runners import BaseTrainer, BaseTester
+from ..utils.utils import merge_slices, print_test_info, shape_list
 
 
 class SeganTrainer(BaseTrainer):
     def __init__(self,
-                 speech_config: dict,
                  training_config: dict,
                  is_mixed_precision: bool = False,
                  strategy: tf.distribute.Strategy = None):
         super(SeganTrainer, self).__init__(config=training_config, strategy=strategy)
-        self.speech_config = speech_config
         self.is_mixed_precision = is_mixed_precision
+        self.deactivate_l1 = False
+        self.deactivate_noise = False
 
     def set_train_metrics(self):
         self.train_metrics = {
@@ -48,6 +50,35 @@ class SeganTrainer(BaseTrainer):
             "d_adv_loss": tf.keras.metrics.Mean("eval_d_adv_loss", dtype=tf.float32)
         }
 
+    def run(self):
+        """Run training."""
+        if self.steps.numpy() > 0: tf.print("Resume training ...")
+
+        self.train_progbar = tqdm(
+            initial=self.steps.numpy(), unit="batch", total=self.total_train_steps,
+            position=0, leave=True,
+            bar_format="{desc} |%s{bar:20}%s{r_bar}" % (Fore.GREEN, Fore.RESET),
+            desc="[Train]"
+        )
+
+        while not self._finished():
+            self._train_epoch()
+            if self.epochs.numpy() >= self.config["l1_remove_epoch"] \
+                    and self.deactivate_l1 is False:
+                self.config["l1_lambda"] = 0.
+                self.deactivate_l1 = True
+            if self.epochs.numpy() >= self.config["denoise_epoch"] \
+                    and self.deactivate_noise is False:
+                self.config["noise_std"] *= self.config["noise_decay"]
+                if self.config["noise_std"] < self.config["denoise_lbound"]:
+                    self.config["noise_std"] = 0.
+                    self.deactivate_noise = True
+
+        self.save_checkpoint()
+
+        self.train_progbar.close()
+        print("> Finish training")
+
     @tf.function(experimental_relax_shapes=True)
     def _train_step(self, batch):
         clean_wavs, noisy_wavs = batch
@@ -55,8 +86,16 @@ class SeganTrainer(BaseTrainer):
             z = self.generator.get_z(shape_list(clean_wavs)[0])
             g_clean_wavs = self.generator([noisy_wavs, z], training=True)
 
-            d_real_logit = self.discriminator([clean_wavs, noisy_wavs], training=True)
-            d_fake_logit = self.discriminator([g_clean_wavs, noisy_wavs], training=True)
+            d_real_logit = self.discriminator(
+                [clean_wavs, noisy_wavs],
+                training=True,
+                noise_std=self.config["noise_std"]
+            )
+            d_fake_logit = self.discriminator(
+                [g_clean_wavs, noisy_wavs],
+                training=True,
+                noise_std=self.config["noise_std"]
+            )
 
             gen_tape.watch(g_clean_wavs)
             disc_tape.watch([d_real_logit, d_fake_logit])
@@ -124,22 +163,15 @@ class SeganTrainer(BaseTrainer):
         self.eval_metrics["g_adv_loss"].update_state(_gen_adv_loss)
         self.eval_metrics["d_adv_loss"].update_state(_disc_loss)
 
-    def compile(self, model_config: dict, optimizer_config: dict, max_to_keep: int = 10):
+    def compile(self,
+                generator: tf.keras.Model,
+                discriminator: tf.keras.Model,
+                optimizer_config: dict,
+                max_to_keep: int = 10):
         with self.strategy.scope():
-            self.generator = Generator(
-                g_enc_depths=model_config["g_enc_depths"],
-                window_size=self.speech_config["window_size"],
-                kwidth=model_config["kwidth"], ratio=model_config["ratio"]
-            )
-            self.generator._build()
-            self.generator.summary(line_length=100)
+            self.generator = generator
+            self.discriminator = discriminator
             self.generator_optimizer = tf.keras.optimizers.get(optimizer_config["generator"])
-            self.discriminator = Discriminator(
-                d_num_fmaps=model_config["d_num_fmaps"],
-                window_size=self.speech_config["window_size"],
-                kwidth=model_config["kwidth"], ratio=model_config["ratio"]
-            )
-            self.discriminator._build()
             self.discriminator_optimizer = tf.keras.optimizers.get(
                 optimizer_config["discriminator"])
             if self.is_mixed_precision:
@@ -194,13 +226,8 @@ class SeganTester(BaseTester):
             "n_ssnr": tf.keras.metrics.Mean("test_noise_ssnr", dtype=tf.float32)
         }
 
-    def compile(self, model_config: dict):
-        self.model = Generator(
-            g_enc_depths=model_config["g_enc_depths"],
-            window_size=self.speech_config["window_size"],
-            kwidth=model_config["kwidth"], ratio=model_config["ratio"]
-        )
-        self.model._build()
+    def compile(self, generator: tf.keras.Model):
+        self.model = generator
         if self.from_weights:
             self.load_model_from_weights()
         else:
@@ -279,132 +306,132 @@ class SeganTester(BaseTester):
                 out.write(f"{key} = {self.test_metrics[key].result().numpy():.2f}\n")
 
 
-class SeganInferencer(BaseInferencer):
-    def __init__(self,
-                 speech_config: dict,
-                 model_config: dict,
-                 saved_path: str,
-                 from_weights: bool = False):
-        super(SeganInferencer, self).__init__(saved_path, from_weights)
-        self.speech_config = speech_config
-        self.model_config = model_config
-
-    def load_model(self):
-        try:
-            self.model = tf.keras.models.load_model(self.saved_path)
-            print("Model loaded")
-        except Exception as e:
-            raise Exception(e)
-
-    def compile(self, *args, **kwargs):
-        if self.from_weights:
-            self.model = Generator(
-                g_enc_depths=self.model_config["g_enc_depths"],
-                window_size=self.speech_config["window_size"],
-                kwidth=self.model_config["kwidth"], ratio=self.model_config["ratio"]
-            )
-            self.model._build()
-            self.load_model_from_weights()
-        else:
-            self.load_model()
-
-    def preprocess(self, audio):
-        signal = read_raw_audio(audio, self.speech_config["sample_rate"])
-        return (
-            slice_signal(signal, self.speech_config["window_size"], stride=1),
-            signal.shape[0]
-        )
-
-    def postprocess(self, signal: np.ndarray):
-        return deemphasis(signal, self.speech_config["preemphasis"])
-
-    def infer(self, audio):
-        sliced_signal, original_length = self.preprocess(audio)
-
-        @tf.function
-        def gen(slices):
-            slices = tf.reshape(slices, [-1, self.speech_config["window_size"]])
-            g_wavs = self.model(slices, training=False)
-            return merge_slices(g_wavs)
-
-        output = gen(sliced_signal).numpy()
-        output = output[:original_length + 1]
-
-        return self.postprocess(output)
-
-
-class SeganTFLite(BaseInferencer):
-    def __init__(self,
-                 speech_config: dict,
-                 saved_path: str):
-        super(SeganTFLite, self).__init__(saved_path, False)
-        self.speech_config = speech_config
-
-    def load_model(self):
-        try:
-            self.model = tf.lite.Interpreter(self.saved_path)
-            self.model.allocate_tensors()
-            print("Segan loaded")
-        except Exception as e:
-            raise Exception(e)
-
-    @staticmethod
-    def convert_saved_model_to_tflite(saved_model_path: str,
-                                      model_config: dict,
-                                      speech_config: dict,
-                                      tflite_path: str):
-        print("Loading saved model ...")
-        try:
-            saved_model = tf.keras.models.load_model(saved_model_path)
-        except Exception as e:
-            raise Exception(e)
-        saved_model = make_z_as_input(saved_model, model_config, speech_config)
-
-        print("Converting to tflite ...")
-        converter = tf.lite.TFLiteConverter.from_keras_model(saved_model)
-        converter.experimental_new_converter = True
-        converter.optimizations = [tf.lite.Optimize.DEFAULT]
-        tflite_model = converter.convert()
-
-        print("Writing to file ...")
-        if not os.path.exists(os.path.dirname(tflite_path)):
-            os.makedirs(os.path.dirname(tflite_path))
-        with open(tflite_path, "wb") as tflite_out:
-            tflite_out.write(tflite_model)
-
-        print(f"Done converting to {tflite_path}")
-
-    def compile(self):
-        self.load_model()
-        self.input_details = self.model.get_input_details()
-        self.output_details = self.model.get_output_details()
-
-    def preprocess(self, audio):
-        signal = read_raw_audio(audio, self.speech_config["sample_rate"])
-        slices = slice_signal(signal, self.speech_config["window_size"], stride=1)
-        slices = np.reshape(slices, [-1, 1, self.speech_config["window_size"]])
-        return slices, signal.shape[0]
-
-    def postprocess(self, signal: np.ndarray):
-        return deemphasis(signal, self.speech_config["preemphasis"])
-
-    def infer(self, audio):
-        slices, original_length = self.preprocess(audio)
-        g_wavs = np.array([])
-
-        for idx, s in enumerate(slices):
-            # audio shape [1, window_size]
-            self.model.set_tensor(self.input_details[0]['index'], s)
-
-            # z shape [1, last_enc, 1, last_enc_channel]
-            z = np.random.normal(0., 1., self.input_details[1]['shape']).astype(np.float32)
-            self.model.set_tensor(self.input_details[1]['index'], z)
-
-            self.model.invoke()
-
-            output = self.model.get_tensor(self.output_details[0]['index'])
-            g_wavs = np.concatenate([g_wavs, output[0]])
-
-        g_wavs = g_wavs[:original_length + 1]
-
-        return self.postprocess(g_wavs)
+# class SeganInferencer(BaseInferencer):
+#     def __init__(self,
+#                  speech_config: dict,
+#                  model_config: dict,
+#                  saved_path: str,
+#                  from_weights: bool = False):
+#         super(SeganInferencer, self).__init__(saved_path, from_weights)
+#         self.speech_config = speech_config
+#         self.model_config = model_config
+#
+#     def load_model(self):
+#         try:
+#             self.model = tf.keras.models.load_model(self.saved_path)
+#             print("Model loaded")
+#         except Exception as e:
+#             raise Exception(e)
+#
+#     def compile(self, *args, **kwargs):
+#         if self.from_weights:
+#             self.model = Generator(
+#                 g_enc_depths=self.model_config["g_enc_depths"],
+#                 window_size=self.speech_config["window_size"],
+#                 kwidth=self.model_config["kwidth"], ratio=self.model_config["ratio"]
+#             )
+#             self.model._build()
+#             self.load_model_from_weights()
+#         else:
+#             self.load_model()
+#
+#     def preprocess(self, audio):
+#         signal = read_raw_audio(audio, self.speech_config["sample_rate"])
+#         return (
+#             slice_signal(signal, self.speech_config["window_size"], stride=1),
+#             signal.shape[0]
+#         )
+#
+#     def postprocess(self, signal: np.ndarray):
+#         return deemphasis(signal, self.speech_config["preemphasis"])
+#
+#     def infer(self, audio):
+#         sliced_signal, original_length = self.preprocess(audio)
+#
+#         @tf.function
+#         def gen(slices):
+#             slices = tf.reshape(slices, [-1, self.speech_config["window_size"]])
+#             g_wavs = self.model(slices, training=False)
+#             return merge_slices(g_wavs)
+#
+#         output = gen(sliced_signal).numpy()
+#         output = output[:original_length + 1]
+#
+#         return self.postprocess(output)
+#
+#
+# class SeganTFLite(BaseInferencer):
+#     def __init__(self,
+#                  speech_config: dict,
+#                  saved_path: str):
+#         super(SeganTFLite, self).__init__(saved_path, False)
+#         self.speech_config = speech_config
+#
+#     def load_model(self):
+#         try:
+#             self.model = tf.lite.Interpreter(self.saved_path)
+#             self.model.allocate_tensors()
+#             print("Segan loaded")
+#         except Exception as e:
+#             raise Exception(e)
+#
+#     @staticmethod
+#     def convert_saved_model_to_tflite(saved_model_path: str,
+#                                       model_config: dict,
+#                                       speech_config: dict,
+#                                       tflite_path: str):
+#         print("Loading saved model ...")
+#         try:
+#             saved_model = tf.keras.models.load_model(saved_model_path)
+#         except Exception as e:
+#             raise Exception(e)
+#         saved_model = make_z_as_input(saved_model, model_config, speech_config)
+#
+#         print("Converting to tflite ...")
+#         converter = tf.lite.TFLiteConverter.from_keras_model(saved_model)
+#         converter.experimental_new_converter = True
+#         converter.optimizations = [tf.lite.Optimize.DEFAULT]
+#         tflite_model = converter.convert()
+#
+#         print("Writing to file ...")
+#         if not os.path.exists(os.path.dirname(tflite_path)):
+#             os.makedirs(os.path.dirname(tflite_path))
+#         with open(tflite_path, "wb") as tflite_out:
+#             tflite_out.write(tflite_model)
+#
+#         print(f"Done converting to {tflite_path}")
+#
+#     def compile(self):
+#         self.load_model()
+#         self.input_details = self.model.get_input_details()
+#         self.output_details = self.model.get_output_details()
+#
+#     def preprocess(self, audio):
+#         signal = read_raw_audio(audio, self.speech_config["sample_rate"])
+#         slices = slice_signal(signal, self.speech_config["window_size"], stride=1)
+#         slices = np.reshape(slices, [-1, 1, self.speech_config["window_size"]])
+#         return slices, signal.shape[0]
+#
+#     def postprocess(self, signal: np.ndarray):
+#         return deemphasis(signal, self.speech_config["preemphasis"])
+#
+#     def infer(self, audio):
+#         slices, original_length = self.preprocess(audio)
+#         g_wavs = np.array([])
+#
+#         for idx, s in enumerate(slices):
+#             # audio shape [1, window_size]
+#             self.model.set_tensor(self.input_details[0]['index'], s)
+#
+#             # z shape [1, last_enc, 1, last_enc_channel]
+#             z = np.random.normal(0., 1., self.input_details[1]['shape']).astype(np.float32)
+#             self.model.set_tensor(self.input_details[1]['index'], z)
+#
+#             self.model.invoke()
+#
+#             output = self.model.get_tensor(self.output_details[0]['index'])
+#             g_wavs = np.concatenate([g_wavs, output[0]])
+#
+#         g_wavs = g_wavs[:original_length + 1]
+#
+#         return self.postprocess(g_wavs)
