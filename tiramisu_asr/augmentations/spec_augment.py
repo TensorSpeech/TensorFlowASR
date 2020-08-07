@@ -33,7 +33,7 @@ class FreqMaskingModel(Spectrogram):
         self.num_masks = num_masks
         self.mask_factor = mask_factor
 
-    def mask(self, spectrogram: np.ndarray) -> np.ndarray:
+    def mask(self, data: np.ndarray) -> np.ndarray:
         """
         Masking the frequency channels (make features on some channel 0)
         Args:
@@ -41,6 +41,7 @@ class FreqMaskingModel(Spectrogram):
         Returns:
             a tensor that's applied freq masking
         """
+        spectrogram = data.copy()
         for _ in range(self.num_masks):
             freq = np.random.randint(0, self.mask_factor + 1)
             freq = min(freq, spectrogram.shape[1])
@@ -67,7 +68,7 @@ class TimeMaskingModel(Spectrogram):
         self.p_upperbound = p_upperbound
         assert 0.0 <= self.p_upperbound <= 1.0, "0.0 <= p_upperbound <= 1.0"
 
-    def mask(self, spectrogram: np.ndarray) -> np.ndarray:
+    def mask(self, data: np.ndarray) -> np.ndarray:
         """
         Masking the time steps (make features on some time steps 0)
         Args:
@@ -75,6 +76,7 @@ class TimeMaskingModel(Spectrogram):
         Returns:
             a tensor that's applied time masking
         """
+        spectrogram = data.copy()
         for _ in range(self.num_masks):
             time = np.random.randint(0, self.mask_factor + 1)
             time = min(time, spectrogram.shape[0])

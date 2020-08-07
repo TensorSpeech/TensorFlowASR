@@ -5,29 +5,23 @@ from tiramisu_asr.featurizers.text_featurizers import TextFeaturizer
 
 augments = {
     "before": {
-        "methods": {
-            "loudness": {
-                "zone": (0.3, 0.7)
-            },
-            "speed": None,
-            "noise": {
-                "noises": "/mnt/Data/ML/ASR/Preprocessed/Noises/train"
-            }
+        "loudness": {
+            "zone": (0.3, 0.7)
         },
-        "sometimes": True
+        "speed": None,
+        "noise": {
+            "noises": "/mnt/Data/ML/ASR/Preprocessed/Noises/train"
+        }
     },
     "after": {
-        "methods": {
-            "time_masking": {
-                "num_masks": 10,
-                "mask_factor": 100,
-                "p_upperbound": 0.05
-            },
-            "freq_masking": {
-                "mask_factor": 27
-            }
+        "time_masking": {
+            "num_masks": 10,
+            "mask_factor": 100,
+            "p_upperbound": 0.05
         },
-        "sometimes": False
+        "freq_masking": {
+            "mask_factor": 27
+        }
     },
     "include_original": False
 }

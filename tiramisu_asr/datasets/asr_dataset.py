@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import abc
-import functools
 import glob
 import multiprocessing
 import os
@@ -78,16 +77,14 @@ class ASRDataset(BaseDataset):
         self.total_steps = len(lines)
         return lines
 
-    def preprocess(self, audio, transcript, with_augment=False):
+    def preprocess(self, audio, transcript):
         signal = read_raw_audio(audio.numpy(), self.speech_featurizer.sample_rate)
 
-        if with_augment:
-            signal = self.augmentations["before"].augment(signal)
+        signal = self.augmentations["before"].augment(signal)
 
         features = self.speech_featurizer.extract(signal)
 
-        if with_augment:
-            features = self.augmentations["after"].augment(features)
+        features = self.augmentations["after"].augment(features)
 
         label = self.text_featurizer.extract(transcript.numpy().decode("utf-8"))
         label_length = tf.cast(tf.shape(label)[0], tf.int32)
@@ -97,15 +94,7 @@ class ASRDataset(BaseDataset):
         return features, input_length, label, label_length, pred_inp
 
     def process(self, dataset, batch_size):
-        if self.augmentations["include_original"]:
-            augmented_dataset = dataset.map(functools.partial(self.parse, augment=True),
-                                            num_parallel_calls=AUTOTUNE)
-            dataset = dataset.map(functools.partial(self.parse, augment=False),
-                                  num_parallel_calls=AUTOTUNE)
-            dataset = dataset.concatenate(augmented_dataset)
-        else:
-            dataset = dataset.map(functools.partial(self.parse, augment=True),
-                                  num_parallel_calls=AUTOTUNE)
+        dataset = dataset.map(self.parse, num_parallel_calls=AUTOTUNE)
         if self.shuffle:
             dataset = dataset.shuffle(TFRECORD_SHARDS, reshuffle_each_iteration=True)
 
@@ -186,7 +175,7 @@ class ASRTFRecordDataset(ASRDataset):
 
         return True
 
-    def parse(self, record, augment=False):
+    def parse(self, record):
         feature_description = {
             "path": tf.io.FixedLenFeature([], tf.string),
             "audio": tf.io.FixedLenFeature([], tf.string),
@@ -195,7 +184,7 @@ class ASRTFRecordDataset(ASRDataset):
         example = tf.io.parse_single_example(record, feature_description)
 
         features, input_length, label, label_length, pred_inp = tf.py_function(
-            functools.partial(self.preprocess, with_augment=augment),
+            self.preprocess,
             inp=[example["audio"], example["transcript"]],
             Tout=(tf.float32, tf.int32, tf.int32, tf.int32, tf.int32)
         )
@@ -226,7 +215,7 @@ class ASRSliceDataset(ASRDataset):
         transcript = record[-1]
         audio = tf.numpy_function(read_bytes, [path], tf.string)
         features, input_length, label, label_length, pred_inp = tf.py_function(
-            functools.partial(self.preprocess, with_augment=augment),
+            self.preprocess,
             inp=[audio, transcript],
             Tout=(tf.float32, tf.int32, tf.int32, tf.int32, tf.int32)
         )
