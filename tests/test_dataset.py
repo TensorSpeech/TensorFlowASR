@@ -19,17 +19,17 @@ augments = {
     "after": {
         "methods": {
             "time_masking": {
-                "mask_factor": 80
+                "num_masks": 10,
+                "mask_factor": 100,
+                "p_upperbound": 0.05
             },
             "freq_masking": {
                 "mask_factor": 27
             }
-
         },
         "sometimes": False
     },
-    "include_original": False,
-    "sometimes": True
+    "include_original": False
 }
 
 data = "/mnt/Data/ML/ASR/Raw/LibriSpeech/train-clean-100/transcripts.tsv"

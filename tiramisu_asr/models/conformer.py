@@ -21,30 +21,32 @@ from .layers.positional_encoding import PositionalEncoding
 from .layers.multihead_attention import MultiHeadAttention
 
 
-class Conv2DSubsampling(tf.keras.layers.Layer):
+class ConvSubsampling(tf.keras.layers.Layer):
     def __init__(self,
                  odim: int,
-                 reduction_factor: int,
-                 dropout: float = 0,
-                 name="conv2dsubsampling",
+                 reduction_factor: int = 4,
+                 kernel_size: int = 32,
+                 dropout: float = 0.0,
+                 name="conv_subsampling",
                  **kwargs):
-        super(Conv2DSubsampling, self).__init__(name=name, **kwargs)
-        assert reduction_factor % 2 == 0, "reduction_factor must be divisible by 2"
-        self.conv = tf.keras.layers.Conv2D(
-            filters=odim, kernel_size=(3, 3),
-            strides=(reduction_factor, reduction_factor), padding="same"
+        super(ConvSubsampling, self).__init__(name=name, **kwargs)
+        self.conv = tf.keras.layers.Conv1D(
+            filters=odim, kernel_size=kernel_size,
+            strides=reduction_factor, padding="same"
         )
         self.linear = tf.keras.layers.Dense(odim)
         self.do = tf.keras.layers.Dropout(dropout)
 
+    @tf.function(experimental_relax_shapes=True)
     def call(self, inputs, training=False, **kwargs):
-        outputs = self.conv(inputs, training=training)
-        outputs = merge_two_last_dims(outputs)
+        outputs = merge_two_last_dims(inputs)
+        outputs = self.conv(outputs, training=training)
+        outputs = tf.nn.relu(outputs)
         outputs = self.linear(outputs, training=training)
         return self.do(outputs, training=training)
 
     def get_config(self):
-        conf = super(Conv2DSubsampling, self).get_config()
+        conf = super(ConvSubsampling, self).get_config()
         conf.update(self.conv.get_config())
         conf.update(self.linear.get_config())
         conf.update(self.do.get_config())
@@ -69,6 +71,7 @@ class FFModule(tf.keras.layers.Layer):
         self.do2 = tf.keras.layers.Dropout(dropout)
         self.res_add = tf.keras.layers.Add()
 
+    @tf.function(experimental_relax_shapes=True)
     def call(self, inputs, training=False, **kwargs):
         outputs = self.ln(inputs, training=training)
         outputs = self.ffn1(outputs, training=training)
@@ -106,6 +109,7 @@ class MHSAModule(tf.keras.layers.Layer):
         self.do = tf.keras.layers.Dropout(dropout)
         self.res_add = tf.keras.layers.Add()
 
+    @tf.function(experimental_relax_shapes=True)
     def call(self, inputs, training=False, **kwargs):
         outputs = self.pc(inputs)
         outputs = self.ln(outputs, training=training)
@@ -150,6 +154,7 @@ class ConvModule(tf.keras.layers.Layer):
         self.do = tf.keras.layers.Dropout(dropout)
         self.res_add = tf.keras.layers.Add()
 
+    @tf.function(experimental_relax_shapes=True)
     def call(self, inputs, training=False, **kwargs):
         outputs = self.ln(inputs, training=training)
         outputs = self.pw_conv_1(outputs, training=training)
@@ -199,6 +204,7 @@ class ConformerBlock(tf.keras.layers.Layer):
                              name="ff_module_2")
         self.ln = tf.keras.layers.LayerNormalization()
 
+    @tf.function(experimental_relax_shapes=True)
     def call(self, inputs, training=False, **kwargs):
         outputs = self.ffm1(inputs, training=training)
         outputs = self.mhsam(outputs, training=training)
@@ -230,8 +236,10 @@ class ConformerEncoder(tf.keras.Model):
                  name="conformer_encoder",
                  **kwargs):
         super(ConformerEncoder, self).__init__(name=name, **kwargs)
-        self.conv_subsampling = Conv2DSubsampling(
-            odim=dmodel, reduction_factor=reduction_factor, dropout=dropout)
+        self.conv_subsampling = ConvSubsampling(
+            odim=dmodel, reduction_factor=reduction_factor,
+            kernel_size=kernel_size, dropout=dropout
+        )
         self.conformer_blocks = []
         for i in range(num_blocks):
             conformer_block = ConformerBlock(
@@ -245,6 +253,7 @@ class ConformerEncoder(tf.keras.Model):
             )
             self.conformer_blocks.append(conformer_block)
 
+    @tf.function(experimental_relax_shapes=True)
     def call(self, inputs, training=False, **kwargs):
         # input with shape [B, T, V1, V2]
         outputs = self.conv_subsampling(inputs, training=training)

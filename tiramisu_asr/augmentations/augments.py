@@ -18,7 +18,10 @@ from collections import UserDict
 import librosa
 import nlpaug.flow as naf
 import nlpaug.augmenter.audio as naa
-import nlpaug.augmenter.spectrogram as nas
+from nlpaug.util import Action
+from nlpaug.augmenter.spectrogram import SpectrogramAugmenter
+
+from .spec_augment import FreqMaskingModel, TimeMaskingModel
 
 
 class SignalCropping(naa.CropAug):
@@ -27,8 +30,9 @@ class SignalCropping(naa.CropAug):
                  coverage=0.1,
                  crop_range=(0.2, 0.8),
                  crop_factor=2):
-        super().__init__(sampling_rate=None, zone=zone, coverage=coverage,
-                         crop_range=crop_range, crop_factor=crop_factor, duration=None)
+        super(SignalCropping, self).__init__(sampling_rate=None, zone=zone, coverage=coverage,
+                                             crop_range=crop_range, crop_factor=crop_factor,
+                                             duration=None)
 
 
 class SignalLoudness(naa.LoudnessAug):
@@ -36,7 +40,7 @@ class SignalLoudness(naa.LoudnessAug):
                  zone=(0.2, 0.8),
                  coverage=1.,
                  factor=(0.5, 2)):
-        super().__init__(zone=zone, coverage=coverage, factor=factor)
+        super(SignalLoudness, self).__init__(zone=zone, coverage=coverage, factor=factor)
 
 
 class SignalMask(naa.MaskAug):
@@ -46,9 +50,10 @@ class SignalMask(naa.MaskAug):
                  mask_range=(0.2, 0.8),
                  mask_factor=2,
                  mask_with_noise=True):
-        super().__init__(sampling_rate=None, zone=zone, coverage=coverage,
-                         duration=None, mask_range=mask_range, mask_factor=mask_factor,
-                         mask_with_noise=mask_with_noise)
+        super(SignalMask, self).__init__(sampling_rate=None, zone=zone, coverage=coverage,
+                                         duration=None, mask_range=mask_range,
+                                         mask_factor=mask_factor,
+                                         mask_with_noise=mask_with_noise)
 
 
 class SignalNoise(naa.NoiseAug):
@@ -61,7 +66,8 @@ class SignalNoise(naa.NoiseAug):
         if noises is not None:
             noises = glob.glob(os.path.join(noises, "**", "*.wav"), recursive=True)
             noises = [librosa.load(n, sr=sample_rate)[0] for n in noises]
-        super().__init__(zone=zone, coverage=coverage, color=color, noises=noises)
+        super(SignalNoise, self).__init__(zone=zone, coverage=coverage,
+                                          color=color, noises=noises)
 
 
 class SignalPitch(naa.PitchAug):
@@ -69,7 +75,8 @@ class SignalPitch(naa.PitchAug):
                  zone=(0.2, 0.8),
                  coverage=1.,
                  factor=(-10, 10)):
-        super().__init__(None, zone=zone, coverage=coverage, duration=None, factor=factor)
+        super(SignalPitch, self).__init__(None, zone=zone, coverage=coverage,
+                                          duration=None, factor=factor)
 
 
 class SignalShift(naa.ShiftAug):
@@ -77,7 +84,7 @@ class SignalShift(naa.ShiftAug):
                  sample_rate=16000,
                  duration=3,
                  direction="random"):
-        super().__init__(sample_rate, duration=duration, direction=direction)
+        super(SignalShift, self).__init__(sample_rate, duration=duration, direction=direction)
 
 
 class SignalSpeed(naa.SpeedAug):
@@ -85,7 +92,8 @@ class SignalSpeed(naa.SpeedAug):
                  zone=(0.2, 0.8),
                  coverage=1.,
                  factor=(0.5, 2)):
-        super().__init__(zone=zone, coverage=coverage, duration=None, factor=factor)
+        super(SignalSpeed, self).__init__(zone=zone, coverage=coverage,
+                                          duration=None, factor=factor)
 
 
 class SignalVtlp(naa.VtlpAug):
@@ -95,8 +103,8 @@ class SignalVtlp(naa.VtlpAug):
                  coverage=0.1,
                  fhi=4800,
                  factor=(0.9, 1.1)):
-        super().__init__(sample_rate, zone=zone, coverage=coverage, duration=None,
-                         fhi=fhi, factor=factor)
+        super(SignalVtlp, self).__init__(sample_rate, zone=zone, coverage=coverage,
+                                         duration=None, fhi=fhi, factor=factor)
 
 # class SeganAugment(Augmentation):
 #     def __init__(self, params: dict):
@@ -121,9 +129,51 @@ class SignalVtlp(naa.VtlpAug):
 #         return gen_signal
 
 
+class TimeMasking(SpectrogramAugmenter):
+    def __init__(self,
+                 num_masks: int = 1,
+                 mask_factor: int = 100,
+                 p_upperbound: float = 0.05,
+                 name="TimeMasking",
+                 verbose=0):
+        super(TimeMasking, self).__init__(
+            action=Action.SUBSTITUTE, name=name, device="cpu", verbose=verbose)
+        self.model = self.get_model(num_masks, mask_factor, p_upperbound)
+
+    def substitute(self, data):
+        return self.model.mask(data)
+
+    @classmethod
+    def get_model(cls,
+                  num_masks,
+                  mask_factor,
+                  p_upperbound):
+        return TimeMaskingModel(num_masks, mask_factor, p_upperbound)
+
+
+class FreqMasking(SpectrogramAugmenter):
+    def __init__(self,
+                 num_masks: int = 1,
+                 mask_factor: int = 27,
+                 name="FreqMasking",
+                 verbose=0):
+        super(FreqMasking, self).__init__(
+            action=Action.SUBSTITUTE, name=name, device="cpu", verbose=verbose)
+        self.model = self.get_model(num_masks, mask_factor)
+
+    def substitute(self, data):
+        return self.model.mask(data)
+
+    @classmethod
+    def get_model(cls,
+                  num_masks,
+                  mask_factor):
+        return FreqMaskingModel(num_masks, mask_factor)
+
+
 AUGMENTATIONS = {
-    "freq_masking": nas.FrequencyMaskingAug,
-    "time_masking": nas.TimeMaskingAug,
+    "freq_masking": FreqMasking,
+    "time_masking": TimeMasking,
     "noise": SignalNoise,
     "masking": SignalMask,
     "cropping": SignalCropping,
