@@ -6,13 +6,8 @@ Augmentations use `nlpaug`, for futher information, see [nlpaug.readthedocs.io](
 
 ```yaml
 augmentations:
-    include_original: False
-    before:
-        methods: ...
-        sometimes: True
-    after:
-        methods: ...
-        sometimes: False
+    before: ...
+    after: ...
 ```
 
 Where `include_original` is whether to use only augmented dataset or both augmented and original datasets, `before` and `after` are augmentation methods to use before and after features extraction, **sometimes** is whether to randomly apply augmentation or apply all augmentations
@@ -20,3 +15,7 @@ Where `include_original` is whether to use only augmented dataset or both augmen
 **Supported Methods**
 
 All methods that supported my `nlpaug` for audio and spectrogram are supported.
+
+## Changes
+
+-   remove `include_original` augmentation on probability

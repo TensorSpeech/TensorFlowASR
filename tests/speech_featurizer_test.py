@@ -20,11 +20,26 @@ import sys
 #
 import matplotlib.pyplot as plt
 from tiramisu_asr.featurizers.speech_featurizers import read_raw_audio, TFSpeechFeaturizer
+from tiramisu_asr.augmentations.augments import UserAugmentation
 
 
 def main(argv):
     speech_file = argv[1]
     feature_type = argv[2]
+    augments = {
+        "after": {
+            "time_masking": {
+                "num_masks": 10,
+                "mask_factor": 100,
+                "p_upperbound": 0.05
+            },
+            "freq_masking": {
+                "mask_factor": 27
+            }
+        },
+        "include_original": False
+    }
+    au = UserAugmentation(augments)
     speech_conf = {
         "sample_rate": 16000,
         "frame_ms": 25,
@@ -39,7 +54,8 @@ def main(argv):
     signal = read_raw_audio(speech_file, speech_conf["sample_rate"])
 
     sf = TFSpeechFeaturizer(speech_conf)
-    ft = sf.extract(signal)[:, :, 0]
+    ft = sf.extract(signal)
+    ft = au["after"].augment(ft)[:, :, 0]
 
     plt.figure(figsize=(15, 5))
     plt.imshow(ft.T, origin="lower")

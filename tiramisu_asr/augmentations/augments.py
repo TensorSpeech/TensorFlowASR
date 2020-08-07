@@ -188,29 +188,21 @@ AUGMENTATIONS = {
 class UserAugmentation(UserDict):
     def __init__(self, config: dict = None):
         if not config: config = {}
-        config["before"] = self.parse(
-            config.get("before", {}).get("methods", {}),
-            sometimes=config.get("before", {}).get("sometimes", True)
-        )
-        config["after"] = self.parse(
-            config.get("after", {}).get("methods", {}),
-            sometimes=config.get("after", {}).get("sometimes", True)
-        )
-        config["include_original"] = config.get("include_original", False)
+        config["before"] = self.parse(config.get("before", {}))
+        config["after"] = self.parse(config.get("after", {}))
         super(UserAugmentation, self).__init__(config)
 
     def __missing__(self, key):
         return None
 
     @staticmethod
-    def parse(config: dict, sometimes: bool = True) -> list:
+    def parse(config: dict) -> list:
         augmentations = []
         for key, value in config.items():
-            if not AUGMENTATIONS.get(key, None):
+            au = AUGMENTATIONS.get(key, None)
+            if au is None:
                 raise KeyError(f"No augmentation named: {key}\n"
                                f"Available augmentations: {AUGMENTATIONS.keys()}")
-            aug = AUGMENTATIONS[key](**value) if value is not None else AUGMENTATIONS[key]()
+            aug = au(**value) if value is not None else au()
             augmentations.append(aug)
-        if not sometimes:
-            return naf.Sequential(augmentations)
         return naf.Sometimes(augmentations)
