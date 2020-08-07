@@ -25,29 +25,36 @@ class ConvSubsampling(tf.keras.layers.Layer):
     def __init__(self,
                  odim: int,
                  reduction_factor: int = 4,
-                 kernel_size: int = 32,
                  dropout: float = 0.0,
                  name="conv_subsampling",
                  **kwargs):
         super(ConvSubsampling, self).__init__(name=name, **kwargs)
-        self.conv = tf.keras.layers.Conv1D(
-            filters=odim, kernel_size=kernel_size,
-            strides=reduction_factor, padding="same"
+        assert reduction_factor % 2 == 0, "reduction_factor must be divisible by 2"
+        self.conv1 = tf.keras.layers.Conv2D(
+            filters=odim, kernel_size=(3, 3),
+            strides=((reduction_factor // 2), 2),
+            padding="same", activation="relu"
+        )
+        self.conv2 = tf.keras.layers.Conv2D(
+            filters=odim, kernel_size=(3, 3),
+            strides=(2, 2), padding="same",
+            activation="relu"
         )
         self.linear = tf.keras.layers.Dense(odim)
         self.do = tf.keras.layers.Dropout(dropout)
 
     @tf.function(experimental_relax_shapes=True)
     def call(self, inputs, training=False, **kwargs):
-        outputs = merge_two_last_dims(inputs)
-        outputs = self.conv(outputs, training=training)
-        outputs = tf.nn.relu(outputs)
+        outputs = self.conv1(inputs, training=training)
+        outputs = self.conv2(outputs, training=training)
+        outputs = merge_two_last_dims(outputs)
         outputs = self.linear(outputs, training=training)
         return self.do(outputs, training=training)
 
     def get_config(self):
         conf = super(ConvSubsampling, self).get_config()
-        conf.update(self.conv.get_config())
+        conf.update(self.conv1.get_config())
+        conf.update(self.conv2.get_config())
         conf.update(self.linear.get_config())
         conf.update(self.do.get_config())
         return conf
@@ -238,7 +245,7 @@ class ConformerEncoder(tf.keras.Model):
         super(ConformerEncoder, self).__init__(name=name, **kwargs)
         self.conv_subsampling = ConvSubsampling(
             odim=dmodel, reduction_factor=reduction_factor,
-            kernel_size=kernel_size, dropout=dropout
+            dropout=dropout
         )
         self.conformer_blocks = []
         for i in range(num_blocks):
