@@ -19,10 +19,14 @@ speech_config:
   window_size: 16384
 
 model_config:
-  g_enc_depths: [16, 32, 32, 64, 64, 128, 128, 256, 256, 512, 1024]
-  d_num_fmaps: [16, 32, 32, 64, 64, 128, 128, 256, 256, 512, 1024]
-  kwidth: 31
-  ratio: 2
+  generator:
+    g_enc_depths: [16, 32, 32, 64, 64, 128, 128, 256, 256, 512, 1024]
+    kwidth: 31
+    ratio: 2
+  discriminator:
+    d_num_fmaps: [16, 32, 32, 64, 64, 128, 128, 256, 256, 512, 1024]
+    kwidth: 31
+    ratio: 2
 
 learning_config:
   augmentations: null
@@ -52,7 +56,9 @@ learning_config:
     noise_std: 0.0
     denoise_epoch: 5
     noise_decay: 0.9
-    noise_std_lbound: 0.0
+    denoise_lbound: 0.0
+
+    l1_remove_epoch: 87
     l1_lambda: 100.0
 
     num_epochs: 86

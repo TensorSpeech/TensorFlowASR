@@ -21,12 +21,13 @@ import tensorflow as tf
 from tiramisu_asr.runners.segan_runners import SeganTrainer, SeganTester
 from tiramisu_asr.datasets.segan_dataset import SeganDataset
 from tiramisu_asr.configs.user_config import UserConfig
+from tiramisu_asr.models.segan import Generator, Discriminator
 
 DEFAULT_YAML = os.path.join(os.path.abspath(os.path.dirname(__file__)), "config.yml")
 
 
 def main():
-    modes = ["train", "test", "save_from_checkpoint"]
+    modes = ["train", "test"]
 
     parser = argparse.ArgumentParser(prog="SEGAN")
 
@@ -71,12 +72,25 @@ def main():
             )
 
             segan_trainer = SeganTrainer(
-                config["speech_config"],
                 config["learning_config"]["running_config"],
                 args.mixed_precision
             )
 
-            segan_trainer.compile(config["model_config"],
+            with segan_trainer.strategy.scope():
+                generator = Generator(
+                    window_size=config["speech_config"]["window_size"],
+                    **config["model_config"]["generator"]
+                )
+                generator._build()
+                generator.summary(line_length=100)
+                discriminator = Discriminator(
+                    window_size=config["speech_config"]["window_size"],
+                    **config["model_config"]["discriminator"]
+                )
+                discriminator._build()
+                discriminator.summary(line_length=100)
+
+            segan_trainer.compile(generator, discriminator,
                                   config["learning_config"]["optimizer_config"],
                                   max_to_keep=args.max_ckpts)
             segan_trainer.fit(train_dataset=dataset)
@@ -95,26 +109,19 @@ def main():
                 config["learning_config"]["dataset_config"]["noise_config"],
                 config["speech_config"], shuffle=False).create_test()
 
+            generator = Generator(
+                window_size=config["speech_config"]["window_size"],
+                **config["model_config"]["generator"]
+            )
+            generator._build()
+            generator.summary(line_length=100)
+
             segan_tester = SeganTester(
                 config["speech_config"], config["learning_config"]["running_config"],
                 args.export, from_weights=args.from_weights)
 
-            segan_tester.compile(config["model_config"])
+            segan_tester.compile(generator)
             segan_tester.run(dataset)
-
-        else:
-            assert args.export
-            segan_trainer = SeganTrainer(
-                config["speech_config"],
-                config["learning_config"]["running_config"], args.mixed_precision)
-            segan_trainer.compile(config["model_config"],
-                                  config["learning_config"]["optimizer_config"])
-            segan_trainer.load_checkpoint()
-
-            if args.from_weights:
-                segan_trainer.generator.save_weights(args.export)
-            else:
-                segan_trainer.generator.save(args.export)
 
     args = parser.parse_args()
     run(args)
