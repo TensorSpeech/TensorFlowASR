@@ -30,7 +30,7 @@ class ConvSubsampling(tf.keras.layers.Layer):
                  name="conv_subsampling",
                  **kwargs):
         super(ConvSubsampling, self).__init__(name=name, **kwargs)
-        self.conv = tf.keras.layers.Conv2D(
+        self.conv = tf.keras.layers.Conv1D(
             filters=odim, kernel_size=kernel_size,
             strides=reduction_factor, padding="same"
         )
