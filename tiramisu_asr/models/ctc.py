@@ -33,7 +33,7 @@ class CtcModel(tf.keras.Model):
         # Fully connected layer
         self.fc = tf.keras.layers.TimeDistributed(
             tf.keras.layers.Dense(units=num_classes, activation="linear",
-                                  use_bias=True), name="fully_connected")
+                                  use_bias=True), name=f"{name}_fc")
 
     def _build(self, sample_shape):
         features = tf.random.normal(shape=sample_shape)

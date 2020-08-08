@@ -37,13 +37,15 @@ class TransducerPrediction(tf.keras.Model):
                  **kwargs):
         super(TransducerPrediction, self).__init__(name=name, **kwargs)
         self.embed = tf.keras.layers.Embedding(
-            input_dim=vocabulary_size, output_dim=embed_dim, mask_zero=False)
-        self.do = tf.keras.layers.Dropout(embed_dropout)
+            input_dim=vocabulary_size, output_dim=embed_dim,
+            mask_zero=False, name=f"{name}_embed")
+        self.do = tf.keras.layers.Dropout(embed_dropout, name=f"{name}_dropout")
         self.lstms = []
         # lstms units must equal (for using beam search)
         for i in range(num_lstms):
-            lstm = tf.keras.layers.LSTM(units=lstm_units,
-                                        return_sequences=True, return_state=True)
+            lstm = tf.keras.layers.LSTM(
+                units=lstm_units, return_sequences=True,
+                return_state=True, name=f"{name}_lstm_{i}")
             self.lstms.append(lstm)
 
     def get_initial_state(self, input_sample):
@@ -94,9 +96,9 @@ class TransducerJoint(tf.keras.Model):
                  name="tranducer_joint",
                  **kwargs):
         super(TransducerJoint, self).__init__(name=name, **kwargs)
-        self.ffn_enc = tf.keras.layers.Dense(joint_dim)
-        self.ffn_pred = tf.keras.layers.Dense(joint_dim)
-        self.ffn_out = tf.keras.layers.Dense(vocabulary_size)
+        self.ffn_enc = tf.keras.layers.Dense(joint_dim, name=f"{name}_enc")
+        self.ffn_pred = tf.keras.layers.Dense(joint_dim, name=f"{name}_pred")
+        self.ffn_out = tf.keras.layers.Dense(vocabulary_size, name=f"{name}_vocab")
 
     @tf.function(experimental_relax_shapes=True)
     def call(self, inputs, training=False, **kwargs):

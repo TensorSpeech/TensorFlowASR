@@ -33,15 +33,15 @@ class ConvSubsampling(tf.keras.layers.Layer):
         self.conv1 = tf.keras.layers.Conv2D(
             filters=odim, kernel_size=(3, 3),
             strides=((reduction_factor // 2), 2),
-            padding="same", activation="relu"
+            padding="same", activation="relu", name=f"{name}_1"
         )
         self.conv2 = tf.keras.layers.Conv2D(
             filters=odim, kernel_size=(3, 3),
             strides=(2, 2), padding="same",
-            activation="relu"
+            activation="relu", name=f"{name}_2"
         )
-        self.linear = tf.keras.layers.Dense(odim)
-        self.do = tf.keras.layers.Dropout(dropout)
+        self.linear = tf.keras.layers.Dense(odim, name=f"{name}_linear")
+        self.do = tf.keras.layers.Dropout(dropout, name=f"{name}_dropout")
 
     @tf.function(experimental_relax_shapes=True)
     def call(self, inputs, training=False, **kwargs):
@@ -69,14 +69,14 @@ class FFModule(tf.keras.layers.Layer):
                  **kwargs):
         super(FFModule, self).__init__(name=name, **kwargs)
         self.fc_factor = fc_factor
-        self.ln = tf.keras.layers.LayerNormalization()
-        self.ffn1 = tf.keras.layers.Dense(4 * input_dim)
+        self.ln = tf.keras.layers.LayerNormalization(name=f"{name}_ln")
+        self.ffn1 = tf.keras.layers.Dense(4 * input_dim, name=f"{name}_dense_1")
         self.swish = tf.keras.layers.Activation(
-            tf.keras.activations.swish, name="swish_activation")
-        self.do1 = tf.keras.layers.Dropout(dropout)
-        self.ffn2 = tf.keras.layers.Dense(input_dim)
-        self.do2 = tf.keras.layers.Dropout(dropout)
-        self.res_add = tf.keras.layers.Add()
+            tf.keras.activations.swish, name=f"{name}_swish_activation")
+        self.do1 = tf.keras.layers.Dropout(dropout, name=f"{name}_dropout_1")
+        self.ffn2 = tf.keras.layers.Dense(input_dim, name=f"{name}_dense_2")
+        self.do2 = tf.keras.layers.Dropout(dropout, name=f"{name}_dropout_2")
+        self.res_add = tf.keras.layers.Add(name=f"{name}_add")
 
     @tf.function(experimental_relax_shapes=True)
     def call(self, inputs, training=False, **kwargs):
@@ -110,11 +110,12 @@ class MHSAModule(tf.keras.layers.Layer):
                  name="mhsa_module",
                  **kwargs):
         super(MHSAModule, self).__init__(name=name, **kwargs)
-        self.pc = PositionalEncoding()
-        self.ln = tf.keras.layers.LayerNormalization()
-        self.mha = MultiHeadAttention(head_size=head_size, num_heads=num_heads)
-        self.do = tf.keras.layers.Dropout(dropout)
-        self.res_add = tf.keras.layers.Add()
+        self.pc = PositionalEncoding(name=f"{name}_pe")
+        self.ln = tf.keras.layers.LayerNormalization(name=f"{name}_ln")
+        self.mha = MultiHeadAttention(head_size=head_size, num_heads=num_heads,
+                                      name=f"{name}_mhsa")
+        self.do = tf.keras.layers.Dropout(dropout, name=f"{name}_dropout")
+        self.res_add = tf.keras.layers.Add(name=f"{name}_add")
 
     @tf.function(experimental_relax_shapes=True)
     def call(self, inputs, training=False, **kwargs):
@@ -146,20 +147,20 @@ class ConvModule(tf.keras.layers.Layer):
         self.ln = tf.keras.layers.LayerNormalization()
         self.pw_conv_1 = tf.keras.layers.Conv1D(
             filters=2 * input_dim, kernel_size=1, strides=1,
-            padding="same", name="pw_conv_1"
+            padding="same", name=f"{name}_pw_conv_1"
         )
-        self.glu = GLU()
+        self.glu = GLU(name=f"{name}_glu")
         self.dw_conv = tf.keras.layers.SeparableConv1D(
             filters=2 * input_dim, kernel_size=kernel_size, strides=1,
-            padding="same", depth_multiplier=1, name="dw_conv"
+            padding="same", depth_multiplier=1, name=f"{name}_dw_conv"
         )
-        self.bn = tf.keras.layers.BatchNormalization()
+        self.bn = tf.keras.layers.BatchNormalization(name=f"{name}_bn")
         self.swish = tf.keras.layers.Activation(
-            tf.keras.activations.swish, name="swish_activation")
+            tf.keras.activations.swish, name=f"{name}_swish_activation")
         self.pw_conv_2 = tf.keras.layers.Conv1D(filters=input_dim, kernel_size=1, strides=1,
-                                                padding="same", name="pw_conv_2")
-        self.do = tf.keras.layers.Dropout(dropout)
-        self.res_add = tf.keras.layers.Add()
+                                                padding="same", name=f"{name}_pw_conv_2")
+        self.do = tf.keras.layers.Dropout(dropout, name=f"{name}_dropout")
+        self.res_add = tf.keras.layers.Add(name=f"{name}_add")
 
     @tf.function(experimental_relax_shapes=True)
     def call(self, inputs, training=False, **kwargs):
@@ -201,15 +202,15 @@ class ConformerBlock(tf.keras.layers.Layer):
         super(ConformerBlock, self).__init__(name=name, **kwargs)
         self.ffm1 = FFModule(input_dim=input_dim,
                              dropout=dropout, fc_factor=fc_factor,
-                             name="ff_module_1")
+                             name=f"{name}_ff_module_1")
         self.mhsam = MHSAModule(head_size=head_size, num_heads=num_heads,
-                                dropout=dropout)
+                                dropout=dropout, name=f"{name}_mhsa_module")
         self.convm = ConvModule(input_dim=input_dim, kernel_size=kernel_size,
-                                dropout=dropout)
+                                dropout=dropout, name=f"{name}_conv_module")
         self.ffm2 = FFModule(input_dim=input_dim,
                              dropout=dropout, fc_factor=fc_factor,
-                             name="ff_module_2")
-        self.ln = tf.keras.layers.LayerNormalization()
+                             name=f"{name}_ff_module_2")
+        self.ln = tf.keras.layers.LayerNormalization(name=f"{name}_ln")
 
     @tf.function(experimental_relax_shapes=True)
     def call(self, inputs, training=False, **kwargs):

@@ -27,7 +27,8 @@ class DownConv(tf.keras.layers.Layer):
             padding="same",
             use_bias=True,
             kernel_initializer=tf.keras.initializers.TruncatedNormal(stddev=0.02),
-            bias_initializer=tf.keras.initializers.Zeros()
+            bias_initializer=tf.keras.initializers.Zeros(),
+            name=f"{name}_2d"
         )
 
     def call(self, inputs, training=False):
@@ -49,7 +50,8 @@ class DeConv(tf.keras.layers.Layer):
             padding="same",
             use_bias=True,
             kernel_initializer=tf.keras.initializers.TruncatedNormal(stddev=0.02),
-            bias_initializer=tf.keras.initializers.Zeros()
+            bias_initializer=tf.keras.initializers.Zeros(),
+            name=f"{name}_2d"
         )
 
     def call(self, inputs, training=False):
