@@ -57,7 +57,7 @@ model = Transducer(
 model._build([1, 50, 80, 1])
 model.summary(line_length=100)
 
-# model.save("/tmp/transducer")
+model.save_weights("/tmp/transducer.h5")
 
 model.add_featurizers(
     speech_featurizer=speech_featurizer,

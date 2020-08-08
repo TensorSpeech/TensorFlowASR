@@ -33,9 +33,10 @@ class MultiHeadAttention(tf.keras.layers.Layer):
         bias_initializer: typing.Union[str, typing.Callable] = "zeros",
         bias_regularizer: typing.Union[str, typing.Callable] = None,
         bias_constraint: typing.Union[str, typing.Callable] = None,
-        **kwargs
+        name="mhsa",
+        ** kwargs
     ):
-        super().__init__(**kwargs)
+        super(MultiHeadAttention, self).__init__(name=name, **kwargs)
 
         if output_size is not None and output_size < 1:
             raise ValueError("output_size must be a positive number")
