@@ -64,7 +64,7 @@ learning_config:
 
   running_config:
     batch_size: 4
-    num_epochs: 0
+    num_epochs: 20
     outdir: /mnt/Projects/asrk16/trained/local/vivos/conformer
     log_interval_steps: 300
     eval_interval_steps: 500
