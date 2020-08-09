@@ -16,6 +16,7 @@ import os
 import collections
 import tensorflow as tf
 
+from . import Model
 from ..utils.utils import shape_list, get_shape_invariants
 from ..featurizers.speech_featurizers import TFSpeechFeaturizer
 from ..featurizers.text_featurizers import TextFeaturizer
@@ -24,6 +25,28 @@ Hypotheses = collections.namedtuple(
     "Hypotheses",
     ("scores", "yseqs", "p_memory_states")
 )
+
+
+class BT1V(tf.keras.layers.Layer):
+    def __init__(self, name="reshape_bt1v", **kwargs):
+        super(BT1V, self).__init__(trainable=False, name=name, **kwargs)
+
+    def call(self, inputs):
+        return tf.expand_dims(inputs, axis=2)
+
+    def get_config(self):
+        return super(BT1V, self).get_config()
+
+
+class B1UV(tf.keras.layers.Layer):
+    def __init__(self, name="reshape_b1uv", **kwargs):
+        super(B1UV, self).__init__(trainable=False, name=name, **kwargs)
+
+    def call(self, inputs):
+        return tf.expand_dims(inputs, axis=1)
+
+    def get_config(self):
+        return super(B1UV, self).get_config()
 
 
 class TransducerPrediction(tf.keras.Model):
@@ -98,7 +121,10 @@ class TransducerJoint(tf.keras.Model):
         super(TransducerJoint, self).__init__(name=name, **kwargs)
         self.ffn_enc = tf.keras.layers.Dense(joint_dim, name=f"{name}_enc")
         self.ffn_pred = tf.keras.layers.Dense(joint_dim, name=f"{name}_pred")
+        self.bt1v = BT1V(name=f"{name}_bt1v")
+        self.b1uv = B1UV(name=f"{name}_b1uv")
         self.add = tf.keras.layers.Add(name=f"{name}_add")
+        self.tanh = tf.keras.layers.Activation(tf.nn.tanh, name=f"{name}_tanh")
         self.ffn_out = tf.keras.layers.Dense(vocabulary_size, name=f"{name}_vocab")
 
     def call(self, inputs, training=False, **kwargs):
@@ -108,10 +134,10 @@ class TransducerJoint(tf.keras.Model):
         enc_out = self.ffn_enc(enc, training=training)  # [B, T ,E] => [B, T, V]
         pred_out = self.ffn_pred(pred, training=training)  # [B, U, P] => [B, U, V]
         # => [B, T, U, V]
-        enc_out = tf.expand_dims(enc_out, axis=2)
-        pred_out = tf.expand_dims(pred_out, axis=1)
+        enc_out = self.bt1v(enc_out)
+        pred_out = self.b1uv(pred_out)
         outputs = self.add([enc_out, pred_out])
-        outputs = tf.nn.tanh(outputs)
+        outputs = self.tanh(outputs)
         outputs = self.ffn_out(outputs, training=training)
         return outputs
 
@@ -123,7 +149,7 @@ class TransducerJoint(tf.keras.Model):
         return conf
 
 
-class Transducer(tf.keras.Model):
+class Transducer(Model):
     """ Transducer Model Warper """
 
     def __init__(self,
@@ -158,7 +184,7 @@ class Transducer(tf.keras.Model):
         input_shape_nobatch = input_shape[1:]
         self.build([input_shape, [None, None]])
         inputs = tf.keras.Input(shape=input_shape_nobatch)
-        pred = tf.keras.Input(shape=[None])
+        pred = tf.keras.Input(shape=[None], dtype=tf.int32)
         self([inputs, pred], training=False)
 
     def save_seperate(self, path_to_dir: str):
@@ -263,7 +289,7 @@ class Transducer(tf.keras.Model):
                        streaming: bool = False) -> tf.Tensor:
         new_hyps = Hypotheses(
             tf.constant(0.0, dtype=tf.float32),
-            self.text_featurizer.blank * tf.ones([1], dtype=tf.int32),
+            tf.constant([self.text_featurizer.blank], dtype=tf.int32),
             self.predict_net.get_initial_state(features)
         )
 

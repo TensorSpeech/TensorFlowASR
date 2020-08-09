@@ -74,7 +74,7 @@ def main():
             vocabulary_size=text_featurizer.num_classes,
             **config["model_config"]
         )
-        conformer._build(speech_featurizer.compute_feature_dim())
+        conformer._build(speech_featurizer.compute_feature_shape())
         conformer.summary(line_length=100)
 
         conformer_tester = BaseTester(
