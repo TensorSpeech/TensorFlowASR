@@ -32,18 +32,18 @@ model_config:
     embed_dropout: 0.0
     num_lstms: 1
     lstm_units: 320
-    joint_dim: 144
+    joint_dim: 1024
 
 learning_config:
     augmentations:
         after:
             time_masking:
-                num_time_mask: 10
-                time_mask_param: 100
+                num_masks: 10
+                mask_factor: 100
                 p_upperbound: 0.2
             freq_masking:
-                num_freq_mask: 1
-                freq_mask_param: 27
+                num_masks: 1
+                mask_factor: 27
 
     dataset_config:
         train_paths: null
@@ -59,7 +59,7 @@ learning_config:
 
     running_config:
         batch_size: 4
-        num_epochs: 25
+        num_epochs: 21
         outdir: /mnt/Projects/asrk16/trained/vivos/conformer
         log_interval_steps: 400
         save_interval_steps: 400
@@ -72,9 +72,9 @@ Training, see `python examples/conformer/train_conformer.py --help`
 
 Testing, see `python examples/conformer/train_conformer.py --help`
 
-## Results on Vietnamse Vivos Corpus
+## Results on Vietnamese Vivos Corpus
 
-Conformer is trained with above config in 22 hours.
+Vivos Conformer is trained with above config in 10 hours.
 
 **Transducer Loss**
 
@@ -84,4 +84,4 @@ Conformer is trained with above config in 22 hours.
 
 |          |  WER (%)   |  CER (%)   |
 | :------- | :--------: | :--------: |
-| _Greedy_ | 35.3230591 | 18.7023373 |
+| _Greedy_ | 42.7813034 | 22.1981564 |
