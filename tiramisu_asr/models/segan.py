@@ -14,6 +14,7 @@
 
 import tensorflow as tf
 
+from . import Model
 from ..utils.utils import shape_list
 
 
@@ -166,7 +167,83 @@ class SeganPrelu(tf.keras.layers.Layer):
         return config
 
 
-class Generator(tf.keras.Model):
+class GeneratorEncoder(tf.keras.Model):
+    def __init__(self,
+                 g_enc_depths,
+                 kwidth,
+                 pool,
+                 name="segan_g_encoder",
+                 **kwargs):
+        super(GeneratorEncoder, self).__init__(name=name, **kwargs)
+        self.blocks = []
+        for i, depth in enumerate(g_enc_depths):
+            dc = DownConv(depth=depth,
+                          kwidth=kwidth,
+                          pool=pool,
+                          name=f"{name}_downconv_{i}")
+            prelu = SeganPrelu(name=f"{name}_prelu_{i}")
+            self.blocks.append({"downconv": dc, "prelu": prelu})
+
+    def call(self, inputs, training=False):
+        skips = []
+        outputs = inputs
+        for i, block in enumerate(self.blocks):
+            outputs = block["downconv"](outputs, training=training)
+            if i < len(self.blocks) - 1:
+                skips.append(outputs)
+            outputs = block["prelu"](outputs)
+        return outputs, skips
+
+    def get_config(self):
+        conf = {}
+        for block in self.blocks:
+            conf.update(block["downconv"].get_config())
+            conf.update(block["prelu"].get_config())
+        return conf
+
+
+class GeneratorDecoder(tf.keras.Model):
+    def __init__(self,
+                 g_dec_depths,
+                 kwidth,
+                 dilation,
+                 name="segan_g_decoder",
+                 **kwargs):
+        super(GeneratorDecoder, self).__init__(name=name, **kwargs)
+        self.blocks = []
+        for i, depth in enumerate(g_dec_depths):
+            dc = DeConv(depth=depth,
+                        kwidth=kwidth,
+                        dilation=dilation,
+                        name=f"{name}_deconv_{i}")
+            prelu = SeganPrelu(name=f"{name}_prelu_{i}")
+            if i < len(g_dec_depths) - 1:
+                skip = tf.keras.layers.Concatenate(axis=3, name=f"{name}_concat")
+            else:
+                skip = tf.keras.layers.Activation(tf.nn.tanh, name=f"{name}_tanh")
+            self.blocks.append({"deconv": dc, "prelu": prelu, "skip": skip})
+
+    def call(self, inputs, skips, training=False):
+        outputs = inputs
+        for i, block in enumerate(self.blocks):
+            outputs = block["deconv"](outputs, training=training)
+            outputs = block["prelu"](outputs)
+            if i < len(self.blocks) - 1:
+                _skip = skips[-(i + 1)]
+                outputs = block["skip"]([outputs, _skip])
+            else:
+                outputs = block["skip"](outputs)
+        return outputs
+
+    def get_config(self):
+        conf = {}
+        for block in self.blocks:
+            conf.update(block["deconv"].get_config())
+            conf.update(block["prelu"].get_config())
+        return conf
+
+
+class Generator(Model):
     def __init__(self,
                  g_enc_depths,
                  window_size,
@@ -179,89 +256,79 @@ class Generator(tf.keras.Model):
         g_dec_depths = g_enc_depths.copy()
         g_dec_depths.reverse()
         g_dec_depths = g_dec_depths[1:] + [1]
-        self.g_dec_depths = g_dec_depths
         self.window_size = window_size
         self.ratio = ratio
         self.inp = Reshape1to3("segan_g_reshape_input")
-        self.enc = []
-        for layer_idx, layer_depth in enumerate(g_enc_depths):
-            dc = DownConv(depth=layer_depth,
-                          kwidth=kwidth,
-                          pool=ratio,
-                          name=f"segan_g_downconv_{layer_idx}")
-            prelu = SeganPrelu(name=f"segan_g_downconv_prelu_{layer_idx}")
-            self.enc.append({
-                "downconv": dc,
-                "prelu": prelu
-            })
-        self.z_concat = tf.keras.layers.Concatenate(axis=3)
-        self.dec = []
-        for layer_idx, layer_depth in enumerate(g_dec_depths):
-            dc = DeConv(depth=layer_depth,
-                        kwidth=kwidth,
-                        dilation=ratio,
-                        name=f"segan_g_deconv_{layer_idx}")
-            prelu = SeganPrelu(name=f"segan_g_deconv_prelu_{layer_idx}")
-            if layer_idx < len(g_dec_depths) - 1:
-                concat = tf.keras.layers.Concatenate(
-                    axis=3, name=f"concat_skip_{layer_idx}")
-            else:
-                concat = None
-            self.dec.append({
-                "deconv": dc,
-                "prelu": prelu,
-                "concat": concat
-            })
+        self.encoder = GeneratorEncoder(g_enc_depths, kwidth=kwidth, pool=ratio,
+                                        name=f"{name}_encoder")
+        self.z = tf.keras.layers.Concatenate(axis=3, name=f"{name}_z")
+        self.decoder = GeneratorDecoder(g_dec_depths, kwidth=kwidth, dilation=ratio,
+                                        name=f"{name}_decoder")
         self.outp = Reshape3to1("segan_g_reshape_output")
 
+    def _get_z_shape(self, batch_size):
+        return [batch_size,
+                self.window_size // (self.ratio ** len(self.g_enc_depths)),
+                1,
+                self.g_enc_depths[-1]]
+
     def get_z(self, batch_size, mean=0., stddev=1.):
-        return tf.random.normal(
-            [batch_size, self.window_size // (self.ratio ** len(self.enc)),
-             1, self.g_enc_depths[-1]], mean=mean, stddev=stddev)
+        return tf.random.normal(self._get_z_shape(batch_size), mean=mean, stddev=stddev)
 
     def _build(self):
-        audio = tf.random.normal([1, self.window_size], dtype=tf.float32)
-        z = self.get_z(1)
-        self([audio, z], training=False)
+        input_shape = [None, self.window_size]
+        z_shape = self._get_z_shape(None)
+        self.build([input_shape, z_shape])
+        noisy, z = tf.keras.Input(input_shape[1:]), tf.keras.Input(z_shape[1:])
+        self([noisy, z], training=False)
 
-    @tf.function(experimental_relax_shapes=True)
+    def summary(self, line_length=100):
+        self.encoder.summary(line_length)
+        self.decoder.summary(line_length)
+        super(Generator, self).summary(line_length)
+
     def call(self, inputs, training=False, **kwargs):
         noisy, z = inputs
-        c = self.inp(noisy)
-        skips = []
-        for i, enc in enumerate(self.enc):
-            c = enc["downconv"](c, training=training)
-            if i < len(self.enc) - 1:
-                skips.append(c)
-            c = enc["prelu"](c)
-        outputs = self.z_concat([z, c])
-        for i, dec in enumerate(self.dec):
-            outputs = dec["deconv"](outputs, training=training)
-            outputs = dec["prelu"](outputs, training=training)
-            if i < len(self.dec) - 1:
-                _skip = skips[-(i + 1)]
-                outputs = dec["concat"]([outputs, _skip])
-            else:
-                outputs = tf.nn.tanh(outputs)
+        outputs = self.inp(noisy)
+        outputs, skips = self.encoder(outputs, training=training)
+        outputs = self.z([z, outputs])
+        outputs = self.decoder(outputs, skips, training=training)
         outputs = self.outp(outputs)
         return outputs
 
     def get_config(self):
         conf = self.noisy.get_config()
-        for enc in self.enc:
-            conf.update(enc[0].get_config())
-            conf.update(enc[1].get_config())
-        conf.update(self.z_concat.get_config())
-        for dec in self.dec:
-            conf.update(dec[0].get_config())
-            conf.update(dec[1].get_config())
-            if dec[2] is not None:
-                conf.update(dec[2].get_config())
-        conf.update(self.out.get_config())
+        conf.update(self.inp.get_config())
+        conf.update(self.encoder.get_config())
+        conf.update(self.z.get_config())
+        conf.update(self.decoder.get_config())
+        conf.update(self.outp.get_config())
         return conf
 
 
-class Discriminator(tf.keras.Model):
+class DiscriminatorBlock(tf.keras.layers.Layer):
+    def __init__(self,
+                 depth,
+                 kwidth,
+                 pool,
+                 name="segan_d_block",
+                 leakyrelu=True,
+                 **kwargs):
+        super(DiscriminatorBlock, self).__init__(name=name, **kwargs)
+        self.dc = DownConv(depth=depth, kwidth=kwidth, pool=pool, name=f"{name}_downconv")
+        self.vbn = VirtualBatchNorm(name=f"{name}_vbn")
+        if leakyrelu:
+            self.relu = tf.keras.layers.LeakyReLU(alpha=0.3, name=f"{name}_leakyrelu")
+        else:
+            self.relu = tf.keras.layers.ReLU(name=f"{name}_relu")
+
+    def call(self, inputs, training=False):
+        outputs = self.dc(inputs, training=training)
+        outputs = self.vbn(outputs, training=training)
+        return self.relu(outputs, training=training)
+
+
+class Discriminator(Model):
     def __init__(self,
                  d_num_fmaps,
                  window_size,
@@ -272,49 +339,37 @@ class Discriminator(tf.keras.Model):
                  **kwargs):
         super(Discriminator, self).__init__(name=name, **kwargs)
         self.window_size = window_size
-        self.clean_wav = Reshape1to3("segan_d_reshape_1_to_3_clean")
-        self.noisy_wav = Reshape1to3("segan_d_reshape_1_to_3_noisy")
-        self.concat = tf.keras.layers.Concatenate(name="segan_d_concat_clean_noisy", axis=3)
-        self.gauss = GaussianNoise(name="segan_d_gaussian_noise")
+        self.clean_wav = Reshape1to3(f"{name}_reshape_1_to_3_clean")
+        self.noisy_wav = Reshape1to3(f"{name}_reshape_1_to_3_noisy")
+        self.concat = tf.keras.layers.Concatenate(name=f"{name}_concat", axis=3)
+        self.gauss = GaussianNoise(name=f"{name}_gaussian_noise")
         self.blocks = []
         for block_idx, nfmaps in enumerate(d_num_fmaps):
-            dc = DownConv(depth=nfmaps, kwidth=kwidth, pool=ratio,
-                          name=f"segan_d_downconv_{block_idx}")
-            vbn = VirtualBatchNorm(name=f"vbn_{block_idx}")
-            if leakyrelu:
-                relu = tf.keras.layers.LeakyReLU(
-                    alpha=0.3, name=f"segan_d_leakyrelu_{block_idx}")
-            else:
-                relu = tf.keras.layers.ReLU(name=f"segan_d_relu_{block_idx}")
-            self.blocks.append({
-                "downconv": dc,
-                "vbn": vbn,
-                "relu": relu
-            })
-        self.conv = tf.keras.layers.Conv1D(
-            filters=1, kernel_size=1, strides=1, padding="same",
+            self.blocks.append(
+                DiscriminatorBlock(depth=nfmaps, kwidth=kwidth, pool=ratio,
+                                   leakyrelu=leakyrelu, name=f"{name}_block_{block_idx}"))
+        self.conv = tf.keras.layers.Conv2D(
+            filters=1, kernel_size=(1, 1), strides=(1, 1), padding="same",
             kernel_initializer=tf.keras.initializers.TruncatedNormal(stddev=0.02),
-            name="segan_d_conv1d"
+            name=f"{name}_conv2d_1x1"
         )
-        self.dense = tf.keras.layers.Dense(1, name="segan_d_fully_connected")
+        self.reshape = Reshape3to1(f"{name}_reshape_3_to_1")
+        self.dense = tf.keras.layers.Dense(1, name=f"{name}_fully_connected")
 
     def _build(self):
-        clean = tf.random.normal([1, self.window_size], dtype=tf.float32)
-        noisy = tf.random.normal([1, self.window_size], dtype=tf.float32)
+        input_shape = [None, self.window_size]
+        self.build([input_shape, input_shape])
+        clean, noisy = tf.keras.Input(input_shape[1:]), tf.keras.Input(input_shape[1:])
         self([clean, noisy], training=False)
 
-    @tf.function(experimental_relax_shapes=True)
     def call(self, inputs, training=False, noise_std=0., **kwargs):
         clean, noisy = inputs
         clean_out = self.clean_wav(clean)
         noisy_out = self.noisy_wav(noisy)
         outputs = self.concat([clean_out, noisy_out])
         outputs = self.gauss(outputs, noise_std=noise_std)
-        for i in range(len(self.blocks)):
-            outputs = self.blocks[i]["downconv"](outputs, training=training)
-            outputs = self.blocks[i]["vbn"](outputs, training=training)
-            outputs = self.blocks[i]["relu"](outputs, training=training)
-        outputs = tf.squeeze(outputs, axis=2)
+        for block in self.blocks:
+            outputs = block(outputs, training=training)
         outputs = self.conv(outputs, training=training)
-        outputs = tf.squeeze(outputs, axis=-1)
+        outputs = self.reshape(outputs)
         return self.dense(outputs, training=training)

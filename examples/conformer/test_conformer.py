@@ -70,12 +70,11 @@ def main():
             ).create(config["learning_config"]["running_config"]["batch_size"])
 
         # build model
-        f, c = speech_featurizer.compute_feature_dim()
         conformer = Conformer(
             vocabulary_size=text_featurizer.num_classes,
             **config["model_config"]
         )
-        conformer._build([1, 50, f, c])
+        conformer._build(speech_featurizer.compute_feature_shape())
         conformer.summary(line_length=100)
 
         conformer_tester = BaseTester(
