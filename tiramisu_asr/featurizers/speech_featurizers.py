@@ -348,7 +348,7 @@ class TFSpeechFeaturizer:
 
     def compute_feature_dim(self) -> tuple:
         channel_dim = 1
-        return self.num_feature_bins, channel_dim
+        return [None, None, self.num_feature_bins, channel_dim]
 
     def compute_tf_spectrogram_features(self, signal):
         spectrogram = self.__compute_spectrogram(signal)

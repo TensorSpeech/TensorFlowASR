@@ -59,7 +59,7 @@ class TransducerPrediction(tf.keras.Model):
             )
         return memory_states
 
-    @tf.function(experimental_relax_shapes=True)
+    @tf.function(experimental_relax_shapes=True)  # avoid error in tflite conversion
     def call(self,
              inputs,
              training=False,
@@ -77,7 +77,7 @@ class TransducerPrediction(tf.keras.Model):
             outputs = outputs[0]
             n_memory_states.append(new_memory_states)
 
-        # return shapes [B, T, P], ([num_lstms, B, P], [num_lstms, B, P]) if using lstm
+        # return shapes [B, T, P], ([num_lstms, B, P], [num_lstms, B, P])
         return outputs, n_memory_states
 
     def get_config(self):
@@ -98,9 +98,9 @@ class TransducerJoint(tf.keras.Model):
         super(TransducerJoint, self).__init__(name=name, **kwargs)
         self.ffn_enc = tf.keras.layers.Dense(joint_dim, name=f"{name}_enc")
         self.ffn_pred = tf.keras.layers.Dense(joint_dim, name=f"{name}_pred")
+        self.add = tf.keras.layers.Add(name=f"{name}_add")
         self.ffn_out = tf.keras.layers.Dense(vocabulary_size, name=f"{name}_vocab")
 
-    @tf.function(experimental_relax_shapes=True)
     def call(self, inputs, training=False, **kwargs):
         # enc has shape [B, T, E]
         # pred has shape [B, U, P]
@@ -108,7 +108,10 @@ class TransducerJoint(tf.keras.Model):
         enc_out = self.ffn_enc(enc, training=training)  # [B, T ,E] => [B, T, V]
         pred_out = self.ffn_pred(pred, training=training)  # [B, U, P] => [B, U, V]
         # => [B, T, U, V]
-        outputs = tf.nn.tanh(tf.expand_dims(enc_out, axis=2) + tf.expand_dims(pred_out, axis=1))
+        enc_out = tf.expand_dims(enc_out, axis=2)
+        pred_out = tf.expand_dims(pred_out, axis=1)
+        outputs = self.add([enc_out, pred_out])
+        outputs = tf.nn.tanh(outputs)
         outputs = self.ffn_out(outputs, training=training)
         return outputs
 
@@ -151,10 +154,12 @@ class Transducer(tf.keras.Model):
         )
         self.kept_hyps = None
 
-    def _build(self, sample_shape):  # Call on real data for building model
-        features = tf.random.normal(shape=sample_shape)
-        predicted = tf.constant([[0, 1, 2, 3, 4, 5, 6, 7, 8, 9]])
-        self([features, predicted], training=True)
+    def _build(self, input_shape):  # Call on real data for building model
+        input_shape_nobatch = input_shape[1:]
+        self.build([input_shape, [None, None]])
+        inputs = tf.keras.Input(shape=input_shape_nobatch)
+        pred = tf.keras.Input(shape=[None])
+        self([inputs, pred], training=False)
 
     def save_seperate(self, path_to_dir: str):
         self.encoder.save(os.path.join(path_to_dir, "encoder"))
@@ -167,7 +172,6 @@ class Transducer(tf.keras.Model):
         self.joint_net.summary(line_length=line_length, **kwargs)
         super(Transducer, self).summary(line_length=line_length, **kwargs)
 
-    @tf.function(experimental_relax_shapes=True)
     def call(self, inputs, training=False):
         """
         Transducer Model call function

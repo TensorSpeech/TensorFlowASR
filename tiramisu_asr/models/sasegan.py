@@ -281,15 +281,21 @@ class Generator(tf.keras.Model):
             name=f"{self.name}_sn_non_local_block_sim_dec"
         )
 
+    def _get_z_shape(self, batch_size):
+        return [batch_size,
+                self.window_size // (self.ratio ** len(self.enc)),
+                1,
+                self.g_enc_depths[-1]]
+
     def get_z(self, batch_size, mean=0., stddev=1.):
-        return tf.random.normal(
-            [batch_size, self.window_size // (self.ratio ** len(self.enc)),
-             1, self.g_enc_depths[-1]], mean=mean, stddev=stddev)
+        return tf.random.normal(self._get_z_shape(batch_size), mean=mean, stddev=stddev)
 
     def _build(self):
-        audio = tf.random.normal([1, self.window_size], dtype=tf.float32)
-        z = self.get_z(1)
-        self([audio, z], training=False)
+        input_shape = [None, self.window_size]
+        z_shape = self._get_z_shape(None)
+        self.build([input_shape, z_shape])
+        noisy, z = tf.keras.Input(input_shape[1:]), tf.keras.Input(z_shape[1:])
+        self([noisy, z], training=False)
 
     def call(self, inputs, training=False, **kwargs):
         noisy, z = inputs
@@ -375,9 +381,10 @@ class Discriminator(tf.keras.Model):
         self.dense = tf.keras.layers.Dense(1, name="segan_d_fully_connected")
 
     def _build(self):
-        clean = tf.random.normal([1, self.window_size], dtype=tf.float32)
-        noisy = tf.random.normal([1, self.window_size], dtype=tf.float32)
-        self([clean, noisy], training=False)
+        input_shape = [None, self.window_size]
+        self.build([input_shape, input_shape])
+        clean, noisy = tf.keras.Input(input_shape[1:]), tf.keras.Input(input_shape[1:])
+        self.call([clean, noisy], training=False)
 
     @tf.function(experimental_relax_shapes=True)
     def call(self, inputs, training=False, noise_std=0., **kwargs):
