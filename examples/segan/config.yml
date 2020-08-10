@@ -34,11 +34,9 @@ learning_config:
   dataset_config:
     noise_config:
       noises: /mnt/Data/ML/ASR/Preprocessed/Noises/train
-    train_paths:
-      - /mnt/Data/ML/ASR/Preprocessed/Vivos/train
+    train_paths: /mnt/Data/ML/ASR/Preprocessed/Vivos/train
     eval_paths: null
-    test_paths:
-      - /mnt/Data/ML/ASR/Preprocessed/Vivos/test
+    test_paths: /mnt/Data/ML/ASR/Preprocessed/Vivos/test
 
   optimizer_config:
     generator:

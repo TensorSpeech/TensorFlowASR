@@ -99,13 +99,11 @@ class ASRDataset(BaseDataset):
             dataset = dataset.shuffle(TFRECORD_SHARDS, reshuffle_each_iteration=True)
 
         # PADDED BATCH the dataset
-        feature_dim, channel_dim = self.speech_featurizer.compute_feature_dim()
-
         dataset = dataset.padded_batch(
             batch_size=batch_size,
             padded_shapes=(
                 tf.TensorShape([]),
-                tf.TensorShape([None, feature_dim, channel_dim]),
+                tf.TensorShape(self.speech_featurizer.compute_feature_shape()),
                 tf.TensorShape([]),
                 tf.TensorShape([None]),
                 tf.TensorShape([]),

@@ -37,17 +37,11 @@ def main():
     parser.add_argument("--config", "-c", type=str, default=DEFAULT_YAML,
                         help="The file path of model configuration file")
 
-    parser.add_argument("--saved_path", "-e", type=str, default=None,
+    parser.add_argument("--saved", "-e", type=str, default=None,
                         help="Path to the model file to be exported")
-
-    parser.add_argument("--from_weights", type=bool, default=False,
-                        help="Whether to save or load only weights")
 
     parser.add_argument("--tfrecords", type=bool, default=False,
                         help="Whether to use tfrecords dataset")
-
-    parser.add_argument("--batch_size", type=int, default=1,
-                        help="Batch size for testing")
 
     args = parser.parse_args()
 
@@ -58,13 +52,14 @@ def main():
     speech_featurizer = TFSpeechFeaturizer(config["speech_config"])
     text_featurizer = TextFeaturizer(config["decoder_config"])
     # Build DS2 model
-    f, c = speech_featurizer.compute_feature_dim()
-    ds2_model = DeepSpeech2(input_shape=[None, f, c],
+    ds2_model = DeepSpeech2(input_shape=speech_featurizer.compute_feature_shape(),
                             arch_config=config["model_config"],
                             num_classes=text_featurizer.num_classes,
                             name="deepspeech2")
-    ds2_model._build([1, 50, f, c])
+    ds2_model._build(speech_featurizer.compute_feature_shape())
     ds2_model.summary(line_length=100)
+    ds2_model.load_weights(args.saved)
+    ds2_model.add_featurizers(speech_featurizer, text_featurizer)
 
     if args.tfrecords:
         test_dataset = ASRTFRecordDataset(
@@ -72,20 +67,17 @@ def main():
             config["learning_config"]["dataset_config"]["tfrecords_dir"],
             speech_featurizer, text_featurizer, "test",
             augmentations=config["learning_config"]["augmentations"], shuffle=False
-        ).create(args.batch_size)
+        )
     else:
         test_dataset = ASRSliceDataset(
             stage="test", speech_featurizer=speech_featurizer,
             text_featurizer=text_featurizer,
             data_paths=config["learning_config"]["dataset_config"]["eval_paths"],
             shuffle=False
-        ).create(args.batch_size)
+        )
 
-    ctc_tester = BaseTester(
-        config=config["learning_config"]["running_config"],
-        saved_path=args.saved_path, from_weights=args.from_weights
-    )
-    ctc_tester.compile(ds2_model, speech_featurizer, text_featurizer)
+    ctc_tester = BaseTester(config=config["learning_config"]["running_config"],)
+    ctc_tester.compile(ds2_model)
     ctc_tester.run(test_dataset)
 
 

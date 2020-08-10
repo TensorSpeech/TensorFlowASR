@@ -34,13 +34,13 @@ learning_config:
   augmentations: null
 
   dataset_config:
-    noise_config:
-      noises: /mnt/Data/ML/ASR/Preprocessed/Noises/train
     train_paths:
-      - /mnt/Data/ML/ASR/Preprocessed/Vivos/train
+      clean: /mnt/Data/ML/ASR/Preprocessed/Vivos/train
+      noisy: /mnt/Data/ML/ASR/Preprocessed/Vivos/train
     eval_paths: null
     test_paths:
-      - /mnt/Data/ML/ASR/Preprocessed/Vivos/test
+      clean: /mnt/Data/ML/ASR/Preprocessed/Vivos/test
+      noisy: /mnt/Data/ML/ASR/Preprocessed/Vivos/test
 
   optimizer_config:
     generator:

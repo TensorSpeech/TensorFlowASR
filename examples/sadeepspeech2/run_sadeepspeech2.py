@@ -20,11 +20,10 @@ import tensorflow as tf
 
 from tiramisu_asr.configs.user_config import UserConfig
 from tiramisu_asr.datasets.asr_dataset import ASRTFRecordDataset, ASRSliceDataset
-from tiramisu_asr.featurizers.speech_featurizers import SpeechFeaturizer
+from tiramisu_asr.featurizers.speech_featurizers import TFSpeechFeaturizer
 from tiramisu_asr.featurizers.text_featurizers import TextFeaturizer
 from tiramisu_asr.runners.ctc_runners import CTCTrainer
 from tiramisu_asr.runners.base_runners import BaseTester
-from tiramisu_asr.runners import save_from_checkpoint
 from ctc_decoders import Scorer
 from model import SelfAttentionDS2
 from optimizer import create_optimizer
@@ -33,7 +32,7 @@ DEFAULT_YAML = os.path.join(os.path.abspath(os.path.dirname(__file__)), "config.
 
 
 def main():
-    modes = ["train", "test", "save_from_checkpoint"]
+    modes = ["train", "test"]
 
     tf.keras.backend.clear_session()
 
@@ -45,22 +44,13 @@ def main():
     parser.add_argument("--config", "-c", type=str, default=DEFAULT_YAML,
                         help="The file path of model configuration file")
 
-    parser.add_argument("--arch", "-a", type=str, default=None,
-                        help="Path to the yaml architecture to be exported")
-
-    parser.add_argument("--export", "-e", type=str, default=None,
-                        help="Path to the model file to be exported")
-
     parser.add_argument("--mixed_precision", type=bool, default=False,
                         help="Whether to use mixed precision training")
-
-    parser.add_argument("--from_weights", type=bool, default=False,
-                        help="Whether to save or load only weights")
 
     parser.add_argument("--max_ckpts", type=int, default=10,
                         help="Max number of checkpoints to keep")
 
-    parser.add_argument("--saved_model", type=str, default=None,
+    parser.add_argument("--saved", type=str, default=None,
                         help="Path to saved model")
 
     parser.add_argument("--tfrecords", type=bool, default=False,
@@ -73,7 +63,7 @@ def main():
         assert args.mode in modes, f"Mode must in {modes}"
 
         config = UserConfig(DEFAULT_YAML, args.config, learning=True)
-        speech_featurizer = SpeechFeaturizer(config["speech_config"])
+        speech_featurizer = TFSpeechFeaturizer(config["speech_config"])
         text_featurizer = TextFeaturizer(config["decoder_config"])
 
         if args.mode == "train":
@@ -115,12 +105,13 @@ def main():
                 )
 
             # Build DS2 model
-            f, c = speech_featurizer.compute_feature_dim()
             with ctc_trainer.strategy.scope():
-                satt_ds2_model = SelfAttentionDS2(input_shape=[None, f, c],
-                                                  arch_config=config["model_config"],
-                                                  num_classes=text_featurizer.num_classes)
-                satt_ds2_model._build([1, 50, f, c])
+                satt_ds2_model = SelfAttentionDS2(
+                    input_shape=speech_featurizer.compute_feature_shape(),
+                    arch_config=config["model_config"],
+                    num_classes=text_featurizer.num_classes
+                )
+                satt_ds2_model._build(speech_featurizer.compute_feature_shape())
                 optimizer = create_optimizer(
                     name=config["learning_config"]["optimizer_config"]["name"],
                     d_model=config["model_config"]["att"]["head_size"],
@@ -131,80 +122,43 @@ def main():
 
             ctc_trainer.fit(train_dataset, eval_dataset, args.eval_train_ratio)
 
-            if args.export:
-                if args.from_weights:
-                    ctc_trainer.model.save_weights(args.export)
-                else:
-                    ctc_trainer.model.save(args.export)
-
         elif args.mode == "test":
             tf.random.set_seed(0)
-            assert args.export
+            assert args.saved
 
             text_featurizer.add_scorer(
                 Scorer(**text_featurizer.decoder_config["lm_config"],
                        vocabulary=text_featurizer.vocab_array))
 
             # Build DS2 model
-            f, c = speech_featurizer.compute_feature_dim()
-            satt_ds2_model = SelfAttentionDS2(input_shape=[None, f, c],
-                                              arch_config=config["model_config"],
-                                              num_classes=text_featurizer.num_classes)
-            satt_ds2_model._build([1, 50, f, c])
-            satt_ds2_model.summary(line_length=100)
-            optimizer = create_optimizer(
-                name=config["learning_config"]["optimizer_config"]["name"],
-                d_model=config["model_config"]["att"]["head_size"],
-                **config["learning_config"]["optimizer_config"]["config"]
+            satt_ds2_model = SelfAttentionDS2(
+                input_shape=speech_featurizer.compute_feature_shape(),
+                arch_config=config["model_config"],
+                num_classes=text_featurizer.num_classes
             )
+            satt_ds2_model._build(speech_featurizer.compute_feature_shape())
+            satt_ds2_model.summary(line_length=100)
+            satt_ds2_model.load_weights(args.saved)
+            satt_ds2_model.add_featurizers(speech_featurizer, text_featurizer)
 
-            batch_size = config["learning_config"]["running_config"]["batch_size"]
             if args.tfrecords:
                 test_dataset = ASRTFRecordDataset(
                     config["learning_config"]["dataset_config"]["test_paths"],
                     config["learning_config"]["dataset_config"]["tfrecords_dir"],
                     speech_featurizer, text_featurizer, "test",
                     augmentations=config["learning_config"]["augmentations"], shuffle=False
-                ).create(batch_size * args.eval_train_ratio)
+                )
             else:
                 test_dataset = ASRSliceDataset(
                     stage="test", speech_featurizer=speech_featurizer,
                     text_featurizer=text_featurizer,
                     data_paths=config["learning_config"]["dataset_config"]["test_paths"],
                     augmentations=config["learning_config"]["augmentations"], shuffle=False
-                ).create(batch_size * args.eval_train_ratio)
+                )
 
-            ctc_tester = BaseTester(
-                config=config["learning_config"]["running_config"],
-                saved_path=args.export, from_weights=args.from_weights
-            )
-            ctc_tester.compile(satt_ds2_model, speech_featurizer, text_featurizer)
+            ctc_tester = BaseTester(config=config["learning_config"]["running_config"])
+            ctc_tester.compile(satt_ds2_model)
             ctc_tester.run(test_dataset)
-
-        else:
-            assert args.export
-
-            # Build DS2 model
-            f, c = speech_featurizer.compute_feature_dim()
-            satt_ds2_model = SelfAttentionDS2(input_shape=[None, f, c],
-                                              arch_config=config["model_config"],
-                                              num_classes=text_featurizer.num_classes)
-            satt_ds2_model._build([1, 50, f, c])
-            optimizer = create_optimizer(
-                name=config["learning_config"]["optimizer_config"]["name"],
-                d_model=config["model_config"]["att"]["head_size"],
-                **config["learning_config"]["optimizer_config"]["config"]
-            )
-
-            def save_func(**kwargs):
-                if args.from_weights:
-                    kwargs["model"].save_weights(args.export)
-                else:
-                    kwargs["model"].save(args.export)
-
-            save_from_checkpoint(func=save_func,
-                                 outdir=config["learning_config"]["running_config"]["outdir"],
-                                 model=satt_ds2_model, optimizer=optimizer)
 
     args = parser.parse_args()
     run(args)

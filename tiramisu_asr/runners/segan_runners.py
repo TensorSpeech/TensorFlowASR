@@ -20,10 +20,10 @@ import soundfile as sf
 import tensorflow as tf
 import tensorflow.keras.mixed_precision.experimental as mixed_precision
 
-from ..featurizers.speech_featurizers import deemphasis
+from ..featurizers.speech_featurizers import deemphasis, tf_merge_slices, read_raw_audio
 from ..losses.segan_losses import generator_loss, discriminator_loss
 from .base_runners import BaseTrainer, BaseTester
-from ..utils.utils import merge_slices, print_test_info, shape_list
+from ..utils.utils import shape_list
 
 
 class SeganTrainer(BaseTrainer):
@@ -49,6 +49,10 @@ class SeganTrainer(BaseTrainer):
             "g_adv_loss": tf.keras.metrics.Mean("eval_g_adv_loss", dtype=tf.float32),
             "d_adv_loss": tf.keras.metrics.Mean("eval_d_adv_loss", dtype=tf.float32)
         }
+
+    def save_model_weights(self):
+        with self.strategy.scope():
+            self.generator.save_weights(os.path.join(self.config["outdir"], "latest.h5"))
 
     def run(self):
         """Run training."""
@@ -194,10 +198,8 @@ class SeganTrainer(BaseTrainer):
 class SeganTester(BaseTester):
     def __init__(self,
                  speech_config: dict,
-                 config: dict,
-                 saved_path: str,
-                 from_weights: bool = False):
-        super(SeganTester, self).__init__(config, saved_path, from_weights)
+                 config: dict):
+        super(SeganTester, self).__init__(config)
         self.speech_config = speech_config
         try:
             from semetrics import composite
@@ -206,13 +208,11 @@ class SeganTester(BaseTester):
             print(
                 f"Error: {e}\nPlease run ./scripts/install_semetrics.sh")
             return
-        self.test_noisy = os.path.join(self.config["outdir"], "test", "noisy")
-        self.test_gen = os.path.join(self.config["outdir"], "test", "gen")
-        if not os.path.exists(self.test_noisy):
-            os.makedirs(self.test_noisy)
-        if not os.path.exists(self.test_gen):
-            os.makedirs(self.test_gen)
-        self.test_file = os.path.join(self.config["outdir"], "test", "results.txt")
+        self.test_noisy_dir = os.path.join(self.config["outdir"], "test", "noisy")
+        self.test_gen_dir = os.path.join(self.config["outdir"], "test", "gen")
+        if not os.path.exists(self.test_noisy_dir): os.makedirs(self.test_noisy_dir)
+        if not os.path.exists(self.test_gen_dir): os.makedirs(self.test_gen_dir)
+        self.test_results = os.path.join(self.config["outdir"], "test", "results.txt")
         self.test_metrics = {
             "g_pesq": tf.keras.metrics.Mean("test_pesq", dtype=tf.float32),
             "g_csig": tf.keras.metrics.Mean("test_csig", dtype=tf.float32),
@@ -226,212 +226,97 @@ class SeganTester(BaseTester):
             "n_ssnr": tf.keras.metrics.Mean("test_noise_ssnr", dtype=tf.float32)
         }
 
-    def compile(self, generator: tf.keras.Model):
-        self.model = generator
-        if self.from_weights:
-            self.load_model_from_weights()
-        else:
-            self.load_model()
+    def set_test_data_loader(self, test_dataset):
+        """Set train data loader (MUST)."""
+        self.clean_dir = test_dataset.clean_dir
+        self.test_data_loader = test_dataset.create()
 
-    def _get_metrics(self):
-        return "PESQ = ", self.test_metrics['g_pesq'].result(), \
-               ", CSIG = ", self.test_metrics['g_csig'].result(), \
-               ", CBAK = ", self.test_metrics['g_cbak'].result(), \
-               ", COVL = ", self.test_metrics['g_covl'].result(), \
-               ", SSNR = ", self.test_metrics['g_ssnr'].result(),
-
-    @tf.function
     def _test_epoch(self):
-        for idx, batch in self.test_data_loader.enumerate(start=1):
-            self._test_step(batch)
-            print_test_info(*self._get_metrics(), batches=idx)
+        if self.processed_records > 0:
+            self.test_data_loader = self.test_data_loader.skip(self.processed_records)
+        progbar = tqdm(initial=self.processed_records, total=None,
+                       unit="batch", position=0, desc="[Test]")
+        test_iter = iter(self.test_data_loader)
+        while True:
+            try:
+                self._test_function(test_iter)
+            except StopIteration:
+                break
+            except tf.errors.OutOfRangeError:
+                break
+            progbar.update(1)
 
-    @tf.function
+        progbar.close()
+
+    @tf.function(experimental_relax_shapes=True)
+    def _test_function(self, iterator):
+        batch = next(iterator)
+        self._test_step(batch)
+
+    @tf.function(experimental_relax_shapes=True)
     def _test_step(self, batch):
         # Test only available for batch size = 1
-        name, clean_wavs, noisy_wavs = batch
-        g_wavs = self.model(noisy_wavs, training=False)
+        clean_wav_path, noisy_wavs = batch
+        g_wavs = self.model([noisy_wavs, self.model.get_z(shape_list(noisy_wavs)[0])],
+                            training=False)
 
         results = tf.numpy_function(
-            self._perform, inp=[clean_wavs, merge_slices(
-                g_wavs), merge_slices(noisy_wavs), name],
+            self._perform, inp=[clean_wav_path, tf_merge_slices(g_wavs),
+                                tf_merge_slices(noisy_wavs)],
             Tout=tf.float32
         )
 
         for idx, key in enumerate(self.test_metrics.keys()):
             self.test_metrics[key].update_state(results[idx])
 
-    def _get_save_file_paths(self, name: str):
-        return os.path.join(self.test_gen, name), os.path.join(self.test_noisy, name)
-
-    def _save_to_tmp(self,
-                     clean_signal: np.ndarray,
-                     gen_signal: np.ndarray,
-                     noisy_signal: np.ndarray,
-                     name: str):
-        gen_path, noisy_path = self._get_save_file_paths(name)
-        sf.write("/tmp/clean_signal.wav", clean_signal, self.speech_config["sample_rate"])
-        sf.write(gen_path, gen_signal, self.speech_config["sample_rate"])
-        sf.write(noisy_path, noisy_signal, self.speech_config["sample_rate"])
-
     def _perform(self,
-                 clean_batch: np.ndarray,
-                 gen_batch: np.ndarray,
-                 noisy_batch: np.ndarray,
-                 name: bytes) -> tf.Tensor:
-        name = name.decode("utf-8")
-        results = self._compare([clean_batch, gen_batch, noisy_batch], name)
+                 clean_wav_path: bytes,
+                 gen_signal: np.ndarray,
+                 noisy_signal: np.ndarray) -> tf.Tensor:
+        clean_wav_path = clean_wav_path.decode("utf-8")
+        results = self._compare(clean_wav_path, gen_signal, noisy_signal)
         return tf.convert_to_tensor(results, dtype=tf.float32)
 
-    def _compare(self, data_slice: list, name: str) -> list:
-        clean_slice, g_slice, n_slice = data_slice
-        clean_slice = deemphasis(clean_slice, self.speech_config["preemphasis"])
-        g_slice = deemphasis(g_slice, self.speech_config["preemphasis"])
-        n_slice = deemphasis(n_slice, self.speech_config["preemphasis"])
+    def _save_to_outdir(self,
+                        clean_wav_path: str,
+                        gen_signal: np.ndarray,
+                        noisy_signal: np.ndarray):
+        gen_path = clean_wav_path.replace(self.clean_dir, self.test_gen_dir)
+        noisy_path = clean_wav_path.replace(self.clean_dir, self.test_noisy_dir)
+        try:
+            os.makedirs(os.path.dirname(gen_path))
+            os.makedirs(os.path.dirname(noisy_path))
+        except Exception:
+            pass
+        # Avoid differences by writing original wav using sf
+        clean_wav = read_raw_audio(clean_wav_path, self.speech_config["sample_rate"])
+        sf.write("/tmp/clean.wav", clean_wav, self.speech_config["sample_rate"])
+        sf.write(gen_path,
+                 gen_signal,
+                 self.speech_config["sample_rate"])
+        sf.write(noisy_path,
+                 noisy_signal,
+                 self.speech_config["sample_rate"])
+        return gen_path, noisy_path
 
-        self._save_to_tmp(clean_slice, g_slice, n_slice, name)
-        gen_path, noisy_path = self._get_save_file_paths(name)
+    def _compare(self,
+                 clean_wav_path: str,
+                 gen_signal: np.ndarray,
+                 noisy_signal: np.ndarray) -> list:
+        gen_signal = deemphasis(gen_signal, self.speech_config["preemphasis"])
+        noisy_signal = deemphasis(noisy_signal, self.speech_config["preemphasis"])
 
-        pesq_gen, csig_gen, cbak_gen, covl_gen, ssnr_gen = self.composite(
-            "/tmp/clean_signal.wav", gen_path)
-        pesq_noisy, csig_noisy, cbak_noisy, covl_noisy, ssnr_noisy = self.composite(
-            "/tmp/clean_signal.wav", noisy_path)
+        gen_path, noisy_path = self._save_to_outdir(clean_wav_path, gen_signal, noisy_signal)
+
+        (pesq_gen, csig_gen, cbak_gen,
+         covl_gen, ssnr_gen) = self.composite("/tmp/clean.wav", gen_path)
+        (pesq_noisy, csig_noisy, cbak_noisy,
+         covl_noisy, ssnr_noisy) = self.composite("/tmp/clean.wav", noisy_path)
 
         return [pesq_gen, csig_gen, cbak_gen, covl_gen, ssnr_gen,
                 pesq_noisy, csig_noisy, cbak_noisy, covl_noisy, ssnr_noisy]
 
     def finish(self):
-        with open(self.test_file, "w", encoding="utf-8") as out:
+        with open(self.test_results, "w", encoding="utf-8") as out:
             for idx, key in enumerate(self.test_metrics.keys()):
                 out.write(f"{key} = {self.test_metrics[key].result().numpy():.2f}\n")
-
-
-# class SeganInferencer(BaseInferencer):
-#     def __init__(self,
-#                  speech_config: dict,
-#                  model_config: dict,
-#                  saved_path: str,
-#                  from_weights: bool = False):
-#         super(SeganInferencer, self).__init__(saved_path, from_weights)
-#         self.speech_config = speech_config
-#         self.model_config = model_config
-#
-#     def load_model(self):
-#         try:
-#             self.model = tf.keras.models.load_model(self.saved_path)
-#             print("Model loaded")
-#         except Exception as e:
-#             raise Exception(e)
-#
-#     def compile(self, *args, **kwargs):
-#         if self.from_weights:
-#             self.model = Generator(
-#                 g_enc_depths=self.model_config["g_enc_depths"],
-#                 window_size=self.speech_config["window_size"],
-#                 kwidth=self.model_config["kwidth"], ratio=self.model_config["ratio"]
-#             )
-#             self.model._build()
-#             self.load_model_from_weights()
-#         else:
-#             self.load_model()
-#
-#     def preprocess(self, audio):
-#         signal = read_raw_audio(audio, self.speech_config["sample_rate"])
-#         return (
-#             slice_signal(signal, self.speech_config["window_size"], stride=1),
-#             signal.shape[0]
-#         )
-#
-#     def postprocess(self, signal: np.ndarray):
-#         return deemphasis(signal, self.speech_config["preemphasis"])
-#
-#     def infer(self, audio):
-#         sliced_signal, original_length = self.preprocess(audio)
-#
-#         @tf.function
-#         def gen(slices):
-#             slices = tf.reshape(slices, [-1, self.speech_config["window_size"]])
-#             g_wavs = self.model(slices, training=False)
-#             return merge_slices(g_wavs)
-#
-#         output = gen(sliced_signal).numpy()
-#         output = output[:original_length + 1]
-#
-#         return self.postprocess(output)
-#
-#
-# class SeganTFLite(BaseInferencer):
-#     def __init__(self,
-#                  speech_config: dict,
-#                  saved_path: str):
-#         super(SeganTFLite, self).__init__(saved_path, False)
-#         self.speech_config = speech_config
-#
-#     def load_model(self):
-#         try:
-#             self.model = tf.lite.Interpreter(self.saved_path)
-#             self.model.allocate_tensors()
-#             print("Segan loaded")
-#         except Exception as e:
-#             raise Exception(e)
-#
-#     @staticmethod
-#     def convert_saved_model_to_tflite(saved_model_path: str,
-#                                       model_config: dict,
-#                                       speech_config: dict,
-#                                       tflite_path: str):
-#         print("Loading saved model ...")
-#         try:
-#             saved_model = tf.keras.models.load_model(saved_model_path)
-#         except Exception as e:
-#             raise Exception(e)
-#         saved_model = make_z_as_input(saved_model, model_config, speech_config)
-#
-#         print("Converting to tflite ...")
-#         converter = tf.lite.TFLiteConverter.from_keras_model(saved_model)
-#         converter.experimental_new_converter = True
-#         converter.optimizations = [tf.lite.Optimize.DEFAULT]
-#         tflite_model = converter.convert()
-#
-#         print("Writing to file ...")
-#         if not os.path.exists(os.path.dirname(tflite_path)):
-#             os.makedirs(os.path.dirname(tflite_path))
-#         with open(tflite_path, "wb") as tflite_out:
-#             tflite_out.write(tflite_model)
-#
-#         print(f"Done converting to {tflite_path}")
-#
-#     def compile(self):
-#         self.load_model()
-#         self.input_details = self.model.get_input_details()
-#         self.output_details = self.model.get_output_details()
-#
-#     def preprocess(self, audio):
-#         signal = read_raw_audio(audio, self.speech_config["sample_rate"])
-#         slices = slice_signal(signal, self.speech_config["window_size"], stride=1)
-#         slices = np.reshape(slices, [-1, 1, self.speech_config["window_size"]])
-#         return slices, signal.shape[0]
-#
-#     def postprocess(self, signal: np.ndarray):
-#         return deemphasis(signal, self.speech_config["preemphasis"])
-#
-#     def infer(self, audio):
-#         slices, original_length = self.preprocess(audio)
-#         g_wavs = np.array([])
-#
-#         for idx, s in enumerate(slices):
-#             # audio shape [1, window_size]
-#             self.model.set_tensor(self.input_details[0]['index'], s)
-#
-#             # z shape [1, last_enc, 1, last_enc_channel]
-#             z = np.random.normal(0., 1., self.input_details[1]['shape']).astype(np.float32)
-#             self.model.set_tensor(self.input_details[1]['index'], z)
-#
-#             self.model.invoke()
-#
-#             output = self.model.get_tensor(self.output_details[0]['index'])
-#             g_wavs = np.concatenate([g_wavs, output[0]])
-#
-#         g_wavs = g_wavs[:original_length + 1]
-#
-#         return self.postprocess(g_wavs)
