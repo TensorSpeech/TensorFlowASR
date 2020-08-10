@@ -16,6 +16,7 @@ import os
 import collections
 import tensorflow as tf
 
+from . import Model
 from ..utils.utils import shape_list, get_shape_invariants
 from ..featurizers.speech_featurizers import TFSpeechFeaturizer
 from ..featurizers.text_featurizers import TextFeaturizer
@@ -24,6 +25,28 @@ Hypotheses = collections.namedtuple(
     "Hypotheses",
     ("scores", "yseqs", "p_memory_states")
 )
+
+
+class BT1V(tf.keras.layers.Layer):
+    def __init__(self, name="reshape_bt1v", **kwargs):
+        super(BT1V, self).__init__(trainable=False, name=name, **kwargs)
+
+    def call(self, inputs):
+        return tf.expand_dims(inputs, axis=2)
+
+    def get_config(self):
+        return super(BT1V, self).get_config()
+
+
+class B1UV(tf.keras.layers.Layer):
+    def __init__(self, name="reshape_b1uv", **kwargs):
+        super(B1UV, self).__init__(trainable=False, name=name, **kwargs)
+
+    def call(self, inputs):
+        return tf.expand_dims(inputs, axis=1)
+
+    def get_config(self):
+        return super(B1UV, self).get_config()
 
 
 class TransducerPrediction(tf.keras.Model):
@@ -59,7 +82,7 @@ class TransducerPrediction(tf.keras.Model):
             )
         return memory_states
 
-    @tf.function(experimental_relax_shapes=True)
+    @tf.function(experimental_relax_shapes=True)  # avoid error in tflite conversion
     def call(self,
              inputs,
              training=False,
@@ -77,7 +100,7 @@ class TransducerPrediction(tf.keras.Model):
             outputs = outputs[0]
             n_memory_states.append(new_memory_states)
 
-        # return shapes [B, T, P], ([num_lstms, B, P], [num_lstms, B, P]) if using lstm
+        # return shapes [B, T, P], ([num_lstms, B, P], [num_lstms, B, P])
         return outputs, n_memory_states
 
     def get_config(self):
@@ -98,9 +121,12 @@ class TransducerJoint(tf.keras.Model):
         super(TransducerJoint, self).__init__(name=name, **kwargs)
         self.ffn_enc = tf.keras.layers.Dense(joint_dim, name=f"{name}_enc")
         self.ffn_pred = tf.keras.layers.Dense(joint_dim, name=f"{name}_pred")
+        self.bt1v = BT1V(name=f"{name}_bt1v")
+        self.b1uv = B1UV(name=f"{name}_b1uv")
+        self.add = tf.keras.layers.Add(name=f"{name}_add")
+        self.tanh = tf.keras.layers.Activation(tf.nn.tanh, name=f"{name}_tanh")
         self.ffn_out = tf.keras.layers.Dense(vocabulary_size, name=f"{name}_vocab")
 
-    @tf.function(experimental_relax_shapes=True)
     def call(self, inputs, training=False, **kwargs):
         # enc has shape [B, T, E]
         # pred has shape [B, U, P]
@@ -108,7 +134,10 @@ class TransducerJoint(tf.keras.Model):
         enc_out = self.ffn_enc(enc, training=training)  # [B, T ,E] => [B, T, V]
         pred_out = self.ffn_pred(pred, training=training)  # [B, U, P] => [B, U, V]
         # => [B, T, U, V]
-        outputs = tf.nn.tanh(tf.expand_dims(enc_out, axis=2) + tf.expand_dims(pred_out, axis=1))
+        enc_out = self.bt1v(enc_out)
+        pred_out = self.b1uv(pred_out)
+        outputs = self.add([enc_out, pred_out])
+        outputs = self.tanh(outputs)
         outputs = self.ffn_out(outputs, training=training)
         return outputs
 
@@ -120,7 +149,7 @@ class TransducerJoint(tf.keras.Model):
         return conf
 
 
-class Transducer(tf.keras.Model):
+class Transducer(Model):
     """ Transducer Model Warper """
 
     def __init__(self,
@@ -151,10 +180,10 @@ class Transducer(tf.keras.Model):
         )
         self.kept_hyps = None
 
-    def _build(self, sample_shape):  # Call on real data for building model
-        features = tf.random.normal(shape=sample_shape)
-        predicted = tf.constant([[0, 1, 2, 3, 4, 5, 6, 7, 8, 9]])
-        self([features, predicted], training=True)
+    def _build(self, input_shape):
+        inputs = tf.keras.Input(shape=input_shape, dtype=tf.float32)
+        pred = tf.keras.Input(shape=[None], dtype=tf.int32)
+        self([inputs, pred], training=False)
 
     def save_seperate(self, path_to_dir: str):
         self.encoder.save(os.path.join(path_to_dir, "encoder"))
@@ -167,7 +196,6 @@ class Transducer(tf.keras.Model):
         self.joint_net.summary(line_length=line_length, **kwargs)
         super(Transducer, self).summary(line_length=line_length, **kwargs)
 
-    @tf.function(experimental_relax_shapes=True)
     def call(self, inputs, training=False):
         """
         Transducer Model call function
@@ -259,7 +287,7 @@ class Transducer(tf.keras.Model):
                        streaming: bool = False) -> tf.Tensor:
         new_hyps = Hypotheses(
             tf.constant(0.0, dtype=tf.float32),
-            self.text_featurizer.blank * tf.ones([1], dtype=tf.int32),
+            tf.constant([self.text_featurizer.blank], dtype=tf.int32),
             self.predict_net.get_initial_state(features)
         )
 

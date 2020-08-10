@@ -31,12 +31,11 @@ class CtcModel(tf.keras.Model):
         super(CtcModel, self).__init__(name=name, **kwargs)
         self.base_model = base_model
         # Fully connected layer
-        self.fc = tf.keras.layers.TimeDistributed(
-            tf.keras.layers.Dense(units=num_classes, activation="linear",
-                                  use_bias=True), name=f"{name}_fc")
+        self.fc = tf.keras.layers.Dense(units=num_classes, activation="linear",
+                                        use_bias=True, name=f"{name}_fc")
 
-    def _build(self, sample_shape):
-        features = tf.random.normal(shape=sample_shape)
+    def _build(self, input_shape):
+        features = tf.keras.Input(input_shape, dtype=tf.float32)
         self(features, training=False)
 
     def summary(self, line_length=None, **kwargs):
@@ -49,7 +48,6 @@ class CtcModel(tf.keras.Model):
         self.speech_featurizer = speech_featurizer
         self.text_featurizer = text_featurizer
 
-    @tf.function(experimental_relax_shapes=True)
     def call(self, inputs, training=False, **kwargs):
         outputs = self.base_model(inputs, training=training)
         outputs = self.fc(outputs, training=training)

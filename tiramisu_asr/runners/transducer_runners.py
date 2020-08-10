@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import os
 import tensorflow as tf
 import tensorflow.keras.mixed_precision.experimental as mixed_precision
 
@@ -46,6 +47,10 @@ class TransducerTrainer(BaseTrainer):
         self.eval_metrics = {
             "transducer_loss": tf.keras.metrics.Mean("eval_transducer_loss", dtype=tf.float32)
         }
+
+    def save_model_weights(self):
+        with self.strategy.scope():
+            self.model.save_weights(os.path.join(self.config["outdir"], "latest.h5"))
 
     @tf.function(experimental_relax_shapes=True)
     def _train_step(self, batch):

@@ -105,12 +105,11 @@ def main():
 
         with conformer_trainer.strategy.scope():
             # build model
-            f, c = speech_featurizer.compute_feature_dim()
             conformer = Conformer(
                 **config["model_config"],
                 vocabulary_size=text_featurizer.num_classes
             )
-            conformer._build([1, 50, f, c])
+            conformer._build(speech_featurizer.compute_feature_shape())
 
             optimizer_config = config["learning_config"]["optimizer_config"]
             optimizer = tf.keras.optimizers.Adam(

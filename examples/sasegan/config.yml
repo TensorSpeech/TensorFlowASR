@@ -23,20 +23,24 @@ model_config:
     g_enc_depths: [16, 32, 32, 64, 64, 128, 128, 256, 256, 512, 1024]
     kwidth: 31
     ratio: 2
+    att_layer_idx: 5
   discriminator:
     d_num_fmaps: [16, 32, 32, 64, 64, 128, 128, 256, 256, 512, 1024]
     kwidth: 31
     ratio: 2
+    att_layer_idx: 5
 
 learning_config:
   augmentations: null
 
   dataset_config:
-    noise_config:
-      noises: /mnt/Data/ML/ASR/Preprocessed/Noises/train
-    train_paths: /mnt/Data/ML/ASR/Preprocessed/Vivos/train
+    train_paths:
+      clean: /mnt/Data/ML/ASR/Preprocessed/Vivos/train
+      noisy: /mnt/Data/ML/ASR/Preprocessed/Vivos/train
     eval_paths: null
-    test_paths: /mnt/Data/ML/ASR/Preprocessed/Vivos/test
+    test_paths:
+      clean: /mnt/Data/ML/ASR/Preprocessed/Vivos/test
+      noisy: /mnt/Data/ML/ASR/Preprocessed/Vivos/test
 
   optimizer_config:
     generator:
@@ -60,7 +64,7 @@ learning_config:
     l1_lambda: 100.0
 
     num_epochs: 86
-    outdir: /mnt/Projects/asrk16/trained/local/segan
+    outdir: /mnt/Projects/asrk16/trained/local/sasegan
     log_interval_steps: 500
     eval_interval_steps: 1000
     save_interval_steps: 500

@@ -33,20 +33,21 @@ class ConvSubsampling(tf.keras.layers.Layer):
         self.conv1 = tf.keras.layers.Conv2D(
             filters=odim, kernel_size=(3, 3),
             strides=((reduction_factor // 2), 2),
-            padding="same", activation="relu", name=f"{name}_1"
+            padding="same", name=f"{name}_1"
         )
         self.conv2 = tf.keras.layers.Conv2D(
             filters=odim, kernel_size=(3, 3),
             strides=(2, 2), padding="same",
-            activation="relu", name=f"{name}_2"
+            name=f"{name}_2"
         )
         self.linear = tf.keras.layers.Dense(odim, name=f"{name}_linear")
         self.do = tf.keras.layers.Dropout(dropout, name=f"{name}_dropout")
 
-    @tf.function(experimental_relax_shapes=True)
     def call(self, inputs, training=False, **kwargs):
         outputs = self.conv1(inputs, training=training)
+        outputs = tf.nn.relu(outputs)
         outputs = self.conv2(outputs, training=training)
+        outputs = tf.nn.relu(outputs)
         outputs = merge_two_last_dims(outputs)
         outputs = self.linear(outputs, training=training)
         return self.do(outputs, training=training)
@@ -78,7 +79,6 @@ class FFModule(tf.keras.layers.Layer):
         self.do2 = tf.keras.layers.Dropout(dropout, name=f"{name}_dropout_2")
         self.res_add = tf.keras.layers.Add(name=f"{name}_add")
 
-    @tf.function(experimental_relax_shapes=True)
     def call(self, inputs, training=False, **kwargs):
         outputs = self.ln(inputs, training=training)
         outputs = self.ffn1(outputs, training=training)
@@ -117,7 +117,6 @@ class MHSAModule(tf.keras.layers.Layer):
         self.do = tf.keras.layers.Dropout(dropout, name=f"{name}_dropout")
         self.res_add = tf.keras.layers.Add(name=f"{name}_add")
 
-    @tf.function(experimental_relax_shapes=True)
     def call(self, inputs, training=False, **kwargs):
         outputs = self.pc(inputs)
         outputs = self.ln(outputs, training=training)
@@ -162,7 +161,6 @@ class ConvModule(tf.keras.layers.Layer):
         self.do = tf.keras.layers.Dropout(dropout, name=f"{name}_dropout")
         self.res_add = tf.keras.layers.Add(name=f"{name}_add")
 
-    @tf.function(experimental_relax_shapes=True)
     def call(self, inputs, training=False, **kwargs):
         outputs = self.ln(inputs, training=training)
         outputs = self.pw_conv_1(outputs, training=training)
@@ -212,7 +210,6 @@ class ConformerBlock(tf.keras.layers.Layer):
                              name=f"{name}_ff_module_2")
         self.ln = tf.keras.layers.LayerNormalization(name=f"{name}_ln")
 
-    @tf.function(experimental_relax_shapes=True)
     def call(self, inputs, training=False, **kwargs):
         outputs = self.ffm1(inputs, training=training)
         outputs = self.mhsam(outputs, training=training)
@@ -261,7 +258,6 @@ class ConformerEncoder(tf.keras.Model):
             )
             self.conformer_blocks.append(conformer_block)
 
-    @tf.function(experimental_relax_shapes=True)
     def call(self, inputs, training=False, **kwargs):
         # input with shape [B, T, V1, V2]
         outputs = self.conv_subsampling(inputs, training=training)
