@@ -28,13 +28,15 @@ from ..utils.utils import shape_list
 
 class SeganTrainer(BaseTrainer):
     def __init__(self,
+                 speech_config: dict,
                  training_config: dict,
                  is_mixed_precision: bool = False,
                  strategy: tf.distribute.Strategy = None):
-        super(SeganTrainer, self).__init__(config=training_config, strategy=strategy)
+        self.speech_config = speech_config
         self.is_mixed_precision = is_mixed_precision
         self.deactivate_l1 = False
         self.deactivate_noise = False
+        super(SeganTrainer, self).__init__(config=training_config, strategy=strategy)
 
     def set_train_metrics(self):
         self.train_metrics = {
@@ -83,7 +85,16 @@ class SeganTrainer(BaseTrainer):
         self.train_progbar.close()
         print("> Finish training")
 
-    @tf.function(experimental_relax_shapes=True)
+    def create_train_step(self):
+        return tf.function(
+            self._train_step,
+            experimental_relax_shapes=True,
+            input_signature=[(
+                tf.TensorSpec([None, self.speech_config["window_size"]], dtype=tf.float32),
+                tf.TensorSpec([None, self.speech_config["window_size"]], dtype=tf.float32)
+            )]
+        )
+
     def _train_step(self, batch):
         clean_wavs, noisy_wavs = batch
         with tf.GradientTape() as gen_tape, tf.GradientTape() as disc_tape:
@@ -146,7 +157,16 @@ class SeganTrainer(BaseTrainer):
         self.train_metrics["g_adv_loss"].update_state(_gen_adv_loss)
         self.train_metrics["d_adv_loss"].update_state(_disc_loss)
 
-    @tf.function(experimental_relax_shapes=True)
+    def create_eval_step(self):
+        return tf.function(
+            self._eval_step,
+            experimental_relax_shapes=True,
+            input_signature=[(
+                tf.TensorSpec([None, self.speech_config["window_size"]], dtype=tf.float32),
+                tf.TensorSpec([None, self.speech_config["window_size"]], dtype=tf.float32)
+            )]
+        )
+
     def _eval_step(self, batch):
         clean_wavs, noisy_wavs = batch
 

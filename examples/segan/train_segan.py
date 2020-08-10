@@ -56,6 +56,7 @@ def main():
     )
 
     segan_trainer = SeganTrainer(
+        config["speech_config"],
         config["learning_config"]["running_config"],
         args.mixed_precision
     )
