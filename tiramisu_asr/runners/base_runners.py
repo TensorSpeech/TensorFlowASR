@@ -85,6 +85,9 @@ class BaseTrainer(BaseRunner):
         # Dataset
         self.train_data_loader = None
         self.eval_data_loader = None
+        # Step functions
+        self.train_step = self.create_train_step()
+        self.eval_step = self.create_eval_step()
 
         with self.strategy.scope():
             self.set_train_metrics()
@@ -223,7 +226,12 @@ class BaseTrainer(BaseRunner):
     @tf.function(experimental_relax_shapes=True)
     def _train_function(self, iterator):
         batch = next(iterator)
-        self.strategy.run(self._train_step, args=(batch,))
+        self.strategy.run(self.train_step, args=(batch,))
+
+    @abc.abstractmethod
+    def create_train_step(self):
+        """ Create train_step from _train_step """
+        raise NotImplementedError()
 
     @abc.abstractmethod
     def _train_step(self, batch):
@@ -274,7 +282,12 @@ class BaseTrainer(BaseRunner):
     @tf.function(experimental_relax_shapes=True)
     def _eval_function(self, iterator):
         batch = next(iterator)
-        self.strategy.run(self._eval_step, args=(batch,))
+        self.strategy.run(self.eval_step, args=(batch,))
+
+    @abc.abstractmethod
+    def create_eval_step(self):
+        """ Create eval_step from _eval_step """
+        raise NotImplementedError()
 
     @abc.abstractmethod
     def _eval_step(self, batch):
