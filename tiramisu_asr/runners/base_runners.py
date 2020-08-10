@@ -185,6 +185,7 @@ class BaseTrainer(BaseRunner):
             self._train_epoch()
 
         self.save_checkpoint()
+        self.save_model_weights()
 
         self.train_progbar.close()
         print("> Finish training")
