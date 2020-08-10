@@ -34,6 +34,34 @@ def read_raw_audio(audio, sample_rate=16000):
     return wave
 
 
+def slice_signal(signal, window_size, stride=0.5) -> np.ndarray:
+    """ Return windows of the given signal by sweeping in stride fractions of window """
+    assert signal.ndim == 1, signal.ndim
+    n_samples = signal.shape[0]
+    offset = int(window_size * stride)
+    slices = []
+    for beg_i, end_i in zip(range(0, n_samples, offset),
+                            range(window_size, n_samples + offset,
+                                  offset)):
+        slice_ = signal[beg_i:end_i]
+        if slice_.shape[0] < window_size:
+            slice_ = np.pad(
+                slice_, (0, window_size - slice_.shape[0]), 'constant', constant_values=0.0)
+        if slice_.shape[0] == window_size:
+            slices.append(slice_)
+    return np.array(slices, dtype=np.float32)
+
+
+def tf_merge_slices(slices: tf.Tensor) -> tf.Tensor:
+    # slices shape = [batch, window_size]
+    return tf.keras.backend.flatten(slices)  # return shape = [-1, ]
+
+
+def merge_slices(slices: np.ndarray) -> np.ndarray:
+    # slices shape = [batch, window_size]
+    return np.reshape(slices, [-1])
+
+
 def normalize_audio_feature(audio_feature: np.ndarray, per_feature=False):
     """ Mean and variance normalization """
     axis = 0 if per_feature else None
@@ -170,7 +198,8 @@ class SpeechFeaturizer:
         total_frames = seconds * self.sample_rate + 2 * (self.frame_length // 2)
         return int(1 + (total_frames - self.frame_length) // self.frame_step)
 
-    def compute_feature_dim(self) -> tuple:
+    def compute_feature_shape(self) -> list:
+        # None for time dimension
         channel_dim = 1
 
         if self.delta:
@@ -182,7 +211,7 @@ class SpeechFeaturizer:
         if self.pitch:
             channel_dim += 1
 
-        return self.num_feature_bins, channel_dim
+        return [None, self.num_feature_bins, channel_dim]
 
     def extract(self, signal: np.ndarray) -> np.ndarray:
         if self.normalize_signal:
@@ -346,13 +375,9 @@ class TFSpeechFeaturizer:
             spectrogram.shape[:-1].concatenate(linear_to_weight_matrix.shape[-1:]))
         return tf.math.log(mel_spectrogram + 1e-6)
 
-    def compute_feature_dim(self) -> tuple:
-        channel_dim = 1
-        return self.num_feature_bins, channel_dim
-
     def compute_feature_shape(self) -> list:
-        f, c = self.compute_feature_dim()
-        return [None, None, f, c]
+        # None for time dimension
+        return [None, self.num_feature_bins, 1]
 
     def compute_tf_spectrogram_features(self, signal):
         spectrogram = self.__compute_spectrogram(signal)

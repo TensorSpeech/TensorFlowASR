@@ -276,10 +276,9 @@ class Generator(Model):
         return tf.random.normal(self._get_z_shape(batch_size), mean=mean, stddev=stddev)
 
     def _build(self):
-        input_shape = [None, self.window_size]
+        input_shape = [self.window_size]
         z_shape = self._get_z_shape(None)
-        self.build([input_shape, z_shape])
-        noisy, z = tf.keras.Input(input_shape[1:]), tf.keras.Input(z_shape[1:])
+        noisy, z = tf.keras.Input(input_shape), tf.keras.Input(z_shape[1:])
         self([noisy, z], training=False)
 
     def summary(self, line_length=100):
@@ -357,9 +356,8 @@ class Discriminator(Model):
         self.dense = tf.keras.layers.Dense(1, name=f"{name}_fully_connected")
 
     def _build(self):
-        input_shape = [None, self.window_size]
-        self.build([input_shape, input_shape])
-        clean, noisy = tf.keras.Input(input_shape[1:]), tf.keras.Input(input_shape[1:])
+        input_shape = [self.window_size]
+        clean, noisy = tf.keras.Input(input_shape), tf.keras.Input(input_shape)
         self([clean, noisy], training=False)
 
     def call(self, inputs, training=False, noise_std=0., **kwargs):

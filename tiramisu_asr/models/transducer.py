@@ -180,10 +180,8 @@ class Transducer(Model):
         )
         self.kept_hyps = None
 
-    def _build(self, input_shape):  # Call on real data for building model
-        input_shape_nobatch = input_shape[1:]
-        self.build([input_shape, [None, None]])
-        inputs = tf.keras.Input(shape=input_shape_nobatch)
+    def _build(self, input_shape):
+        inputs = tf.keras.Input(shape=input_shape, dtype=tf.float32)
         pred = tf.keras.Input(shape=[None], dtype=tf.int32)
         self([inputs, pred], training=False)
 

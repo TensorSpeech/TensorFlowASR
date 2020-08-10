@@ -1,4 +1,4 @@
-# Copyright 2020 Huy Le Nguyen (@usimarit) and Huy Phan (@pquochuy)
+# Copyright 2020 Huy Le Nguyen (@usimarit)
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -19,27 +19,21 @@ setup_environment()
 import tensorflow as tf
 
 from tiramisu_asr.runners.segan_runners import SeganTrainer
-from tiramisu_asr.datasets.segan_dataset import SeganTrainDataset
+from tiramisu_asr.datasets.segan_dataset import SeganAugTrainDataset
 from tiramisu_asr.configs.user_config import UserConfig
-from tiramisu_asr.models.sasegan import Generator, Discriminator
+from tiramisu_asr.models.segan import Generator, Discriminator
 
 DEFAULT_YAML = os.path.join(os.path.abspath(os.path.dirname(__file__)), "config.yml")
 
 
 def main():
-    parser = argparse.ArgumentParser(prog="SASEGAN")
+    parser = argparse.ArgumentParser(prog="SEGAN")
 
     parser.add_argument("--config", "-c", type=str, default=DEFAULT_YAML,
                         help="The file path of model configuration file")
 
-    parser.add_argument("--export", "-e", type=str, default=None,
-                        help="Path to the model file to be exported")
-
     parser.add_argument("--mixed_precision", type=bool, default=False,
                         help="Whether to use mixed precision training")
-
-    parser.add_argument("--from_weights", type=bool, default=False,
-                        help="Whether to save or load only weights")
 
     parser.add_argument("--max_ckpts", type=int, default=10,
                         help="Max number of checkpoints to keep")
@@ -55,10 +49,9 @@ def main():
         tf.keras.mixed_precision.experimental.set_policy(policy)
         print("Enabled mixed precision training")
 
-    dataset = SeganTrainDataset(
-        stage="train",
-        clean_dir=config["learning_config"]["dataset_config"]["train_paths"]["clean"],
-        noisy_dir=config["learning_config"]["dataset_config"]["train_paths"]["noisy"],
+    dataset = SeganAugTrainDataset(
+        stage="train", clean_dir=config["learning_config"]["dataset_config"]["train_paths"],
+        noises_config=config["learning_config"]["dataset_config"]["noise_config"],
         speech_config=config["speech_config"], shuffle=True
     )
 
@@ -73,24 +66,18 @@ def main():
             **config["model_config"]["generator"]
         )
         generator._build()
-        generator.summary(line_length=150)
+        generator.summary(line_length=100)
         discriminator = Discriminator(
             window_size=config["speech_config"]["window_size"],
             **config["model_config"]["discriminator"]
         )
         discriminator._build()
-        discriminator.summary(line_length=150)
+        discriminator.summary(line_length=100)
 
     segan_trainer.compile(generator, discriminator,
                           config["learning_config"]["optimizer_config"],
                           max_to_keep=args.max_ckpts)
     segan_trainer.fit(train_dataset=dataset)
-
-    if args.export:
-        if args.from_weights:
-            segan_trainer.generator.save_weights(args.export)
-        else:
-            segan_trainer.generator.save(args.export)
 
 
 if __name__ == "__main__":

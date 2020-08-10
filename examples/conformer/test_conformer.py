@@ -37,10 +37,7 @@ def main():
     parser.add_argument("--config", type=str, default=DEFAULT_YAML,
                         help="The file path of model configuration file")
 
-    parser.add_argument("--from_weights", type=bool, default=False,
-                        help="Whether to save or load only weights")
-
-    parser.add_argument("--saved_model", type=str, default=None,
+    parser.add_argument("--saved", type=str, default=None,
                         help="Path to saved model")
 
     parser.add_argument("--tfrecords", type=bool, default=False,
@@ -52,7 +49,7 @@ def main():
         text_featurizer = TextFeaturizer(config["decoder_config"])
 
         tf.random.set_seed(0)
-        assert args.saved_model
+        assert args.saved
 
         if args.tfrecords:
             test_dataset = ASRTFRecordDataset(
@@ -60,14 +57,14 @@ def main():
                 config["learning_config"]["dataset_config"]["tfrecords_dir"],
                 speech_featurizer, text_featurizer, "test",
                 augmentations=config["learning_config"]["augmentations"], shuffle=False
-            ).create(config["learning_config"]["running_config"]["batch_size"])
+            )
         else:
             test_dataset = ASRSliceDataset(
                 stage="test", speech_featurizer=speech_featurizer,
                 text_featurizer=text_featurizer,
                 data_paths=config["learning_config"]["dataset_config"]["eval_paths"],
                 shuffle=False
-            ).create(config["learning_config"]["running_config"]["batch_size"])
+            )
 
         # build model
         conformer = Conformer(
@@ -76,12 +73,11 @@ def main():
         )
         conformer._build(speech_featurizer.compute_feature_shape())
         conformer.summary(line_length=100)
+        conformer.load_weights(args.saved)
+        conformer.add_featurizers(speech_featurizer, text_featurizer)
 
-        conformer_tester = BaseTester(
-            config=config["learning_config"]["running_config"],
-            saved_path=args.saved_model, from_weights=args.from_weights
-        )
-        conformer_tester.compile(conformer, speech_featurizer, text_featurizer)
+        conformer_tester = BaseTester(config=config["learning_config"]["running_config"])
+        conformer_tester.compile(conformer)
         conformer_tester.run(test_dataset)
 
     args = parser.parse_args()

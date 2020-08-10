@@ -347,8 +347,8 @@ class Generator(tf.keras.Model):
 
     def _build(self):
         input_shape = [self.window_size]
-        z_shape = self._get_z_shape(None)[1:]
-        noisy, z = tf.keras.Input(input_shape), tf.keras.Input(z_shape)
+        z_shape = self._get_z_shape(None)
+        noisy, z = tf.keras.Input(input_shape), tf.keras.Input(z_shape[1:])
         self([noisy, z], training=False)
 
     def summary(self, line_length=100):

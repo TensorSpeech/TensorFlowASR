@@ -37,14 +37,8 @@ def main():
     parser.add_argument("--config", "-c", type=str, default=DEFAULT_YAML,
                         help="The file path of model configuration file")
 
-    parser.add_argument("--export", "-e", type=str, default=None,
-                        help="Path to the model file to be exported")
-
     parser.add_argument("--mixed_precision", type=bool, default=False,
                         help="Whether to use mixed precision training")
-
-    parser.add_argument("--save_weights", type=bool, default=False,
-                        help="Whether to save or load only weights")
 
     parser.add_argument("--max_ckpts", type=int, default=10,
                         help="Max number of checkpoints to keep")
@@ -98,24 +92,17 @@ def main():
                              config["learning_config"]["running_config"],
                              args.mixed_precision)
     # Build DS2 model
-    f, c = speech_featurizer.compute_feature_dim()
     with ctc_trainer.strategy.scope():
-        ds2_model = DeepSpeech2(input_shape=[None, f, c],
+        ds2_model = DeepSpeech2(input_shape=speech_featurizer.compute_feature_shape(),
                                 arch_config=config["model_config"],
                                 num_classes=text_featurizer.num_classes,
                                 name="deepspeech2")
-        ds2_model._build([1, 50, f, c])
+        ds2_model._build(speech_featurizer.compute_feature_shape())
     # Compile
     ctc_trainer.compile(ds2_model, config["learning_config"]["optimizer_config"],
                         max_to_keep=args.max_ckpts)
 
     ctc_trainer.fit(train_dataset, eval_dataset, args.eval_train_ratio)
-
-    if args.export:
-        if args.save_weights:
-            ctc_trainer.model.save_weights(args.export)
-        else:
-            ctc_trainer.model.save(args.export)
 
 
 if __name__ == '__main__':

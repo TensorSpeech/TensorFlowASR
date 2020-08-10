@@ -21,7 +21,6 @@ from colorama import Fore
 import numpy as np
 import tensorflow as tf
 
-from ..featurizers.text_featurizers import TextFeaturizer
 from ..utils.utils import preprocess_paths, get_num_batches, bytes_to_string
 from ..utils.metrics import ErrorRate, wer, cer
 
@@ -157,6 +156,9 @@ class BaseTrainer(BaseRunner):
         with self.strategy.scope():
             if self.ckpt_manager.latest_checkpoint:
                 self.ckpt.restore(self.ckpt_manager.latest_checkpoint)
+
+    def save_model_weights(self):
+        pass
 
     # -------------------------------- RUNNING -------------------------------------
 
@@ -303,6 +305,7 @@ class BaseTrainer(BaseRunner):
         """Save log interval."""
         if self.steps % self.config["save_interval_steps"] == 0:
             self.save_checkpoint()
+            self.save_model_weights()
 
     def _check_eval_interval(self):
         """Save log interval."""
@@ -326,52 +329,14 @@ class BaseTrainer(BaseRunner):
     # -------------------------------- END -------------------------------------
 
 
-class BaseLoader(metaclass=abc.ABCMeta):
-    """ Based class for loading saved model """
-
-    def __init__(self,
-                 saved_path: str,
-                 from_weights: bool = False):
-        self.saved_path = preprocess_paths(saved_path)
-        self.from_weights = from_weights
-
-    def load_model(self):
-        try:
-            self.model = tf.saved_model.load(self.saved_path)
-            print("Model loaded")
-        except Exception as e:
-            raise Exception(e)
-
-    def load_model_from_weights(self):
-        try:
-            self.model.load_weights(self.saved_path)
-        except Exception as e:
-            raise Exception(e)
-
-    @abc.abstractmethod
-    def compile(self, *args, **kwargs):
-        """ Define a way to create model and load model """
-        raise NotImplementedError()
-
-
-class BaseTester(BaseLoader, BaseRunner):
+class BaseTester(BaseRunner):
     """ Customized tester module for all models
     This tester model will write results to test.tsv file in outdir
     After writing finished, it will calculate testing metrics
     """
 
-    def __init__(self,
-                 config: dict,
-                 saved_path: str,
-                 from_weights: bool = False):
-        """
-        Args:
-            config: the 'learning_config' part in YAML config file
-            saved_path: path to exported weights or model
-            from_weights: choose to load from weights or from whole model
-        """
-        BaseLoader.__init__(self, saved_path, from_weights)
-        BaseRunner.__init__(self, config)
+    def __init__(self, config: dict):
+        super(BaseTester, self).__init__(config)
         self.test_data_loader = None
         self.processed_records = 0
 
@@ -387,32 +352,23 @@ class BaseTester(BaseLoader, BaseRunner):
 
         if os.path.exists(self.output_file_path):
             with open(self.output_file_path, "r", encoding="utf-8") as out:
-                self.processed_records = get_num_batches(len(out.read().splitlines()) - 1,
-                                                         self.config["batch_size"])
+                self.processed_records = get_num_batches(
+                    len(out.read().splitlines()) - 1,
+                    self.config["batch_size"]
+                )
         else:
             with open(self.output_file_path, "w") as out:
                 out.write("PATH\tGROUNDTRUTH\tGREEDY\tBEAMSEARCH\tBEAMSEARCHLM\n")
 
     def set_test_data_loader(self, test_dataset):
         """Set train data loader (MUST)."""
-        self.test_data_loader = test_dataset
+        self.test_data_loader = test_dataset.create(self.config["batch_size"])
 
     # -------------------------------- RUNNING -------------------------------------
 
-    def compile(self,
-                builtmodel: tf.keras.Model,
-                speech_featurizer: any,
-                text_featurizer: TextFeaturizer):
-        self.model = builtmodel
-        if not self.from_weights:
-            saved_model = tf.keras.models.load_model(self.saved_path)
-            self.model.set_weights(saved_model.get_weights())
-        else:
-            self.model.load_weights(self.saved_path)
-        self.model.add_featurizers(
-            speech_featurizer=speech_featurizer,
-            text_featurizer=text_featurizer
-        )
+    def compile(self, trained_model: tf.keras.Model):
+        """ Set loaded trained model """
+        self.model = trained_model
 
     def run(self, test_dataset):
         self.set_test_data_loader(test_dataset)
@@ -511,22 +467,3 @@ class BaseTester(BaseLoader, BaseRunner):
                 out.write(f"{path.strip()}\t{line}\n")
 
     # -------------------------------- END -------------------------------------
-
-
-class BaseInferencer(BaseLoader):
-    """ Customized inferencer module for all models """
-
-    @abc.abstractmethod
-    def preprocess(self, *args, **kwargs):
-        """ Preprocessing stage """
-        raise NotImplementedError()
-
-    @abc.abstractmethod
-    def postprocess(self, *args, **kwargs):
-        """ Postprocessing stage """
-        raise NotImplementedError()
-
-    @abc.abstractmethod
-    def infer(self, inputs):
-        """ Function for infering result """
-        raise NotImplementedError()
