@@ -99,6 +99,7 @@ def main():
 
         conformer_trainer = TransducerTrainer(
             config=config["learning_config"]["running_config"],
+            speech_featurizer=speech_featurizer,
             text_featurizer=text_featurizer,
             is_mixed_precision=args.mixed_precision
         )
