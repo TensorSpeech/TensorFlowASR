@@ -54,7 +54,7 @@ def main():
     )
     generator._build()
     generator.load_weights(args.saved)
-    generator.summary(line_length=100)
+    generator.summary(line_length=150)
 
     segan_tester = SeganTester(config["speech_config"],
                                config["learning_config"]["running_config"])

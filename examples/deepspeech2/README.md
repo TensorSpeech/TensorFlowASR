@@ -1,5 +1,7 @@
 # Deep Speech 2
 
+References: [https://arxiv.org/abs/1512.02595](https://arxiv.org/abs/1512.02595)
+
 ## Model YAML Config Structure
 
 ```yaml

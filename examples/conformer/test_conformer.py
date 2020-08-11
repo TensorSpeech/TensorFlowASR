@@ -72,7 +72,7 @@ def main():
             **config["model_config"]
         )
         conformer._build(speech_featurizer.compute_feature_shape())
-        conformer.summary(line_length=100)
+        conformer.summary(line_length=150)
         conformer.load_weights(args.saved)
         conformer.add_featurizers(speech_featurizer, text_featurizer)
 

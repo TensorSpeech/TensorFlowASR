@@ -395,7 +395,7 @@ class TFSpeechFeaturizer:
 
     def tf_extract(self, signal: tf.Tensor) -> tf.Tensor:
         """
-        Extract speech features from signals
+        Extract speech features from signals (for using in tflite)
         Args:
             signal: tf.Tensor with shape [None]
 
@@ -423,24 +423,3 @@ class TFSpeechFeaturizer:
         with tf.device("/CPU:0"):  # Use in tf.data => avoid error copying
             features = self.tf_extract(tf.convert_to_tensor(signal, dtype=tf.float32))
         return features.numpy()
-
-
-class SpeechFeaturizerLayer(tf.keras.layers.Layer):
-    """ TFSpeechFeaturizer in Keras Layer (If you want to use it :D) """
-
-    def __init__(self,
-                 speech_config: dict,
-                 name="speech_featurizer",
-                 **kwargs):
-        super(SpeechFeaturizer, self).__init__(name=name, **kwargs)
-        self.speech_config = speech_config
-        self.speech_featurizer = TFSpeechFeaturizer(self.speech_config)
-
-    @tf.function(experimental_relax_shapes=True)
-    def call(self, signal, **kwargs):
-        return self.speech_featurizer.tf_extract(signal)
-
-    def get_config(self):
-        conf = super(SpeechFeaturizerLayer, self).get_config()
-        conf.update(self.speech_config)
-        return conf

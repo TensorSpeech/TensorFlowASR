@@ -53,12 +53,7 @@ class CtcModel(tf.keras.Model):
         outputs = self.fc(outputs, training=training)
         return outputs
 
-    @tf.function(
-        experimental_relax_shapes=True,
-        input_signature=[
-            tf.TensorSpec([None, None, None, None], dtype=tf.float32)
-        ]
-    )
+    @tf.function
     def recognize(self, features):
         logits = self.call(features, training=False)
         probs = tf.nn.softmax(logits)
@@ -101,13 +96,7 @@ class CtcModel(tf.keras.Model):
         transcript = self.text_featurizer.index2upoints(tf.cast(decoded[0][0], dtype=tf.int32))
         return tf.squeeze(transcript, axis=0)
 
-    @tf.function(
-        experimental_relax_shapes=True,
-        input_signature=[
-            tf.TensorSpec([None, None, None, None], dtype=tf.float32),
-            tf.TensorSpec([], dtype=tf.bool)
-        ]
-    )
+    @tf.function
     def recognize_beam(self, features, lm=False):
         logits = self.call(features, training=False)
         probs = tf.nn.softmax(logits)

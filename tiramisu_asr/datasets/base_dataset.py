@@ -26,15 +26,15 @@ class BaseDataset(metaclass=abc.ABCMeta):
                  shuffle: bool = False,
                  stage: str = "train"):
         self.data_paths = preprocess_paths(data_paths) if data_paths else []
-        self.augmentations = UserAugmentation(augmentations)
-        self.shuffle = shuffle
-        self.stage = stage
-        self.total_steps = None
+        self.augmentations = UserAugmentation(augmentations)  # apply augmentation
+        self.shuffle = shuffle  # whether to shuffle tf.data.Dataset
+        self.stage = stage  # for defining tfrecords files
+        self.total_steps = None  # for better training visualization
 
     @abc.abstractmethod
     def parse(self, *args, **kwargs):
-        pass
+        raise NotImplementedError()
 
     @abc.abstractmethod
     def create(self, batch_size):
-        pass
+        raise NotImplementedError()

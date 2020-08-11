@@ -37,9 +37,6 @@ def main():
     parser.add_argument("--config", "-c", type=str, default=DEFAULT_YAML,
                         help="The file path of model configuration file")
 
-    parser.add_argument("--mixed_precision", type=bool, default=False,
-                        help="Whether to use mixed precision training")
-
     parser.add_argument("--max_ckpts", type=int, default=10,
                         help="Max number of checkpoints to keep")
 
@@ -56,11 +53,6 @@ def main():
     text_featurizer = TextFeaturizer(config["decoder_config"])
 
     tf.random.set_seed(2020)
-
-    if args.mixed_precision:
-        policy = tf.keras.mixed_precision.experimental.Policy("mixed_float16")
-        tf.keras.mixed_precision.experimental.set_policy(policy)
-        print("Enabled mixed precision training")
 
     if args.tfrecords:
         train_dataset = ASRTFRecordDataset(
@@ -88,9 +80,7 @@ def main():
             shuffle=True
         )
 
-    ctc_trainer = CTCTrainer(speech_featurizer, text_featurizer,
-                             config["learning_config"]["running_config"],
-                             args.mixed_precision)
+    ctc_trainer = CTCTrainer(text_featurizer, config["learning_config"]["running_config"])
     # Build DS2 model
     with ctc_trainer.strategy.scope():
         ds2_model = DeepSpeech2(input_shape=speech_featurizer.compute_feature_shape(),
@@ -98,6 +88,7 @@ def main():
                                 num_classes=text_featurizer.num_classes,
                                 name="deepspeech2")
         ds2_model._build(speech_featurizer.compute_feature_shape())
+        ds2_model.summary(line_length=150)
     # Compile
     ctc_trainer.compile(ds2_model, config["learning_config"]["optimizer_config"],
                         max_to_keep=args.max_ckpts)

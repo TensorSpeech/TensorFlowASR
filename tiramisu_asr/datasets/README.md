@@ -1,5 +1,10 @@
 # Dataset Structures :kissing:
 
+To make a custom dataset, inherit the `BaseDataset` class and override following methods:
+
+1. `create` to create `tf.data.Dataset` instance.
+2. `parse` for transforming `tf.data.Dataset` during creation by applyting `tf.data.Dataset.map` function.
+
 ## ASR Datasets
 
 An ASR dataset is some `.tsv` files in format: `PATH\tDURATION\tTRANSCRIPT`. You must create those files by your own with your own data and methods.
@@ -49,8 +54,8 @@ A SEGAN Dataset is some path to **clean** `.wav` files and a path to **noise** `
 class SeganDataset(BaseDataset):
     def __init__(self,
                  stage: str,
-                 data_paths: list,
-                 noises_config: dict,
+                 clean_dir: str,
+                 noisy_dir: str,
                  speech_config: dict,
                  shuffle: bool = False)
 ```
@@ -64,5 +69,5 @@ class SeganDataset(BaseDataset):
 **Outputs when iterating for testing**
 
 ```python
-(path, clean_wav, noisy_wav_slices)
+(clean_wav_path, noisy_wavs)
 ```

@@ -19,6 +19,9 @@ TiramisuASR implements some speech recognition and speech enhancement architectu
 
 ## What's New?
 
+-   Update readme files
+-   Use `tf.keras.Input()` in `_build()` method of every models for better summary
+-   Fix **runners**, **datasets**
 -   Use **nlpaug** as augmentation for speech recognition and enhancement
 
 ## :yum: Supported Models
@@ -39,9 +42,9 @@ TiramisuASR implements some speech recognition and speech enhancement architectu
 
 For _training, testing and using_ **CTC Models**, run `./scripts/install_ctc_decoders.sh`
 
-For _training_ **Transducer Models**, run `./scripts/install_rnnt_loss.sh`
+For _training_ **Transducer Models**, export `CUDA_HOME` and run `./scripts/install_rnnt_loss.sh`
 
-For _testing_ **Speech Enhancement Model** (i.e SEGAN), run `./scripts/install_semetrics.sh`
+For _testing_ **Speech Enhancement Model** (i.e SEGAN), install `octave` and run `./scripts/install_semetrics.sh`
 
 Install tensorflow: `pip3 install tensorflow` or `pip3 install tf-nightly` (for using tflite)
 
@@ -131,9 +134,8 @@ See [examples](./examples/) for some predefined ASR models.
 
 ## References & Credits
 
-1. [Deep Speech 2: End-to-End Speech Recognition in English and Mandarin](https://arxiv.org/abs/1512.02595)
-2. [NVIDIA OpenSeq2Seq Toolkit](https://github.com/NVIDIA/OpenSeq2Seq)
-3. [https://github.com/santi-pdp/segan](https://github.com/santi-pdp/segan)
-4. [SEGAN: Speech Enhancement Generative Adversarial Network](https://arxiv.org/abs/1703.09452)
-5. [https://github.com/noahchalifour/warp-transducer](https://github.com/noahchalifour/warp-transducer)
-6. [Sequence Transduction with Recurrent Neural Network](https://arxiv.org/abs/1211.3711)
+1. [NVIDIA OpenSeq2Seq Toolkit](https://github.com/NVIDIA/OpenSeq2Seq)
+2. [https://github.com/santi-pdp/segan](https://github.com/santi-pdp/segan)
+3. [https://github.com/noahchalifour/warp-transducer](https://github.com/noahchalifour/warp-transducer)
+4. [Sequence Transduction with Recurrent Neural Network](https://arxiv.org/abs/1211.3711)
+5. [End-to-End Speech Processing Toolkit in PyTorch](https://github.com/espnet/espnet)

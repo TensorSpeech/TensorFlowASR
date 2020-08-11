@@ -82,25 +82,28 @@ class TransducerPrediction(tf.keras.Model):
             )
         return memory_states
 
-    @tf.function(experimental_relax_shapes=True)  # avoid error in tflite conversion
-    def call(self,
-             inputs,
-             training=False,
-             p_memory_states=None,
-             **kwargs):
+    @tf.function  # unable to convert embedding to tflite without wraping tf.function
+    def call(self, inputs, training=False):
         # inputs has shape [B, U]
         outputs = self.embed(inputs, training=training)
         outputs = self.do(outputs, training=training)
-        if p_memory_states is None:  # Zeros mean no initial_state
-            p_memory_states = self.get_initial_state(outputs)
+        for i, lstm in enumerate(self.lstms):
+            outputs, _, _ = lstm(outputs, training=training, initial_state=None)
+        return outputs
+
+    @tf.function
+    def inference(self, inputs, p_memory_states):
+        # inputs has shape [B, U]
+        outputs = self.embed(inputs, training=False)
+        outputs = self.do(outputs, training=False)
         n_memory_states = []
         for i, lstm in enumerate(self.lstms):
-            outputs = lstm(outputs, training=training, initial_state=p_memory_states[i])
+            outputs = lstm(outputs, training=False, initial_state=p_memory_states[i])
             new_memory_states = outputs[1:]
             outputs = outputs[0]
             n_memory_states.append(new_memory_states)
 
-        # return shapes [B, T, P], ([num_lstms, B, P], [num_lstms, B, P])
+        # return shapes [B, T, P], ([B, P], [B, P])
         return outputs, n_memory_states
 
     def get_config(self):
@@ -210,7 +213,7 @@ class Transducer(Model):
         """
         features, predicted = inputs
         enc = self.encoder(features, training=training)
-        pred, _ = self.predict_net(predicted, training=training)
+        pred = self.predict_net(predicted, training=training)
         outputs = self.joint_net([enc, pred], training=training)
         return outputs
 
@@ -227,7 +230,7 @@ class Transducer(Model):
         self.speech_featurizer = speech_featurizer
         self.text_featurizer = text_featurizer
 
-    @tf.function(experimental_relax_shapes=True)
+    @tf.function
     def recognize(self, features: tf.Tensor) -> tf.Tensor:
         b_i = tf.constant(0, dtype=tf.int32)
 
@@ -260,7 +263,6 @@ class Transducer(Model):
         return decoded
 
     @tf.function(
-        experimental_relax_shapes=True,
         input_signature=[
             tf.TensorSpec([None], dtype=tf.float32),
         ]
@@ -281,7 +283,6 @@ class Transducer(Model):
         transcript = self.text_featurizer.index2upoints(indices)
         return tf.squeeze(transcript, axis=0)
 
-    @tf.function(experimental_relax_shapes=True)
     def perform_greedy(self,
                        features: tf.Tensor,
                        streaming: bool = False) -> tf.Tensor:
@@ -305,10 +306,9 @@ class Transducer(Model):
 
         def _body(enc, i, new_hyps, T):
             hi = tf.reshape(enc[i], [1, 1, -1])  # [1, 1, E]
-            y, n_memory_states = self.predict_net(
+            y, n_memory_states = self.predict_net.inference(
                 inputs=tf.reshape(new_hyps[1][-1], [1, 1]),  # [1, 1]
-                p_memory_states=new_hyps[2],
-                training=False
+                p_memory_states=new_hyps[2]
             )  # [1, 1, P], [1, P], [1, P]
             # [1, 1, E] + [1, 1, P] => [1, 1, 1, V]
             ytu = tf.nn.log_softmax(self.joint_net([hi, y], training=False))
@@ -351,7 +351,6 @@ class Transducer(Model):
         return tf.expand_dims(new_hyps[1], axis=0)
 
     @tf.function(
-        experimental_relax_shapes=True,
         input_signature=[
             tf.TensorSpec([None, None, None, None], dtype=tf.float32),  # features
             tf.TensorSpec([], dtype=tf.bool),  # lm
@@ -435,10 +434,9 @@ class Transducer(Model):
                 y_hat = max(A, key=lambda x: x["score"])
                 A.remove(y_hat)
 
-                y, n_memory_states = self.predict_net(
+                y, n_memory_states = self.predict_net.inference(
                     inputs=tf.reshape(y_hat["yseq"][-1], [1, 1]),
-                    p_memory_states=y_hat["p_memory_states"],
-                    training=False
+                    p_memory_states=y_hat["p_memory_states"]
                 )
                 ytu = tf.nn.log_softmax(self.joint_net([hi, y], training=False))  # [1, 1, 1, V]
 
