@@ -19,3 +19,4 @@ All methods that supported my `nlpaug` for audio and spectrogram are supported.
 ## Changes
 
 -   remove `include_original` augmentation on probability
+-   `noise_augment.py` file is deprecated

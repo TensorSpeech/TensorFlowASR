@@ -57,7 +57,7 @@ def main():
                             num_classes=text_featurizer.num_classes,
                             name="deepspeech2")
     ds2_model._build(speech_featurizer.compute_feature_shape())
-    ds2_model.summary(line_length=100)
+    ds2_model.summary(line_length=150)
     ds2_model.load_weights(args.saved)
     ds2_model.add_featurizers(speech_featurizer, text_featurizer)
 

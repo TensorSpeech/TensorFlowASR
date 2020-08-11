@@ -34,4 +34,3 @@ decoder_config:
 ## TODO
 
 -   Implement `TFSpeechFeaturizer` to extract `delta, delta_delta, pitch` features
--   Inplement `TextFeaturizer` to convert from `int` to `char` without using `tf.numpy_function` for tflite

@@ -88,7 +88,6 @@ class SeganTrainer(BaseTrainer):
     def create_train_step(self):
         return tf.function(
             self._train_step,
-            experimental_relax_shapes=True,
             input_signature=[(
                 tf.TensorSpec([None, self.speech_config["window_size"]], dtype=tf.float32),
                 tf.TensorSpec([None, self.speech_config["window_size"]], dtype=tf.float32)
@@ -160,7 +159,6 @@ class SeganTrainer(BaseTrainer):
     def create_eval_step(self):
         return tf.function(
             self._eval_step,
-            experimental_relax_shapes=True,
             input_signature=[(
                 tf.TensorSpec([None, self.speech_config["window_size"]], dtype=tf.float32),
                 tf.TensorSpec([None, self.speech_config["window_size"]], dtype=tf.float32)
@@ -268,12 +266,12 @@ class SeganTester(BaseTester):
 
         progbar.close()
 
-    @tf.function(experimental_relax_shapes=True)
+    @tf.function
     def _test_function(self, iterator):
         batch = next(iterator)
         self._test_step(batch)
 
-    @tf.function(experimental_relax_shapes=True)
+    @tf.function
     def _test_step(self, batch):
         # Test only available for batch size = 1
         clean_wav_path, noisy_wavs = batch

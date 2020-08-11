@@ -124,11 +124,11 @@ class ASRDataset(BaseDataset):
         Returns:
             path, features, input_lengths, labels, label_lengths, pred_inp
         """
-        pass
+        raise NotImplementedError()
 
     @abc.abstractmethod
     def create(self, batch_size):
-        pass
+        raise NotImplementedError()
 
 
 class ASRTFRecordDataset(ASRDataset):

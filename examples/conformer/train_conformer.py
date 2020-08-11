@@ -39,14 +39,8 @@ def main():
     parser.add_argument("--config", type=str, default=DEFAULT_YAML,
                         help="The file path of model configuration file")
 
-    parser.add_argument("--export", "-e", type=str, default=None,
-                        help="Path to the model file to be exported")
-
     parser.add_argument("--mixed_precision", type=bool, default=False,
                         help="Whether to use mixed precision training")
-
-    parser.add_argument("--from_weights", type=bool, default=False,
-                        help="Whether to save or load only weights")
 
     parser.add_argument("--max_ckpts", type=int, default=10,
                         help="Max number of checkpoints to keep")
@@ -111,6 +105,7 @@ def main():
                 vocabulary_size=text_featurizer.num_classes
             )
             conformer._build(speech_featurizer.compute_feature_shape())
+            conformer.summary(line_length=150)
 
             optimizer_config = config["learning_config"]["optimizer_config"]
             optimizer = tf.keras.optimizers.Adam(
@@ -128,12 +123,6 @@ def main():
                                   max_to_keep=args.max_ckpts)
 
         conformer_trainer.fit(train_dataset, eval_dataset, args.eval_train_ratio)
-
-        if args.export:
-            if args.from_weights:
-                conformer_trainer.model.save_weights(args.export)
-            else:
-                conformer_trainer.model.save(args.export)
 
     args = parser.parse_args()
     run(args)

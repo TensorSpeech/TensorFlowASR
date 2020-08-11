@@ -67,13 +67,13 @@ def main():
             **config["model_config"]["generator"]
         )
         generator._build()
-        generator.summary(line_length=100)
+        generator.summary(line_length=150)
         discriminator = Discriminator(
             window_size=config["speech_config"]["window_size"],
             **config["model_config"]["discriminator"]
         )
         discriminator._build()
-        discriminator.summary(line_length=100)
+        discriminator.summary(line_length=150)
 
     segan_trainer.compile(generator, discriminator,
                           config["learning_config"]["optimizer_config"],

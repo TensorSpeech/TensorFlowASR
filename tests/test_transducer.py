@@ -33,12 +33,9 @@ speech_featurizer = TFSpeechFeaturizer({
     "num_feature_bins": 80,
     "feature_type": "logfbank",
     "preemphasis": 0.97,
-    # "delta": True,
-    # "delta_delta": True,
     "normalize_signal": True,
     "normalize_feature": True,
-    "normalize_per_feature": False,
-    # "pitch": False,
+    "normalize_per_feature": False
 })
 
 inp = tf.keras.Input(shape=[None, 80, 1])
@@ -54,7 +51,7 @@ model = Transducer(
     embed_dim=350, embed_dropout=0.0, num_lstms=1, lstm_units=320, joint_dim=1024
 )
 
-model._build([None, None, 80, 1])
+model._build(speech_featurizer.compute_feature_shape())
 model.summary(line_length=150)
 
 model.save_weights("/tmp/transducer.h5")

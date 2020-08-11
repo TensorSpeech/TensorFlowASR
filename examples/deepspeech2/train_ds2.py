@@ -98,6 +98,7 @@ def main():
                                 num_classes=text_featurizer.num_classes,
                                 name="deepspeech2")
         ds2_model._build(speech_featurizer.compute_feature_shape())
+        ds2_model.summary(line_length=150)
     # Compile
     ctc_trainer.compile(ds2_model, config["learning_config"]["optimizer_config"],
                         max_to_keep=args.max_ckpts)

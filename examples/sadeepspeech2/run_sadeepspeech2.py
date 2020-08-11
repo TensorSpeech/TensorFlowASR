@@ -112,6 +112,7 @@ def main():
                     num_classes=text_featurizer.num_classes
                 )
                 satt_ds2_model._build(speech_featurizer.compute_feature_shape())
+                satt_ds2_model.summary(line_length=150)
                 optimizer = create_optimizer(
                     name=config["learning_config"]["optimizer_config"]["name"],
                     d_model=config["model_config"]["att"]["head_size"],
@@ -137,7 +138,7 @@ def main():
                 num_classes=text_featurizer.num_classes
             )
             satt_ds2_model._build(speech_featurizer.compute_feature_shape())
-            satt_ds2_model.summary(line_length=100)
+            satt_ds2_model.summary(line_length=150)
             satt_ds2_model.load_weights(args.saved)
             satt_ds2_model.add_featurizers(speech_featurizer, text_featurizer)
 

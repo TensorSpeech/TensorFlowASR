@@ -31,14 +31,12 @@ class ConvSubsampling(tf.keras.layers.Layer):
         super(ConvSubsampling, self).__init__(name=name, **kwargs)
         assert reduction_factor % 2 == 0, "reduction_factor must be divisible by 2"
         self.conv1 = tf.keras.layers.Conv2D(
-            filters=odim, kernel_size=(3, 3),
-            strides=((reduction_factor // 2), 2),
+            filters=odim, kernel_size=3, strides=(reduction_factor // 2),
             padding="same", name=f"{name}_1"
         )
         self.conv2 = tf.keras.layers.Conv2D(
-            filters=odim, kernel_size=(3, 3),
-            strides=(2, 2), padding="same",
-            name=f"{name}_2"
+            filters=odim, kernel_size=3, strides=2,
+            padding="same", name=f"{name}_2"
         )
         self.linear = tf.keras.layers.Dense(odim, name=f"{name}_linear")
         self.do = tf.keras.layers.Dropout(dropout, name=f"{name}_dropout")

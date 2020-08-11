@@ -54,7 +54,6 @@ class CTCTrainer(BaseTrainer):
         _, f, c = self.speech_featurizer.compute_feature_shape()
         return tf.function(
             self._train_step,
-            experimental_relax_shapes=True,
             input_signature=[(
                 tf.TensorSpec([None], dtype=tf.string),
                 tf.TensorSpec([None, None, f, c], dtype=tf.float32),
@@ -96,7 +95,6 @@ class CTCTrainer(BaseTrainer):
         _, f, c = self.speech_featurizer.compute_feature_shape()
         return tf.function(
             self._eval_step,
-            experimental_relax_shapes=True,
             input_signature=[(
                 tf.TensorSpec([None], dtype=tf.string),
                 tf.TensorSpec([None, None, f, c], dtype=tf.float32),
@@ -127,7 +125,6 @@ class CTCTrainer(BaseTrainer):
                 max_to_keep: int = 10):
         with self.strategy.scope():
             self.model = model
-            self.model.summary(line_length=100)
             self.optimizer = tf.keras.optimizers.get(optimizer)
             if self.is_mixed_precision:
                 self.optimizer = mixed_precision.LossScaleOptimizer(self.optimizer, "dynamic")
