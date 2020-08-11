@@ -46,12 +46,19 @@ class UserConfig(UserDict):
             del self.data["learning_config"]
         elif learning:
             # Check keys
-            check_key_in_dict(self.data["learning_config"], ["augmentations", "dataset_config",
-                                                             "optimizer_config", "running_config"])
-            check_key_in_dict(self.data["learning_config"]["dataset_config"], ["train_paths", "eval_paths", "test_paths"])
-            check_key_in_dict(self.data["learning_config"]["running_config"],
-                              ["batch_size", "num_epochs", "outdir",
-                               "log_interval_steps", "save_interval_steps", "eval_interval_steps"])
+            check_key_in_dict(
+                self.data["learning_config"],
+                ["augmentations", "dataset_config", "optimizer_config", "running_config"]
+            )
+            check_key_in_dict(
+                self.data["learning_config"]["dataset_config"],
+                ["train_paths", "eval_paths", "test_paths"]
+            )
+            check_key_in_dict(
+                self.data["learning_config"]["running_config"],
+                ["batch_size", "num_epochs", "outdir", "log_interval_steps",
+                    "save_interval_steps", "eval_interval_steps"]
+            )
 
     def __missing__(self, key):
         return None
