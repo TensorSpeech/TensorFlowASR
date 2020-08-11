@@ -39,9 +39,6 @@ def main():
     parser.add_argument("--config", type=str, default=DEFAULT_YAML,
                         help="The file path of model configuration file")
 
-    parser.add_argument("--mixed_precision", type=bool, default=False,
-                        help="Whether to use mixed precision training")
-
     parser.add_argument("--max_ckpts", type=int, default=10,
                         help="Max number of checkpoints to keep")
 
@@ -57,11 +54,6 @@ def main():
         text_featurizer = TextFeaturizer(config["decoder_config"])
 
         tf.random.set_seed(2020)
-
-        if args.mixed_precision:
-            policy = tf.keras.mixed_precision.experimental.Policy("mixed_float16")
-            tf.keras.mixed_precision.experimental.set_policy(policy)
-            print("Enabled mixed precision training")
 
         if args.tfrecords:
             train_dataset = ASRTFRecordDataset(
@@ -93,9 +85,7 @@ def main():
 
         conformer_trainer = TransducerTrainer(
             config=config["learning_config"]["running_config"],
-            speech_featurizer=speech_featurizer,
-            text_featurizer=text_featurizer,
-            is_mixed_precision=args.mixed_precision
+            text_featurizer=text_featurizer
         )
 
         with conformer_trainer.strategy.scope():

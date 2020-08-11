@@ -28,12 +28,8 @@ from ..utils.utils import shape_list
 
 class SeganTrainer(BaseTrainer):
     def __init__(self,
-                 speech_config: dict,
                  training_config: dict,
-                 is_mixed_precision: bool = False,
                  strategy: tf.distribute.Strategy = None):
-        self.speech_config = speech_config
-        self.is_mixed_precision = is_mixed_precision
         self.deactivate_l1 = False
         self.deactivate_noise = False
         super(SeganTrainer, self).__init__(config=training_config, strategy=strategy)
@@ -53,8 +49,7 @@ class SeganTrainer(BaseTrainer):
         }
 
     def save_model_weights(self):
-        with self.strategy.scope():
-            self.generator.save_weights(os.path.join(self.config["outdir"], "latest.h5"))
+        self.generator.save_weights(os.path.join(self.config["outdir"], "latest.h5"))
 
     def run(self):
         """Run training."""
@@ -119,29 +114,18 @@ class SeganTrainer(BaseTrainer):
             train_gen_loss = tf.nn.compute_average_loss(
                 _gen_loss, global_batch_size=self.global_batch_size)
 
-            if self.is_mixed_precision:
-                scaled_gen_loss = self.generator_optimizer.get_scaled_loss(train_gen_loss)
-                scaled_disc_loss = self.discriminator_optimizer.get_scaled_loss(train_disc_loss)
+            train_gen_loss = self.generator_optimizer.get_scaled_loss(train_gen_loss)
+            train_disc_loss = self.discriminator_optimizer.get_scaled_loss(train_disc_loss)
 
-        if self.is_mixed_precision:
-            scaled_gen_grad = gen_tape.gradient(
-                scaled_gen_loss, self.generator.trainable_variables)
-            scaled_disc_grad = disc_tape.gradient(
-                scaled_disc_loss, self.discriminator.trainable_variables)
-            gradients_of_generator = self.generator_optimizer.get_unscaled_gradients(
-                scaled_gen_grad)
-            gradients_of_discriminator = self.discriminator_optimizer.get_unscaled_gradients(
-                scaled_disc_grad)
-        else:
-            gradients_of_generator = gen_tape.gradient(
-                train_gen_loss, self.generator.trainable_variables)
-            gradients_of_discriminator = disc_tape.gradient(
-                train_disc_loss, self.discriminator.trainable_variables)
+        gen_grad = gen_tape.gradient(train_gen_loss, self.generator.trainable_variables)
+        disc_grad = disc_tape.gradient(train_disc_loss, self.discriminator.trainable_variables)
+        gen_grad = self.generator_optimizer.get_unscaled_gradients(gen_grad)
+        disc_grad = self.discriminator_optimizer.get_unscaled_gradients(disc_grad)
 
         self.generator_optimizer.apply_gradients(
-            zip(gradients_of_generator, self.generator.trainable_variables))
+            zip(gen_grad, self.generator.trainable_variables))
         self.discriminator_optimizer.apply_gradients(
-            zip(gradients_of_discriminator, self.discriminator.trainable_variables))
+            zip(disc_grad, self.discriminator.trainable_variables))
 
         self.train_metrics["g_l1_loss"].update_state(_gen_l1_loss)
         self.train_metrics["g_adv_loss"].update_state(_gen_adv_loss)
@@ -178,11 +162,10 @@ class SeganTrainer(BaseTrainer):
             self.generator_optimizer = tf.keras.optimizers.get(optimizer_config["generator"])
             self.discriminator_optimizer = tf.keras.optimizers.get(
                 optimizer_config["discriminator"])
-            if self.is_mixed_precision:
-                self.generator_optimizer = mixed_precision.LossScaleOptimizer(
-                    self.generator_optimizer, "dynamic")
-                self.discriminator_optimizer = mixed_precision.LossScaleOptimizer(
-                    self.discriminator_optimizer, "dynamic")
+            self.generator_optimizer = mixed_precision.LossScaleOptimizer(
+                self.generator_optimizer, "dynamic")
+            self.discriminator_optimizer = mixed_precision.LossScaleOptimizer(
+                self.discriminator_optimizer, "dynamic")
         self.create_checkpoint_manager(
             max_to_keep, generator=self.generator, gen_optimizer=self.generator_optimizer,
             discriminator=self.discriminator, disc_optimizer=self.discriminator_optimizer

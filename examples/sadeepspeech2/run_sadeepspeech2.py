@@ -44,9 +44,6 @@ def main():
     parser.add_argument("--config", "-c", type=str, default=DEFAULT_YAML,
                         help="The file path of model configuration file")
 
-    parser.add_argument("--mixed_precision", type=bool, default=False,
-                        help="Whether to use mixed precision training")
-
     parser.add_argument("--max_ckpts", type=int, default=10,
                         help="Max number of checkpoints to keep")
 
@@ -69,14 +66,8 @@ def main():
         if args.mode == "train":
             tf.random.set_seed(2020)
 
-            if args.mixed_precision:
-                policy = tf.keras.mixed_precision.experimental.Policy("mixed_float16")
-                tf.keras.mixed_precision.experimental.set_policy(policy)
-                print("Enabled mixed precision training")
-
-            ctc_trainer = CTCTrainer(speech_featurizer, text_featurizer,
-                                     config["learning_config"]["running_config"],
-                                     args.mixed_precision)
+            ctc_trainer = CTCTrainer(text_featurizer,
+                                     config["learning_config"]["running_config"])
 
             if args.tfrecords:
                 train_dataset = ASRTFRecordDataset(

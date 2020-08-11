@@ -32,9 +32,6 @@ def main():
     parser.add_argument("--config", "-c", type=str, default=DEFAULT_YAML,
                         help="The file path of model configuration file")
 
-    parser.add_argument("--mixed_precision", type=bool, default=False,
-                        help="Whether to use mixed precision training")
-
     parser.add_argument("--max_ckpts", type=int, default=10,
                         help="Max number of checkpoints to keep")
 
@@ -44,22 +41,13 @@ def main():
 
     tf.random.set_seed(2020)
 
-    if args.mixed_precision:
-        policy = tf.keras.mixed_precision.experimental.Policy("mixed_float16")
-        tf.keras.mixed_precision.experimental.set_policy(policy)
-        print("Enabled mixed precision training")
-
     dataset = SeganAugTrainDataset(
         stage="train", clean_dir=config["learning_config"]["dataset_config"]["train_paths"],
         noises_config=config["learning_config"]["dataset_config"]["noise_config"],
         speech_config=config["speech_config"], shuffle=True
     )
 
-    segan_trainer = SeganTrainer(
-        config["speech_config"],
-        config["learning_config"]["running_config"],
-        args.mixed_precision
-    )
+    segan_trainer = SeganTrainer(config["learning_config"]["running_config"])
 
     with segan_trainer.strategy.scope():
         generator = Generator(
