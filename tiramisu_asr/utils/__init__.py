@@ -16,24 +16,24 @@ def setup_environment():  # Set memory growth and only log ERRORs
     import os
     import warnings
 
-    os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
-    warnings.simplefilter('ignore')
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
+    os.environ["TF_ENABLE_AUTO_MIXED_PRECISION_GRAPH_REWRITE"] = "1"
+    os.environ["TF_ENABLE_AUTO_MIXED_PRECISION"] = "1"
+    warnings.simplefilter("ignore")
 
     import tensorflow as tf
 
-    tf.get_logger().setLevel('ERROR')
+    tf.get_logger().setLevel("ERROR")
 
-    gpus = tf.config.experimental.list_physical_devices('GPU')
+    gpus = tf.config.experimental.list_physical_devices("GPU")
     if gpus:
         try:
             # Currently, memory growth needs to be the same across GPUs
             for gpu in gpus:
                 tf.config.experimental.set_memory_growth(gpu, True)
-            logical_gpus = tf.config.experimental.list_logical_devices('GPU')
+            logical_gpus = tf.config.experimental.list_logical_devices("GPU")
             print(len(gpus), "Physical GPUs,",
                   len(logical_gpus), "Logical GPUs")
         except RuntimeError as e:
             # Memory growth must be set before GPUs have been initialized
             print(e)
-
-    tf.config.optimizer.set_experimental_options({"auto_mixed_precision": True})
