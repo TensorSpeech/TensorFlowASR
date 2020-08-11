@@ -70,7 +70,7 @@ def create_sattds2(input_shape: list,
         att = tf.keras.layers.LayerNormalization()(att)
         att = MultiHeadAttention(head_size=arch_config["att"]["head_size"],
                                  num_heads=arch_config["att"]["num_heads"],
-                                 name=f"mulhead_satt_{i}")([att, att])
+                                 name=f"mulhead_satt_{i}")([att, att, att])
         att = tf.keras.layers.Dropout(arch_config["att"]["dropout"],
                                       name=f"mhsa_dropout_{i}")(att)
         layer = tf.keras.layers.Add()([layer, att])

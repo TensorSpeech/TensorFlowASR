@@ -71,13 +71,12 @@ class TransducerPrediction(tf.keras.Model):
                 return_state=True, name=f"{name}_lstm_{i}")
             self.lstms.append(lstm)
 
-    def get_initial_state(self, input_sample):
-        B = shape_list(input_sample)[0]
+    def get_initial_state(self):
         memory_states = []
         for i in range(len(self.lstms)):
             memory_states.append(
                 self.lstms[i].get_initial_state(
-                    tf.zeros([B, 1, 1], dtype=input_sample.dtype)
+                    tf.zeros([1, 1, 1], dtype=tf.float32)
                 )
             )
         return memory_states
@@ -289,7 +288,7 @@ class Transducer(Model):
         new_hyps = Hypotheses(
             tf.constant(0.0, dtype=tf.float32),
             tf.constant([self.text_featurizer.blank], dtype=tf.int32),
-            self.predict_net.get_initial_state(features)
+            self.predict_net.get_initial_state()
         )
 
         if self.kept_hyps is not None:
@@ -406,7 +405,7 @@ class Transducer(Model):
                 {
                     "score": 0.0,
                     "yseq": [self.text_featurizer.blank],
-                    "p_memory_states": None,
+                    "p_memory_states": self.predict_net.get_initial_state(),
                     "lm_state": None
                 }
             ]
@@ -416,7 +415,7 @@ class Transducer(Model):
                 {
                     "score": 0.0,
                     "yseq": [self.text_featurizer.blank],
-                    "p_memory_states": None,
+                    "p_memory_states": self.predict_net.get_initial_state(),
                     "lm_state": None
                 }
             ]

@@ -17,8 +17,6 @@ def setup_environment():  # Set memory growth and only log ERRORs
     import warnings
 
     os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
-    os.environ["TF_ENABLE_AUTO_MIXED_PRECISION_GRAPH_REWRITE"] = "1"
-    os.environ["TF_ENABLE_AUTO_MIXED_PRECISION"] = "1"
     warnings.simplefilter("ignore")
 
     import tensorflow as tf
@@ -37,3 +35,5 @@ def setup_environment():  # Set memory growth and only log ERRORs
         except RuntimeError as e:
             # Memory growth must be set before GPUs have been initialized
             print(e)
+
+    tf.config.optimizer.set_experimental_options({"auto_mixed_precision": True})
