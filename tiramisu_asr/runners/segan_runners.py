@@ -85,15 +85,6 @@ class SeganTrainer(BaseTrainer):
         self.train_progbar.close()
         print("> Finish training")
 
-    def create_train_step(self):
-        return tf.function(
-            self._train_step,
-            input_signature=[(
-                tf.TensorSpec([None, self.speech_config["window_size"]], dtype=tf.float32),
-                tf.TensorSpec([None, self.speech_config["window_size"]], dtype=tf.float32)
-            )]
-        )
-
     def _train_step(self, batch):
         clean_wavs, noisy_wavs = batch
         with tf.GradientTape() as gen_tape, tf.GradientTape() as disc_tape:
@@ -156,15 +147,6 @@ class SeganTrainer(BaseTrainer):
         self.train_metrics["g_adv_loss"].update_state(_gen_adv_loss)
         self.train_metrics["d_adv_loss"].update_state(_disc_loss)
 
-    def create_eval_step(self):
-        return tf.function(
-            self._eval_step,
-            input_signature=[(
-                tf.TensorSpec([None, self.speech_config["window_size"]], dtype=tf.float32),
-                tf.TensorSpec([None, self.speech_config["window_size"]], dtype=tf.float32)
-            )]
-        )
-
     def _eval_step(self, batch):
         clean_wavs, noisy_wavs = batch
 
@@ -205,12 +187,6 @@ class SeganTrainer(BaseTrainer):
             max_to_keep, generator=self.generator, gen_optimizer=self.generator_optimizer,
             discriminator=self.discriminator, disc_optimizer=self.discriminator_optimizer
         )
-
-    def fit(self, train_dataset, eval_dataset=None, eval_train_ratio=1):
-        self.set_train_data_loader(train_dataset)
-        self.set_eval_data_loader(eval_dataset, eval_train_ratio)
-        self.load_checkpoint()
-        self.run()
 
 
 class SeganTester(BaseTester):
@@ -271,7 +247,6 @@ class SeganTester(BaseTester):
         batch = next(iterator)
         self._test_step(batch)
 
-    @tf.function
     def _test_step(self, batch):
         # Test only available for batch size = 1
         clean_wav_path, noisy_wavs = batch

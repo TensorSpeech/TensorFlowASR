@@ -85,9 +85,6 @@ class BaseTrainer(BaseRunner):
         # Dataset
         self.train_data_loader = None
         self.eval_data_loader = None
-        # Step functions
-        self.train_step = self.create_train_step()
-        self.eval_step = self.create_eval_step()
 
         with self.strategy.scope():
             self.set_train_metrics()
@@ -229,10 +226,12 @@ class BaseTrainer(BaseRunner):
         batch = next(iterator)
         self.strategy.run(self.train_step, args=(batch,))
 
-    @abc.abstractmethod
     def create_train_step(self):
         """ Create train_step from _train_step """
-        raise NotImplementedError()
+        self.train_step = tf.function(
+            self._train_step,
+            input_signature=[self.train_data_loader.element_spec]
+        )
 
     @abc.abstractmethod
     def _train_step(self, batch):
@@ -285,10 +284,15 @@ class BaseTrainer(BaseRunner):
         batch = next(iterator)
         self.strategy.run(self.eval_step, args=(batch,))
 
-    @abc.abstractmethod
     def create_eval_step(self):
         """ Create eval_step from _eval_step """
-        raise NotImplementedError()
+        if self.eval_data_loader is None:
+            self.eval_step = tf.function(self._eval_step)
+        else:
+            self.eval_step = tf.function(
+                self._eval_step,
+                input_signature=[self.eval_data_loader.element_spec]
+            )
 
     @abc.abstractmethod
     def _eval_step(self, batch):
@@ -300,10 +304,14 @@ class BaseTrainer(BaseRunner):
         """ Function to initialize models and optimizers """
         raise NotImplementedError()
 
-    @abc.abstractmethod
-    def fit(self, *args, **kwargs):
+    def fit(self, train_dataset, eval_dataset=None, eval_train_ratio=1):
         """ Function run start training, including executing "run" func """
-        raise NotImplementedError()
+        self.set_train_data_loader(train_dataset)
+        self.set_eval_data_loader(eval_dataset, eval_train_ratio)
+        self.create_train_step()
+        self.create_eval_step()
+        self.load_checkpoint()
+        self.run()
 
     # -------------------------------- LOGGING -------------------------------------
 
@@ -386,7 +394,7 @@ class BaseTester(BaseRunner):
 
     def run(self, test_dataset):
         self.set_test_data_loader(test_dataset)
-        """ Run testing """
+        self.create_test_step()
         self._test_epoch()
         self._finish()
 
@@ -413,9 +421,14 @@ class BaseTester(BaseRunner):
     @tf.function
     def _test_function(self, iterator):
         batch = next(iterator)
-        return self._test_step(batch)
+        return self.test_step(batch)
 
-    @tf.function
+    def create_test_step(self):
+        self.test_step = tf.function(
+            self._test_step,
+            input_signature=[self.test_data_loader.element_spec]
+        )
+
     def _test_step(self, batch):
         """
         One testing step

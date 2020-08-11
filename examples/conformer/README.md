@@ -84,4 +84,4 @@ Vivos Conformer is trained with above config in 10 hours.
 
 |          |  WER (%)   |  CER (%)   |
 | :------- | :--------: | :--------: |
-| _Greedy_ | 42.7813034 | 22.1981564 |
+| _Greedy_ | 42.5870781 | 22.2378139 |

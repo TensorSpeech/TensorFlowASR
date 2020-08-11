@@ -50,20 +50,6 @@ class CTCTrainer(BaseTrainer):
         with self.strategy.scope():
             self.model.save_weights(os.path.join(self.config["outdir"], "latest.h5"))
 
-    def create_train_step(self):
-        _, f, c = self.speech_featurizer.compute_feature_shape()
-        return tf.function(
-            self._train_step,
-            input_signature=[(
-                tf.TensorSpec([None], dtype=tf.string),
-                tf.TensorSpec([None, None, f, c], dtype=tf.float32),
-                tf.TensorSpec([None], dtype=tf.int32),
-                tf.TensorSpec([None, None], dtype=tf.int32),
-                tf.TensorSpec([None], dtype=tf.int32),
-                tf.TensorSpec([None, None], dtype=tf.int32)
-            )]
-        )
-
     def _train_step(self, batch):
         _, features, input_length, labels, label_length, _ = batch
 
@@ -91,20 +77,6 @@ class CTCTrainer(BaseTrainer):
 
         self.train_metrics["ctc_loss"].update_state(per_train_loss)
 
-    def create_eval_step(self):
-        _, f, c = self.speech_featurizer.compute_feature_shape()
-        return tf.function(
-            self._eval_step,
-            input_signature=[(
-                tf.TensorSpec([None], dtype=tf.string),
-                tf.TensorSpec([None, None, f, c], dtype=tf.float32),
-                tf.TensorSpec([None], dtype=tf.int32),
-                tf.TensorSpec([None, None], dtype=tf.int32),
-                tf.TensorSpec([None], dtype=tf.int32),
-                tf.TensorSpec([None, None], dtype=tf.int32)
-            )]
-        )
-
     def _eval_step(self, batch):
         _, features, input_length, labels, label_length, _ = batch
 
@@ -129,9 +101,3 @@ class CTCTrainer(BaseTrainer):
             if self.is_mixed_precision:
                 self.optimizer = mixed_precision.LossScaleOptimizer(self.optimizer, "dynamic")
         self.create_checkpoint_manager(max_to_keep, model=self.model, optimizer=self.optimizer)
-
-    def fit(self, train_dataset, eval_dataset=None, eval_train_ratio=1):
-        self.set_train_data_loader(train_dataset)
-        self.set_eval_data_loader(eval_dataset, eval_train_ratio)
-        self.load_checkpoint()
-        self.run()
