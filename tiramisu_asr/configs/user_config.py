@@ -11,6 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import re
 import yaml
 from collections import UserDict
 
@@ -18,8 +19,20 @@ from ..utils.utils import preprocess_paths, append_default_keys_dict, check_key_
 
 
 def load_yaml(path):
+    # Fix yaml numbers https://stackoverflow.com/a/30462009/11037553
+    loader = yaml.SafeLoader
+    loader.add_implicit_resolver(
+        u'tag:yaml.org,2002:float',
+        re.compile(u'''^(?:
+         [-+]?(?:[0-9][0-9_]*)\\.[0-9_]*(?:[eE][-+]?[0-9]+)?
+        |[-+]?(?:[0-9][0-9_]*)(?:[eE][-+]?[0-9]+)
+        |\\.[0-9_]+(?:[eE][-+][0-9]+)?
+        |[-+]?[0-9][0-9_]*(?::[0-5]?[0-9])+\\.[0-9_]*
+        |[-+]?\\.(?:inf|Inf|INF)
+        |\\.(?:nan|NaN|NAN))$''', re.X),
+        list(u'-+0123456789.'))
     with open(preprocess_paths(path), "r", encoding="utf-8") as file:
-        return yaml.load(file, Loader=yaml.FullLoader)
+        return yaml.load(file, Loader=loader)
 
 
 # def fill_missing(default: dict, self_attention_ds2: dict, level: int = 0):

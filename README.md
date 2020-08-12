@@ -40,19 +40,23 @@ TiramisuASR implements some speech recognition and speech enhancement architectu
 
 ## Setup Environment and Datasets
 
-For _training, testing and using_ **CTC Models**, run `./scripts/install_ctc_decoders.sh`
-
-For _training_ **Transducer Models**, export `CUDA_HOME` and run `./scripts/install_rnnt_loss.sh`
-
-For _testing_ **Speech Enhancement Model** (i.e SEGAN), install `octave` and run `./scripts/install_semetrics.sh`
-
 Install tensorflow: `pip3 install tensorflow` or `pip3 install tf-nightly` (for using tflite)
 
 Install packages: `python3 setup.py install`
 
-Clean up: `python3 setup.py clean --all` (this will remove `/build` contents)
-
 For **setting up datasets**, see [datasets](./tiramisu_asr/datasets/README.md)
+
+-   For _training, testing and using_ **CTC Models**, run `./scripts/install_ctc_decoders.sh`
+
+-   For _training_ **Transducer Models**, export `CUDA_HOME` and run `./scripts/install_rnnt_loss.sh`
+
+-   For _testing_ **Speech Enhancement Model** (i.e SEGAN), install `octave` and run `./scripts/install_semetrics.sh`
+
+-   Method `tiramisu_asr.utils.setup_environment()` automatically enable **mixed_precision** if available.
+
+-   To enable XLA, run `TF_XLA_FLAGS=--tf_xla_auto_jit=2 $python_train_script`
+
+Clean up: `python3 setup.py clean --all` (this will remove `/build` contents)
 
 ## TFLite Convertion
 

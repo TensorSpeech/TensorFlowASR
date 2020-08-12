@@ -27,48 +27,33 @@ Hypotheses = collections.namedtuple(
 )
 
 
-class BT1V(tf.keras.layers.Layer):
-    def __init__(self, name="reshape_bt1v", **kwargs):
-        super(BT1V, self).__init__(trainable=False, name=name, **kwargs)
-
-    def call(self, inputs):
-        return tf.expand_dims(inputs, axis=2)
-
-    def get_config(self):
-        return super(BT1V, self).get_config()
-
-
-class B1UV(tf.keras.layers.Layer):
-    def __init__(self, name="reshape_b1uv", **kwargs):
-        super(B1UV, self).__init__(trainable=False, name=name, **kwargs)
-
-    def call(self, inputs):
-        return tf.expand_dims(inputs, axis=1)
-
-    def get_config(self):
-        return super(B1UV, self).get_config()
-
-
-class TransducerPrediction(tf.keras.Model):
+class TransducerPrediction(tf.keras.layers.Layer):
     def __init__(self,
                  vocabulary_size: int,
                  embed_dim: int,
                  embed_dropout: float = 0,
                  num_lstms: int = 1,
                  lstm_units: int = 512,
+                 kernel_regularizer=None,
+                 bias_regularizer=None,
                  name="transducer_prediction",
                  **kwargs):
         super(TransducerPrediction, self).__init__(name=name, **kwargs)
         self.embed = tf.keras.layers.Embedding(
             input_dim=vocabulary_size, output_dim=embed_dim,
-            mask_zero=False, name=f"{name}_embed")
+            mask_zero=False, name=f"{name}_embed",
+            embeddings_regularizer=kernel_regularizer
+        )
         self.do = tf.keras.layers.Dropout(embed_dropout, name=f"{name}_dropout")
         self.lstms = []
         # lstms units must equal (for using beam search)
         for i in range(num_lstms):
             lstm = tf.keras.layers.LSTM(
                 units=lstm_units, return_sequences=True,
-                return_state=True, name=f"{name}_lstm_{i}")
+                return_state=True, name=f"{name}_lstm_{i}",
+                kernel_regularizer=kernel_regularizer,
+                bias_regularizer=bias_regularizer
+            )
             self.lstms.append(lstm)
 
     def get_initial_state(self):
@@ -114,32 +99,39 @@ class TransducerPrediction(tf.keras.Model):
         return conf
 
 
-class TransducerJoint(tf.keras.Model):
+class TransducerJoint(tf.keras.layers.Layer):
     def __init__(self,
                  vocabulary_size: int,
                  joint_dim: int = 1024,
+                 kernel_regularizer=None,
+                 bias_regularizer=None,
                  name="tranducer_joint",
                  **kwargs):
         super(TransducerJoint, self).__init__(name=name, **kwargs)
-        self.ffn_enc = tf.keras.layers.Dense(joint_dim, name=f"{name}_enc")
-        self.ffn_pred = tf.keras.layers.Dense(joint_dim, name=f"{name}_pred")
-        self.bt1v = BT1V(name=f"{name}_bt1v")
-        self.b1uv = B1UV(name=f"{name}_b1uv")
-        self.add = tf.keras.layers.Add(name=f"{name}_add")
-        self.tanh = tf.keras.layers.Activation(tf.nn.tanh, name=f"{name}_tanh")
-        self.ffn_out = tf.keras.layers.Dense(vocabulary_size, name=f"{name}_vocab")
+        self.ffn_enc = tf.keras.layers.Dense(
+            joint_dim, name=f"{name}_enc",
+            kernel_regularizer=kernel_regularizer,
+            bias_regularizer=bias_regularizer
+        )
+        self.ffn_pred = tf.keras.layers.Dense(
+            joint_dim, use_bias=False, name=f"{name}_pred",
+            kernel_regularizer=kernel_regularizer
+        )
+        self.ffn_out = tf.keras.layers.Dense(
+            vocabulary_size, name=f"{name}_vocab",
+            kernel_regularizer=kernel_regularizer,
+            bias_regularizer=bias_regularizer
+        )
 
-    def call(self, inputs, training=False, **kwargs):
+    def call(self, inputs, training=False):
         # enc has shape [B, T, E]
         # pred has shape [B, U, P]
-        enc, pred = inputs
-        enc_out = self.ffn_enc(enc, training=training)  # [B, T ,E] => [B, T, V]
-        pred_out = self.ffn_pred(pred, training=training)  # [B, U, P] => [B, U, V]
-        # => [B, T, U, V]
-        enc_out = self.bt1v(enc_out)
-        pred_out = self.b1uv(pred_out)
-        outputs = self.add([enc_out, pred_out])
-        outputs = self.tanh(outputs)
+        enc_out, pred_out = inputs
+        enc_out = tf.expand_dims(enc_out, axis=2)
+        pred_out = tf.expand_dims(pred_out, axis=1)
+        enc_out = self.ffn_enc(enc_out, training=training)  # [B, T, 1, E] => [B, T, 1, V]
+        pred_out = self.ffn_pred(pred_out, training=training)  # [B, 1, U, P] => [B, 1, U, V]
+        outputs = tf.nn.tanh(enc_out + pred_out)  # => [B, T, U, V]
         outputs = self.ffn_out(outputs, training=training)
         return outputs
 
@@ -163,6 +155,8 @@ class Transducer(Model):
                  num_lstms: int = 1,
                  lstm_units: int = 320,
                  joint_dim: int = 1024,
+                 kernel_regularizer=None,
+                 bias_regularizer=None,
                  name="transducer",
                  **kwargs):
         super(Transducer, self).__init__(name=name, **kwargs)
@@ -173,11 +167,15 @@ class Transducer(Model):
             embed_dropout=embed_dropout,
             num_lstms=num_lstms,
             lstm_units=lstm_units,
+            kernel_regularizer=kernel_regularizer,
+            bias_regularizer=bias_regularizer,
             name=f"{name}_prediction"
         )
         self.joint_net = TransducerJoint(
             vocabulary_size=vocabulary_size,
             joint_dim=joint_dim,
+            kernel_regularizer=kernel_regularizer,
+            bias_regularizer=bias_regularizer,
             name=f"{name}_joint"
         )
         self.kept_hyps = None
@@ -194,8 +192,6 @@ class Transducer(Model):
 
     def summary(self, line_length=None, **kwargs):
         self.encoder.summary(line_length=line_length, **kwargs)
-        self.predict_net.summary(line_length=line_length, **kwargs)
-        self.joint_net.summary(line_length=line_length, **kwargs)
         super(Transducer, self).summary(line_length=line_length, **kwargs)
 
     def call(self, inputs, training=False):

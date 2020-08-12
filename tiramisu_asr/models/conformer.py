@@ -20,25 +20,37 @@ from ..utils.utils import merge_two_last_dims
 from .layers.positional_encoding import PositionalEncoding
 from .layers.multihead_attention import MultiHeadAttention
 
+L2 = tf.keras.regularizers.L2(1e-6)
+
 
 class ConvSubsampling(tf.keras.layers.Layer):
     def __init__(self,
                  odim: int,
                  reduction_factor: int = 4,
                  dropout: float = 0.0,
+                 kernel_regularizer=L2,
+                 bias_regularizer=L2,
                  name="conv_subsampling",
                  **kwargs):
         super(ConvSubsampling, self).__init__(name=name, **kwargs)
         assert reduction_factor % 2 == 0, "reduction_factor must be divisible by 2"
         self.conv1 = tf.keras.layers.Conv2D(
             filters=odim, kernel_size=3, strides=(reduction_factor // 2),
-            padding="same", name=f"{name}_1"
+            padding="same", name=f"{name}_1",
+            kernel_regularizer=kernel_regularizer,
+            bias_regularizer=bias_regularizer
         )
         self.conv2 = tf.keras.layers.Conv2D(
             filters=odim, kernel_size=3, strides=2,
-            padding="same", name=f"{name}_2"
+            padding="same", name=f"{name}_2",
+            kernel_regularizer=kernel_regularizer,
+            bias_regularizer=bias_regularizer
         )
-        self.linear = tf.keras.layers.Dense(odim, name=f"{name}_linear")
+        self.linear = tf.keras.layers.Dense(
+            odim, name=f"{name}_linear",
+            kernel_regularizer=kernel_regularizer,
+            bias_regularizer=bias_regularizer
+        )
         self.do = tf.keras.layers.Dropout(dropout, name=f"{name}_dropout")
 
     def call(self, inputs, training=False, **kwargs):
@@ -64,16 +76,30 @@ class FFModule(tf.keras.layers.Layer):
                  input_dim,
                  dropout=0.0,
                  fc_factor=0.5,
+                 kernel_regularizer=L2,
+                 bias_regularizer=L2,
                  name="ff_module",
                  **kwargs):
         super(FFModule, self).__init__(name=name, **kwargs)
         self.fc_factor = fc_factor
-        self.ln = tf.keras.layers.LayerNormalization(name=f"{name}_ln")
-        self.ffn1 = tf.keras.layers.Dense(4 * input_dim, name=f"{name}_dense_1")
+        self.ln = tf.keras.layers.LayerNormalization(
+            name=f"{name}_ln",
+            gamma_regularizer=kernel_regularizer,
+            beta_regularizer=bias_regularizer
+        )
+        self.ffn1 = tf.keras.layers.Dense(
+            4 * input_dim, name=f"{name}_dense_1",
+            kernel_regularizer=kernel_regularizer,
+            bias_regularizer=bias_regularizer
+        )
         self.swish = tf.keras.layers.Activation(
             tf.keras.activations.swish, name=f"{name}_swish_activation")
         self.do1 = tf.keras.layers.Dropout(dropout, name=f"{name}_dropout_1")
-        self.ffn2 = tf.keras.layers.Dense(input_dim, name=f"{name}_dense_2")
+        self.ffn2 = tf.keras.layers.Dense(
+            input_dim, name=f"{name}_dense_2",
+            kernel_regularizer=kernel_regularizer,
+            bias_regularizer=bias_regularizer
+        )
         self.do2 = tf.keras.layers.Dropout(dropout, name=f"{name}_dropout_2")
         self.res_add = tf.keras.layers.Add(name=f"{name}_add")
 
@@ -105,13 +131,22 @@ class MHSAModule(tf.keras.layers.Layer):
                  head_size,
                  num_heads,
                  dropout=0.0,
+                 kernel_regularizer=L2,
+                 bias_regularizer=L2,
                  name="mhsa_module",
                  **kwargs):
         super(MHSAModule, self).__init__(name=name, **kwargs)
         self.pc = PositionalEncoding(name=f"{name}_pe")
-        self.ln = tf.keras.layers.LayerNormalization(name=f"{name}_ln")
-        self.mha = MultiHeadAttention(head_size=head_size, num_heads=num_heads,
-                                      name=f"{name}_mhsa")
+        self.ln = tf.keras.layers.LayerNormalization(
+            name=f"{name}_ln",
+            gamma_regularizer=kernel_regularizer,
+            beta_regularizer=bias_regularizer
+        )
+        self.mha = MultiHeadAttention(
+            head_size=head_size, num_heads=num_heads, name=f"{name}_mhsa",
+            kernel_regularizer=kernel_regularizer,
+            bias_regularizer=bias_regularizer
+        )
         self.do = tf.keras.layers.Dropout(dropout, name=f"{name}_dropout")
         self.res_add = tf.keras.layers.Add(name=f"{name}_add")
 
@@ -138,24 +173,38 @@ class ConvModule(tf.keras.layers.Layer):
                  input_dim,
                  kernel_size=32,
                  dropout=0.0,
+                 kernel_regularizer=L2,
+                 bias_regularizer=L2,
                  name="conv_module",
                  **kwargs):
         super(ConvModule, self).__init__(name=name, **kwargs)
         self.ln = tf.keras.layers.LayerNormalization()
         self.pw_conv_1 = tf.keras.layers.Conv1D(
             filters=2 * input_dim, kernel_size=1, strides=1,
-            padding="same", name=f"{name}_pw_conv_1"
+            padding="same", name=f"{name}_pw_conv_1",
+            kernel_regularizer=kernel_regularizer,
+            bias_regularizer=bias_regularizer
         )
         self.glu = GLU(name=f"{name}_glu")
         self.dw_conv = tf.keras.layers.SeparableConv1D(
             filters=2 * input_dim, kernel_size=kernel_size, strides=1,
-            padding="same", depth_multiplier=1, name=f"{name}_dw_conv"
+            padding="same", depth_multiplier=1, name=f"{name}_dw_conv",
+            depthwise_regularizer=kernel_regularizer,
+            bias_regularizer=bias_regularizer
         )
-        self.bn = tf.keras.layers.BatchNormalization(name=f"{name}_bn")
+        self.bn = tf.keras.layers.BatchNormalization(
+            name=f"{name}_bn",
+            gamma_regularizer=kernel_regularizer,
+            beta_regularizer=bias_regularizer
+        )
         self.swish = tf.keras.layers.Activation(
             tf.keras.activations.swish, name=f"{name}_swish_activation")
-        self.pw_conv_2 = tf.keras.layers.Conv1D(filters=input_dim, kernel_size=1, strides=1,
-                                                padding="same", name=f"{name}_pw_conv_2")
+        self.pw_conv_2 = tf.keras.layers.Conv1D(
+            filters=input_dim, kernel_size=1, strides=1,
+            padding="same", name=f"{name}_pw_conv_2",
+            kernel_regularizer=kernel_regularizer,
+            bias_regularizer=bias_regularizer
+        )
         self.do = tf.keras.layers.Dropout(dropout, name=f"{name}_dropout")
         self.res_add = tf.keras.layers.Add(name=f"{name}_add")
 
@@ -193,20 +242,40 @@ class ConformerBlock(tf.keras.layers.Layer):
                  head_size=144,
                  num_heads=4,
                  kernel_size=32,
+                 kernel_regularizer=L2,
+                 bias_regularizer=L2,
                  name="conformer_block",
                  **kwargs):
         super(ConformerBlock, self).__init__(name=name, **kwargs)
-        self.ffm1 = FFModule(input_dim=input_dim,
-                             dropout=dropout, fc_factor=fc_factor,
-                             name=f"{name}_ff_module_1")
-        self.mhsam = MHSAModule(head_size=head_size, num_heads=num_heads,
-                                dropout=dropout, name=f"{name}_mhsa_module")
-        self.convm = ConvModule(input_dim=input_dim, kernel_size=kernel_size,
-                                dropout=dropout, name=f"{name}_conv_module")
-        self.ffm2 = FFModule(input_dim=input_dim,
-                             dropout=dropout, fc_factor=fc_factor,
-                             name=f"{name}_ff_module_2")
-        self.ln = tf.keras.layers.LayerNormalization(name=f"{name}_ln")
+        self.ffm1 = FFModule(
+            input_dim=input_dim, dropout=dropout,
+            fc_factor=fc_factor, name=f"{name}_ff_module_1",
+            kernel_regularizer=kernel_regularizer,
+            bias_regularizer=bias_regularizer
+        )
+        self.mhsam = MHSAModule(
+            head_size=head_size, num_heads=num_heads,
+            dropout=dropout, name=f"{name}_mhsa_module",
+            kernel_regularizer=kernel_regularizer,
+            bias_regularizer=bias_regularizer
+        )
+        self.convm = ConvModule(
+            input_dim=input_dim, kernel_size=kernel_size,
+            dropout=dropout, name=f"{name}_conv_module",
+            kernel_regularizer=kernel_regularizer,
+            bias_regularizer=bias_regularizer
+        )
+        self.ffm2 = FFModule(
+            input_dim=input_dim, dropout=dropout,
+            fc_factor=fc_factor, name=f"{name}_ff_module_2",
+            kernel_regularizer=kernel_regularizer,
+            bias_regularizer=bias_regularizer
+        )
+        self.ln = tf.keras.layers.LayerNormalization(
+            name=f"{name}_ln",
+            gamma_regularizer=kernel_regularizer,
+            beta_regularizer=kernel_regularizer
+        )
 
     def call(self, inputs, training=False, **kwargs):
         outputs = self.ffm1(inputs, training=training)
@@ -236,12 +305,16 @@ class ConformerEncoder(tf.keras.Model):
                  kernel_size=32,
                  fc_factor=0.5,
                  dropout=0.0,
+                 kernel_regularizer=L2,
+                 bias_regularizer=L2,
                  name="conformer_encoder",
                  **kwargs):
         super(ConformerEncoder, self).__init__(name=name, **kwargs)
         self.conv_subsampling = ConvSubsampling(
             odim=dmodel, reduction_factor=reduction_factor,
-            dropout=dropout
+            dropout=dropout, name=f"{name}_subsampling",
+            kernel_regularizer=kernel_regularizer,
+            bias_regularizer=bias_regularizer
         )
         self.conformer_blocks = []
         for i in range(num_blocks):
@@ -252,6 +325,8 @@ class ConformerEncoder(tf.keras.Model):
                 head_size=head_size,
                 num_heads=num_heads,
                 kernel_size=kernel_size,
+                kernel_regularizer=kernel_regularizer,
+                bias_regularizer=bias_regularizer,
                 name=f"conformer_block_{i}"
             )
             self.conformer_blocks.append(conformer_block)
@@ -287,6 +362,8 @@ class Conformer(Transducer):
                  num_lstms: int = 1,
                  lstm_units: int = 320,
                  joint_dim: int = 1024,
+                 kernel_regularizer=L2,
+                 bias_regularizer=L2,
                  name: str = "conformer_transducer",
                  **kwargs):
         super(Conformer, self).__init__(
@@ -299,6 +376,8 @@ class Conformer(Transducer):
                 kernel_size=kernel_size,
                 fc_factor=fc_factor,
                 dropout=dropout,
+                kernel_regularizer=kernel_regularizer,
+                bias_regularizer=bias_regularizer
             ),
             vocabulary_size=vocabulary_size,
             embed_dim=embed_dim,
@@ -306,6 +385,8 @@ class Conformer(Transducer):
             num_lstms=num_lstms,
             lstm_units=lstm_units,
             joint_dim=joint_dim,
+            kernel_regularizer=kernel_regularizer,
+            bias_regularizer=bias_regularizer,
             name=name, **kwargs
         )
         self.time_reduction_factor = reduction_factor

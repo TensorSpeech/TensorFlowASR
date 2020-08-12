@@ -15,9 +15,10 @@
 import os
 import math
 import argparse
-from tiramisu_asr.utils import setup_environment
+from tiramisu_asr.utils import setup_environment, setup_tpu
 
 setup_environment()
+resolver = setup_tpu(os.environ["COLAB_TPU_ADDR"])
 import tensorflow as tf
 
 from tiramisu_asr.configs.user_config import UserConfig
@@ -56,6 +57,8 @@ def main():
 
     tf.random.set_seed(2020)
 
+    strategy = tf.distribute.TPUStrategy(resolver)
+
     if args.tfrecords:
         train_dataset = ASRTFRecordDataset(
             config["learning_config"]["dataset_config"]["train_paths"],
@@ -86,7 +89,8 @@ def main():
 
     conformer_trainer = TransducerTrainer(
         config=config["learning_config"]["running_config"],
-        text_featurizer=text_featurizer
+        text_featurizer=text_featurizer,
+        strategy=strategy
     )
 
     with conformer_trainer.strategy.scope():

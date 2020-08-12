@@ -43,45 +43,43 @@ def main():
     parser.add_argument("--tfrecords", type=bool, default=False,
                         help="Whether to use tfrecords as dataset")
 
-    def run(args):
-        config = UserConfig(DEFAULT_YAML, args.config, learning=True)
-        speech_featurizer = TFSpeechFeaturizer(config["speech_config"])
-        text_featurizer = TextFeaturizer(config["decoder_config"])
-
-        tf.random.set_seed(0)
-        assert args.saved
-
-        if args.tfrecords:
-            test_dataset = ASRTFRecordDataset(
-                config["learning_config"]["dataset_config"]["test_paths"],
-                config["learning_config"]["dataset_config"]["tfrecords_dir"],
-                speech_featurizer, text_featurizer, "test",
-                augmentations=config["learning_config"]["augmentations"], shuffle=False
-            )
-        else:
-            test_dataset = ASRSliceDataset(
-                stage="test", speech_featurizer=speech_featurizer,
-                text_featurizer=text_featurizer,
-                data_paths=config["learning_config"]["dataset_config"]["eval_paths"],
-                shuffle=False
-            )
-
-        # build model
-        conformer = Conformer(
-            vocabulary_size=text_featurizer.num_classes,
-            **config["model_config"]
-        )
-        conformer._build(speech_featurizer.compute_feature_shape())
-        conformer.summary(line_length=150)
-        conformer.load_weights(args.saved)
-        conformer.add_featurizers(speech_featurizer, text_featurizer)
-
-        conformer_tester = BaseTester(config=config["learning_config"]["running_config"])
-        conformer_tester.compile(conformer)
-        conformer_tester.run(test_dataset)
-
     args = parser.parse_args()
-    run(args)
+
+    config = UserConfig(DEFAULT_YAML, args.config, learning=True)
+    speech_featurizer = TFSpeechFeaturizer(config["speech_config"])
+    text_featurizer = TextFeaturizer(config["decoder_config"])
+
+    tf.random.set_seed(0)
+    assert args.saved
+
+    if args.tfrecords:
+        test_dataset = ASRTFRecordDataset(
+            config["learning_config"]["dataset_config"]["test_paths"],
+            config["learning_config"]["dataset_config"]["tfrecords_dir"],
+            speech_featurizer, text_featurizer, "test",
+            augmentations=config["learning_config"]["augmentations"], shuffle=False
+        )
+    else:
+        test_dataset = ASRSliceDataset(
+            stage="test", speech_featurizer=speech_featurizer,
+            text_featurizer=text_featurizer,
+            data_paths=config["learning_config"]["dataset_config"]["eval_paths"],
+            shuffle=False
+        )
+
+    # build model
+    conformer = Conformer(
+        vocabulary_size=text_featurizer.num_classes,
+        **config["model_config"]
+    )
+    conformer._build(speech_featurizer.compute_feature_shape())
+    conformer.summary(line_length=150)
+    conformer.load_weights(args.saved)
+    conformer.add_featurizers(speech_featurizer, text_featurizer)
+
+    conformer_tester = BaseTester(config=config["learning_config"]["running_config"])
+    conformer_tester.compile(conformer)
+    conformer_tester.run(test_dataset)
 
 
 if __name__ == "__main__":

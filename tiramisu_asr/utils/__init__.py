@@ -37,3 +37,11 @@ def setup_environment():  # Set memory growth and only log ERRORs
             print(e)
 
     tf.config.optimizer.set_experimental_options({"auto_mixed_precision": True})
+
+
+def setup_tpu(tpu_address):
+    resolver = tf.distribute.cluster_resolver.TPUClusterResolver(tpu='grpc://' + tpu_address)
+    tf.config.experimental_connect_to_cluster(resolver)
+    tf.tpu.experimental.initialize_tpu_system(resolver)
+    print("All TPUs: ", tf.config.list_logical_devices('TPU'))
+    return resolver
