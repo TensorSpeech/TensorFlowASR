@@ -40,6 +40,8 @@ def setup_environment():  # Set memory growth and only log ERRORs
 
 
 def setup_tpu(tpu_address):
+    import tensorflow as tf
+
     resolver = tf.distribute.cluster_resolver.TPUClusterResolver(tpu='grpc://' + tpu_address)
     tf.config.experimental_connect_to_cluster(resolver)
     tf.tpu.experimental.initialize_tpu_system(resolver)
