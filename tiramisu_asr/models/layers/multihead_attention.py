@@ -22,6 +22,8 @@ class MultiHeadAttention(tf.keras.layers.Layer):
                  num_heads: int,
                  output_size: int = None,
                  dropout: float = 0.0,
+                 kernel_regularizer=None,
+                 bias_regularizer=None,
                  name: str = "mha",
                  **kwargs):
         super(MultiHeadAttention, self).__init__(name=name, **kwargs)
@@ -30,6 +32,8 @@ class MultiHeadAttention(tf.keras.layers.Layer):
         self.all_head_size = self.head_size * self.num_heads
         self.output_size = output_size
         self.dropout = dropout
+        self.kernel_regularizer = tf.keras.regularizers.get(kernel_regularizer)
+        self.bias_regularizer = tf.keras.regularizers.get(bias_regularizer)
 
     def transpose_for_scores(self, x, batch_size):
         """Transpose to calculate attention scores."""
@@ -38,12 +42,28 @@ class MultiHeadAttention(tf.keras.layers.Layer):
 
     def build(self, input_shape):
         _, _, value_shape = input_shape
-        self.query = tf.keras.layers.Dense(self.all_head_size, name="query")
-        self.key = tf.keras.layers.Dense(self.all_head_size, name="key")
-        self.value = tf.keras.layers.Dense(self.all_head_size, name="value")
+        self.query = tf.keras.layers.Dense(
+            self.all_head_size, name="query",
+            kernel_regularizer=self.kernel_regularizer,
+            bias_regularizer=self.bias_regularizer
+        )
+        self.key = tf.keras.layers.Dense(
+            self.all_head_size, name="key",
+            kernel_regularizer=self.kernel_regularizer,
+            bias_regularizer=self.bias_regularizer
+        )
+        self.value = tf.keras.layers.Dense(
+            self.all_head_size, name="value",
+            kernel_regularizer=self.kernel_regularizer,
+            bias_regularizer=self.bias_regularizer
+        )
         self.dropout = tf.keras.layers.Dropout(self.dropout, name="dropout")
         if self.output_size is None: self.output_size = value_shape[-1]  # value dim
-        self.wo = tf.keras.layers.Dense(self.output_size, name="wo")
+        self.wo = tf.keras.layers.Dense(
+            self.output_size, name="wo",
+            kernel_regularizer=self.kernel_regularizer,
+            bias_regularizer=self.bias_regularizer
+        )
 
     def call(self, inputs, training=False):
         query, key, value = inputs
