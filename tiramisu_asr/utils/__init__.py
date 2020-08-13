@@ -36,6 +36,8 @@ def setup_environment():  # Set memory growth and only log ERRORs
             # Memory growth must be set before GPUs have been initialized
             print(e)
 
+    tf.config.optimizer.set_experimental_options({"auto_mixed_precision": True})
+
 
 def setup_tpu(tpu_address):
     import tensorflow as tf

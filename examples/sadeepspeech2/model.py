@@ -16,9 +16,9 @@ Read https://www.tensorflow.org/api_docs/python/tf/keras/layers/LSTM
 to use cuDNN-LSTM
 """
 import tensorflow as tf
+import tensorflow_addons as tfa
 
 from tiramisu_asr.models.layers.positional_encoding import PositionalEncoding
-from tiramisu_asr.models.layers.multihead_attention import MultiHeadAttention
 from tiramisu_asr.models.layers.point_wise_ffn import PointWiseFFN
 from tiramisu_asr.models.layers.sequence_wise_batch_norm import SequenceBatchNorm
 from tiramisu_asr.utils.utils import merge_features_to_channels
@@ -68,9 +68,9 @@ def create_sattds2(input_shape: list,
         layer = tf.keras.layers.Add()([layer, 0.5 * ffn])
         att = PositionalEncoding(name=f"pos_enc_{i}")(layer)
         att = tf.keras.layers.LayerNormalization()(att)
-        att = MultiHeadAttention(head_size=arch_config["att"]["head_size"],
-                                 num_heads=arch_config["att"]["num_heads"],
-                                 name=f"mulhead_satt_{i}")([att, att, att])
+        att = tfa.layers.MultiHeadAttention(head_size=arch_config["att"]["head_size"],
+                                            num_heads=arch_config["att"]["num_heads"],
+                                            name=f"mulhead_satt_{i}")([att, att, att])
         att = tf.keras.layers.Dropout(arch_config["att"]["dropout"],
                                       name=f"mhsa_dropout_{i}")(att)
         layer = tf.keras.layers.Add()([layer, att])
