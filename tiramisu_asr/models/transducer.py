@@ -36,7 +36,7 @@ class TransducerPrediction(tf.keras.layers.Layer):
                  lstm_units: int = 512,
                  kernel_regularizer=None,
                  bias_regularizer=None,
-                 inference: bool = False,  # whether to build with tf.function for inference
+                 tflite: bool = False,
                  name="transducer_prediction",
                  **kwargs):
         super(TransducerPrediction, self).__init__(name=name, **kwargs)
@@ -56,8 +56,8 @@ class TransducerPrediction(tf.keras.layers.Layer):
                 bias_regularizer=bias_regularizer
             )
             self.lstms.append(lstm)
-        if inference:
-            # build with tf.function for inference to convert
+        if tflite:
+            # build with tf.function for converting
             # embeddings to tflite
             self.call = tf.function(self.perform)
         else:
@@ -164,6 +164,7 @@ class Transducer(Model):
                  joint_dim: int = 1024,
                  kernel_regularizer=None,
                  bias_regularizer=None,
+                 tflite: bool = False,
                  name="transducer",
                  **kwargs):
         super(Transducer, self).__init__(name=name, **kwargs)
@@ -176,6 +177,7 @@ class Transducer(Model):
             lstm_units=lstm_units,
             kernel_regularizer=kernel_regularizer,
             bias_regularizer=bias_regularizer,
+            tflite=tflite,
             name=f"{name}_prediction"
         )
         self.joint_net = TransducerJoint(

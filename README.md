@@ -63,7 +63,7 @@ Clean up: `python3 setup.py clean --all` (this will remove `/build` contents)
 After converting to tflite, the tflite model is like a function that transforms directly from an **audio signal** to **unicode code points**, then we can convert unicode points to string.
 
 1. Install `tf-nightly` using `pip install tf-nightly`
-2. Build a model with the same architecture as the trained model, then load the weights from trained model to the built model
+2. Build a model with the same architecture as the trained model _(if model has tflite argument, you must set it to True)_, then load the weights from trained model to the built model
 3. Load `TFSpeechFeaturizer` and `TextFeaturizer` to model using function `add_featurizers`
 4. Convert `recognize_tflite` or `recognize_beam_tflite` function to tflite as follows:
 
