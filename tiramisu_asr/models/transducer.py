@@ -72,7 +72,8 @@ class TransducerPrediction(tf.keras.layers.Layer):
         outputs = self.embed(inputs, training=training)
         outputs = self.do(outputs, training=training)
         for i, lstm in enumerate(self.lstms):
-            outputs, _, _ = lstm(outputs, training=training, initial_state=None)
+            outputs = lstm(outputs, training=training, initial_state=None)
+            outputs = outputs[0]
         return outputs
 
     @tf.function
