@@ -52,7 +52,7 @@ For **setting up datasets**, see [datasets](./tiramisu_asr/datasets/README.md)
 
 -   For _testing_ **Speech Enhancement Model** (i.e SEGAN), install `octave` and run `./scripts/install_semetrics.sh`
 
--   Method `tiramisu_asr.utils.setup_environment()` automatically enable **mixed_precision** if available.
+-   Method `compile` in any `trainers` automatically enable **mixed_precision** if available.
 
 -   To enable XLA, run `TF_XLA_FLAGS=--tf_xla_auto_jit=2 $python_train_script`
 

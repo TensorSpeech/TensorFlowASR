@@ -16,7 +16,7 @@ def setup_environment():  # Set memory growth and only log ERRORs
     import os
     import warnings
 
-    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "0"
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
     warnings.simplefilter("ignore")
 
     import tensorflow as tf
@@ -35,8 +35,6 @@ def setup_environment():  # Set memory growth and only log ERRORs
         except RuntimeError as e:
             # Memory growth must be set before GPUs have been initialized
             print(e)
-
-    # tf.config.optimizer.set_experimental_options({"auto_mixed_precision": True})
 
 
 def setup_tpu(tpu_address):

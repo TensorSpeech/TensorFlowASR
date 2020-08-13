@@ -36,6 +36,7 @@ class TransducerPrediction(tf.keras.layers.Layer):
                  lstm_units: int = 512,
                  kernel_regularizer=None,
                  bias_regularizer=None,
+                 inference: bool = False,  # whether to build with tf.function for inference
                  name="transducer_prediction",
                  **kwargs):
         super(TransducerPrediction, self).__init__(name=name, **kwargs)
@@ -55,6 +56,12 @@ class TransducerPrediction(tf.keras.layers.Layer):
                 bias_regularizer=bias_regularizer
             )
             self.lstms.append(lstm)
+        if inference:
+            # build with tf.function for inference to convert
+            # embeddings to tflite
+            self.call = tf.function(self.perform)
+        else:
+            self.call = self.perform
 
     def get_initial_state(self):
         memory_states = []
@@ -66,8 +73,7 @@ class TransducerPrediction(tf.keras.layers.Layer):
             )
         return memory_states
 
-    # @tf.function  # unable to convert embedding to tflite without wraping tf.function
-    def call(self, inputs, training=False):
+    def perform(self, inputs, training=False):
         # inputs has shape [B, U]
         outputs = self.embed(inputs, training=training)
         outputs = self.do(outputs, training=training)
