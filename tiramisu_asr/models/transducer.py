@@ -66,7 +66,7 @@ class TransducerPrediction(tf.keras.layers.Layer):
             )
         return memory_states
 
-    @tf.function  # unable to convert embedding to tflite without wraping tf.function
+    # @tf.function  # unable to convert embedding to tflite without wraping tf.function
     def call(self, inputs, training=False):
         # inputs has shape [B, U]
         outputs = self.embed(inputs, training=training)
