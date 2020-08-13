@@ -36,6 +36,7 @@ class TransducerPrediction(tf.keras.layers.Layer):
                  lstm_units: int = 512,
                  kernel_regularizer=None,
                  bias_regularizer=None,
+                 tflite: bool = False,
                  name="transducer_prediction",
                  **kwargs):
         super(TransducerPrediction, self).__init__(name=name, **kwargs)
@@ -55,6 +56,12 @@ class TransducerPrediction(tf.keras.layers.Layer):
                 bias_regularizer=bias_regularizer
             )
             self.lstms.append(lstm)
+        if tflite:
+            # build with tf.function for converting
+            # embeddings to tflite
+            self.call = tf.function(self.perform)
+        else:
+            self.call = self.perform
 
     def get_initial_state(self):
         memory_states = []
@@ -66,13 +73,13 @@ class TransducerPrediction(tf.keras.layers.Layer):
             )
         return memory_states
 
-    @tf.function  # unable to convert embedding to tflite without wraping tf.function
-    def call(self, inputs, training=False):
+    def perform(self, inputs, training=False):
         # inputs has shape [B, U]
         outputs = self.embed(inputs, training=training)
         outputs = self.do(outputs, training=training)
         for i, lstm in enumerate(self.lstms):
-            outputs, _, _ = lstm(outputs, training=training, initial_state=None)
+            outputs = lstm(outputs, training=training, initial_state=None)
+            outputs = outputs[0]
         return outputs
 
     @tf.function
@@ -157,6 +164,7 @@ class Transducer(Model):
                  joint_dim: int = 1024,
                  kernel_regularizer=None,
                  bias_regularizer=None,
+                 tflite: bool = False,
                  name="transducer",
                  **kwargs):
         super(Transducer, self).__init__(name=name, **kwargs)
@@ -169,6 +177,7 @@ class Transducer(Model):
             lstm_units=lstm_units,
             kernel_regularizer=kernel_regularizer,
             bias_regularizer=bias_regularizer,
+            tflite=tflite,
             name=f"{name}_prediction"
         )
         self.joint_net = TransducerJoint(

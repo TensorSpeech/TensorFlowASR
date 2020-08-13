@@ -52,7 +52,7 @@ For **setting up datasets**, see [datasets](./tiramisu_asr/datasets/README.md)
 
 -   For _testing_ **Speech Enhancement Model** (i.e SEGAN), install `octave` and run `./scripts/install_semetrics.sh`
 
--   Method `tiramisu_asr.utils.setup_environment()` automatically enable **mixed_precision** if available.
+-   Method `compile` in any `trainers` automatically enable **mixed_precision** if available.
 
 -   To enable XLA, run `TF_XLA_FLAGS=--tf_xla_auto_jit=2 $python_train_script`
 
@@ -63,7 +63,7 @@ Clean up: `python3 setup.py clean --all` (this will remove `/build` contents)
 After converting to tflite, the tflite model is like a function that transforms directly from an **audio signal** to **unicode code points**, then we can convert unicode points to string.
 
 1. Install `tf-nightly` using `pip install tf-nightly`
-2. Build a model with the same architecture as the trained model, then load the weights from trained model to the built model
+2. Build a model with the same architecture as the trained model _(if model has tflite argument, you must set it to True)_, then load the weights from trained model to the built model
 3. Load `TFSpeechFeaturizer` and `TextFeaturizer` to model using function `add_featurizers`
 4. Convert `recognize_tflite` or `recognize_beam_tflite` function to tflite as follows:
 

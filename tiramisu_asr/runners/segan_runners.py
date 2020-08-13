@@ -159,13 +159,12 @@ class SeganTrainer(BaseTrainer):
         with self.strategy.scope():
             self.generator = generator
             self.discriminator = discriminator
-            self.generator_optimizer = tf.keras.optimizers.get(optimizer_config["generator"])
-            self.discriminator_optimizer = tf.keras.optimizers.get(
-                optimizer_config["discriminator"])
-            self.generator_optimizer = mixed_precision.LossScaleOptimizer(
-                self.generator_optimizer, "dynamic")
-            self.discriminator_optimizer = mixed_precision.LossScaleOptimizer(
-                self.discriminator_optimizer, "dynamic")
+            gen_opt = tf.keras.optimizers.get(optimizer_config["generator"])
+            disc_opt = tf.keras.optimizers.get(optimizer_config["discriminator"])
+            self.generator_optimizer = \
+                tf.train.experimental.enable_mixed_precision_graph_rewrite(gen_opt)
+            self.discriminator_optimizer = \
+                tf.train.experimental.enable_mixed_precision_graph_rewrite(disc_opt)
         self.create_checkpoint_manager(
             max_to_keep, generator=self.generator, gen_optimizer=self.generator_optimizer,
             discriminator=self.discriminator, disc_optimizer=self.discriminator_optimizer

@@ -14,7 +14,6 @@
 
 import os
 import tensorflow as tf
-import tensorflow.keras.mixed_precision.experimental as mixed_precision
 
 from .base_runners import BaseTrainer
 from ..losses.rnnt_losses import rnnt_loss
@@ -83,6 +82,6 @@ class TransducerTrainer(BaseTrainer):
                 max_to_keep: int = 10):
         with self.strategy.scope():
             self.model = model
-            self.optimizer = tf.keras.optimizers.get(optimizer)
-            self.optimizer = mixed_precision.LossScaleOptimizer(self.optimizer, "dynamic")
+            opt = tf.keras.optimizers.get(optimizer)
+            self.optimizer = tf.train.experimental.enable_mixed_precision_graph_rewrite(opt)
         self.create_checkpoint_manager(max_to_keep, model=self.model, optimizer=self.optimizer)
