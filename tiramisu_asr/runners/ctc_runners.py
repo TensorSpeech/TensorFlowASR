@@ -59,10 +59,7 @@ class CTCTrainer(BaseTrainer):
             train_loss = tf.nn.compute_average_loss(per_train_loss,
                                                     global_batch_size=self.global_batch_size)
 
-            train_loss = self.optimizer.get_scaled_loss(train_loss)
-
         gradients = tape.gradient(train_loss, self.model.trainable_variables)
-        gradients = self.optimizer.get_unscaled_gradients(gradients)
         self.optimizer.apply_gradients(zip(gradients, self.model.trainable_variables))
 
         self.train_metrics["ctc_loss"].update_state(per_train_loss)
@@ -87,6 +84,5 @@ class CTCTrainer(BaseTrainer):
                 max_to_keep: int = 10):
         with self.strategy.scope():
             self.model = model
-            opt = tf.keras.optimizers.get(optimizer)
-            self.optimizer = tf.train.experimental.enable_mixed_precision_graph_rewrite(opt)
+            self.optimizer = tf.keras.optimizers.get(optimizer)
         self.create_checkpoint_manager(max_to_keep, model=self.model, optimizer=self.optimizer)

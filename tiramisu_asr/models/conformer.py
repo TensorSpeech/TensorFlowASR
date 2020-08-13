@@ -13,12 +13,12 @@
 # limitations under the License.
 
 import tensorflow as tf
+import tensorflow_addons as tfa
 
 from .activations import GLU
 from .transducer import Transducer
 from ..utils.utils import merge_two_last_dims
 from .layers.positional_encoding import PositionalEncoding
-from .layers.multihead_attention import MultiHeadAttention
 
 L2 = tf.keras.regularizers.L2(1e-6)
 
@@ -142,7 +142,7 @@ class MHSAModule(tf.keras.layers.Layer):
             gamma_regularizer=kernel_regularizer,
             beta_regularizer=bias_regularizer
         )
-        self.mha = MultiHeadAttention(
+        self.mha = tfa.layers.MultiHeadAttention(
             head_size=head_size, num_heads=num_heads, name=f"{name}_mhsa",
             kernel_regularizer=kernel_regularizer,
             bias_regularizer=bias_regularizer
