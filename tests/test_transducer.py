@@ -51,7 +51,7 @@ model = Transducer(
     embed_dim=350, embed_dropout=0.0, num_lstms=1, lstm_units=320, joint_dim=1024
 )
 
-model._build(speech_featurizer.compute_feature_shape())
+model._build(speech_featurizer.shape)
 model.summary(line_length=150)
 
 model.save_weights("/tmp/transducer.h5")

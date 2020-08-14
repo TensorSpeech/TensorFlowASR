@@ -95,7 +95,7 @@ def main():
             **config["model_config"],
             vocabulary_size=text_featurizer.num_classes
         )
-        conformer._build(speech_featurizer.compute_feature_shape())
+        conformer._build(speech_featurizer.shape)
         conformer.summary(line_length=150)
 
         optimizer_config = config["learning_config"]["optimizer_config"]

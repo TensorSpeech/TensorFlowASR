@@ -19,7 +19,7 @@ import sys
 # sys.path.append(o.abspath(o.join(o.dirname(sys.modules[__name__].__file__), "..")))
 #
 import matplotlib.pyplot as plt
-from tiramisu_asr.featurizers.speech_featurizers import read_raw_audio, TFSpeechFeaturizer
+from tiramisu_asr.featurizers.speech_featurizers import read_raw_audio, TFSpeechFeaturizer, NumpySpeechFeaturizer
 from tiramisu_asr.augmentations.augments import UserAugmentation
 
 
@@ -27,17 +27,16 @@ def main(argv):
     speech_file = argv[1]
     feature_type = argv[2]
     augments = {
-        "after": {
-            "time_masking": {
-                "num_masks": 10,
-                "mask_factor": 100,
-                "p_upperbound": 0.05
-            },
-            "freq_masking": {
-                "mask_factor": 27
-            }
-        },
-        "include_original": False
+        # "after": {
+        #     "time_masking": {
+        #         "num_masks": 10,
+        #         "mask_factor": 100,
+        #         "p_upperbound": 0.05
+        #     },
+        #     "freq_masking": {
+        #         "mask_factor": 27
+        #     }
+        # },
     }
     au = UserAugmentation(augments)
     speech_conf = {
@@ -46,6 +45,9 @@ def main(argv):
         "stride_ms": 10,
         "feature_type": feature_type,
         "preemphasis": 0.97,
+        "delta": False,
+        "delta_delta": False,
+        "pitch": False,
         "normalize_signal": True,
         "normalize_feature": True,
         "normalize_per_feature": False,
@@ -53,14 +55,16 @@ def main(argv):
     }
     signal = read_raw_audio(speech_file, speech_conf["sample_rate"])
 
-    sf = TFSpeechFeaturizer(speech_conf)
+    sf = NumpySpeechFeaturizer(speech_conf)
+    sf1 = TFSpeechFeaturizer(speech_conf)
     ft = sf.extract(signal)
+    ft1 = sf1.extract(signal)
     ft = au["after"].augment(ft)[:, :, 0]
 
-    plt.figure(figsize=(15, 5))
+    plt.figure(figsize=(15, 3))
     plt.imshow(ft.T, origin="lower")
-    plt.colorbar()
     plt.tight_layout()
+    plt.colorbar()
     plt.show()
     # plt.figure(figsize=(15, 5))
     # for i in range(4):

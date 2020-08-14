@@ -83,11 +83,11 @@ def main():
     ctc_trainer = CTCTrainer(text_featurizer, config["learning_config"]["running_config"])
     # Build DS2 model
     with ctc_trainer.strategy.scope():
-        ds2_model = DeepSpeech2(input_shape=speech_featurizer.compute_feature_shape(),
+        ds2_model = DeepSpeech2(input_shape=speech_featurizer.shape,
                                 arch_config=config["model_config"],
                                 num_classes=text_featurizer.num_classes,
                                 name="deepspeech2")
-        ds2_model._build(speech_featurizer.compute_feature_shape())
+        ds2_model._build(speech_featurizer.shape)
         ds2_model.summary(line_length=150)
     # Compile
     ctc_trainer.compile(ds2_model, config["learning_config"]["optimizer_config"],

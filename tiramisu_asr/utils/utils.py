@@ -138,3 +138,9 @@ def merge_repeated(yseqs, blank=0):
     )
 
     return tf.pad(result, [[U - shape_list(result)[0], 0]], constant_values=blank)
+
+
+def log10(x):
+    numerator = tf.math.log(x)
+    denominator = tf.math.log(tf.constant(10, dtype=numerator.dtype))
+    return numerator / denominator

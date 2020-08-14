@@ -98,11 +98,11 @@ def main():
             # Build DS2 model
             with ctc_trainer.strategy.scope():
                 satt_ds2_model = SelfAttentionDS2(
-                    input_shape=speech_featurizer.compute_feature_shape(),
+                    input_shape=speech_featurizer.shape,
                     arch_config=config["model_config"],
                     num_classes=text_featurizer.num_classes
                 )
-                satt_ds2_model._build(speech_featurizer.compute_feature_shape())
+                satt_ds2_model._build(speech_featurizer.shape)
                 satt_ds2_model.summary(line_length=150)
                 optimizer = create_optimizer(
                     name=config["learning_config"]["optimizer_config"]["name"],
@@ -124,11 +124,11 @@ def main():
 
             # Build DS2 model
             satt_ds2_model = SelfAttentionDS2(
-                input_shape=speech_featurizer.compute_feature_shape(),
+                input_shape=speech_featurizer.shape,
                 arch_config=config["model_config"],
                 num_classes=text_featurizer.num_classes
             )
-            satt_ds2_model._build(speech_featurizer.compute_feature_shape())
+            satt_ds2_model._build(speech_featurizer.shape)
             satt_ds2_model.summary(line_length=150)
             satt_ds2_model.load_weights(args.saved)
             satt_ds2_model.add_featurizers(speech_featurizer, text_featurizer)

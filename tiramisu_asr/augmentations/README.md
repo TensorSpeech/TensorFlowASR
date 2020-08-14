@@ -10,7 +10,7 @@ augmentations:
     after: ...
 ```
 
-Where `include_original` is whether to use only augmented dataset or both augmented and original datasets, `before` and `after` are augmentation methods to use before and after features extraction, **sometimes** is whether to randomly apply augmentation or apply all augmentations
+Where `before` and `after` are augmentation methods to use before and after features extraction.
 
 **Supported Methods**
 
