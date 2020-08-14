@@ -78,32 +78,34 @@ class ASRDataset(BaseDataset):
         return lines
 
     def preprocess(self, audio, transcript):
-        signal = read_raw_audio(audio.numpy(), self.speech_featurizer.sample_rate)
+        with tf.device("/CPU:0"):
+            signal = read_raw_audio(audio, self.speech_featurizer.sample_rate)
 
-        signal = self.augmentations["before"].augment(signal)
+            signal = self.augmentations["before"].augment(signal)
 
-        features = self.speech_featurizer.extract(signal)
+            features = self.speech_featurizer.extract(signal)
 
-        features = self.augmentations["after"].augment(features)
+            features = self.augmentations["after"].augment(features)
 
-        label = self.text_featurizer.extract(transcript.numpy().decode("utf-8"))
-        label_length = tf.cast(tf.shape(label)[0], tf.int32)
-        pred_inp = self.text_featurizer.prepand_blank(label)
-        features = tf.convert_to_tensor(features, tf.float32)
-        input_length = tf.cast(tf.shape(features)[0], tf.int32)
-        return features, input_length, label, label_length, pred_inp
+            label = self.text_featurizer.extract(transcript.decode("utf-8"))
+            label_length = tf.cast(tf.shape(label)[0], tf.int32)
+            pred_inp = self.text_featurizer.prepand_blank(label)
+            features = tf.convert_to_tensor(features, tf.float32)
+            input_length = tf.cast(tf.shape(features)[0], tf.int32)
+
+            return features, input_length, label, label_length, pred_inp
 
     def process(self, dataset, batch_size):
         dataset = dataset.map(self.parse, num_parallel_calls=AUTOTUNE)
         if self.shuffle:
-            dataset = dataset.shuffle(TFRECORD_SHARDS, reshuffle_each_iteration=True)
+            dataset = dataset.shuffle(TFRECORD_SHARDS)
 
         # PADDED BATCH the dataset
         dataset = dataset.padded_batch(
             batch_size=batch_size,
             padded_shapes=(
                 tf.TensorShape([]),
-                tf.TensorShape(self.speech_featurizer.compute_feature_shape()),
+                tf.TensorShape(self.speech_featurizer.shape),
                 tf.TensorShape([]),
                 tf.TensorShape([None]),
                 tf.TensorShape([]),
@@ -181,7 +183,7 @@ class ASRTFRecordDataset(ASRDataset):
         }
         example = tf.io.parse_single_example(record, feature_description)
 
-        features, input_length, label, label_length, pred_inp = tf.py_function(
+        features, input_length, label, label_length, pred_inp = tf.numpy_function(
             self.preprocess,
             inp=[example["audio"], example["transcript"]],
             Tout=(tf.float32, tf.int32, tf.int32, tf.int32, tf.int32)
@@ -208,20 +210,18 @@ class ASRTFRecordDataset(ASRDataset):
 class ASRSliceDataset(ASRDataset):
     """ Dataset for ASR using Slice """
 
-    def parse(self, record, augment=False):
-        path = record[0]
-        transcript = record[-1]
-        audio = tf.numpy_function(read_bytes, [path], tf.string)
-        features, input_length, label, label_length, pred_inp = tf.py_function(
+    def preprocess(self, path, transcript):
+        data = super(ASRSliceDataset, self).preprocess(path.decode("utf-8"), transcript)
+        return (path, *data)
+
+    def parse(self, record):
+        return tf.numpy_function(
             self.preprocess,
-            inp=[audio, transcript],
-            Tout=(tf.float32, tf.int32, tf.int32, tf.int32, tf.int32)
+            inp=[record[0], record[1]],
+            Tout=[tf.string, tf.float32, tf.int32, tf.int32, tf.int32, tf.int32]
         )
-        return path, features, input_length, label, label_length, pred_inp
 
     def create(self, batch_size):
-        # Create Generator dataset
-
         entries = self.read_entries()
         if len(entries) == 0:
             return None

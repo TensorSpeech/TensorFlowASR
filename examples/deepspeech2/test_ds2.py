@@ -52,11 +52,11 @@ def main():
     speech_featurizer = TFSpeechFeaturizer(config["speech_config"])
     text_featurizer = TextFeaturizer(config["decoder_config"])
     # Build DS2 model
-    ds2_model = DeepSpeech2(input_shape=speech_featurizer.compute_feature_shape(),
+    ds2_model = DeepSpeech2(input_shape=speech_featurizer.shape,
                             arch_config=config["model_config"],
                             num_classes=text_featurizer.num_classes,
                             name="deepspeech2")
-    ds2_model._build(speech_featurizer.compute_feature_shape())
+    ds2_model._build(speech_featurizer.shape)
     ds2_model.summary(line_length=150)
     ds2_model.load_weights(args.saved)
     ds2_model.add_featurizers(speech_featurizer, text_featurizer)

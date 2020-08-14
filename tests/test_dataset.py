@@ -1,3 +1,9 @@
+import os
+import psutil
+process = psutil.Process(os.getpid())
+
+from tiramisu_asr.utils import setup_environment
+setup_environment()
 from tiramisu_asr.datasets.asr_dataset import ASRSliceDataset
 from tiramisu_asr.featurizers.speech_featurizers import TFSpeechFeaturizer
 from tiramisu_asr.featurizers.text_featurizers import TextFeaturizer
@@ -42,18 +48,17 @@ speech_featurizer = TFSpeechFeaturizer({
     "num_feature_bins": 80,
     "feature_type": "logfbank",
     "preemphasis": 0.97,
-    # "delta": True,
-    # "delta_delta": True,
     "normalize_signal": True,
     "normalize_feature": True,
-    "normalize_per_feature": False,
-    # "pitch": False,
+    "normalize_per_feature": False
 })
 
 
 dataset = ASRSliceDataset(stage="train", speech_featurizer=speech_featurizer,
                           text_featurizer=text_featurizer, data_paths=[data],
-                          augmentations=augments, shuffle=True).create(4)
+                          augmentations=augments, shuffle=True).create(4).take(100)
 
-for i, batch in enumerate(dataset):
-    print(f"Processed batch {i}")
+while True:
+    print("--------------------------------------------")
+    for i, batch in enumerate(dataset):
+        print(process.memory_info().rss)

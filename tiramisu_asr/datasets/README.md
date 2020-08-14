@@ -5,6 +5,8 @@ To make a custom dataset, inherit the `BaseDataset` class and override following
 1. `create` to create `tf.data.Dataset` instance.
 2. `parse` for transforming `tf.data.Dataset` during creation by applyting `tf.data.Dataset.map` function.
 
+_Note_: To create transcripts for **librispeech**, see [create_librispeech_trans.py](../../scripts/create_librispeech_trans.py)
+
 ## ASR Datasets
 
 An ASR dataset is some `.tsv` files in format: `PATH\tDURATION\tTRANSCRIPT`. You must create those files by your own with your own data and methods.
@@ -46,18 +48,28 @@ class ASRSliceDataset(ASRDataset):
 
 ## SEGAN Datasets
 
-A SEGAN Dataset is some path to **clean** `.wav` files and a path to **noise** `.wav` files. While training, it will add noises from noisy audio files into clean audio signals _on the fly_ according to your configuration :kissing_smiling_eyes:
+A `SeganAugDataset` is constructed from some path to **clean** `.wav` files and a path to **noise** `.wav` files. While training, it will add noises from noisy audio files into clean audio signals _on the fly_ according to your configuration :kissing_smiling_eyes:
+
+A `SeganDataset` is constructed from a directory containing **clean** `.wav` and a directory containing **noisy** `.wav`.
 
 **Inputs**
 
 ```python
-class SeganDataset(BaseDataset):
+class SeganAugTrainDataset(BaseDataset):
     def __init__(self,
                  stage: str,
                  clean_dir: str,
                  noisy_dir: str,
                  speech_config: dict,
                  shuffle: bool = False)
+                 
+class SeganTrainDataset(BaseDataset):
+    def __init__(self,
+                 stage: str,
+                 clean_dir: str,
+                 noisy_dir: str,
+                 speech_config: dict,
+                 shuffle: bool = False):
 ```
 
 **Outputs when iterating for training**

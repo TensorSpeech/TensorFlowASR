@@ -13,10 +13,14 @@
 # limitations under the License.
 import os
 import io
+import abc
+import six
 import numpy as np
 import librosa
 import soundfile as sf
 import tensorflow as tf
+
+from ..utils.utils import log10
 
 
 def read_raw_audio(audio, sample_rate=16000):
@@ -158,7 +162,46 @@ def tf_depreemphasis(signal: tf.Tensor, coeff=0.97):
     return tf.map_fn(map_fn, signal)
 
 
-class SpeechFeaturizer:
+class SpeechFeaturizer(metaclass=abc.ABCMeta):
+    def __init__(self, speech_config: dict):
+        # Samples
+        self.sample_rate = speech_config["sample_rate"]
+        self.frame_length = int(self.sample_rate * (speech_config["frame_ms"] / 1000))
+        self.frame_step = int(self.sample_rate * (speech_config["stride_ms"] / 1000))
+        # Features
+        self.num_feature_bins = speech_config["num_feature_bins"]
+        self.feature_type = speech_config["feature_type"]
+        self.preemphasis = speech_config["preemphasis"]
+        # Normalization
+        self.normalize_signal = speech_config["normalize_signal"]
+        self.normalize_feature = speech_config["normalize_feature"]
+        self.normalize_per_feature = speech_config["normalize_per_feature"]
+
+    @property
+    def nfft(self) -> int:
+        """ Number of FFT """
+        return 2 ** (self.frame_length - 1).bit_length()
+
+    @property
+    def shape(self) -> list:
+        """ The shape of extracted features """
+        raise NotImplementedError()
+
+    @abc.abstractclassmethod
+    def stft(self, signal):
+        raise NotImplementedError()
+
+    @abc.abstractclassmethod
+    def power_to_db(self, S, ref=1.0, amin=1e-10, top_db=80.0):
+        raise NotImplementedError()
+
+    @abc.abstractmethod
+    def extract(self, signal):
+        """ Function to perform feature extraction """
+        raise NotImplementedError()
+
+
+class NumpySpeechFeaturizer(SpeechFeaturizer):
     def __init__(self, speech_config: dict):
         """
         We should use TFSpeechFeaturizer for training to avoid differences
@@ -177,28 +220,13 @@ class SpeechFeaturizer:
             "normalize_per_feature": bool
         }
         """
-        # Samples
-        self.sample_rate = speech_config["sample_rate"]
-        self.frame_length = int(self.sample_rate * (speech_config["frame_ms"] / 1000))
-        self.frame_step = int(self.sample_rate * (speech_config["stride_ms"] / 1000))
-        # Features
-        self.num_feature_bins = speech_config["num_feature_bins"]
-        self.feature_type = speech_config["feature_type"]
+        super(NumpySpeechFeaturizer, self).__init__(speech_config)
         self.delta = speech_config["delta"]
         self.delta_delta = speech_config["delta_delta"]
         self.pitch = speech_config["pitch"]
-        self.preemphasis = speech_config["preemphasis"]
-        # Normalization
-        self.normalize_signal = speech_config["normalize_signal"]
-        self.normalize_feature = speech_config["normalize_feature"]
-        self.normalize_per_feature = speech_config["normalize_per_feature"]
 
-    def compute_time_dim(self, seconds: float) -> int:
-        # implementation using pad "reflect" with n_fft // 2
-        total_frames = seconds * self.sample_rate + 2 * (self.frame_length // 2)
-        return int(1 + (total_frames - self.frame_length) // self.frame_step)
-
-    def compute_feature_shape(self) -> list:
+    @property
+    def shape(self) -> list:
         # None for time dimension
         channel_dim = 1
 
@@ -213,17 +241,26 @@ class SpeechFeaturizer:
 
         return [None, self.num_feature_bins, channel_dim]
 
+    def stft(self, signal):
+        return np.square(
+            np.abs(librosa.core.stft(signal, n_fft=self.nfft,
+                                     hop_length=self.frame_step,
+                                     win_length=self.frame_length, center=True)))
+
+    def power_to_db(self, S, ref=1.0, amin=1e-10, top_db=80.0):
+        return librosa.power_to_db(S, ref=ref, amin=amin, top_db=top_db)
+
     def extract(self, signal: np.ndarray) -> np.ndarray:
         if self.normalize_signal:
             signal = normalize_signal(signal)
         signal = preemphasis(signal, self.preemphasis)
 
         if self.feature_type == "mfcc":
-            features = self._compute_mfcc_feature(signal)
+            features = self._compute_mfcc_features(signal)
         elif self.feature_type == "logfbank":
-            features = self._compute_logfbank_feature(signal)
+            features = self._compute_logfbank_features(signal)
         elif self.feature_type == "spectrogram":
-            features = self._compute_spectrogram_feature(signal)
+            features = self._compute_spectrogram_features(signal)
         else:
             raise ValueError("feature_type must be either 'mfcc', 'logfbank' or 'spectrogram'")
 
@@ -248,7 +285,7 @@ class SpeechFeaturizer:
             features = np.concatenate([features, np.expand_dims(delta_delta, axis=-1)], axis=-1)
 
         if self.pitch:
-            pitches = self._compute_pitch_feature(signal)
+            pitches = self._compute_pitch_features(signal)
             if self.normalize_feature:
                 pitches = normalize_audio_feature(
                     pitches, per_feature=self.normalize_per_feature)
@@ -256,11 +293,11 @@ class SpeechFeaturizer:
 
         return features
 
-    def _compute_pitch_feature(self, signal: np.ndarray) -> np.ndarray:
+    def _compute_pitch_features(self, signal: np.ndarray) -> np.ndarray:
         pitches, _ = librosa.core.piptrack(
             y=signal, sr=self.sample_rate,
-            n_fft=self.frame_length, hop_length=self.frame_step,
-            fmin=0, fmax=int(self.sample_rate / 2), win_length=self.frame_length, center=True
+            n_fft=self.nfft, hop_length=self.frame_step,
+            fmin=0.0, fmax=int(self.sample_rate / 2), win_length=self.frame_length, center=True
         )
 
         pitches = pitches.T
@@ -271,13 +308,9 @@ class SpeechFeaturizer:
 
         return pitches[:, :self.num_feature_bins]
 
-    def _compute_spectrogram_feature(self, signal: np.ndarray) -> np.ndarray:
-        powspec = np.abs(librosa.core.stft(signal, n_fft=self.frame_length,
-                                           hop_length=self.frame_step,
-                                           win_length=self.frame_length, center=True))
-
-        # remove small bins
-        features = 20 * np.log10(powspec.T)
+    def _compute_spectrogram_features(self, signal: np.ndarray) -> np.ndarray:
+        powspec = self.stft(signal)
+        features = self.power_to_db(powspec.T)
 
         assert self.num_feature_bins <= self.frame_length // 2 + 1, \
             "num_features for spectrogram should \
@@ -288,37 +321,34 @@ class SpeechFeaturizer:
 
         return features
 
-    def _compute_mfcc_feature(self, signal: np.ndarray) -> np.ndarray:
-        S = np.square(
-            np.abs(
-                librosa.core.stft(
-                    signal, n_fft=self.frame_length, hop_length=self.frame_step,
-                    win_length=self.frame_length, center=True
-                )))
+    def _compute_mfcc_features(self, signal: np.ndarray) -> np.ndarray:
+        S = self.stft(signal)
 
-        mel_basis = librosa.filters.mel(self.sample_rate, self.frame_length,
-                                        n_mels=128,
-                                        fmin=0, fmax=int(self.sample_rate / 2))
+        mel = librosa.filters.mel(self.sample_rate, self.nfft,
+                                  n_mels=self.num_feature_bins,
+                                  fmin=0.0, fmax=int(self.sample_rate / 2))
+
+        mel_spectrogram = np.dot(mel, S)
 
         mfcc = librosa.feature.mfcc(sr=self.sample_rate,
-                                    S=librosa.core.power_to_db(np.dot(mel_basis, S) + 1e-20),
+                                    S=self.power_to_db(mel_spectrogram),
                                     n_mfcc=self.num_feature_bins)
 
         return mfcc.T
 
-    def _compute_logfbank_feature(self, signal: np.ndarray) -> np.ndarray:
-        S = np.square(np.abs(librosa.core.stft(signal, n_fft=self.frame_length,
-                                               hop_length=self.frame_step,
-                                               win_length=self.frame_length, center=True)))
+    def _compute_logfbank_features(self, signal: np.ndarray) -> np.ndarray:
+        S = self.stft(signal)
 
-        mel_basis = librosa.filters.mel(self.sample_rate, self.frame_length,
-                                        n_mels=self.num_feature_bins,
-                                        fmin=0, fmax=int(self.sample_rate / 2))
+        mel = librosa.filters.mel(self.sample_rate, self.nfft,
+                                  n_mels=self.num_feature_bins,
+                                  fmin=0.0, fmax=int(self.sample_rate / 2))
 
-        return np.log(np.dot(mel_basis, S) + 1e-20).T
+        mel_spectrogram = np.dot(mel, S)
+
+        return self.power_to_db(mel_spectrogram).T
 
 
-class TFSpeechFeaturizer:
+class TFSpeechFeaturizer(SpeechFeaturizer):
     def __init__(self, speech_config: dict):
         """
         TF Speech Featurizer does not support delta, delta's deltas and pitch features yet
@@ -328,9 +358,6 @@ class TFSpeechFeaturizer:
             "stride_ms": int,
             "num_feature_bins": int,
             "feature_type": "spectrogram", "logfbank" or "mfcc",
-            "delta": bool,
-            "delta_delta": bool,
-            "pitch": bool,
             "normalize_signal": bool,
             "normalize_feature": bool,
             "normalize_per_feature": bool
@@ -339,59 +366,43 @@ class TFSpeechFeaturizer:
         (because tflite doesnt support py_func so we cant use librosa)
         """
         # Samples
-        self.sample_rate = speech_config["sample_rate"]
-        self.frame_length = int(self.sample_rate * (speech_config["frame_ms"] / 1000))
-        self.frame_step = int(self.sample_rate * (speech_config["stride_ms"] / 1000))
-        # Features
-        self.num_feature_bins = speech_config["num_feature_bins"]
-        self.feature_type = speech_config["feature_type"]
-        for k in ["delta", "delta_delta", "pitch"]:
-            if speech_config.get(k, None) is not None:
-                raise ValueError("delta, delta_delta, pitch not supported yet")
-        # self.delta = speech_config["delta"]
-        # self.delta_delta = speech_config["delta_delta"]
-        # self.pitch = speech_config["pitch"]
-        self.preemphasis = speech_config["preemphasis"]
-        # Normalization
-        self.normalize_signal = speech_config["normalize_signal"]
-        self.normalize_feature = speech_config["normalize_feature"]
-        self.normalize_per_feature = speech_config["normalize_per_feature"]
-        self.num_fft = self.frame_length
+        super(TFSpeechFeaturizer, self).__init__(speech_config)
 
-    def __compute_spectrogram(self, signal):
-        return tf.abs(tf.signal.stft(signal, frame_length=self.frame_length,
-                                     frame_step=self.frame_step, fft_length=self.num_fft))
-
-    def __compute_logfbank(self, signal):
-        spectrogram = self.__compute_spectrogram(signal)
-        linear_to_weight_matrix = tf.signal.linear_to_mel_weight_matrix(
-            num_mel_bins=self.num_feature_bins,
-            num_spectrogram_bins=spectrogram.shape[-1],
-            sample_rate=self.sample_rate,
-            lower_edge_hertz=0.0, upper_edge_hertz=(self.sample_rate / 2)
-        )
-        mel_spectrogram = tf.tensordot(spectrogram, linear_to_weight_matrix, 1)
-        mel_spectrogram.set_shape(
-            spectrogram.shape[:-1].concatenate(linear_to_weight_matrix.shape[-1:]))
-        return tf.math.log(mel_spectrogram + 1e-6)
-
-    def compute_feature_shape(self) -> list:
+    @property
+    def shape(self) -> list:
         # None for time dimension
         return [None, self.num_feature_bins, 1]
 
-    def compute_tf_spectrogram_features(self, signal):
-        spectrogram = self.__compute_spectrogram(signal)
-        spectrogram = spectrogram[:, :self.num_feature_bins]
-        return tf.expand_dims(spectrogram, axis=-1)
+    def stft(self, signal):
+        return tf.square(
+            tf.abs(tf.signal.stft(signal, frame_length=self.frame_length,
+                                  frame_step=self.frame_step, fft_length=self.nfft)))
 
-    def compute_tf_logfbank_features(self, signal):
-        log_mel_spectrogram = self.__compute_logfbank(signal)
-        return tf.expand_dims(log_mel_spectrogram, axis=-1)
+    def power_to_db(self, S, ref=1.0, amin=1e-10, top_db=80.0):
+        if amin <= 0:
+            raise ParameterError('amin must be strictly positive')
 
-    def compute_tf_mfcc_features(self, signal):
-        log_mel_spectrogram = self.__compute_logfbank(signal)
-        mfcc = tf.signal.mfccs_from_log_mel_spectrograms(log_mel_spectrogram)
-        return tf.expand_dims(mfcc, axis=-1)
+        magnitude = S
+
+        if six.callable(ref):
+            # User supplied a function to calculate reference power
+            ref_value = ref(magnitude)
+        else:
+            ref_value = np.abs(ref)
+
+        log_spec = 10.0 * log10(tf.maximum(amin, magnitude))
+        log_spec -= 10.0 * log10(tf.maximum(amin, ref_value))
+
+        if top_db is not None:
+            if top_db < 0:
+                raise ParameterError('top_db must be non-negative')
+            log_spec = tf.maximum(log_spec, tf.reduce_max(log_spec) - top_db)
+
+        return log_spec
+
+    def extract(self, signal: np.ndarray) -> np.ndarray:
+        features = self.tf_extract(tf.convert_to_tensor(signal, dtype=tf.float32))
+        return features.numpy()
 
     def tf_extract(self, signal: tf.Tensor) -> tf.Tensor:
         """
@@ -407,11 +418,11 @@ class TFSpeechFeaturizer:
         signal = tf_preemphasis(signal, self.preemphasis)
 
         if self.feature_type == "mfcc":
-            features = self.compute_tf_mfcc_features(signal)
+            features = self._compute_mfcc_features(signal)
         elif self.feature_type == "spectrogram":
-            features = self.compute_tf_spectrogram_features(signal)
+            features = self._compute_spectrogram_features(signal)
         elif self.feature_type == "logfbank":
-            features = self.compute_tf_logfbank_features(signal)
+            features = self._compute_logfbank_features(signal)
 
         if self.normalize_feature:
             features = tf_normalize_audio_features(
@@ -419,7 +430,30 @@ class TFSpeechFeaturizer:
 
         return features
 
-    def extract(self, signal: np.ndarray) -> np.ndarray:
-        with tf.device("/CPU:0"):  # Use in tf.data => avoid error copying
-            features = self.tf_extract(tf.convert_to_tensor(signal, dtype=tf.float32))
-        return features.numpy()
+    def __compute_logfbank(self, signal):
+        spectrogram = self.stft(signal)
+        linear_to_weight_matrix = tf.signal.linear_to_mel_weight_matrix(
+            num_mel_bins=self.num_feature_bins,
+            num_spectrogram_bins=spectrogram.shape[-1],
+            sample_rate=self.sample_rate,
+            lower_edge_hertz=0.0, upper_edge_hertz=(self.sample_rate / 2)
+        )
+        mel_spectrogram = tf.tensordot(spectrogram, linear_to_weight_matrix, 1)
+        mel_spectrogram.set_shape(
+            spectrogram.shape[:-1].concatenate(linear_to_weight_matrix.shape[-1:]))
+        return self.power_to_db(mel_spectrogram)
+
+    def _compute_spectrogram_features(self, signal):
+        S = self.stft(signal)
+        spectrogram = self.power_to_db(S)
+        spectrogram = spectrogram[:, :self.num_feature_bins]
+        return tf.expand_dims(spectrogram, axis=-1)
+
+    def _compute_logfbank_features(self, signal):
+        log_mel_spectrogram = self.__compute_logfbank(signal)
+        return tf.expand_dims(log_mel_spectrogram, axis=-1)
+
+    def _compute_mfcc_features(self, signal):
+        log_mel_spectrogram = self.__compute_logfbank(signal)
+        mfcc = tf.signal.mfccs_from_log_mel_spectrograms(log_mel_spectrogram)
+        return tf.expand_dims(mfcc, axis=-1)

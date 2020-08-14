@@ -41,7 +41,7 @@ class TextFeaturizer:
         self.decoder_config = decoder_config
 
         if not self.decoder_config["vocabulary"]:
-            self.decoder_config["vocabulary"] = (ENGLISH)  # Default language is english
+            self.decoder_config["vocabulary"] = ENGLISH  # Default language is english
         self.decoder_config["vocabulary"] = preprocess_paths(self.decoder_config["vocabulary"])
 
         self.scorer = None
@@ -110,43 +110,34 @@ class TextFeaturizer:
         feats = [self.token_to_index[token] for token in tokens]
         return tf.convert_to_tensor(feats, dtype=tf.int32)
 
-    @tf.function
     def iextract(self, feat: tf.Tensor) -> tf.Tensor:
         """
+        Convert list of integers to string
         Args:
             feat: tf.Tensor with dim [B, None]
 
         Returns:
             transcripts: tf.Tensor of dtype tf.string with dim [B]
         """
-        # return tf.map_fn(lambda x: tf.numpy_function(self._idx_to_char, [x], tf.string),
-        #                  feat, dtype=tf.string)
-        with tf.name_scope("invert_text_extraction"):
-            minus_one = -1 * tf.ones_like(feat, dtype=tf.int32)
-            blank_like = self.blank * tf.ones_like(feat, dtype=tf.int32)
-            feat = tf.where(feat == minus_one, blank_like, feat)
-            return tf.map_fn(self._idx_to_char, feat, dtype=tf.string)
+        minus_one = -1 * tf.ones_like(feat, dtype=tf.int32)
+        blank_like = self.blank * tf.ones_like(feat, dtype=tf.int32)
+        feat = tf.where(feat == minus_one, blank_like, feat)
+        return tf.map_fn(self._idx_to_char, feat, dtype=tf.string)
 
-    @tf.function
     def _idx_to_char(self, arr: tf.Tensor) -> tf.Tensor:
         transcript = tf.constant("", dtype=tf.string)
         for i in arr:
             transcript = tf.strings.join([transcript, self.tf_vocab_array[i]])
         return transcript
 
-        # arr = arr[arr != self.blank]
-        # arr = arr[arr != -1]
-        # return "".join([self.index_to_token[i] for i in arr])
-
     @tf.function(
-        experimental_relax_shapes=True,
         input_signature=[
             tf.TensorSpec([None, None], dtype=tf.int32)
         ]
     )
     def index2upoints(self, feat: tf.Tensor) -> tf.Tensor:
         """
-        Transform Predicted Classes to Unicode Code Points (mainly for using tflite)
+        Transform Predicted Indices to Unicode Code Points (mainly for using tflite)
         TFLite Map_fn Issue: https://github.com/tensorflow/tensorflow/issues/40221
         Only use in tf-nightly
         Args:
