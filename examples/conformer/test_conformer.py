@@ -63,7 +63,7 @@ def main():
         test_dataset = ASRSliceDataset(
             stage="test", speech_featurizer=speech_featurizer,
             text_featurizer=text_featurizer,
-            data_paths=config["learning_config"]["dataset_config"]["eval_paths"],
+            data_paths=config["learning_config"]["dataset_config"]["test_paths"],
             shuffle=False
         )
 

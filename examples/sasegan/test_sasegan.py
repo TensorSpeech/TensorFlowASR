@@ -53,7 +53,7 @@ def main():
 
     generator = Generator(
         window_size=config["speech_config"]["window_size"],
-        **config["model_config"]["generator"]
+        **config["model_config"]
     )
     generator._build()
     generator.load_weights(args.saved)

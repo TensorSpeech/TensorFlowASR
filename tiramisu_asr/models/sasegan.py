@@ -224,23 +224,27 @@ class GeneratorEncoder(tf.keras.Model):
                  g_enc_depths,
                  kwidth,
                  pool,
-                 att_layer_idx,
+                 att_layer_indices,
                  name="sasegan_g_encoder",
                  **kwargs):
         super(GeneratorEncoder, self).__init__(name=name, **kwargs)
         self.blocks = []
-        self.att_layer_idx = att_layer_idx
-        self.attn = SnNonLocalBlockSim(
-            g_enc_depths[att_layer_idx],
-            name=f"{self.name}_sn_non_local_block_sim_enc"
-        )
         for i, depth in enumerate(g_enc_depths):
             dc = SnDownConv(depth=depth,
                             kwidth=kwidth,
                             pool=pool,
                             name=f"{name}_sn_downconv_{i}")
             prelu = SeganPrelu(name=f"{name}_prelu_{i}")
-            self.blocks.append({"downconv": dc, "prelu": prelu})
+            block = {
+                "downconv": dc,
+                "prelu": prelu
+            }
+            if i in att_layer_indices:
+                block["attn"] = SnNonLocalBlockSim(
+                    g_enc_depths[i],
+                    name=f"{self.name}_sn_non_local_block_sim_enc_{i}"
+                )
+            self.blocks.append(block)
 
     def call(self, inputs, training=False):
         skips = []
@@ -250,8 +254,8 @@ class GeneratorEncoder(tf.keras.Model):
             if i < len(self.blocks) - 1:
                 skips.append(outputs)
             outputs = block["prelu"](outputs)
-            if i == self.att_layer_idx:
-                outputs = self.attn(outputs, training=training)
+            if block.get("attn", None) is not None:
+                outputs = block["attn"](outputs, training=training)
         return outputs, skips
 
     def get_config(self):
@@ -267,16 +271,11 @@ class GeneratorDecoder(tf.keras.Model):
                  g_dec_depths,
                  kwidth,
                  dilation,
-                 att_layer_idx,
+                 att_layer_indices,
                  name="sasegan_g_decoder",
                  **kwargs):
         super(GeneratorDecoder, self).__init__(name=name, **kwargs)
         self.blocks = []
-        self.att_layer_idx = att_layer_idx
-        self.attn = SnNonLocalBlockSim(
-            g_dec_depths[att_layer_idx] * 2,  # the att placed after concat
-            name=f"{self.name}_sn_non_local_block_sim_dec"
-        )
         for i, depth in enumerate(g_dec_depths):
             dc = SnDeConv(depth=depth,
                           kwidth=kwidth,
@@ -287,7 +286,17 @@ class GeneratorDecoder(tf.keras.Model):
                 skip = tf.keras.layers.Concatenate(axis=3, name=f"{name}_concat")
             else:
                 skip = tf.keras.layers.Activation(tf.nn.tanh, name=f"{name}_tanh")
-            self.blocks.append({"deconv": dc, "prelu": prelu, "skip": skip})
+            block = {
+                "deconv": dc,
+                "prelu": prelu,
+                "skip": skip
+            }
+            if i in att_layer_indices:
+                block["attn"] = SnNonLocalBlockSim(
+                    g_dec_depths[i] * 2,  # the att placed after concat
+                    name=f"{self.name}_sn_non_local_block_sim_dec_{i}"
+                )
+            self.blocks.append(block)
 
     def call(self, inputs, skips, training=False):
         outputs = inputs
@@ -299,8 +308,8 @@ class GeneratorDecoder(tf.keras.Model):
                 outputs = block["skip"]([outputs, _skip])
             else:
                 outputs = block["skip"](outputs)
-            if i == self.att_layer_idx:
-                outputs = self.attn(outputs, training=training)
+            if block.get("attn", None) is not None:
+                outputs = block["attn"](outputs, training=training)
         return outputs
 
     def get_config(self):
@@ -315,7 +324,7 @@ class Generator(tf.keras.Model):
     def __init__(self,
                  g_enc_depths,
                  window_size,
-                 att_layer_idx,
+                 att_layer_indices,
                  kwidth=31,
                  ratio=2,
                  name="sasegan_generator",
@@ -328,12 +337,16 @@ class Generator(tf.keras.Model):
         self.window_size = window_size
         self.ratio = ratio
         self.inp = Reshape1to3(f"{self.name}_reshape_input")
-        self.encoder = GeneratorEncoder(g_enc_depths, kwidth=kwidth, pool=ratio,
-                                        att_layer_idx=att_layer_idx, name=f"{name}_encoder")
+        self.encoder = GeneratorEncoder(
+            g_enc_depths, kwidth=kwidth, pool=ratio,
+            att_layer_indices=att_layer_indices, name=f"{name}_encoder"
+        )
         self.z = tf.keras.layers.Concatenate(axis=3, name=f"{self.name}_z")
-        self.decoder = GeneratorDecoder(g_dec_depths, kwidth=kwidth, dilation=ratio,
-                                        att_layer_idx=(len(g_enc_depths) - att_layer_idx - 1),
-                                        name=f"{name}_decoder")
+        self.decoder = GeneratorDecoder(
+            g_dec_depths, kwidth=kwidth, dilation=ratio,
+            att_layer_indices=[(len(g_enc_depths) - i - 2)
+                               for i in att_layer_indices if i < (len(g_enc_depths) - 1)],
+            name=f"{name}_decoder")
         self.outp = Reshape3to1(f"{self.name}_reshape_output")
 
     def _get_z_shape(self, batch_size):
@@ -398,9 +411,9 @@ class DiscriminatorBlock(tf.keras.layers.Layer):
 
 class Discriminator(tf.keras.Model):
     def __init__(self,
-                 d_num_fmaps,
+                 g_enc_depths,
                  window_size,
-                 att_layer_idx,
+                 att_layer_indices,
                  kwidth=31,
                  ratio=2,
                  leakyrelu=True,
@@ -408,18 +421,21 @@ class Discriminator(tf.keras.Model):
                  **kwargs):
         super(Discriminator, self).__init__(name=name, **kwargs)
         self.window_size = window_size
-        self.att_layer_idx = att_layer_idx
         self.clean_wav = Reshape1to3(f"{name}_reshape_1_to_3_clean")
         self.noisy_wav = Reshape1to3(f"{name}_reshape_1_to_3_noisy")
         self.concat = tf.keras.layers.Concatenate(name=f"{name}_concat", axis=3)
         self.gauss = GaussianNoise(name=f"{name}_gaussian_noise")
         self.blocks = []
-        for block_idx, nfmaps in enumerate(d_num_fmaps):
-            self.blocks.append(
-                DiscriminatorBlock(depth=nfmaps, kwidth=kwidth, pool=ratio,
-                                   leakyrelu=leakyrelu, name=f"{name}_block_{block_idx}"))
-        self.attn = SnNonLocalBlockSim(d_num_fmaps[self.att_layer_idx],
-                                       name=f"{name}_sn_non_local_block_sim")
+        for i, nfmaps in enumerate(g_enc_depths):
+            db = DiscriminatorBlock(depth=nfmaps, kwidth=kwidth, pool=ratio,
+                                    leakyrelu=leakyrelu, name=f"{name}_block_{i}")
+            block = {"db": db}
+            if i in att_layer_indices:
+                block["attn"] = SnNonLocalBlockSim(
+                    g_enc_depths[i],
+                    name=f"{name}_sn_non_local_block_sim_{i}"
+                )
+            self.blocks.append(block)
         self.conv = tf.keras.layers.Conv2D(
             filters=1, kernel_size=1, strides=1, padding="same",
             kernel_initializer=tf.keras.initializers.TruncatedNormal(stddev=0.02),
@@ -440,9 +456,9 @@ class Discriminator(tf.keras.Model):
         outputs = self.concat([clean_out, noisy_out])
         outputs = self.gauss(outputs, noise_std=noise_std)
         for i, block in enumerate(self.blocks):
-            outputs = block(outputs, training=training)
-            if i == self.att_layer_idx:
-                outputs = self.attn(outputs, training=training)
+            outputs = block["db"](outputs, training=training)
+            if block.get("attn", None) is not None:
+                outputs = block["attn"](outputs, training=training)
         outputs = self.conv(outputs, training=training)
         outputs = self.reshape(outputs)
         return self.dense(outputs, training=training)

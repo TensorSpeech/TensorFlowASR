@@ -329,7 +329,7 @@ class DiscriminatorBlock(tf.keras.layers.Layer):
 
 class Discriminator(Model):
     def __init__(self,
-                 d_num_fmaps,
+                 g_enc_depths,
                  window_size,
                  kwidth=31,
                  ratio=2,
@@ -343,7 +343,7 @@ class Discriminator(Model):
         self.concat = tf.keras.layers.Concatenate(name=f"{name}_concat", axis=3)
         self.gauss = GaussianNoise(name=f"{name}_gaussian_noise")
         self.blocks = []
-        for block_idx, nfmaps in enumerate(d_num_fmaps):
+        for block_idx, nfmaps in enumerate(g_enc_depths):
             self.blocks.append(
                 DiscriminatorBlock(depth=nfmaps, kwidth=kwidth, pool=ratio,
                                    leakyrelu=leakyrelu, name=f"{name}_block_{block_idx}"))

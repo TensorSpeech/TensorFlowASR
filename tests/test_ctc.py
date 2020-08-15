@@ -24,7 +24,7 @@ speech_featurizer = TFSpeechFeaturizer({
     "frame_ms": 25,
     "stride_ms": 10,
     "num_feature_bins": 80,
-    "feature_type": "logfbank",
+    "feature_type": "log_mel_spectrogram",
     "preemphasis": 0.97,
     # "delta": True,
     # "delta_delta": True,
