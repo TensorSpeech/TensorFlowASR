@@ -13,20 +13,16 @@
 # limitations under the License.
 
 import tensorflow as tf
+from ...utils.utils import merge_two_last_dims
 
 
 class Merge2LastDims(tf.keras.layers.Layer):
-    def __init__(self, name: str = "merge_2_last_dims", **kwargs):
+    def __init__(self, name: str = "merge_two_last_dims", **kwargs):
         super(Merge2LastDims, self).__init__(name=name, **kwargs)
 
-    def build(self, input_shape):
-        f, c = input_shape[2:]
-        self.reshape = tf.keras.layers.Reshape([-1, f * c])
-
     def call(self, inputs, **kwargs):
-        return self.reshape(inputs, **kwargs)
+        return merge_two_last_dims(inputs)
 
     def get_config(self):
         config = super(Merge2LastDims, self).get_config()
-        config.update({"reshape": self.reshape})
         return config

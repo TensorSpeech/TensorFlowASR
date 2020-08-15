@@ -17,7 +17,7 @@ import tensorflow as tf
 from tiramisu_asr.models.transducer import Transducer
 from tiramisu_asr.featurizers.text_featurizers import TextFeaturizer
 from tiramisu_asr.featurizers.speech_featurizers import TFSpeechFeaturizer, read_raw_audio
-from tiramisu_asr.utils.utils import merge_features_to_channels
+from tiramisu_asr.utils.utils import merge_two_last_dims
 
 text_featurizer = TextFeaturizer({
     "vocabulary": None,
@@ -39,7 +39,7 @@ speech_featurizer = TFSpeechFeaturizer({
 })
 
 inp = tf.keras.Input(shape=[None, 80, 1])
-enc = merge_features_to_channels(inp)
+enc = merge_two_last_dims(inp)
 enc = tf.keras.layers.LSTM(350, return_sequences=True)(enc)
 
 enc_model = tf.keras.Model(inputs=inp, outputs=enc)

@@ -40,6 +40,8 @@ TiramisuASR implements some speech recognition and speech enhancement architectu
 
 ## Setup Environment and Datasets
 
+Install gammatone: `pip3 install git+https://github.com/detly/gammatone.git`
+
 Install tensorflow: `pip3 install tensorflow` or `pip3 install tf-nightly` (for using tflite)
 
 Install packages: `python3 setup.py install`

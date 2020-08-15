@@ -18,7 +18,6 @@ from colorama import Fore
 import numpy as np
 import soundfile as sf
 import tensorflow as tf
-import tensorflow.keras.mixed_precision.experimental as mixed_precision
 
 from ..featurizers.speech_featurizers import deemphasis, tf_merge_slices, read_raw_audio
 from ..losses.segan_losses import generator_loss, discriminator_loss

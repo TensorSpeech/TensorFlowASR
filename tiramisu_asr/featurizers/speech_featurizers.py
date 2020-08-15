@@ -22,6 +22,7 @@ import tensorflow as tf
 import gammatone.fftweight as gam_w
 
 from ..utils.utils import log10
+from .gammatone import fft_weights
 
 
 def read_raw_audio(audio, sample_rate=16000):
@@ -265,8 +266,9 @@ class NumpySpeechFeaturizer(SpeechFeaturizer):
         elif self.feature_type == "log_gammatone_spectrogram":
             features = self.compute_log_gammatone_spectrogram(signal)
         else:
-            raise ValueError("feature_type must be either 'mfcc',"
-                             "'log_mel_spectrogram', 'log_gammatone_spectrogram' or 'spectrogram'")
+            raise ValueError("feature_type must be either 'mfcc', "
+                             "'log_mel_spectrogram', 'log_gammatone_spectrogram' "
+                             "or 'spectrogram'")
 
         original_features = features.copy()
 
@@ -379,7 +381,7 @@ class TFSpeechFeaturizer(SpeechFeaturizer):
 
     def power_to_db(self, S, ref=1.0, amin=1e-10, top_db=80.0):
         if amin <= 0:
-            raise ParameterError('amin must be strictly positive')
+            raise ValueError('amin must be strictly positive')
 
         magnitude = S
 
@@ -394,7 +396,7 @@ class TFSpeechFeaturizer(SpeechFeaturizer):
 
         if top_db is not None:
             if top_db < 0:
-                raise ParameterError('top_db must be non-negative')
+                raise ValueError('top_db must be non-negative')
             log_spec = tf.maximum(log_spec, tf.reduce_max(log_spec) - top_db)
 
         return log_spec
@@ -423,6 +425,8 @@ class TFSpeechFeaturizer(SpeechFeaturizer):
             features = self.compute_log_mel_spectrogram(signal)
         elif self.feature_type == "mfcc":
             features = self.compute_mfcc(signal)
+        elif self.feature_type == "log_gammatone_spectrogram":
+            features = self.compute_log_gammatone_spectrogram(signal)
         else:
             raise ValueError("feature_type must be either 'mfcc',"
                              "'log_mel_spectrogram' or 'spectrogram'")
@@ -454,3 +458,15 @@ class TFSpeechFeaturizer(SpeechFeaturizer):
     def compute_mfcc(self, signal):
         log_mel_spectrogram = self.compute_log_mel_spectrogram(signal)
         return tf.signal.mfccs_from_log_mel_spectrograms(log_mel_spectrogram)
+
+    def compute_log_gammatone_spectrogram(self, signal: np.ndarray) -> np.ndarray:
+        S = self.stft(signal)
+
+        gammatone = fft_weights(self.nfft, self.sample_rate,
+                                self.num_feature_bins, width=1.0,
+                                fmin=0, fmax=int(self.sample_rate / 2),
+                                maxlen=(self.nfft / 2 + 1))
+
+        gammatone_spectrogram = tf.tensordot(S, gammatone, 1)
+
+        return self.power_to_db(gammatone_spectrogram)

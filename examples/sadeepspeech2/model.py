@@ -20,8 +20,8 @@ import tensorflow_addons as tfa
 
 from tiramisu_asr.models.layers.positional_encoding import PositionalEncoding
 from tiramisu_asr.models.layers.point_wise_ffn import PointWiseFFN
-from tiramisu_asr.models.layers.sequence_wise_batch_norm import SequenceBatchNorm
-from tiramisu_asr.utils.utils import merge_features_to_channels
+from tiramisu_asr.models.layers.sequence_wise_bn import SequenceBatchNorm
+from tiramisu_asr.utils.utils import merge_two_last_dims
 from tiramisu_asr.models.ctc import CtcModel
 
 ARCH_CONFIG = {
@@ -49,7 +49,7 @@ def create_sattds2(input_shape: list,
                    arch_config: dict,
                    name: str = "self_attention_ds2"):
     features = tf.keras.Input(shape=input_shape, name="features")
-    layer = merge_features_to_channels(features)
+    layer = merge_two_last_dims(features)
 
     layer = tf.keras.layers.Conv1D(filters=arch_config["subsampling"]["filters"],
                                    kernel_size=arch_config["subsampling"]["kernel_size"],
