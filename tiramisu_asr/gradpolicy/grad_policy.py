@@ -105,23 +105,25 @@ class GradPolicy(object):
         cur_valid_loss = self.smoothed_valid_loss[-1]
 
         # overfitting rate
-        Ok = (self.prev_best_train_loss - cur_train_loss) / self.train_size - \
-             (self.prev_best_valid_loss - cur_valid_loss) / self.valid_size
+        Ok = (self.train_loss_ref - cur_train_loss) / self.train_size - \
+             (self.valid_loss_ref - cur_valid_loss) / self.valid_size
         self.O = np.append(self.O, [Ok])
 
         # generalization rate
-        Gk = (self.prev_best_valid_loss - cur_valid_loss) / self.valid_size
+        Gk = (self.valid_loss_ref - cur_valid_loss) / self.valid_size
         self.G = np.append(self.G, [Gk])
-
-        # update references
-        if (self.prev_best_valid_loss is None or self.prev_best_valid_loss > self.valid_loss[-1]):
-            self.prev_best_train_loss = self.train_loss[-1]
-            self.prev_best_valid_loss = self.valid_loss[-1]
 
         # generalization to overfitting ratio
         w = Gk / (Ok * Ok + 1e-6)
         if (w < 0.):
             w = 0.
+
+        # update references to the best-performance current model snapshot
+        if (self.prev_best_valid_loss is None or self.prev_best_valid_loss > self.valid_loss[-1]):
+            self.train_loss_ref = cur_train_loss
+            self.valid_loss_ref = cur_valid_loss
+            self.prev_best_valid_loss = self.valid_loss[-1]
+            self.prev_best_train_loss = self.train_loss[-1]
 
         return w
 
@@ -137,11 +139,6 @@ class GradPolicy(object):
         cur_valid_loss = self.smoothed_valid_loss[max([0, N - self.hist_size]) : ]
         train_slope, valid_slope = self._line_fit(cur_train_loss, cur_valid_loss)
 
-        # update references
-        if (self.prev_best_valid_loss is None or self.prev_best_valid_loss > self.valid_loss[-1]):
-            self.train_slope_ref = train_slope
-            self.valid_slope_ref = valid_slope
-
         Ok = (valid_slope - train_slope) - (self.valid_slope_ref - self.train_slope_ref)
         self.O = np.append(self.O, [Ok])
 
@@ -151,6 +148,13 @@ class GradPolicy(object):
         w = Gk / (Ok * Ok + 1e-6)
         if (w < 0.):
             w = 0.
+
+        # update references
+        if (self.prev_best_valid_loss is None or self.prev_best_valid_loss > self.valid_loss[-1]):
+            self.train_slope_ref = train_slope
+            self.valid_slope_ref = valid_slope
+            self.prev_best_valid_loss = self.valid_loss[-1]
+            self.prev_best_train_loss = self.train_loss[-1]
 
         return w
 
