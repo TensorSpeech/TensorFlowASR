@@ -19,6 +19,7 @@ import sys
 from tiramisu_asr.utils import setup_environment
 setup_environment()
 import librosa
+import numpy as np
 # sys.path.append(o.abspath(o.join(o.dirname(sys.modules[__name__].__file__), "..")))
 #
 import matplotlib.pyplot as plt
@@ -60,10 +61,14 @@ def main(argv):
     ft = sf.extract(signal)
     ft = au["after"].augment(ft)[:, :, 0]
 
-    plt.figure(figsize=(20, 3))
+    plt.figure(figsize=(16, 2.5))
+    ax = plt.gca()
+    ax.set_title(f"{feature_type}", fontweight="bold")
     librosa.display.specshow(ft.T, cmap="magma")
+    v1 = np.linspace(ft.min(), ft.max(), 8, endpoint=True)
+    plt.colorbar(pad=0.01, fraction=0.02, ax=ax, format="%.2f", ticks=v1)
     plt.tight_layout()
-    plt.colorbar()
+    plt.savefig(argv[3])
     plt.show()
     # plt.figure(figsize=(15, 5))
     # for i in range(4):
