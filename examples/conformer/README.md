@@ -12,7 +12,7 @@ speech_config:
     frame_ms: 25
     stride_ms: 10
     num_feature_bins: 80
-    feature_type: logfbank
+    feature_type: log_mel_spectrogram
     preemphasis: 0.97
     normalize_signal: True
     normalize_feature: True
@@ -28,11 +28,11 @@ model_config:
     kernel_size: 32
     fc_factor: 0.5
     dropout: 0.1
-    embed_dim: 144
+    embed_dim: 320
     embed_dropout: 0.0
     num_lstms: 1
     lstm_units: 320
-    joint_dim: 1024
+    joint_dim: 320
 
 learning_config:
     augmentations:
@@ -59,7 +59,7 @@ learning_config:
 
     running_config:
         batch_size: 4
-        num_epochs: 21
+        num_epochs: 22
         outdir: /mnt/Projects/asrk16/trained/vivos/conformer
         log_interval_steps: 400
         save_interval_steps: 400

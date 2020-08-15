@@ -93,7 +93,7 @@ def main():
     plt.close()
     plt.hist(features.flatten(), 200, color="green", histtype="stepfilled")
     plt.title("Log Mel Spectrogram", fontweight="bold")
-    plt.savefig(os.path.join(args.output, "logfbank.png"))
+    plt.savefig(os.path.join(args.output, "log_mel_spectrogram.png"))
     plt.clf()
     plt.cla()
     plt.close()

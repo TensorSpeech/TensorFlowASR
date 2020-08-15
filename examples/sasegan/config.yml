@@ -19,16 +19,10 @@ speech_config:
   window_size: 16384
 
 model_config:
-  generator:
-    g_enc_depths: [16, 32, 32, 64, 64, 128, 128, 256, 256, 512, 1024]
-    kwidth: 31
-    ratio: 2
-    att_layer_idx: 5
-  discriminator:
-    d_num_fmaps: [16, 32, 32, 64, 64, 128, 128, 256, 256, 512, 1024]
-    kwidth: 31
-    ratio: 2
-    att_layer_idx: 5
+  g_enc_depths: [16, 32, 32, 64, 64, 128, 128, 256, 256, 512, 1024]
+  kwidth: 31
+  ratio: 2
+  att_layer_indices: [1, 2, 3, 4, 5]
 
 learning_config:
   augmentations: null

@@ -53,13 +53,13 @@ def main():
     with segan_trainer.strategy.scope():
         generator = Generator(
             window_size=config["speech_config"]["window_size"],
-            **config["model_config"]["generator"]
+            **config["model_config"]
         )
         generator._build()
         generator.summary(line_length=150)
         discriminator = Discriminator(
             window_size=config["speech_config"]["window_size"],
-            **config["model_config"]["discriminator"]
+            **config["model_config"]
         )
         discriminator._build()
         discriminator.summary(line_length=150)
