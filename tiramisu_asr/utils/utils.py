@@ -63,11 +63,6 @@ def get_num_batches(samples, batch_size):
     return math.ceil(float(samples) / float(batch_size))
 
 
-def merge_features_to_channels(x):
-    f, c = x.get_shape().as_list()[2:]
-    return tf.keras.layers.Reshape([-1, f * c])(x)
-
-
 def merge_two_last_dims(x):
     b, _, f, c = shape_list(x)
     return tf.reshape(x, shape=[b, -1, f * c])
@@ -94,10 +89,6 @@ def read_bytes(path: str) -> tf.Tensor:
     with tf.io.gfile.GFile(path, "rb") as f:
         content = f.read()
     return tf.convert_to_tensor(content, dtype=tf.string)
-
-
-def print_string(batch: tf.Tensor):
-    tf.numpy_function(lambda x: print(*bytes_to_string(x), sep="\n"), [batch], [])
 
 
 def shape_list(x):
