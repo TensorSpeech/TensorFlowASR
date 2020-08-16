@@ -12,6 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import os
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "0"
 import tensorflow as tf
 
 from tiramisu_asr.models.transducer import Transducer
@@ -22,7 +24,7 @@ from tiramisu_asr.utils.utils import merge_two_last_dims
 text_featurizer = TextFeaturizer({
     "vocabulary": None,
     "blank_at_zero": True,
-    "beam_width": 5,
+    "beam_width": 10,
     "norm_score": True
 })
 
@@ -66,26 +68,40 @@ hyps = model.recognize(features)
 
 print(hyps)
 
+hyps = model.recognize_beam(features)
+
 signal = read_raw_audio("/home/nlhuy/Desktop/test/11003.wav", speech_featurizer.sample_rate)
 
 # hyps = model.recognize_tflite(signal)
-#
-# print(hyps)
-
-# hyps = model.recognize_beam(tf.expand_dims(speech_featurizer.tf_extract(signal), 0))
 
 print(hyps)
 
+# hyps = model.recognize_beam(tf.expand_dims(speech_featurizer.tf_extract(signal), 0))
+
+# print(hyps)
+
 # hyps = model.recognize_beam_tflite(signal)
-#
+
 # print(hyps.numpy().decode("utf-8"))
-#
+
 concrete_func = model.recognize_tflite.get_concrete_function()
 converter = tf.lite.TFLiteConverter.from_concrete_functions(
     [concrete_func]
 )
-converter.experimental_new_converter = True
+# converter = tf.lite.TFLiteConverter.from_keras_model(model)
 converter.optimizations = [tf.lite.Optimize.DEFAULT]
 converter.target_spec.supported_ops = [tf.lite.OpsSet.TFLITE_BUILTINS,
                                        tf.lite.OpsSet.SELECT_TF_OPS]
-converter.convert()
+tflite = converter.convert()
+
+# tflitemodel = tf.lite.Interpreter(model_content=tflite)
+
+# input_details = tflitemodel.get_input_details()
+# output_details = tflitemodel.get_output_details()
+# tflitemodel.resize_tensor_input(input_details[0]["index"], signal.shape)
+# tflitemodel.allocate_tensors()
+# tflitemodel.set_tensor(input_details[0]["index"], signal)
+# tflitemodel.invoke()
+# hyp = tflitemodel.get_tensor(output_details[0]["index"])
+
+# print(hyp)

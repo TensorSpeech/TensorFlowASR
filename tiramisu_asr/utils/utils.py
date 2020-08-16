@@ -103,6 +103,11 @@ def get_shape_invariants(tensor):
     return tf.TensorShape([i if isinstance(i, int) else None for i in shapes])
 
 
+def get_float_spec(tensor):
+    shape = get_shape_invariants(tensor)
+    return tf.TensorSpec(shape, dtype=tf.float32)
+
+
 def merge_repeated(yseqs, blank=0):
     result = tf.reshape(yseqs[0], [1])
 

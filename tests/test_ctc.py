@@ -24,7 +24,7 @@ speech_featurizer = TFSpeechFeaturizer({
     "frame_ms": 25,
     "stride_ms": 10,
     "num_feature_bins": 80,
-    "feature_type": "log_mel_spectrogram",
+    "feature_type": "spectrogram",
     "preemphasis": 0.97,
     # "delta": True,
     # "delta_delta": True,
@@ -51,7 +51,7 @@ class BaseModel(tf.keras.Model):
 
 model = CtcModel(base_model=BaseModel(), num_classes=text_featurizer.num_classes)
 
-model._build([1, 50, 80, 1])
+model._build(speech_featurizer.shape)
 model.summary(line_length=100)
 model.add_featurizers(
     speech_featurizer=speech_featurizer,
@@ -84,7 +84,6 @@ concrete_func = model.recognize_beam_tflite.get_concrete_function()
 converter = tf.lite.TFLiteConverter.from_concrete_functions(
     [concrete_func]
 )
-converter.experimental_new_converter = True
 converter.optimizations = [tf.lite.Optimize.DEFAULT]
 converter.target_spec.supported_ops = [tf.lite.OpsSet.TFLITE_BUILTINS,
                                        tf.lite.OpsSet.SELECT_TF_OPS]

@@ -122,7 +122,8 @@ class TextFeaturizer:
         minus_one = -1 * tf.ones_like(feat, dtype=tf.int32)
         blank_like = self.blank * tf.ones_like(feat, dtype=tf.int32)
         feat = tf.where(feat == minus_one, blank_like, feat)
-        return tf.map_fn(self._idx_to_char, feat, dtype=tf.string)
+        return tf.map_fn(self._idx_to_char, feat,
+                         fn_output_signature=tf.TensorSpec([], tf.string))
 
     def _idx_to_char(self, arr: tf.Tensor) -> tf.Tensor:
         transcript = tf.constant("", dtype=tf.string)
@@ -132,29 +133,23 @@ class TextFeaturizer:
 
     @tf.function(
         input_signature=[
-            tf.TensorSpec([None, None], dtype=tf.int32)
+            tf.TensorSpec([None], dtype=tf.int32)
         ]
     )
     def index2upoints(self, feat: tf.Tensor) -> tf.Tensor:
         """
-        Transform Predicted Indices to Unicode Code Points (mainly for using tflite)
+        Transform Predicted Indices to Unicode Code Points (for using tflite)
         TFLite Map_fn Issue: https://github.com/tensorflow/tensorflow/issues/40221
         Only use in tf-nightly
         Args:
-            feat: tf.Tensor of Classes in shape [B, None]
+            feat: tf.Tensor of Classes in shape [None]
 
         Returns:
-            unicode code points transcript with dtype tf.int32 and shap [B, None]
+            unicode code points transcript with dtype tf.int32 and shape [None]
         """
-        with tf.name_scope("index_to_unicode_points"):
-            def map_fn(arr):
-                def sub_map_fn(index):
-                    return self.index_to_unicode_points[index]
-                return tf.map_fn(sub_map_fn, arr, dtype=tf.int32,
-                                 fn_output_signature=tf.TensorSpec([], dtype=tf.int32))
-            # filter -1 value to avoid outofrange
-            minus_one = -1 * tf.ones_like(feat, dtype=tf.int32)
-            blank_like = self.blank * tf.ones_like(feat, dtype=tf.int32)
-            feat = tf.where(feat == minus_one, blank_like, feat)
-            return tf.map_fn(map_fn, feat, dtype=tf.int32,
-                             fn_output_signature=tf.TensorSpec([None], dtype=tf.int32))
+        # filter -1 value to avoid outofrange
+        minus_one = -1 * tf.ones_like(feat, dtype=tf.int32)
+        blank_like = self.blank * tf.ones_like(feat, dtype=tf.int32)
+        feat = tf.where(feat == minus_one, blank_like, feat)
+        return tf.map_fn(lambda i: self.index_to_unicode_points[i], feat,
+                         fn_output_signature=tf.TensorSpec([], dtype=tf.int32))
