@@ -22,8 +22,8 @@ class Model(tf.keras.Model):
 
     @abc.abstractmethod
     def _build(self, *args, **kwargs):
-        raise NotImplementedError
+        raise NotImplementedError()
 
     @abc.abstractmethod
     def call(self, inputs, training=False, **kwargs):
-        raise NotImplementedError
+        raise NotImplementedError()

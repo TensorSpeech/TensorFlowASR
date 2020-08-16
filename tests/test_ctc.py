@@ -41,11 +41,13 @@ class BaseModel(tf.keras.Model):
     def __init__(self, name="basemodel", **kwargs):
         super().__init__(name=name, **kwargs)
         self.dense = tf.keras.layers.Dense(350)
+        self.lstm = tf.keras.layers.LSTM(350, return_sequences=True)
         self.time_reduction_factor = 1
 
     @tf.function
     def call(self, inputs, training=False, **kwargs):
         outputs = merge_two_last_dims(inputs)
+        outputs = self.lstm(outputs, training=training)
         return self.dense(outputs, training=training)
 
 

@@ -41,16 +41,15 @@ speech_featurizer = TFSpeechFeaturizer({
 })
 
 inp = tf.keras.Input(shape=[None, 80, 1])
-enc = merge_two_last_dims(inp)
-enc = tf.keras.layers.LSTM(350, return_sequences=True)(enc)
+enc = tf.keras.layers.Reshape([-1, 80])(inp)
+enc = tf.keras.layers.Dense(350)(enc)
 
 enc_model = tf.keras.Model(inputs=inp, outputs=enc)
 
 model = Transducer(
     encoder=enc_model,
-    blank=0,
     vocabulary_size=text_featurizer.num_classes,
-    embed_dim=350, embed_dropout=0.0, num_lstms=1, lstm_units=320, joint_dim=1024
+    embed_dim=350, embed_dropout=0.0, num_lstms=2, lstm_units=320, joint_dim=1024
 )
 
 model._build(speech_featurizer.shape)
@@ -68,7 +67,7 @@ hyps = model.recognize(features)
 
 print(hyps)
 
-hyps = model.recognize_beam(features)
+# hyps = model.recognize_beam(features)
 
 signal = read_raw_audio("/home/nlhuy/Desktop/test/11003.wav", speech_featurizer.sample_rate)
 
@@ -85,16 +84,15 @@ print(hyps)
 # print(hyps.numpy().decode("utf-8"))
 
 concrete_func = model.recognize_tflite.get_concrete_function()
-converter = tf.lite.TFLiteConverter.from_concrete_functions(
-    [concrete_func]
-)
+converter = tf.lite.TFLiteConverter.from_concrete_functions([concrete_func])
 # converter = tf.lite.TFLiteConverter.from_keras_model(model)
 converter.optimizations = [tf.lite.Optimize.DEFAULT]
+converter.experimental_new_converter = True
 converter.target_spec.supported_ops = [tf.lite.OpsSet.TFLITE_BUILTINS,
                                        tf.lite.OpsSet.SELECT_TF_OPS]
 tflite = converter.convert()
 
-# tflitemodel = tf.lite.Interpreter(model_content=tflite)
+tflitemodel = tf.lite.Interpreter(model_content=tflite)
 
 # input_details = tflitemodel.get_input_details()
 # output_details = tflitemodel.get_output_details()
