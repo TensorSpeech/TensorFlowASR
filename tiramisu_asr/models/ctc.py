@@ -55,7 +55,7 @@ class CtcModel(tf.keras.Model):
 
     @tf.function
     def recognize(self, features):
-        logits = self.call(features, training=False)
+        logits = self(features, training=False)
         probs = tf.nn.softmax(logits)
 
         def map_fn(prob):
@@ -69,7 +69,6 @@ class CtcModel(tf.keras.Model):
         return tf.convert_to_tensor(decoded, dtype=tf.string)
 
     @tf.function(
-        experimental_relax_shapes=True,
         input_signature=[
             tf.TensorSpec([None], dtype=tf.float32)
         ]
@@ -83,22 +82,24 @@ class CtcModel(tf.keras.Model):
         Return:
             transcript: tf.Tensor of Unicode Code Points with shape [None] and dtype tf.int32
         """
-        signal = tf.expand_dims(signal, axis=0)
         features = self.speech_featurizer.tf_extract(signal)
+        features = tf.expand_dims(features, axis=0)
         input_length = shape_list(features)[1]
         input_length = input_length // self.base_model.time_reduction_factor
         input_length = tf.expand_dims(input_length, axis=0)
-        logits = self.call(features, training=False)
+        logits = self(features, training=False)
         probs = tf.nn.softmax(logits)
+        print(probs, flush=True)
         decoded = tf.keras.backend.ctc_decode(
             y_pred=probs, input_length=input_length, greedy=True
         )
-        transcript = self.text_featurizer.index2upoints(tf.cast(decoded[0][0], dtype=tf.int32))
-        return tf.squeeze(transcript, axis=0)
+        decoded = tf.cast(decoded[0][0][0], dtype=tf.int32)
+        transcript = self.text_featurizer.index2upoints(decoded)
+        return transcript
 
     @tf.function
     def recognize_beam(self, features, lm=False):
-        logits = self.call(features, training=False)
+        logits = self(features, training=False)
         probs = tf.nn.softmax(logits)
 
         def map_fn(prob):
@@ -121,25 +122,25 @@ class CtcModel(tf.keras.Model):
         return tf.convert_to_tensor(decoded, dtype=tf.string)
 
     @tf.function(
-        experimental_relax_shapes=True,
         input_signature=[
             tf.TensorSpec([None], dtype=tf.float32)
         ]
     )
     def recognize_beam_tflite(self, signal):
-        signal = tf.expand_dims(signal, axis=0)
         features = self.speech_featurizer.tf_extract(signal)
+        features = tf.expand_dims(features, axis=0)
         input_length = shape_list(features)[1]
         input_length = input_length // self.base_model.time_reduction_factor
         input_length = tf.expand_dims(input_length, axis=0)
-        logits = self.call(features, training=False)
+        logits = self(features, training=False)
         probs = tf.nn.softmax(logits)
         decoded = tf.keras.backend.ctc_decode(
             y_pred=probs, input_length=input_length, greedy=False,
             beam_width=self.text_featurizer.decoder_config["beam_width"]
         )
-        transcript = self.text_featurizer.index2upoints(tf.cast(decoded[0][0], dtype=tf.int32))
-        return tf.squeeze(transcript, axis=0)
+        decoded = tf.cast(decoded[0][0][0], dtype=tf.int32)
+        transcript = self.text_featurizer.index2upoints(decoded)
+        return transcript
 
     def get_config(self):
         config = self.base_model.get_config()
