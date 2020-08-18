@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import os
 import collections
 import tensorflow as tf
 
@@ -275,78 +274,78 @@ class Transducer(Model):
     def perform_greedy(self,
                        features: tf.Tensor,
                        streaming: bool = False) -> tf.Tensor:
-        new_hyps = Hypothesis(
-            tf.constant(0.0, dtype=tf.float32),
-            tf.constant([self.text_featurizer.blank], dtype=tf.int32),
-            self.predict_net.get_initial_state()
-        )
+        with tf.name_scope("perform_greedy"):
+            new_hyps = Hypothesis(
+                tf.constant(0.0, dtype=tf.float32),
+                tf.constant([self.text_featurizer.blank], dtype=tf.int32),
+                self.predict_net.get_initial_state()
+            )
 
-        if self.kept_hyps is not None:
-            new_hyps = self.kept_hyps
+            if self.kept_hyps is not None:
+                new_hyps = self.kept_hyps
 
-        enc = self.encoder(features, training=False)  # [1, T, E]
-        enc = tf.squeeze(enc, axis=0)  # [T, E]
+            enc = self.encoder(features, training=False)  # [1, T, E]
+            enc = tf.squeeze(enc, axis=0)  # [T, E]
 
-        T = tf.cast(shape_list(enc)[0], dtype=tf.int32)
+            T = tf.cast(shape_list(enc)[0], dtype=tf.int32)
 
-        i = tf.constant(0, dtype=tf.int32)
+            i = tf.constant(0, dtype=tf.int32)
 
-        def _cond(enc, i, new_hyps, T): return tf.less(i, T)
+            def _cond(enc, i, new_hyps, T): return tf.less(i, T)
 
-        def _body(enc, i, new_hyps, T):
-            hi = tf.reshape(enc[i], [1, 1, -1])  # [1, 1, E]
-            y, new_states = self.predict_net.inference(
-                inputs=tf.reshape(new_hyps.prediction[-1], [1, 1]),  # [1, 1]
-                states=new_hyps.states
-            )  # [1, 1, P], [1, P], [1, P]
-            y = y[:, -1, :]
-            # [1, 1, E] + [1, 1, P] => [1, 1, 1, V]
-            ytu = tf.nn.log_softmax(self.joint_net([hi, y], training=False))
-            ytu = tf.squeeze(ytu, axis=None)  # [1, 1, 1, V] => [V]
-            n_predict = tf.argmax(ytu, axis=-1, output_type=tf.int32)  # => argmax []
+            def _body(enc, i, new_hyps, T):
+                hi = tf.reshape(enc[i], [1, 1, -1])  # [1, 1, E]
+                y, new_states = self.predict_net.inference(
+                    inputs=tf.reshape(new_hyps.prediction[-1], [1, 1]),  # [1, 1]
+                    states=new_hyps.states
+                )  # [1, 1, P], [1, P], [1, P]
+                # [1, 1, E] + [1, 1, P] => [1, 1, 1, V]
+                ytu = tf.nn.log_softmax(self.joint_net([hi, y], training=False))
+                ytu = tf.squeeze(ytu, axis=None)  # [1, 1, 1, V] => [V]
+                n_predict = tf.argmax(ytu, axis=-1, output_type=tf.int32)  # => argmax []
 
-            def return_no_blank():
-                return Hypothesis(
-                    new_hyps.score + ytu[n_predict],
-                    tf.concat([new_hyps.prediction, [n_predict]], axis=0),
-                    new_states
+                def return_no_blank():
+                    return Hypothesis(
+                        new_hyps.score + ytu[n_predict],
+                        tf.concat([new_hyps.prediction, [n_predict]], axis=0),
+                        new_states
+                    )
+
+                hyps = tf.cond(
+                    n_predict != self.text_featurizer.blank,
+                    true_fn=return_no_blank,
+                    false_fn=lambda: new_hyps
                 )
 
-            hyps = tf.cond(
-                n_predict != self.text_featurizer.blank,
-                true_fn=return_no_blank,
-                false_fn=lambda: new_hyps
-            )
+                return enc, i + 1, hyps, T
 
-            return enc, i + 1, hyps, T
-
-        _, _, new_hyps, _ = tf.while_loop(
-            _cond,
-            _body,
-            loop_vars=(enc, i, new_hyps, T),
-            swap_memory=True,
-            shape_invariants=(
-                get_shape_invariants(enc),
-                tf.TensorShape([]),
-                Hypothesis(
+            _, _, new_hyps, _ = tf.while_loop(
+                _cond,
+                _body,
+                loop_vars=(enc, i, new_hyps, T),
+                swap_memory=True,
+                shape_invariants=(
+                    get_shape_invariants(enc),
                     tf.TensorShape([]),
-                    tf.TensorShape([None]),
-                    tf.nest.map_structure(get_shape_invariants, new_hyps.states)
-                ),
-                tf.TensorShape([])
+                    Hypothesis(
+                        tf.TensorShape([]),
+                        tf.TensorShape([None]),
+                        tf.nest.map_structure(get_shape_invariants, new_hyps.states)
+                    ),
+                    tf.TensorShape([])
+                )
             )
-        )
 
-        if streaming: self.kept_hyps = new_hyps
+            if streaming: self.kept_hyps = new_hyps
 
-        return new_hyps.prediction[None, ...]
+            return new_hyps.prediction[None, ...]
 
     @tf.function
     def recognize_beam(self,
                        features: tf.Tensor,
                        lm: bool = False,
                        streaming: bool = False) -> tf.Tensor:
-        if lm: self.recognize(features)
+        if lm: return self.recognize(features)
 
         b_i = tf.constant(0, dtype=tf.int32)
 
@@ -379,27 +378,6 @@ class Transducer(Model):
         )
 
         return decoded
-
-#    @tf.function(
-#        experimental_relax_shapes=True,
-#        input_signature=[
-#            tf.TensorSpec([None], dtype=tf.float32),  # signal
-#            tf.TensorSpec([], dtype=tf.bool),  # lm
-#            tf.TensorSpec([], dtype=tf.bool)  # streaming
-#        ]
-#    )
-#    def recognize_beam_tflite(self,
-#                              signal,
-#                              lm=False,
-#                              streaming=False):
-#        def func(signal, lm, streaming):
-#            features = self.speech_featurizer.extract(signal)
-#            transcript = self.perform_beam_search(
-#                tf.expand_dims(features, axis=0), lm, streaming)
-#            transcript = self.text_featurizer.iextract(tf.expand_dims(transcript, axis=0))
-#            return tf.squeeze(transcript, axis=0)
-#
-#        return tf.py_function(func, inp=[signal, lm, streaming], Tout=tf.string)
 
     def perform_beam_search(self,
                             features: tf.Tensor,

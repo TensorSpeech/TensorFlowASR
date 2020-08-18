@@ -18,6 +18,7 @@ with open("README.md", "r") as fh:
     long_description = fh.read()
 
 requirements = [
+    "tensorflow>=2.3.0",
     "tensorflow-addons>=0.10.0",
     "setuptools>=47.1.1",
     "librosa>=0.7.2",
@@ -36,7 +37,7 @@ requirements = [
 
 setuptools.setup(
     name="tiramisu-asr",
-    version="0.1.6",
+    version="0.1.7",
     author="Huy Le Nguyen",
     author_email="nlhuy.cs.16@gmail.com",
     description="Automatic Speech Recognition using Tensorflow 2",

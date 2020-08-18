@@ -89,7 +89,6 @@ class CtcModel(tf.keras.Model):
         input_length = tf.expand_dims(input_length, axis=0)
         logits = self(features, training=False)
         probs = tf.nn.softmax(logits)
-        print(probs, flush=True)
         decoded = tf.keras.backend.ctc_decode(
             y_pred=probs, input_length=input_length, greedy=True
         )

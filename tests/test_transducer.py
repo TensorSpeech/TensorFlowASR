@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import os
+import datetime
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "0"
 import tensorflow as tf
 
@@ -62,14 +63,25 @@ model.add_featurizers(
     text_featurizer=text_featurizer
 )
 
-features = tf.random.normal(shape=[5, 50, 80, 1], stddev=127., mean=247.)
-hyps = model.recognize(features)
+stamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+logdir = '/tmp/logs/func/%s' % stamp
+writer = tf.summary.create_file_writer(logdir)
+
+features = tf.random.normal(shape=[1, 50, 80, 1], stddev=127., mean=247.)
+signal = read_raw_audio("/home/nlhuy/Desktop/test/11003.wav", speech_featurizer.sample_rate)
+
+tf.summary.trace_on(graph=True, profiler=True)
+hyps = model.recognize_tflite(signal)
+with writer.as_default():
+    tf.summary.trace_export(
+        name="recognize_tflite",
+        step=0,
+        profiler_outdir=logdir)
 
 print(hyps)
 
 # hyps = model.recognize_beam(features)
 
-signal = read_raw_audio("/home/nlhuy/Desktop/test/11003.wav", speech_featurizer.sample_rate)
 
 # hyps = model.recognize_tflite(signal)
 
@@ -94,12 +106,16 @@ tflite = converter.convert()
 
 tflitemodel = tf.lite.Interpreter(model_content=tflite)
 
-# input_details = tflitemodel.get_input_details()
-# output_details = tflitemodel.get_output_details()
-# tflitemodel.resize_tensor_input(input_details[0]["index"], signal.shape)
-# tflitemodel.allocate_tensors()
-# tflitemodel.set_tensor(input_details[0]["index"], signal)
-# tflitemodel.invoke()
-# hyp = tflitemodel.get_tensor(output_details[0]["index"])
+input_details = tflitemodel.get_input_details()
+output_details = tflitemodel.get_output_details()
+# tflitemodel.resize_tensor_input(input_details[0]["index"], [1, 50, 80, 1])
+# tflitemodel.resize_tensor_input(input_details[1]["index"], [1, 1])
+tflitemodel.resize_tensor_input(input_details[1]["index"], signal.shape)
+tflitemodel.allocate_tensors()
+# tflitemodel.set_tensor(input_details[0]["index"], features)
+# tflitemodel.set_tensor(input_details[1]["index"], tf.constant([[0]], dtype=tf.int32))
+tflitemodel.set_tensor(input_details[0]["index"], signal)
+tflitemodel.invoke()
+hyp = tflitemodel.get_tensor(output_details[0]["index"])
 
-# print(hyp)
+print(hyp)

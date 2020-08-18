@@ -5,7 +5,7 @@
     <img alt="GitHub" src="https://img.shields.io/github/license/usimarit/TiramisuASR">
 </a>
 <img alt="python" src="https://img.shields.io/badge/python-%3E%3D3.6-blue">
-<img alt="tensorflow" src="https://img.shields.io/badge/tensorflow-%3E%3D2.2.0-orange">
+<img alt="tensorflow" src="https://img.shields.io/badge/tensorflow-%3E%3D2.3.0-orange">
 <img alt="ubuntu" src="https://img.shields.io/badge/ubuntu-%3E%3D18.04-yellowgreen">
 </p>
 </h1>
@@ -19,24 +19,24 @@ TiramisuASR implements some speech recognition and speech enhancement architectu
 
 ## What's New?
 
--   Update readme files
--   Use `tf.keras.Input()` in `_build()` method of every models for better summary
--   Fix **runners**, **datasets**
--   Use **nlpaug** as augmentation for speech recognition and enhancement
+- Update readme files
+- Use `tf.keras.Input()` in `_build()` method of every models for better summary
+- Fix **runners**, **datasets**
+- Use **nlpaug** as augmentation for speech recognition and enhancement
 
 ## :yum: Supported Models
 
--   **CTCModel** (End2end models using CTC Loss for training)
--   **SEGAN** (Refer to [https://github.com/santi-pdp/segan](https://github.com/santi-pdp/segan)), see [examples/segan](./examples/segan)
--   **Transducer Models** (End2end models using RNNT Loss for training)
--   **Conformer Transducer** (Reference: [https://arxiv.org/abs/2005.08100](https://arxiv.org/abs/2005.08100))
-    See [examples/conformer](./examples/conformer)
+- **CTCModel** (End2end models using CTC Loss for training)
+- **SEGAN** (Refer to [https://github.com/santi-pdp/segan](https://github.com/santi-pdp/segan)), see [examples/segan](./examples/segan)
+- **Transducer Models** (End2end models using RNNT Loss for training)
+- **Conformer Transducer** (Reference: [https://arxiv.org/abs/2005.08100](https://arxiv.org/abs/2005.08100))
+  See [examples/conformer](./examples/conformer)
 
 ## Requirements
 
--   Ubuntu distribution (`ctc-decoders` and `semetrics` require some packages from apt)
--   Python 3.6+
--   Tensorflow 2.2+: `pip install tensorflow`
+- Ubuntu distribution (`ctc-decoders` and `semetrics` require some packages from apt)
+- Python 3.6+
+- Tensorflow 2.2+: `pip install tensorflow`
 
 ## Setup Environment and Datasets
 
@@ -48,15 +48,15 @@ Install packages: `python3 setup.py install`
 
 For **setting up datasets**, see [datasets](./tiramisu_asr/datasets/README.md)
 
--   For _training, testing and using_ **CTC Models**, run `./scripts/install_ctc_decoders.sh`
+- For _training, testing and using_ **CTC Models**, run `./scripts/install_ctc_decoders.sh`
 
--   For _training_ **Transducer Models**, export `CUDA_HOME` and run `./scripts/install_rnnt_loss.sh`
+- For _training_ **Transducer Models**, export `CUDA_HOME` and run `./scripts/install_rnnt_loss.sh`
 
--   For _testing_ **Speech Enhancement Model** (i.e SEGAN), install `octave` and run `./scripts/install_semetrics.sh`
+- For _testing_ **Speech Enhancement Model** (i.e SEGAN), install `octave` and run `./scripts/install_semetrics.sh`
 
--   Method `tiramisu_asr.utils.setup_environment()` _automatically_ enable **mixed_precision** if available.
+- Method `tiramisu_asr.utils.setup_environment()` _automatically_ enable **mixed_precision** if available.
 
--   To enable XLA, run `TF_XLA_FLAGS=--tf_xla_auto_jit=2 $python_train_script`
+- To enable XLA, run `TF_XLA_FLAGS=--tf_xla_auto_jit=2 $python_train_script`
 
 Clean up: `python3 setup.py clean --all` (this will remove `/build` contents)
 
@@ -110,18 +110,18 @@ speech_config: ...
 model_config: ...
 decoder_config: ...
 learning_config:
-    augmentations: ...
-    dataset_config:
-        train_paths: ...
-        eval_paths: ...
-        test_paths: ...
-        tfrecords_dir: ...
-    optimizer_config: ...
-    running_config:
-        batch_size: 8
-        num_epochs: 20
-        outdir: ...
-        log_interval_steps: 500
+  augmentations: ...
+  dataset_config:
+    train_paths: ...
+    eval_paths: ...
+    test_paths: ...
+    tfrecords_dir: ...
+  optimizer_config: ...
+  running_config:
+    batch_size: 8
+    num_epochs: 20
+    outdir: ...
+    log_interval_steps: 500
 ```
 
 See [examples](./examples/) for some predefined ASR models.

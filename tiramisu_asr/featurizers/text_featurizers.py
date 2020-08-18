@@ -147,9 +147,10 @@ class TextFeaturizer:
         Returns:
             unicode code points transcript with dtype tf.int32 and shape [None]
         """
-        # filter -1 value to avoid outofrange
-        minus_one = -1 * tf.ones_like(feat, dtype=tf.int32)
-        blank_like = self.blank * tf.ones_like(feat, dtype=tf.int32)
-        feat = tf.where(feat == minus_one, blank_like, feat)
-        return tf.map_fn(lambda i: self.index_to_unicode_points[i], feat,
-                         fn_output_signature=tf.TensorSpec([], dtype=tf.int32))
+        with tf.name_scope("index2upoints"):
+            # filter -1 value to avoid outofrange
+            minus_one = -1 * tf.ones_like(feat, dtype=tf.int32)
+            blank_like = self.blank * tf.ones_like(feat, dtype=tf.int32)
+            feat = tf.where(feat == minus_one, blank_like, feat)
+            return tf.map_fn(lambda i: self.index_to_unicode_points[i], feat,
+                             fn_output_signature=tf.TensorSpec([], dtype=tf.int32))
