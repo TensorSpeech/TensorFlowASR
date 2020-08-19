@@ -41,23 +41,27 @@ class BaseRunner(metaclass=abc.ABCMeta):
         self.config = config
         self.config["outdir"] = preprocess_paths(self.config["outdir"])
         # Writers
-        self.train_writer = tf.summary.create_file_writer(
-            os.path.join(config["outdir"], "tensorboard", "train")
-        )
-        self.eval_writer = tf.summary.create_file_writer(
-            os.path.join(config["outdir"], "tensorboard", "eval")
-        )
+        self.writers = {
+            "train": tf.summary.create_file_writer(
+                os.path.join(self.config["outdir"], "tensorboard", "train")),
+            "eval": tf.summary.create_file_writer(
+                os.path.join(self.config["outdir"], "tensorboard", "eval"))
+        }
+
+    def add_writer(self, stage: str):
+        self.writers[stage] = tf.summary.create_file_writer(
+            os.path.join(self.config["outdir"], "tensorboard", stage))
 
     def _write_to_tensorboard(self,
                               list_metrics: dict,
                               step: any,
                               stage: str = "train"):
         """Write variables to tensorboard."""
-        assert stage in ["train", "eval"]
-        if stage == "train":
-            writer = self.train_writer
-        else:
-            writer = self.eval_writer
+        writer = self.writers.get(stage, None)
+
+        if writer is None:
+            raise ValueError(f"Missing writer for stage {stage}")
+
         with writer.as_default():
             for key, value in list_metrics.items():
                 tf.summary.scalar(key, value.result(), step=step)
@@ -207,12 +211,14 @@ class BaseTrainer(BaseRunner):
             self.train_progbar.update(1)
             train_steps += 1
 
-            # Print train info to progress bar
-            self._print_train_metrics(self.train_progbar)
-
             # Run logging
             self._check_log_interval()
             self._check_save_interval()
+
+            # Print train info to progress bar
+            self._print_train_metrics(self.train_progbar)
+
+            # Run evaluation
             self._check_eval_interval()
 
         # Update epoch variable

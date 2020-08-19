@@ -1,4 +1,4 @@
-# Copyright 2020 Huy Le Nguyen (@usimarit)
+# Copyright 2020 Huy Le Nguyen (@usimarit) and Huy Phan (@pquochuy)
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -11,6 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+
 import abc
 import glob
 import multiprocessing
@@ -19,10 +20,10 @@ import os
 import numpy as np
 import tensorflow as tf
 
-from .base_dataset import BaseDataset
-from ..featurizers.speech_featurizers import read_raw_audio, SpeechFeaturizer
-from ..featurizers.text_featurizers import TextFeaturizer
-from ..utils.utils import bytestring_feature, print_one_line, get_num_batches
+from tiramisu_asr.datasets.base_dataset import BaseDataset
+from tiramisu_asr.featurizers.speech_featurizers import read_raw_audio, SpeechFeaturizer
+from tiramisu_asr.featurizers.text_featurizers import TextFeaturizer
+from tiramisu_asr.utils.utils import bytestring_feature, print_one_line, get_num_batches
 
 AUTOTUNE = tf.data.experimental.AUTOTUNE
 TFRECORD_SHARDS = 16
@@ -49,16 +50,18 @@ def write_tfrecord_file(splitted_entries):
     print(f"\nCreated {shard_path}")
 
 
-class ASRDataset(BaseDataset):
+class MultiConformersDataset(BaseDataset):
     def __init__(self,
                  stage: str,
-                 speech_featurizer: SpeechFeaturizer,
+                 speech_featurizer_lms: SpeechFeaturizer,
+                 speech_featurizer_lgs: SpeechFeaturizer,
                  text_featurizer: TextFeaturizer,
                  data_paths: list,
                  augmentations: dict = None,
                  shuffle: bool = False):
-        super(ASRDataset, self).__init__(data_paths, augmentations, shuffle, stage)
-        self.speech_featurizer = speech_featurizer
+        super().__init__(data_paths, augmentations, shuffle, stage)
+        self.speech_featurizer_lms = speech_featurizer_lms
+        self.speech_featurizer_lgs = speech_featurizer_lgs
         self.text_featurizer = text_featurizer
 
     def read_entries(self):
@@ -79,21 +82,24 @@ class ASRDataset(BaseDataset):
 
     def preprocess(self, audio, transcript):
         with tf.device("/CPU:0"):
-            signal = read_raw_audio(audio, self.speech_featurizer.sample_rate)
+            signal = read_raw_audio(audio, self.speech_featurizer_lms.sample_rate)
 
             signal = self.augmentations["before"].augment(signal)
 
-            features = self.speech_featurizer.extract(signal)
+            lms = self.speech_featurizer_lms.extract(signal)
+            lgs = self.speech_featurizer_lgs.extract(signal)
 
-            features = self.augmentations["after"].augment(features)
+            lms = self.augmentations["after"].augment(lms)
+            lgs = self.augmentations["after"].augment(lgs)
 
             label = self.text_featurizer.extract(transcript.decode("utf-8"))
             label_length = tf.cast(tf.shape(label)[0], tf.int32)
             pred_inp = self.text_featurizer.prepand_blank(label)
-            features = tf.convert_to_tensor(features, tf.float32)
-            input_length = tf.cast(tf.shape(features)[0], tf.int32)
+            lms = tf.convert_to_tensor(lms, tf.float32)
+            lgs = tf.convert_to_tensor(lgs, tf.float32)
+            input_length = tf.cast(tf.shape(lms)[0], tf.int32)
 
-            return features, input_length, label, label_length, pred_inp
+            return lms, lgs, input_length, label, label_length, pred_inp
 
     def process(self, dataset, batch_size):
         dataset = dataset.map(self.parse, num_parallel_calls=AUTOTUNE)
@@ -105,13 +111,14 @@ class ASRDataset(BaseDataset):
             batch_size=batch_size,
             padded_shapes=(
                 tf.TensorShape([]),
-                tf.TensorShape(self.speech_featurizer.shape),
+                tf.TensorShape(self.speech_featurizer_lms.shape),
+                tf.TensorShape(self.speech_featurizer_lgs.shape),
                 tf.TensorShape([]),
                 tf.TensorShape([None]),
                 tf.TensorShape([]),
                 tf.TensorShape([None])
             ),
-            padding_values=("", 0., 0, self.text_featurizer.blank,
+            padding_values=("", 0., 0., 0, self.text_featurizer.blank,
                             0, self.text_featurizer.blank)
         )
 
@@ -133,19 +140,20 @@ class ASRDataset(BaseDataset):
         raise NotImplementedError()
 
 
-class ASRTFRecordDataset(ASRDataset):
+class MultiConformersTFRecordDataset(MultiConformersDataset):
     """ Dataset for ASR using TFRecords """
 
     def __init__(self,
                  data_paths: list,
                  tfrecords_dir: str,
-                 speech_featurizer: SpeechFeaturizer,
+                 speech_featurizer_lms: SpeechFeaturizer,
+                 speech_featurizer_lgs: SpeechFeaturizer,
                  text_featurizer: TextFeaturizer,
                  stage: str,
                  augmentations: dict = None,
                  shuffle: bool = False):
-        super(ASRTFRecordDataset, self).__init__(stage, speech_featurizer, text_featurizer,
-                                                 data_paths, augmentations, shuffle)
+        super().__init__(stage, speech_featurizer_lms, speech_featurizer_lgs,
+                         text_featurizer, data_paths, augmentations, shuffle)
         self.tfrecords_dir = tfrecords_dir
         if not os.path.exists(self.tfrecords_dir):
             os.makedirs(self.tfrecords_dir)
@@ -183,12 +191,12 @@ class ASRTFRecordDataset(ASRDataset):
         }
         example = tf.io.parse_single_example(record, feature_description)
 
-        features, input_length, label, label_length, pred_inp = tf.numpy_function(
+        lms, lgs, input_length, label, label_length, pred_inp = tf.numpy_function(
             self.preprocess,
             inp=[example["audio"], example["transcript"]],
-            Tout=(tf.float32, tf.int32, tf.int32, tf.int32, tf.int32)
+            Tout=(tf.float32, tf.float32, tf.int32, tf.int32, tf.int32, tf.int32)
         )
-        return example["path"], features, input_length, label, label_length, pred_inp
+        return example["path"], lms, lgs, input_length, label, label_length, pred_inp
 
     def create(self, batch_size):
         # Create TFRecords dataset
@@ -207,18 +215,18 @@ class ASRTFRecordDataset(ASRDataset):
         return self.process(dataset, batch_size)
 
 
-class ASRSliceDataset(ASRDataset):
+class MultiConformersSliceDataset(MultiConformersDataset):
     """ Dataset for ASR using Slice """
 
     def preprocess(self, path, transcript):
-        data = super(ASRSliceDataset, self).preprocess(path.decode("utf-8"), transcript)
+        data = super().preprocess(path.decode("utf-8"), transcript)
         return (path, *data)
 
     def parse(self, record):
         return tf.numpy_function(
             self.preprocess,
             inp=[record[0], record[1]],
-            Tout=[tf.string, tf.float32, tf.int32, tf.int32, tf.int32, tf.int32]
+            Tout=[tf.string, tf.float32, tf.float32, tf.int32, tf.int32, tf.int32, tf.int32]
         )
 
     def create(self, batch_size):

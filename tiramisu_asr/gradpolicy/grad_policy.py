@@ -13,7 +13,7 @@
 # limitations under the License.
 
 import numpy as np
-import warnings
+
 
 class GradPolicy(object):
     """ Gradient policy for one network branch """
@@ -22,14 +22,15 @@ class GradPolicy(object):
                  train_size: int = 0,
                  valid_size: int = 0,
                  smooth_win_size: int = 50,
-                 hist_size : int = 100,
+                 hist_size: int = 100,
                  policy_name: str = 'simple'):
         """
         train_size: size of the training (sub)set used for gradient policing
         valid_size: size of the validation set used for gradient policing
         smooth_win_size: window size for loss smoothing
         hist_size: how many previous loss values we should use for line fitting
-        policy_name: name of the used policy ("simple", "fully_adaptive", "fully_adaptive_slope")
+        policy_name: name of the used policy
+        ("simple", "fully_adaptive", "fully_adaptive_slope")
         """
 
         self.train_size = train_size
@@ -119,7 +120,8 @@ class GradPolicy(object):
             w = 0.
 
         # update references to the best-performance current model snapshot
-        if (self.prev_best_valid_loss is None or self.prev_best_valid_loss > self.valid_loss[-1]):
+        if (self.prev_best_valid_loss is None or
+                self.prev_best_valid_loss > self.valid_loss[-1]):
             self.train_loss_ref = cur_train_loss
             self.valid_loss_ref = cur_valid_loss
             self.prev_best_valid_loss = self.valid_loss[-1]
@@ -131,12 +133,12 @@ class GradPolicy(object):
         # the losses at training step 0 are references
         N = len(self.smoothed_train_loss)
         if (self.train_slope_ref is None and self.valid_slope_ref is None):
-            train_loss = self.smoothed_train_loss[max([0, N - self.hist_size - 1]) : -1]
-            valid_loss = self.smoothed_valid_loss[max([0, N - self.hist_size - 1]) : -1]
+            train_loss = self.smoothed_train_loss[max([0, N - self.hist_size - 1]): -1]
+            valid_loss = self.smoothed_valid_loss[max([0, N - self.hist_size - 1]): -1]
             self.train_slope_ref, self.valid_slope_ref = self._line_fit(train_loss, valid_loss)
 
-        cur_train_loss = self.smoothed_train_loss[max([0, N - self.hist_size]) : ]
-        cur_valid_loss = self.smoothed_valid_loss[max([0, N - self.hist_size]) : ]
+        cur_train_loss = self.smoothed_train_loss[max([0, N - self.hist_size]):]
+        cur_valid_loss = self.smoothed_valid_loss[max([0, N - self.hist_size]):]
         train_slope, valid_slope = self._line_fit(cur_train_loss, cur_valid_loss)
 
         Ok = (valid_slope - train_slope) - (self.valid_slope_ref - self.train_slope_ref)
@@ -150,7 +152,8 @@ class GradPolicy(object):
             w = 0.
 
         # update references
-        if (self.prev_best_valid_loss is None or self.prev_best_valid_loss > self.valid_loss[-1]):
+        if (self.prev_best_valid_loss is None or
+                self.prev_best_valid_loss > self.valid_loss[-1]):
             self.train_slope_ref = train_slope
             self.valid_slope_ref = valid_slope
             self.prev_best_valid_loss = self.valid_loss[-1]
@@ -183,5 +186,8 @@ class GradPolicy(object):
         elif self.policy_name == "fully_adaptive_slope":
             w = self._compute_weight_fully_adaptive_slope()
         else:
-            raise ValueError("policy_name must be either 'simple', 'fully_adaptive' or 'fully_adaptive_slope'")
+            raise ValueError(
+                "policy_name must be either 'simple', "
+                "'fully_adaptive' or 'fully_adaptive_slope'")
         return w
+

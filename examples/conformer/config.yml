@@ -24,9 +24,10 @@ speech_config:
   normalize_per_feature: False
 
 decoder_config:
-  vocabulary: /mnt/Projects/asrk16/TiramisuASR/examples/conformer/vocabularies/vietnamese.txt
+  vocabulary: /mnt/Projects/asrk16/TiramisuASR/vocabularies/vietnamese.txt
   blank_at_zero: True
-  beam_width: 1
+  beam_width: 5
+  norm_score: True
 
 model_config:
   name: conformer

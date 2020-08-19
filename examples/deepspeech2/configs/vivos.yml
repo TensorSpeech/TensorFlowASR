@@ -24,7 +24,7 @@ speech_config:
   normalize_per_feature: False
 
 decoder_config:
-  vocabulary: /mnt/Projects/asrk16/TiramisuASR/examples/deepspeech2/vocabularies/vietnamese.txt
+  vocabulary: /mnt/Projects/asrk16/TiramisuASR/vocabularies/vietnamese.txt
   blank_at_zero: False
   beam_width: 500
   lm_config:
