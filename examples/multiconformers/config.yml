@@ -33,7 +33,7 @@ model_config:
   name: conformer
   dmodel: 144
   reduction_factor: 4
-  num_blocks: 6
+  num_blocks: 4
   head_size: 36
   num_heads: 4
   kernel_size: 32
@@ -67,7 +67,7 @@ learning_config:
     train_size: 100
     smooth_win_size: 2
     hist_size: 50
-    policy_name: "simple"
+    policy_name: "fully_adaptive"
 
   running_config:
     batch_size: 4

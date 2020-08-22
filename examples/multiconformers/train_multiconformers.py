@@ -50,6 +50,9 @@ def main():
     parser.add_argument("--nfx", type=bool, default=False,
                         help="Whether to use numpy feature extraction")
 
+    parser.add_argument("--devices", type=int, nargs="*", default=0,
+                        help="Devices' ids to apply distributed training")
+
     args = parser.parse_args()
 
     config = UserConfig(DEFAULT_YAML, args.config, learning=True)
@@ -97,9 +100,14 @@ def main():
             data_paths=config["learning_config"]["dataset_config"]["eval_paths"], shuffle=True
         )
 
+    if tf.config.experimental.list_physical_devices("GPU"):
+        strategy = tf.distribute.MirroredStrategy(devices=[f"/GPU:{i}" for i in args.devices])
+    else:
+        strategy = tf.distribute.MirroredStrategy()
+
     multiconformers_trainer = MultiConformersTrainer(
         config=config["learning_config"]["running_config"],
-        text_featurizer=text_featurizer
+        text_featurizer=text_featurizer, strategy=strategy
     )
 
     with multiconformers_trainer.strategy.scope():

@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+
 def setup_environment():  # Set memory growth and only log ERRORs
     import os
     import warnings

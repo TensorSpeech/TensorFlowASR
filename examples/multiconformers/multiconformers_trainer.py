@@ -37,6 +37,8 @@ class MultiConformersTrainer(BaseTrainer):
         self.set_lweights_metrics()
         self.update_lweights()
 
+    # -------------------------------- GET SET -------------------------------------
+
     def set_gradpolicy(self, **kwargs):
         self.gradpolicy = MultiviewGradPolicy(num_branches=3, **kwargs)
 
@@ -80,6 +82,12 @@ class MultiConformersTrainer(BaseTrainer):
 
     def save_model_weights(self):
         self.model.save_weights(os.path.join(self.config["outdir"], "latest.h5"))
+
+    def set_subset_step(self, train_subset):
+        self.subset_step = tf.function(
+            self._strategy_subset_step,
+            input_signature=[train_subset.element_spec]
+        )
 
     # -------------------------------- RUNNING -------------------------------------
 
@@ -134,7 +142,7 @@ class MultiConformersTrainer(BaseTrainer):
         train_subset = self.strategy.experimental_distribute_dataset(
             self.train_data.take(self.gradpolicy.train_size))
 
-        self.create_subset_step(train_subset)
+        self.set_subset_step(train_subset)
 
         eval_progbar = tqdm(
             initial=0, total=self.gradpolicy.train_size, unit="batch",
@@ -226,15 +234,12 @@ class MultiConformersTrainer(BaseTrainer):
     @tf.function
     def _subset_function(self, iterator):
         batch = next(iterator)
-        self.strategy.run(self.eval_subset, args=(batch,))
+        self.subset_step(batch)
 
-    def create_subset_step(self, train_subset):
-        self.eval_subset = tf.function(
-            self._eval_subset,
-            input_signature=[train_subset.element_spec]
-        )
+    def _strategy_subset_step(self, batch):
+        self.strategy.run(self._subset_step, args=(batch,))
 
-    def _eval_subset(self, batch):
+    def _subset_step(self, batch):
         per_eval_loss_lms, per_eval_loss, per_eval_loss_lgs = self._run_eval_step(batch)
 
         self.subset_metrics["rnnt_loss_lms"].update_state(per_eval_loss_lms)
@@ -283,8 +288,8 @@ class MultiConformersTrainer(BaseTrainer):
         """ Function run start training, including executing "run" func """
         self.set_train_data_loader(train_dataset)
         self.set_eval_data_loader(eval_dataset, eval_train_ratio)
-        self.create_train_step()
-        self.create_eval_step()
+        self.set_train_step()
+        self.set_eval_step()
         self.load_checkpoint()
         self.set_gradpolicy(valid_size=self.eval_steps_per_epoch, **gradpolicy_config)
         self.run()

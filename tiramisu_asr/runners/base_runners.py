@@ -113,7 +113,7 @@ class BaseTrainer(BaseRunner):
         raise NotImplementedError()
 
     def set_strategy(self, strategy=None):
-        if not strategy:
+        if strategy is None:
             gpus = tf.config.experimental.list_physical_devices('GPU')
             self.strategy = tf.distribute.OneDeviceStrategy("/GPU:0") if gpus else \
                 tf.distribute.OneDeviceStrategy("/CPU:0")
@@ -136,6 +136,24 @@ class BaseTrainer(BaseRunner):
             eval_data = eval_dataset.create(self.global_batch_size * eval_train_ratio)
             self.eval_data_loader = self.strategy.experimental_distribute_dataset(eval_data)
             self.eval_steps_per_epoch = eval_dataset.total_steps
+
+    def set_train_step(self):
+        """ Create train_step from _train_step """
+        self.train_step = tf.function(
+            self._strategy_train_step,
+            input_signature=[self.train_data_loader.element_spec]
+
+        )
+
+    def set_eval_step(self):
+        """ Create eval_step from _eval_step """
+        if self.eval_data_loader is None:
+            self.eval_step = tf.function(self._strategy_eval_step)
+        else:
+            self.eval_step = tf.function(
+                self._strategy_eval_step,
+                input_signature=[self.eval_data_loader.element_spec]
+            )
 
     # -------------------------------- CHECKPOINTS -------------------------------------
 
@@ -230,14 +248,10 @@ class BaseTrainer(BaseRunner):
     @tf.function
     def _train_function(self, iterator):
         batch = next(iterator)
-        self.strategy.run(self.train_step, args=(batch,))
+        self.train_step(batch)
 
-    def create_train_step(self):
-        """ Create train_step from _train_step """
-        self.train_step = tf.function(
-            self._train_step,
-            input_signature=[self.train_data_loader.element_spec]
-        )
+    def _strategy_train_step(self, batch):
+        self.strategy.run(self._train_step, args=(batch,))
 
     @abc.abstractmethod
     def _train_step(self, batch):
@@ -288,17 +302,10 @@ class BaseTrainer(BaseRunner):
     @tf.function
     def _eval_function(self, iterator):
         batch = next(iterator)
-        self.strategy.run(self.eval_step, args=(batch,))
+        self.eval_step(batch)
 
-    def create_eval_step(self):
-        """ Create eval_step from _eval_step """
-        if self.eval_data_loader is None:
-            self.eval_step = tf.function(self._eval_step)
-        else:
-            self.eval_step = tf.function(
-                self._eval_step,
-                input_signature=[self.eval_data_loader.element_spec]
-            )
+    def _strategy_eval_step(self, batch):
+        self.strategy.run(self._eval_step, args=(batch,))
 
     @abc.abstractmethod
     def _eval_step(self, batch):
@@ -314,8 +321,8 @@ class BaseTrainer(BaseRunner):
         """ Function run start training, including executing "run" func """
         self.set_train_data_loader(train_dataset)
         self.set_eval_data_loader(eval_dataset, eval_train_ratio)
-        self.create_train_step()
-        self.create_eval_step()
+        self.set_train_step()
+        self.set_eval_step()
         self.load_checkpoint()
         self.run()
 
