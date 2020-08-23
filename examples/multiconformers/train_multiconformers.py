@@ -55,6 +55,8 @@ def main():
 
     args = parser.parse_args()
 
+    strategy = setup_strategy(args.devices)
+
     config = UserConfig(DEFAULT_YAML, args.config, learning=True)
     lms_config = config["speech_config"]
     lms_config["feature_type"] = "log_mel_spectrogram"
@@ -99,8 +101,6 @@ def main():
             speech_featurizer_lgs=speech_featurizer_lgs, text_featurizer=text_featurizer,
             data_paths=config["learning_config"]["dataset_config"]["eval_paths"], shuffle=True
         )
-
-    strategy = setup_strategy(args.devices)
 
     multiconformers_trainer = MultiConformersTrainer(
         config=config["learning_config"]["running_config"],

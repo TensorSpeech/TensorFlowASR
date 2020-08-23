@@ -29,18 +29,15 @@ def setup_environment():  # Set memory growth and only log ERRORs
 
 def setup_strategy(devices):
     import tensorflow as tf
-    try:
-        # Currently, memory growth needs to be the same across GPUs
-        gpus = tf.config.list_physical_devices("GPU")
-        if gpus:
-            gpus = [gpus[i] for i in devices]
-            tf.config.set_visible_devices(gpus, "GPU")
-            for gpu in gpus:
-                tf.config.experimental.set_memory_growth(gpu, True)
-            print(len(gpus), "Physical GPUs")
-    except RuntimeError as e:
-        # Memory growth must be set before GPUs have been initialized
-        print(e)
+
+    # Currently, memory growth needs to be the same across GPUs
+    gpus = tf.config.list_physical_devices("GPU")
+    if gpus:
+        visible_gpus = [gpus[i] for i in devices]
+        tf.config.set_visible_devices(visible_gpus, "GPU")
+        for gpu in visible_gpus:
+            tf.config.experimental.set_memory_growth(gpu, True)
+        print(len(gpus), "Physical GPUs")
 
     return tf.distribute.MirroredStrategy()
 
