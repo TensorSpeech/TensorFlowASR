@@ -15,7 +15,7 @@
 import os
 import math
 import argparse
-from tiramisu_asr.utils import setup_environment
+from tiramisu_asr.utils import setup_environment, setup_strategy
 
 setup_environment()
 import tensorflow as tf
@@ -100,10 +100,7 @@ def main():
             data_paths=config["learning_config"]["dataset_config"]["eval_paths"], shuffle=True
         )
 
-    if tf.config.experimental.list_physical_devices("GPU"):
-        strategy = tf.distribute.MirroredStrategy(devices=[f"/GPU:{i}" for i in args.devices])
-    else:
-        strategy = tf.distribute.MirroredStrategy()
+    strategy = setup_strategy(args.devices)
 
     multiconformers_trainer = MultiConformersTrainer(
         config=config["learning_config"]["running_config"],
