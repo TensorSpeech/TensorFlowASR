@@ -50,7 +50,7 @@ def main():
     parser.add_argument("--nfx", type=bool, default=False,
                         help="Whether to use numpy feature extraction")
 
-    parser.add_argument("--devices", type=int, nargs="*", default=0,
+    parser.add_argument("--devices", type=int, nargs="*", default=[0],
                         help="Devices' ids to apply distributed training")
 
     args = parser.parse_args()
