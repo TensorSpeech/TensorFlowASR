@@ -13,61 +13,60 @@
 # limitations under the License.
 import os
 import argparse
-from tiramisu_asr.utils import setup_environment
+from tiramisu_asr.utils import setup_environment, setup_strategy
 
 setup_environment()
 import tensorflow as tf
+
+DEFAULT_YAML = os.path.join(os.path.abspath(os.path.dirname(__file__)), "config.yml")
+
+parser = argparse.ArgumentParser(prog="SEGAN")
+
+parser.add_argument("--config", "-c", type=str, default=DEFAULT_YAML,
+                    help="The file path of model configuration file")
+
+parser.add_argument("--max_ckpts", type=int, default=10,
+                    help="Max number of checkpoints to keep")
+
+parser.add_argument("--devices", type=int, nargs="*", default=[0],
+                    help="Devices' ids to apply distributed training")
+
+args = parser.parse_args()
+
+strategy = setup_strategy(args.devices)
 
 from tiramisu_asr.runners.segan_runners import SeganTrainer
 from tiramisu_asr.datasets.segan_dataset import SeganAugTrainDataset
 from tiramisu_asr.configs.user_config import UserConfig
 from tiramisu_asr.models.segan import Generator, Discriminator
 
-DEFAULT_YAML = os.path.join(os.path.abspath(os.path.dirname(__file__)), "config.yml")
+config = UserConfig(DEFAULT_YAML, args.config, learning=True)
 
+tf.random.set_seed(2020)
 
-def main():
-    parser = argparse.ArgumentParser(prog="SEGAN")
+dataset = SeganAugTrainDataset(
+    stage="train", clean_dir=config["learning_config"]["dataset_config"]["train_paths"],
+    noises_config=config["learning_config"]["dataset_config"]["noise_config"],
+    speech_config=config["speech_config"], shuffle=True
+)
 
-    parser.add_argument("--config", "-c", type=str, default=DEFAULT_YAML,
-                        help="The file path of model configuration file")
+segan_trainer = SeganTrainer(config["learning_config"]["running_config"])
 
-    parser.add_argument("--max_ckpts", type=int, default=10,
-                        help="Max number of checkpoints to keep")
-
-    args = parser.parse_args()
-
-    config = UserConfig(DEFAULT_YAML, args.config, learning=True)
-
-    tf.random.set_seed(2020)
-
-    dataset = SeganAugTrainDataset(
-        stage="train", clean_dir=config["learning_config"]["dataset_config"]["train_paths"],
-        noises_config=config["learning_config"]["dataset_config"]["noise_config"],
-        speech_config=config["speech_config"], shuffle=True
+with segan_trainer.strategy.scope():
+    generator = Generator(
+        window_size=config["speech_config"]["window_size"],
+        **config["model_config"]
     )
+    generator._build()
+    generator.summary(line_length=150)
+    discriminator = Discriminator(
+        window_size=config["speech_config"]["window_size"],
+        **config["model_config"]
+    )
+    discriminator._build()
+    discriminator.summary(line_length=150)
 
-    segan_trainer = SeganTrainer(config["learning_config"]["running_config"])
-
-    with segan_trainer.strategy.scope():
-        generator = Generator(
-            window_size=config["speech_config"]["window_size"],
-            **config["model_config"]
-        )
-        generator._build()
-        generator.summary(line_length=150)
-        discriminator = Discriminator(
-            window_size=config["speech_config"]["window_size"],
-            **config["model_config"]
-        )
-        discriminator._build()
-        discriminator.summary(line_length=150)
-
-    segan_trainer.compile(generator, discriminator,
-                          config["learning_config"]["optimizer_config"],
-                          max_to_keep=args.max_ckpts)
-    segan_trainer.fit(train_dataset=dataset)
-
-
-if __name__ == "__main__":
-    main()
+segan_trainer.compile(generator, discriminator,
+                      config["learning_config"]["optimizer_config"],
+                      max_to_keep=args.max_ckpts)
+segan_trainer.fit(train_dataset=dataset)
