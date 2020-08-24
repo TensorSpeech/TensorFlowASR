@@ -35,7 +35,6 @@ class MultiConformersTrainer(BaseTrainer):
         self.text_featurizer = text_featurizer
         self.add_writer("subset")
         self.set_lweights_metrics()
-        self.update_lweights()
 
     # -------------------------------- GET SET -------------------------------------
 
@@ -63,9 +62,9 @@ class MultiConformersTrainer(BaseTrainer):
 
     def set_lweights_metrics(self):
         self.lweights_metrics = {
-            "lweights_lms": tf.keras.metrics.Sum("loss_weights_lms", dtype=tf.float32),
-            "lweights": tf.keras.metrics.Sum("loss_weights", dtype=tf.float32),
-            "lweights_lgs": tf.keras.metrics.Sum("loss_weights_lgs", dtype=tf.float32)
+            "lweights_lms": tf.Variable(1.0, dtype=tf.float32),
+            "lweights": tf.Variable(1.0, dtype=tf.float32),
+            "lweights_lgs": tf.Variable(1.0, dtype=tf.float32)
         }
 
     def set_train_data_loader(self, train_dataset):
@@ -75,9 +74,9 @@ class MultiConformersTrainer(BaseTrainer):
         self.train_steps_per_epoch = train_dataset.total_steps
 
     def update_lweights(self, w_lms=1., w=1., w_lgs=1.):
-        self.lweights_metrics["lweights_lms"].update_state(w_lms)
-        self.lweights_metrics["lweights"].update_state(w)
-        self.lweights_metrics["lweights_lgs"].update_state(w_lgs)
+        self.lweights_metrics["lweights_lms"].assign(w_lms)
+        self.lweights_metrics["lweights"].assign(w)
+        self.lweights_metrics["lweights_lgs"].assign(w_lgs)
         self._write_to_tensorboard(self.lweights_metrics, self.steps, stage="train")
 
     def save_model_weights(self):
@@ -119,9 +118,9 @@ class MultiConformersTrainer(BaseTrainer):
             train_loss = tf.nn.compute_average_loss(
                 per_train_loss, global_batch_size=self.global_batch_size)
 
-            train_loss = (self.lweights_metrics["lweights_lms"].result() * train_loss_lms +
-                          self.lweights_metrics["lweights"].result() * train_loss +
-                          self.lweights_metrics["lweights_lgs"].result() * train_loss_lgs)
+            train_loss = (self.lweights_metrics["lweights_lms"] * train_loss_lms +
+                          self.lweights_metrics["lweights"] * train_loss +
+                          self.lweights_metrics["lweights_lgs"] * train_loss_lgs)
 
         gradients = tape.gradient(train_loss, self.model.trainable_variables)
         self.optimizer.apply_gradients(zip(gradients, self.model.trainable_variables))
@@ -208,9 +207,6 @@ class MultiConformersTrainer(BaseTrainer):
 
         print("> End evaluating validation set")
 
-        for metric in self.lweights_metrics.keys():
-            self.lweights_metrics[metric].reset_states()
-
         self.gradpolicy.update_losses(
             train_loss=[
                 self.subset_metrics["rnnt_loss_lms"].result().numpy(),
@@ -226,10 +222,7 @@ class MultiConformersTrainer(BaseTrainer):
         w_lms, w, w_lgs = self.gradpolicy.compute_weights()
         self.update_lweights(w_lms, w, w_lgs)
 
-        print(f"> Updated loss weights "
-              f"lms={self.lweights_metrics['lweights_lms'].result().numpy()}, "
-              f"joint={self.lweights_metrics['lweights'].result().numpy()}, "
-              f"lgs={self.lweights_metrics['lweights_lgs'].result().numpy()}")
+        self._print_loss_weights()
 
     @tf.function
     def _subset_function(self, iterator):
@@ -282,7 +275,12 @@ class MultiConformersTrainer(BaseTrainer):
         with self.strategy.scope():
             self.model = model
             self.optimizer = tf.keras.optimizers.get(optimizer)
-        self.create_checkpoint_manager(max_to_keep, model=self.model, optimizer=self.optimizer)
+        self.create_checkpoint_manager(
+            max_to_keep,
+            model=self.model,
+            optimizer=self.optimizer,
+            **self.lweights_metrics
+        )
 
     def fit(self, gradpolicy_config, train_dataset, eval_dataset=None, eval_train_ratio=1):
         """ Function run start training, including executing "run" func """
@@ -292,9 +290,16 @@ class MultiConformersTrainer(BaseTrainer):
         self.set_eval_step()
         self.load_checkpoint()
         self.set_gradpolicy(valid_size=self.eval_steps_per_epoch, **gradpolicy_config)
+        self._print_loss_weights()
         self.run()
 
     # -------------------------------- UTILS -------------------------------------
+
+    def _print_loss_weights(self):
+        print(f"> Loss weights "
+              f"lms={self.lweights_metrics['lweights_lms'].numpy()}, "
+              f"joint={self.lweights_metrics['lweights'].numpy()}, "
+              f"lgs={self.lweights_metrics['lweights_lgs'].numpy()}")
 
     def _print_subset_metrics(self, progbar):
         result_dict = {}

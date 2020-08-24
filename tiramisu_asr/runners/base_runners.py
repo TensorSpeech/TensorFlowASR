@@ -64,7 +64,10 @@ class BaseRunner(metaclass=abc.ABCMeta):
 
         with writer.as_default():
             for key, value in list_metrics.items():
-                tf.summary.scalar(key, value.result(), step=step)
+                if isinstance(value, tf.keras.metrics.Metric):
+                    tf.summary.scalar(key, value.result(), step=step)
+                else:
+                    tf.summary.scalar(key, value, step=step)
                 writer.flush()
 
 
