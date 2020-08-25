@@ -64,6 +64,8 @@ class CTCTrainer(BaseTrainer):
 
         self.train_metrics["ctc_loss"].update_state(per_train_loss)
 
+        return train_loss
+
     def _eval_step(self, batch):
         _, features, input_length, labels, label_length, _ = batch
 
@@ -78,6 +80,8 @@ class CTCTrainer(BaseTrainer):
 
         # Update metrics
         self.eval_metrics["ctc_loss"].update_state(per_eval_loss)
+
+        return per_eval_loss
 
     def compile(self, model: tf.keras.Model,
                 optimizer: any,

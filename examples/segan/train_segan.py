@@ -28,6 +28,9 @@ parser.add_argument("--config", "-c", type=str, default=DEFAULT_YAML,
 parser.add_argument("--max_ckpts", type=int, default=10,
                     help="Max number of checkpoints to keep")
 
+parser.add_argument("--tbs", type=int, default=None,
+                    help="Train batch size per replicas")
+
 parser.add_argument("--devices", type=int, nargs="*", default=[0],
                     help="Devices' ids to apply distributed training")
 
@@ -69,4 +72,4 @@ with segan_trainer.strategy.scope():
 segan_trainer.compile(generator, discriminator,
                       config["learning_config"]["optimizer_config"],
                       max_to_keep=args.max_ckpts)
-segan_trainer.fit(train_dataset=dataset)
+segan_trainer.fit(train_dataset=dataset, train_bs=args.tbs)

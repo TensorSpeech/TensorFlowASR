@@ -122,23 +122,26 @@ class BaseTrainer(BaseRunner):
                 tf.distribute.OneDeviceStrategy("/CPU:0")
         else:
             self.strategy = strategy
-        self.global_batch_size = self.config["batch_size"] * self.strategy.num_replicas_in_sync
 
-    def set_train_data_loader(self, train_dataset):
+    def set_train_data_loader(self, train_dataset, train_bs=None):
         """ Set train data loader (MUST). """
-        train_data = train_dataset.create(self.global_batch_size)
-        self.train_data_loader = self.strategy.experimental_distribute_dataset(train_data)
+        if not train_bs: train_bs = self.config["batch_size"]
+        self.global_batch_size = train_bs * self.strategy.num_replicas_in_sync
+        self.train_data = train_dataset.create(self.global_batch_size)
+        self.train_data_loader = self.strategy.experimental_distribute_dataset(self.train_data)
         self.train_steps_per_epoch = train_dataset.total_steps
 
-    def set_eval_data_loader(self, eval_dataset, eval_train_ratio=1):
+    def set_eval_data_loader(self, eval_dataset, eval_bs=None):
         """ Set eval data loader (MUST).
         Eval batch might be significantly greater than train batch """
         if eval_dataset is None:
+            self.eval_data = None
             self.eval_data_loader = None
-        else:
-            eval_data = eval_dataset.create(self.global_batch_size * eval_train_ratio)
-            self.eval_data_loader = self.strategy.experimental_distribute_dataset(eval_data)
-            self.eval_steps_per_epoch = eval_dataset.total_steps
+            return
+        if not eval_bs: eval_bs = self.config["batch_size"]
+        self.eval_data = eval_dataset.create(eval_bs * self.strategy.num_replicas_in_sync)
+        self.eval_data_loader = self.strategy.experimental_distribute_dataset(self.eval_data)
+        self.eval_steps_per_epoch = eval_dataset.total_steps
 
     def set_train_step(self):
         """ Create train_step from _train_step """
@@ -320,10 +323,10 @@ class BaseTrainer(BaseRunner):
         """ Function to initialize models and optimizers """
         raise NotImplementedError()
 
-    def fit(self, train_dataset, eval_dataset=None, eval_train_ratio=1):
+    def fit(self, train_dataset, eval_dataset=None, train_bs=None, eval_bs=None):
         """ Function run start training, including executing "run" func """
-        self.set_train_data_loader(train_dataset)
-        self.set_eval_data_loader(eval_dataset, eval_train_ratio)
+        self.set_train_data_loader(train_dataset, train_bs)
+        self.set_eval_data_loader(eval_dataset, eval_bs)
         self.set_train_step()
         self.set_eval_step()
         self.load_checkpoint()
@@ -398,9 +401,10 @@ class BaseTester(BaseRunner):
             with open(self.output_file_path, "w") as out:
                 out.write("PATH\tGROUNDTRUTH\tGREEDY\tBEAMSEARCH\tBEAMSEARCHLM\n")
 
-    def set_test_data_loader(self, test_dataset):
+    def set_test_data_loader(self, test_dataset, batch_size=None):
         """Set train data loader (MUST)."""
-        self.test_data_loader = test_dataset.create(self.config["batch_size"])
+        if not batch_size: batch_size = self.config["batch_size"]
+        self.test_data_loader = test_dataset.create(batch_size)
 
     # -------------------------------- RUNNING -------------------------------------
 
@@ -408,8 +412,8 @@ class BaseTester(BaseRunner):
         """ Set loaded trained model """
         self.model = trained_model
 
-    def run(self, test_dataset):
-        self.set_test_data_loader(test_dataset)
+    def run(self, test_dataset, batch_size=None):
+        self.set_test_data_loader(test_dataset, batch_size)
         self.create_test_step()
         self._test_epoch()
         self._finish()

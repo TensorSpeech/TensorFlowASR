@@ -35,8 +35,11 @@ parser.add_argument("--max_ckpts", type=int, default=10,
 parser.add_argument("--tfrecords", type=bool, default=False,
                     help="Whether to use tfrecords")
 
-parser.add_argument("--eval_train_ratio", type=int, default=1,
-                    help="ratio between train batch size and eval batch size")
+parser.add_argument("--tbs", type=int, default=None,
+                    help="Train batch size per replicas")
+
+parser.add_argument("--ebs", type=int, default=None,
+                    help="Evaluation batch size per replicas")
 
 parser.add_argument("--devices", type=int, nargs="*", default=[0],
                     help="Devices' ids to apply distributed training")
@@ -116,4 +119,4 @@ with conformer_trainer.strategy.scope():
 conformer_trainer.compile(model=conformer, optimizer=optimizer,
                           max_to_keep=args.max_ckpts)
 
-conformer_trainer.fit(train_dataset, eval_dataset, args.eval_train_ratio)
+conformer_trainer.fit(train_dataset, eval_dataset, train_bs=args.tbs, eval_bs=args.ebs)

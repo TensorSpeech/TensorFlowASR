@@ -38,6 +38,12 @@ parser.add_argument("--tfrecords", type=bool, default=False,
 parser.add_argument("--nfx", type=bool, default=False,
                     help="Whether to use numpy feature extraction")
 
+parser.add_argument("--tbs", type=int, default=None,
+                    help="Train batch size per replicas")
+
+parser.add_argument("--ebs", type=int, default=None,
+                    help="Evaluation batch size per replicas")
+
 parser.add_argument("--devices", type=int, nargs="*", default=[0],
                     help="Devices' ids to apply distributed training")
 
@@ -129,4 +135,4 @@ multiconformers_trainer.compile(model=multiconformers, optimizer=optimizer,
                                 max_to_keep=args.max_ckpts)
 
 multiconformers_trainer.fit(config["learning_config"]["gradpolicy"],
-                            train_dataset, eval_dataset)
+                            train_dataset, eval_dataset, train_bs=args.tbs, eval_bs=args.ebs)

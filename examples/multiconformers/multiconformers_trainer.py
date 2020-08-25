@@ -67,12 +67,6 @@ class MultiConformersTrainer(BaseTrainer):
             "lweights_lgs": tf.Variable(1.0, dtype=tf.float32)
         }
 
-    def set_train_data_loader(self, train_dataset):
-        """ Set train data loader (MUST). """
-        self.train_data = train_dataset.create(self.global_batch_size)
-        self.train_data_loader = self.strategy.experimental_distribute_dataset(self.train_data)
-        self.train_steps_per_epoch = train_dataset.total_steps
-
     def update_lweights(self, w_lms=1., w=1., w_lgs=1.):
         self.lweights_metrics["lweights_lms"].assign(w_lms)
         self.lweights_metrics["lweights"].assign(w)
@@ -87,6 +81,10 @@ class MultiConformersTrainer(BaseTrainer):
             self._strategy_subset_step,
             input_signature=[train_subset.element_spec]
         )
+
+    def get_subset_data_loader(self):
+        return self.strategy.experimental_distribute_dataset(
+            self.train_data.take(self.gradpolicy.train_size))
 
     # -------------------------------- RUNNING -------------------------------------
 
@@ -129,6 +127,8 @@ class MultiConformersTrainer(BaseTrainer):
         self.train_metrics["rnnt_loss_lms"].update_state(per_train_loss_lms)
         self.train_metrics["rnnt_loss_lgs"].update_state(per_train_loss_lgs)
 
+        return train_loss_lms, train_loss, train_loss_lgs
+
     def _eval_epoch(self):
         """One epoch evaluation."""
         if not self.eval_data_loader: raise ValueError("Validation set is required")
@@ -138,8 +138,7 @@ class MultiConformersTrainer(BaseTrainer):
         for metric in self.subset_metrics.keys():
             self.subset_metrics[metric].reset_states()
 
-        train_subset = self.strategy.experimental_distribute_dataset(
-            self.train_data.take(self.gradpolicy.train_size))
+        train_subset = self.get_subset_data_loader()
 
         self.set_subset_step(train_subset)
 
@@ -239,12 +238,16 @@ class MultiConformersTrainer(BaseTrainer):
         self.subset_metrics["rnnt_loss"].update_state(per_eval_loss)
         self.subset_metrics["rnnt_loss_lgs"].update_state(per_eval_loss_lgs)
 
+        return per_eval_loss_lms, per_eval_loss, per_eval_loss_lgs
+
     def _eval_step(self, batch):
         per_eval_loss_lms, per_eval_loss, per_eval_loss_lgs = self._run_eval_step(batch)
 
         self.eval_metrics["rnnt_loss_lms"].update_state(per_eval_loss_lms)
         self.eval_metrics["rnnt_loss"].update_state(per_eval_loss)
         self.eval_metrics["rnnt_loss_lgs"].update_state(per_eval_loss_lgs)
+
+        return per_eval_loss_lms, per_eval_loss, per_eval_loss_lgs
 
     def _run_eval_step(self, batch):
         _, lms, lgs, input_length, labels, label_length, pred_inp = batch
@@ -282,10 +285,11 @@ class MultiConformersTrainer(BaseTrainer):
             **self.lweights_metrics
         )
 
-    def fit(self, gradpolicy_config, train_dataset, eval_dataset=None, eval_train_ratio=1):
+    def fit(self, gradpolicy_config, train_dataset, eval_dataset=None,
+            train_bs=None, eval_bs=None):
         """ Function run start training, including executing "run" func """
-        self.set_train_data_loader(train_dataset)
-        self.set_eval_data_loader(eval_dataset, eval_train_ratio)
+        self.set_train_data_loader(train_dataset, train_bs)
+        self.set_eval_data_loader(eval_dataset, eval_bs)
         self.set_train_step()
         self.set_eval_step()
         self.load_checkpoint()

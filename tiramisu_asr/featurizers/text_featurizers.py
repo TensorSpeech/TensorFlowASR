@@ -127,8 +127,7 @@ class TextFeaturizer:
 
     def _idx_to_char(self, arr: tf.Tensor) -> tf.Tensor:
         transcript = tf.constant("", dtype=tf.string)
-        for i in arr:
-            transcript = tf.strings.join([transcript, self.tf_vocab_array[i]])
+        for i in arr: transcript = tf.strings.join([transcript, self.tf_vocab_array[i]])
         return transcript
 
     @tf.function(

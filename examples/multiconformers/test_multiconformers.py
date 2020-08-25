@@ -14,10 +14,38 @@
 
 import os
 import argparse
-from tiramisu_asr.utils import setup_environment
+from tiramisu_asr.utils import setup_environment, setup_devices
 
 setup_environment()
 import tensorflow as tf
+
+DEFAULT_YAML = os.path.join(os.path.abspath(os.path.dirname(__file__)), "config.yml")
+
+tf.keras.backend.clear_session()
+
+parser = argparse.ArgumentParser(prog="MultiConformers Training")
+
+parser.add_argument("--config", type=str, default=DEFAULT_YAML,
+                    help="The file path of model configuration file")
+
+parser.add_argument("--saved", type=str, default=None,
+                    help="Path to saved model")
+
+parser.add_argument("--tfrecords", type=bool, default=False,
+                    help="Whether to use tfrecords")
+
+parser.add_argument("--nfx", type=bool, default=False,
+                    help="Whether to use numpy feature extraction")
+
+parser.add_argument("--bs", type=int, default=None,
+                    help="Batch size")
+
+parser.add_argument("--device", type=int, default=0,
+                    help="Device's id to run test on")
+
+args = parser.parse_args()
+
+setup_devices([args.device])
 
 from tiramisu_asr.configs.user_config import UserConfig
 from tiramisu_asr.models.multiconformers import MultiConformers
@@ -28,74 +56,48 @@ from tiramisu_asr.featurizers.text_featurizers import TextFeaturizer
 from multiconformers_tester import MultiConformersTester
 from multiconformers_dataset import MultiConformersTFRecordDataset, MultiConformersSliceDataset
 
-DEFAULT_YAML = os.path.join(os.path.abspath(os.path.dirname(__file__)), "config.yml")
+config = UserConfig(DEFAULT_YAML, args.config, learning=True)
+lms_config = config["speech_config"]
+lms_config["feature_type"] = "log_mel_spectrogram"
+lgs_config = config["speech_config"]
+lgs_config["feature_type"] = "log_gammatone_spectrogram"
 
+if args.nfx:
+    speech_featurizer_lms = NumpySpeechFeaturizer(lms_config)
+    speech_featurizer_lgs = NumpySpeechFeaturizer(lgs_config)
+else:
+    speech_featurizer_lms = TFSpeechFeaturizer(lms_config)
+    speech_featurizer_lgs = TFSpeechFeaturizer(lgs_config)
 
-def main():
-    tf.keras.backend.clear_session()
+text_featurizer = TextFeaturizer(config["decoder_config"])
 
-    parser = argparse.ArgumentParser(prog="MultiConformers Training")
+tf.random.set_seed(0)
+assert args.saved
 
-    parser.add_argument("--config", type=str, default=DEFAULT_YAML,
-                        help="The file path of model configuration file")
-
-    parser.add_argument("--saved", type=str, default=None,
-                        help="Path to saved model")
-
-    parser.add_argument("--tfrecords", type=bool, default=False,
-                        help="Whether to use tfrecords")
-
-    parser.add_argument("--nfx", type=bool, default=False,
-                        help="Whether to use numpy feature extraction")
-
-    args = parser.parse_args()
-
-    config = UserConfig(DEFAULT_YAML, args.config, learning=True)
-    lms_config = config["speech_config"]
-    lms_config["feature_type"] = "log_mel_spectrogram"
-    lgs_config = config["speech_config"]
-    lgs_config["feature_type"] = "log_gammatone_spectrogram"
-
-    if args.nfx:
-        speech_featurizer_lms = NumpySpeechFeaturizer(lms_config)
-        speech_featurizer_lgs = NumpySpeechFeaturizer(lgs_config)
-    else:
-        speech_featurizer_lms = TFSpeechFeaturizer(lms_config)
-        speech_featurizer_lgs = TFSpeechFeaturizer(lgs_config)
-
-    text_featurizer = TextFeaturizer(config["decoder_config"])
-
-    tf.random.set_seed(0)
-    assert args.saved
-
-    if args.tfrecords:
-        test_dataset = MultiConformersTFRecordDataset(
-            config["learning_config"]["dataset_config"]["eval_paths"],
-            config["learning_config"]["dataset_config"]["tfrecords_dir"],
-            speech_featurizer_lms, speech_featurizer_lgs, text_featurizer,
-            "test", shuffle=True
-        )
-    else:
-        test_dataset = MultiConformersSliceDataset(
-            stage="test", speech_featurizer_lms=speech_featurizer_lms,
-            speech_featurizer_lgs=speech_featurizer_lgs, text_featurizer=text_featurizer,
-            data_paths=config["learning_config"]["dataset_config"]["eval_paths"], shuffle=True
-        )
-
-    multiconformers = MultiConformers(
-        **config["model_config"],
-        vocabulary_size=text_featurizer.num_classes
+if args.tfrecords:
+    test_dataset = MultiConformersTFRecordDataset(
+        config["learning_config"]["dataset_config"]["eval_paths"],
+        config["learning_config"]["dataset_config"]["tfrecords_dir"],
+        speech_featurizer_lms, speech_featurizer_lgs, text_featurizer,
+        "test", shuffle=True
     )
-    multiconformers._build(speech_featurizer_lms.shape, speech_featurizer_lgs.shape)
-    multiconformers.load_weights(args.saved)
-    multiconformers.summary(line_length=100)
+else:
+    test_dataset = MultiConformersSliceDataset(
+        stage="test", speech_featurizer_lms=speech_featurizer_lms,
+        speech_featurizer_lgs=speech_featurizer_lgs, text_featurizer=text_featurizer,
+        data_paths=config["learning_config"]["dataset_config"]["eval_paths"], shuffle=True
+    )
 
-    multiconformers_tester = MultiConformersTester(
-        config=config["learning_config"]["running_config"])
-    multiconformers_tester.compile(multiconformers)
+multiconformers = MultiConformers(
+    **config["model_config"],
+    vocabulary_size=text_featurizer.num_classes
+)
+multiconformers._build(speech_featurizer_lms.shape, speech_featurizer_lgs.shape)
+multiconformers.load_weights(args.saved)
+multiconformers.summary(line_length=100)
 
-    multiconformers_tester.run(test_dataset)
+multiconformers_tester = MultiConformersTester(
+    config=config["learning_config"]["running_config"])
+multiconformers_tester.compile(multiconformers)
 
-
-if __name__ == "__main__":
-    main()
+multiconformers_tester.run(test_dataset, batch_size=args.bs)

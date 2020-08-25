@@ -14,10 +14,34 @@
 
 import os
 import argparse
-from tiramisu_asr.utils import setup_environment
+from tiramisu_asr.utils import setup_environment, setup_devices
 
 setup_environment()
 import tensorflow as tf
+
+DEFAULT_YAML = os.path.join(os.path.abspath(os.path.dirname(__file__)), "config.yml")
+
+tf.keras.backend.clear_session()
+
+parser = argparse.ArgumentParser(prog="Conformer Testing")
+
+parser.add_argument("--config", type=str, default=DEFAULT_YAML,
+                    help="The file path of model configuration file")
+
+parser.add_argument("--saved", type=str, default=None,
+                    help="Path to saved model")
+
+parser.add_argument("--tfrecords", type=bool, default=False,
+                    help="Whether to use tfrecords as dataset")
+
+parser.add_argument("--bs", type=int, default=None, help="Batch size")
+
+parser.add_argument("--device", type=int, default=0,
+                    help="Device's id to run test on")
+
+args = parser.parse_args()
+
+setup_devices([args.device])
 
 from tiramisu_asr.configs.user_config import UserConfig
 from tiramisu_asr.datasets.asr_dataset import ASRTFRecordDataset, ASRSliceDataset
@@ -26,61 +50,38 @@ from tiramisu_asr.featurizers.text_featurizers import TextFeaturizer
 from tiramisu_asr.runners.base_runners import BaseTester
 from tiramisu_asr.models.conformer import Conformer
 
-DEFAULT_YAML = os.path.join(os.path.abspath(os.path.dirname(__file__)), "config.yml")
+config = UserConfig(DEFAULT_YAML, args.config, learning=True)
+speech_featurizer = TFSpeechFeaturizer(config["speech_config"])
+text_featurizer = TextFeaturizer(config["decoder_config"])
 
+tf.random.set_seed(0)
+assert args.saved
 
-def main():
-    tf.keras.backend.clear_session()
-
-    parser = argparse.ArgumentParser(prog="Conformer Testing")
-
-    parser.add_argument("--config", type=str, default=DEFAULT_YAML,
-                        help="The file path of model configuration file")
-
-    parser.add_argument("--saved", type=str, default=None,
-                        help="Path to saved model")
-
-    parser.add_argument("--tfrecords", type=bool, default=False,
-                        help="Whether to use tfrecords as dataset")
-
-    args = parser.parse_args()
-
-    config = UserConfig(DEFAULT_YAML, args.config, learning=True)
-    speech_featurizer = TFSpeechFeaturizer(config["speech_config"])
-    text_featurizer = TextFeaturizer(config["decoder_config"])
-
-    tf.random.set_seed(0)
-    assert args.saved
-
-    if args.tfrecords:
-        test_dataset = ASRTFRecordDataset(
-            config["learning_config"]["dataset_config"]["test_paths"],
-            config["learning_config"]["dataset_config"]["tfrecords_dir"],
-            speech_featurizer, text_featurizer, "test",
-            augmentations=config["learning_config"]["augmentations"], shuffle=False
-        )
-    else:
-        test_dataset = ASRSliceDataset(
-            stage="test", speech_featurizer=speech_featurizer,
-            text_featurizer=text_featurizer,
-            data_paths=config["learning_config"]["dataset_config"]["test_paths"],
-            shuffle=False
-        )
-
-    # build model
-    conformer = Conformer(
-        vocabulary_size=text_featurizer.num_classes,
-        **config["model_config"]
+if args.tfrecords:
+    test_dataset = ASRTFRecordDataset(
+        config["learning_config"]["dataset_config"]["test_paths"],
+        config["learning_config"]["dataset_config"]["tfrecords_dir"],
+        speech_featurizer, text_featurizer, "test",
+        augmentations=config["learning_config"]["augmentations"], shuffle=False
     )
-    conformer._build(speech_featurizer.shape)
-    conformer.load_weights(args.saved)
-    conformer.summary(line_length=150)
-    conformer.add_featurizers(speech_featurizer, text_featurizer)
+else:
+    test_dataset = ASRSliceDataset(
+        stage="test", speech_featurizer=speech_featurizer,
+        text_featurizer=text_featurizer,
+        data_paths=config["learning_config"]["dataset_config"]["test_paths"],
+        shuffle=False
+    )
 
-    conformer_tester = BaseTester(config=config["learning_config"]["running_config"])
-    conformer_tester.compile(conformer)
-    conformer_tester.run(test_dataset)
+# build model
+conformer = Conformer(
+    vocabulary_size=text_featurizer.num_classes,
+    **config["model_config"]
+)
+conformer._build(speech_featurizer.shape)
+conformer.load_weights(args.saved)
+conformer.summary(line_length=150)
+conformer.add_featurizers(speech_featurizer, text_featurizer)
 
-
-if __name__ == "__main__":
-    main()
+conformer_tester = BaseTester(config=config["learning_config"]["running_config"])
+conformer_tester.compile(conformer)
+conformer_tester.run(test_dataset, batch_size=args.bs)

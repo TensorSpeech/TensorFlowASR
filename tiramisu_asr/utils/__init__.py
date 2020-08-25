@@ -18,6 +18,7 @@ def setup_environment():  # Set memory growth and only log ERRORs
     import warnings
 
     os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
+    os.environ["TF_FORCE_GPU_ALLOW_GROWTH"] = "true"
     warnings.simplefilter("ignore")
 
     import tensorflow as tf
@@ -27,7 +28,7 @@ def setup_environment():  # Set memory growth and only log ERRORs
     tf.config.optimizer.set_experimental_options({"auto_mixed_precision": True})
 
 
-def setup_strategy(devices):
+def setup_devices(devices):
     import tensorflow as tf
 
     # Currently, memory growth needs to be the same across GPUs
@@ -38,6 +39,12 @@ def setup_strategy(devices):
         for gpu in visible_gpus:
             tf.config.experimental.set_memory_growth(gpu, True)
         print(len(gpus), "Physical GPUs")
+
+
+def setup_strategy(devices):
+    import tensorflow as tf
+
+    setup_devices(devices)
 
     return tf.distribute.MirroredStrategy()
 

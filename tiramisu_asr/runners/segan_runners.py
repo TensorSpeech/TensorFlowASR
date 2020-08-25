@@ -130,6 +130,8 @@ class SeganTrainer(BaseTrainer):
         self.train_metrics["g_adv_loss"].update_state(_gen_adv_loss)
         self.train_metrics["d_adv_loss"].update_state(_disc_loss)
 
+        return train_gen_loss, train_disc_loss
+
     def _eval_step(self, batch):
         clean_wavs, noisy_wavs = batch
 
@@ -149,6 +151,8 @@ class SeganTrainer(BaseTrainer):
         self.eval_metrics["g_l1_loss"].update_state(_gen_l1_loss)
         self.eval_metrics["g_adv_loss"].update_state(_gen_adv_loss)
         self.eval_metrics["d_adv_loss"].update_state(_disc_loss)
+
+        return _gen_l1_loss + _gen_adv_loss, _disc_loss
 
     def compile(self,
                 generator: tf.keras.Model,
