@@ -19,10 +19,9 @@ TiramisuASR implements some speech recognition and speech enhancement architectu
 
 ## What's New?
 
-- Update readme files
-- Use `tf.keras.Input()` in `_build()` method of every models for better summary
-- Fix **runners**, **datasets**
-- Use **nlpaug** as augmentation for speech recognition and enhancement
+- Distributed training using `tf.distribute.MirroredStrategy`
+- Fixed transducer beam search
+- Add `log_gammatone_spectrogram`
 
 ## :yum: Supported Models
 
@@ -126,17 +125,28 @@ learning_config:
 
 See [examples](./examples/) for some predefined ASR models.
 
-## Collected Datasets
+## Corpus Sources
 
-<details><summary>expand</summary><div>
+### English
+
+|   **Name**   |                             **Source**                             | **Hours** |
+| :----------: | :----------------------------------------------------------------: | :-------: |
+| LibriSpeech  |              [LibriSpeech](http://www.openslr.org/12)              |   970h    |
+| Common Voice | [https://commonvoice.mozilla.org](https://commonvoice.mozilla.org) |   1932h   |
 
 ### Vietnamese
 
-1. VIVOS: 15hrs from [here](https://ailab.hcmus.edu.vn/vivos)
-2. InfoRe Technology 1: 25hrs Single Person [here](https://files.huylenguyen.com/datasets/infore/25hours.zip)
-3. InfoRe Technology 2 (also used in VLSP2019): ~415hrs from [here](https://files.huylenguyen.com/datasets/infore/audiobooks.zip)
+|                **Name**                |                               **Source**                                | **Hours** |
+| :------------------------------------: | :---------------------------------------------------------------------: | :-------: |
+|                 Vivos                  |  [https://ailab.hcmus.edu.vn/vivos](https://ailab.hcmus.edu.vn/vivos)   |    15h    |
+|          InfoRe Technology 1           |  [InfoRe1](https://files.huylenguyen.com/datasets/infore/25hours.zip)   |    25h    |
+| InfoRe Technology 2 (used in VLSP2019) | [InfoRe2](https://files.huylenguyen.com/datasets/infore/audiobooks.zip) |   415h    |
 
-</div></details>
+### German
+
+|   **Name**   |                             **Source**                              | **Hours** |
+| :----------: | :-----------------------------------------------------------------: | :-------: |
+| Common Voice | [https://commonvoice.mozilla.org/](https://commonvoice.mozilla.org) |   750h    |
 
 ## References & Credits
 

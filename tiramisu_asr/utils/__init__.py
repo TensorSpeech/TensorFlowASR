@@ -18,7 +18,7 @@ def setup_environment():  # Set memory growth and only log ERRORs
     import warnings
 
     os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
-    os.environ["TF_FORCE_GPU_ALLOW_GROWTH"] = "true"
+    # os.environ["TF_FORCE_GPU_ALLOW_GROWTH"] = "true"
     warnings.simplefilter("ignore")
 
     import tensorflow as tf
@@ -36,9 +36,9 @@ def setup_devices(devices):
     if gpus:
         visible_gpus = [gpus[i] for i in devices]
         tf.config.set_visible_devices(visible_gpus, "GPU")
-        for gpu in visible_gpus:
-            tf.config.experimental.set_memory_growth(gpu, True)
-        print(len(gpus), "Physical GPUs")
+        # for gpu in visible_gpus:
+        #     tf.config.experimental.set_memory_growth(gpu, True)
+        print("Run on", len(visible_gpus), "Physical GPUs")
 
 
 def setup_strategy(devices):

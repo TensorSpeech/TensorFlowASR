@@ -74,7 +74,7 @@ Testing, see `python examples/conformer/train_conformer.py --help`
 
 ## Results on LibriSpeech 100h
 
-LibriSpeech 100h Conformer is trained with [config](./pretrained/librispeech-100h/libri-clean-100.yml) in 19 hours using RTX 2080Ti 11GB.
+LibriSpeech 100h Conformer is trained with [config](./pretrained/librispeech-100h/libri-clean-100.yml) in 19 hours using 1 RTX 2080Ti 11GB.
 
 **Transducer Loss**
 
@@ -82,7 +82,7 @@ LibriSpeech 100h Conformer is trained with [config](./pretrained/librispeech-100
 
 **Error Rates**
 
-|               |  WER (%)   |  CER (%)   |
-| :------------ | :--------: | :--------: |
-| _Greedy_      | 34.4447212 | 16.1116848 |
-| _Beam Search_ | 13.7398481 | 5.45213652 |
+|  Test-clean   |    WER (%)     |    CER (%)     |
+| :-----------: | :------------: | :------------: |
+|   _Greedy_    |   34.4447212   |   16.1116848   |
+| _Beam Search_ | **13.7398481** | **5.45213652** |

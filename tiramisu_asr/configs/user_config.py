@@ -35,17 +35,6 @@ def load_yaml(path):
         return yaml.load(file, Loader=loader)
 
 
-# def fill_missing(default: dict, self_attention_ds2: dict, level: int = 0):
-#     if level > 1:  # Only fill default value up to level 1 from 0 of config dict
-#         return self_attention_ds2
-#     for key, value in default.items():
-#         if not self_attention_ds2.get(key, None):
-#             self_attention_ds2[key] = value
-#         elif isinstance(value, dict):
-#             self_attention_ds2[key] = fill_missing(value, self_attention_ds2[key], level + 1)
-#     return self_attention_ds2
-
-
 class UserConfig(UserDict):
     """ User config class for training, testing or infering """
 
