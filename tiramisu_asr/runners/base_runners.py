@@ -86,7 +86,6 @@ class BaseTrainer(BaseRunner):
         self.set_strategy(strategy)
         # Steps and Epochs start from 0
         self.steps = tf.Variable(0, dtype=tf.int64)  # Step must be int64 to use tf.summary
-        self.epochs = tf.Variable(1)
         self.train_steps_per_epoch = None
         self.eval_steps_per_epoch = None
         # Dataset
@@ -99,9 +98,13 @@ class BaseTrainer(BaseRunner):
 
     @property
     def total_train_steps(self):
-        if self.train_steps_per_epoch is None:
-            return None
+        if self.train_steps_per_epoch is None: return None
         return self.config["num_epochs"] * self.train_steps_per_epoch
+
+    @property
+    def epochs(self):
+        if self.train_steps_per_epoch is None: return 1
+        return (self.steps.numpy() // self.train_steps_per_epoch) + 1
 
     # -------------------------------- GET SET -------------------------------------
 
@@ -166,7 +169,7 @@ class BaseTrainer(BaseRunner):
     def create_checkpoint_manager(self, max_to_keep=10, **kwargs):
         """Create checkpoint management."""
         with self.strategy.scope():
-            self.ckpt = tf.train.Checkpoint(steps=self.steps, epochs=self.epochs, **kwargs)
+            self.ckpt = tf.train.Checkpoint(steps=self.steps, **kwargs)
             checkpoint_dir = os.path.join(self.config["outdir"], "checkpoints")
             if not os.path.exists(checkpoint_dir):
                 os.makedirs(checkpoint_dir)
@@ -217,8 +220,6 @@ class BaseTrainer(BaseRunner):
 
     def _train_epoch(self):
         """Train model one epoch."""
-        self.train_progbar.set_description_str(
-            f"[Train] [Epoch {self.epochs.numpy()}/{self.config['num_epochs']}]")
         train_iterator = iter(self.train_data_loader)
         train_steps = 0
         while True:
@@ -235,18 +236,20 @@ class BaseTrainer(BaseRunner):
             self.train_progbar.update(1)
             train_steps += 1
 
-            # Run logging
-            self._check_log_interval()
-            self._check_save_interval()
+            # Print epoch info
+            self.train_progbar.set_description_str(
+                f"[Train] [Epoch {self.epochs}/{self.config['num_epochs']}]")
 
             # Print train info to progress bar
             self._print_train_metrics(self.train_progbar)
 
+            # Run logging
+            self._check_log_interval()
+            self._check_save_interval()
+
             # Run evaluation
             self._check_eval_interval()
 
-        # Update epoch variable
-        self.epochs.assign_add(1)
         self.train_steps_per_epoch = train_steps
         self.train_progbar.total = self.total_train_steps
         self.train_progbar.refresh()
