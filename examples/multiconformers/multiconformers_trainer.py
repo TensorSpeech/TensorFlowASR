@@ -158,6 +158,8 @@ class MultiConformersTrainer(BaseTrainer):
                 break
             except tf.errors.OutOfRangeError:
                 break
+            except Exception as e:
+                print(e)
 
             # Update steps
             eval_progbar.update(1)
@@ -192,6 +194,8 @@ class MultiConformersTrainer(BaseTrainer):
                 break
             except tf.errors.OutOfRangeError:
                 break
+            except Exception as e:
+                print(e)
 
             # Update steps
             eval_progbar.update(1)

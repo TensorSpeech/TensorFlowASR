@@ -223,13 +223,14 @@ class BaseTrainer(BaseRunner):
         train_iterator = iter(self.train_data_loader)
         train_steps = 0
         while True:
-            # Run train step
             try:
-                self._train_function(train_iterator)
+                self._train_function(train_iterator)  # Run train step
             except StopIteration:
                 break
             except tf.errors.OutOfRangeError:
                 break
+            except Exception as e:
+                print(e)
 
             # Update steps
             self.steps.assign_add(1)
@@ -286,13 +287,14 @@ class BaseTrainer(BaseRunner):
         eval_steps = 0
 
         while True:
-            # Run eval step
             try:
-                self._eval_function(eval_iterator)
+                self._eval_function(eval_iterator)  # Run eval step
             except StopIteration:
                 break
             except tf.errors.OutOfRangeError:
                 break
+            except Exception as e:
+                print(e)
 
             # Update steps
             eval_progbar.update(1)
