@@ -42,6 +42,7 @@ class TransducerTrainer(BaseTrainer):
     def save_model_weights(self):
         self.model.save_weights(os.path.join(self.config["outdir"], "latest.h5"))
 
+    @tf.function(experimental_relax_shapes=True)
     def _train_step(self, batch):
         _, features, input_length, labels, label_length, pred_inp = batch
 
@@ -61,8 +62,7 @@ class TransducerTrainer(BaseTrainer):
 
         self.train_metrics["transducer_loss"].update_state(per_train_loss)
 
-        return train_loss
-
+    @tf.function(experimental_relax_shapes=True)
     def _eval_step(self, batch):
         _, features, input_length, labels, label_length, pred_inp = batch
 
@@ -74,8 +74,6 @@ class TransducerTrainer(BaseTrainer):
         )
 
         self.eval_metrics["transducer_loss"].update_state(eval_loss)
-
-        return eval_loss
 
     def compile(self,
                 model: Transducer,

@@ -76,18 +76,13 @@ class MultiConformersTrainer(BaseTrainer):
     def save_model_weights(self):
         self.model.save_weights(os.path.join(self.config["outdir"], "latest.h5"))
 
-    def set_subset_step(self, train_subset):
-        self.subset_step = tf.function(
-            self._strategy_subset_step,
-            input_signature=[train_subset.element_spec]
-        )
-
     def get_subset_data_loader(self):
         return self.strategy.experimental_distribute_dataset(
             self.train_data.take(self.gradpolicy.train_size))
 
     # -------------------------------- RUNNING -------------------------------------
 
+    @tf.function(experimental_relax_shapes=True)
     def _train_step(self, batch):
         _, lms, lgs, input_length, labels, label_length, pred_inp = batch
 
@@ -127,8 +122,6 @@ class MultiConformersTrainer(BaseTrainer):
         self.train_metrics["rnnt_loss_lms"].update_state(per_train_loss_lms)
         self.train_metrics["rnnt_loss_lgs"].update_state(per_train_loss_lgs)
 
-        return train_loss_lms, train_loss, train_loss_lgs
-
     def _eval_epoch(self):
         """One epoch evaluation."""
         if not self.eval_data_loader: raise ValueError("Validation set is required")
@@ -139,8 +132,6 @@ class MultiConformersTrainer(BaseTrainer):
             self.subset_metrics[metric].reset_states()
 
         train_subset = self.get_subset_data_loader()
-
-        self.set_subset_step(train_subset)
 
         eval_progbar = tqdm(
             initial=0, total=self.gradpolicy.train_size, unit="batch",
@@ -227,14 +218,11 @@ class MultiConformersTrainer(BaseTrainer):
 
         self._print_loss_weights()
 
-    @tf.function
     def _subset_function(self, iterator):
         batch = next(iterator)
-        self.subset_step(batch)
-
-    def _strategy_subset_step(self, batch):
         self.strategy.run(self._subset_step, args=(batch,))
 
+    @tf.function(experimental_relax_shapes=True)
     def _subset_step(self, batch):
         per_eval_loss_lms, per_eval_loss, per_eval_loss_lgs = self._run_eval_step(batch)
 
@@ -242,16 +230,13 @@ class MultiConformersTrainer(BaseTrainer):
         self.subset_metrics["rnnt_loss"].update_state(per_eval_loss)
         self.subset_metrics["rnnt_loss_lgs"].update_state(per_eval_loss_lgs)
 
-        return per_eval_loss_lms, per_eval_loss, per_eval_loss_lgs
-
+    @tf.function(experimental_relax_shapes=True)
     def _eval_step(self, batch):
         per_eval_loss_lms, per_eval_loss, per_eval_loss_lgs = self._run_eval_step(batch)
 
         self.eval_metrics["rnnt_loss_lms"].update_state(per_eval_loss_lms)
         self.eval_metrics["rnnt_loss"].update_state(per_eval_loss)
         self.eval_metrics["rnnt_loss_lgs"].update_state(per_eval_loss_lgs)
-
-        return per_eval_loss_lms, per_eval_loss, per_eval_loss_lgs
 
     def _run_eval_step(self, batch):
         _, lms, lgs, input_length, labels, label_length, pred_inp = batch
@@ -294,8 +279,6 @@ class MultiConformersTrainer(BaseTrainer):
         """ Function run start training, including executing "run" func """
         self.set_train_data_loader(train_dataset, train_bs)
         self.set_eval_data_loader(eval_dataset, eval_bs)
-        self.set_train_step()
-        self.set_eval_step()
         self.load_checkpoint()
         self.set_gradpolicy(valid_size=self.eval_steps_per_epoch, **gradpolicy_config)
         self._print_loss_weights()

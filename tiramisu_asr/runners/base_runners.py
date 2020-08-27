@@ -146,24 +146,6 @@ class BaseTrainer(BaseRunner):
         self.eval_data_loader = self.strategy.experimental_distribute_dataset(self.eval_data)
         self.eval_steps_per_epoch = eval_dataset.total_steps
 
-    def set_train_step(self):
-        """ Create train_step from _train_step """
-        self.train_step = tf.function(
-            self._strategy_train_step,
-            input_signature=[self.train_data_loader.element_spec]
-
-        )
-
-    def set_eval_step(self):
-        """ Create eval_step from _eval_step """
-        if self.eval_data_loader is None:
-            self.eval_step = tf.function(self._strategy_eval_step)
-        else:
-            self.eval_step = tf.function(
-                self._strategy_eval_step,
-                input_signature=[self.eval_data_loader.element_spec]
-            )
-
     # -------------------------------- CHECKPOINTS -------------------------------------
 
     def create_checkpoint_manager(self, max_to_keep=10, **kwargs):
@@ -230,7 +212,7 @@ class BaseTrainer(BaseRunner):
             except tf.errors.OutOfRangeError:
                 break
             except Exception as e:
-                print(e)
+                raise e
 
             # Update steps
             self.steps.assign_add(1)
@@ -255,12 +237,8 @@ class BaseTrainer(BaseRunner):
         self.train_progbar.total = self.total_train_steps
         self.train_progbar.refresh()
 
-    @tf.function
     def _train_function(self, iterator):
         batch = next(iterator)
-        self.train_step(batch)
-
-    def _strategy_train_step(self, batch):
         self.strategy.run(self._train_step, args=(batch,))
 
     @abc.abstractmethod
@@ -294,7 +272,7 @@ class BaseTrainer(BaseRunner):
             except tf.errors.OutOfRangeError:
                 break
             except Exception as e:
-                print(e)
+                raise e
 
             # Update steps
             eval_progbar.update(1)
@@ -310,12 +288,8 @@ class BaseTrainer(BaseRunner):
 
         print("> End evaluation ...")
 
-    @tf.function
     def _eval_function(self, iterator):
         batch = next(iterator)
-        self.eval_step(batch)
-
-    def _strategy_eval_step(self, batch):
         self.strategy.run(self._eval_step, args=(batch,))
 
     @abc.abstractmethod
@@ -332,8 +306,6 @@ class BaseTrainer(BaseRunner):
         """ Function run start training, including executing "run" func """
         self.set_train_data_loader(train_dataset, train_bs)
         self.set_eval_data_loader(eval_dataset, eval_bs)
-        self.set_train_step()
-        self.set_eval_step()
         self.load_checkpoint()
         self.run()
 

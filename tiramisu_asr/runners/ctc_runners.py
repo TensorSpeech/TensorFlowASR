@@ -44,6 +44,7 @@ class CTCTrainer(BaseTrainer):
         with self.strategy.scope():
             self.model.save_weights(os.path.join(self.config["outdir"], "latest.h5"))
 
+    @tf.function(experimental_relax_shapes=True)
     def _train_step(self, batch):
         _, features, input_length, labels, label_length, _ = batch
 
@@ -64,8 +65,7 @@ class CTCTrainer(BaseTrainer):
 
         self.train_metrics["ctc_loss"].update_state(per_train_loss)
 
-        return train_loss
-
+    @tf.function(experimental_relax_shapes=True)
     def _eval_step(self, batch):
         _, features, input_length, labels, label_length, _ = batch
 
@@ -80,8 +80,6 @@ class CTCTrainer(BaseTrainer):
 
         # Update metrics
         self.eval_metrics["ctc_loss"].update_state(per_eval_loss)
-
-        return per_eval_loss
 
     def compile(self, model: tf.keras.Model,
                 optimizer: any,
