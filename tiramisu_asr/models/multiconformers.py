@@ -232,7 +232,7 @@ class MultiConformers(Model):
         def _body(record):
             lms, lgs = tf.unstack(record, axis=0)
             decoded = tf.py_function(self.perform_beam_search,
-                                     inp=[lms[None, ...], lgs[None, ...], lm, False],
+                                     inp=[lms[None, ...], lgs[None, ...], lm],
                                      Tout=tf.int32)
             decoded = self.text_featurizer.iextract(decoded)
             return tf.squeeze(decoded)

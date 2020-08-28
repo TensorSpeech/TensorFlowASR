@@ -76,7 +76,7 @@ assert args.saved
 
 if args.tfrecords:
     test_dataset = MultiConformersTFRecordDataset(
-        config["learning_config"]["dataset_config"]["eval_paths"],
+        config["learning_config"]["dataset_config"]["test_paths"],
         config["learning_config"]["dataset_config"]["tfrecords_dir"],
         speech_featurizer_lms, speech_featurizer_lgs, text_featurizer,
         "test", shuffle=True
@@ -85,7 +85,7 @@ else:
     test_dataset = MultiConformersSliceDataset(
         stage="test", speech_featurizer_lms=speech_featurizer_lms,
         speech_featurizer_lgs=speech_featurizer_lgs, text_featurizer=text_featurizer,
-        data_paths=config["learning_config"]["dataset_config"]["eval_paths"], shuffle=True
+        data_paths=config["learning_config"]["dataset_config"]["test_paths"], shuffle=True
     )
 
 multiconformers = MultiConformers(
