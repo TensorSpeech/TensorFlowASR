@@ -42,7 +42,13 @@ parser.add_argument("--ebs", type=int, default=None,
 parser.add_argument("--devices", type=int, nargs="*", default=[0],
                     help="Devices' ids to apply distributed training")
 
+parser.add_argument("--mxp", type=bool, default=False,
+                    help="Enable mixed precision")
+
 args = parser.parse_args()
+
+if args.mxp:
+    tf.config.optimizer.set_experimental_options({"auto_mixed_precision": True})
 
 strategy = setup_strategy(args.devices)
 
