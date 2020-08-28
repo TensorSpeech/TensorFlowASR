@@ -74,5 +74,5 @@ learning_config:
     num_epochs: 20
     outdir: /mnt/Projects/asrk16/trained/local/vivos/multiconformer
     log_interval_steps: 300
-    eval_interval_steps: 10
-    save_interval_steps: 5
+    eval_interval_steps: 300
+    save_interval_steps: 1000

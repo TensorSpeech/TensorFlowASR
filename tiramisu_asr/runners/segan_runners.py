@@ -122,10 +122,17 @@ class SeganTrainer(BaseTrainer):
         gen_grad = self.generator_optimizer.get_unscaled_gradients(gen_grad)
         disc_grad = self.discriminator_optimizer.get_unscaled_gradients(disc_grad)
 
+        gen_grad = tf.distribute.get_replica_context().all_reduce('sum', gen_grad)
+        disc_grad = tf.distribute.get_replica_context().all_reduce('sum', disc_grad)
+
         self.generator_optimizer.apply_gradients(
-            zip(gen_grad, self.generator.trainable_variables))
+            zip(gen_grad, self.generator.trainable_variables),
+            experimental_aggregate_gradients=False
+        )
         self.discriminator_optimizer.apply_gradients(
-            zip(disc_grad, self.discriminator.trainable_variables))
+            zip(disc_grad, self.discriminator.trainable_variables),
+            experimental_aggregate_gradients=False
+        )
 
         self.train_metrics["g_l1_loss"].update_state(_gen_l1_loss)
         self.train_metrics["g_adv_loss"].update_state(_gen_adv_loss)

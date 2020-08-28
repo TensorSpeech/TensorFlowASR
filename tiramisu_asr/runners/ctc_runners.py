@@ -61,7 +61,11 @@ class CTCTrainer(BaseTrainer):
                                                     global_batch_size=self.global_batch_size)
 
         gradients = tape.gradient(train_loss, self.model.trainable_variables)
-        self.optimizer.apply_gradients(zip(gradients, self.model.trainable_variables))
+        gradients = tf.distribute.get_replica_context().all_reduce('sum', gradients)
+        self.optimizer.apply_gradients(
+            zip(gradients, self.model.trainable_variables),
+            experimental_aggregate_gradients=False
+        )
 
         self.train_metrics["ctc_loss"].update_state(per_train_loss)
 
