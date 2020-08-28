@@ -153,8 +153,7 @@ class MultiConformers(Model):
             decoded = self.text_featurizer.iextract(decoded)
             return tf.squeeze(decoded)
 
-        return tf.map_fn(_body, features,
-                         fn_output_signature=tf.TensorSpec([], dtype=tf.string))
+        return tf.map_fn(_body, features, dtype=tf.string)
 
     def perform_greedy(self,
                        lms: tf.Tensor,
@@ -237,8 +236,7 @@ class MultiConformers(Model):
             decoded = self.text_featurizer.iextract(decoded)
             return tf.squeeze(decoded)
 
-        return tf.map_fn(_body, features,
-                         fn_output_signature=tf.TensorSpec([], dtype=tf.string))
+        return tf.map_fn(_body, features, dtype=tf.string)
 
     def perform_beam_search(self,
                             lms: tf.Tensor,
