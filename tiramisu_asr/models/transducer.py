@@ -16,7 +16,7 @@ import collections
 import tensorflow as tf
 
 from . import Model
-from ..utils.utils import shape_list, get_shape_invariants
+from ..utils.utils import shape_list, get_shape_invariants, get_float_spec
 from ..featurizers.speech_featurizers import TFSpeechFeaturizer
 from ..featurizers.text_featurizers import TextFeaturizer
 from .layers.embedding import Embedding
@@ -177,7 +177,17 @@ class Transducer(Model):
             bias_regularizer=bias_regularizer,
             name=f"{name}_joint"
         )
-        self.kept_hyps = None
+        self.recognize_tflite = tf.function(
+            self.perform_recognize_tflite,
+            input_signature=[
+                tf.TensorSpec([None], dtype=tf.float32),
+                (
+                    tf.TensorSpec([], dtype=tf.float32),
+                    tf.TensorSpec([1], dtype=tf.int32),
+                    tf.nest.map_structure(get_float_spec, self.predict_net.get_initial_state())
+                )
+            ]
+        )
 
     def _build(self, input_shape):
         inputs = tf.keras.Input(shape=input_shape, dtype=tf.float32)
@@ -230,9 +240,8 @@ class Transducer(Model):
         def _cond(b_i, B, features, decoded): return tf.less(b_i, B)
 
         def _body(b_i, B, features, decoded):
-            yseq = self.perform_greedy(tf.expand_dims(features[b_i], axis=0),
-                                       streaming=False)
-            yseq = self.text_featurizer.iextract(yseq)
+            yseq = self.perform_greedy(features[b_i])
+            yseq = self.text_featurizer.iextract(tf.expand_dims(yseq.prediction, axis=0))
             decoded = tf.concat([decoded, yseq], axis=0)
             return b_i + 1, B, features, decoded
 
@@ -251,12 +260,9 @@ class Transducer(Model):
 
         return decoded
 
-    @tf.function(
-        input_signature=[
-            tf.TensorSpec([None], dtype=tf.float32)
-        ]
-    )
-    def recognize_tflite(self, signal: tf.Tensor) -> tf.Tensor:
+    def perform_recognize_tflite(self,
+                                 signal: tf.Tensor,
+                                 prediction: Hypothesis) -> tf.Tensor:
         """
         Function to convert to tflite using greedy decoding (default streaming mode)
         Args:
@@ -265,15 +271,23 @@ class Transducer(Model):
 
         Return:
             transcript: tf.Tensor of Unicode Code Points with shape [None] and dtype tf.int32
+            prediction
         """
         features = self.speech_featurizer.tf_extract(signal)
-        indices = self.perform_greedy(features[None, ...], streaming=True)
-        transcript = self.text_featurizer.index2upoints(indices[0])
-        return transcript
+        hypothesis = self.perform_greedy(features, prediction)
+        transcript = self.text_featurizer.index2upoints(hypothesis.prediction)
+        return (
+            transcript,
+            (
+                hypothesis.score,
+                tf.expand_dims(hypothesis.prediction[-1], axis=0),
+                hypothesis.states
+            )
+        )
 
     def perform_greedy(self,
                        features: tf.Tensor,
-                       streaming: bool = False) -> tf.Tensor:
+                       prediction: tuple = None) -> tf.Tensor:
         with tf.name_scope("perform_greedy"):
             new_hyps = Hypothesis(
                 tf.constant(0.0, dtype=tf.float32),
@@ -281,10 +295,9 @@ class Transducer(Model):
                 self.predict_net.get_initial_state()
             )
 
-            if self.kept_hyps is not None:
-                new_hyps = self.kept_hyps
+            if prediction is not None: new_hyps = Hypothesis(*prediction)
 
-            enc = self.encoder(features, training=False)  # [1, T, E]
+            enc = self.encoder(tf.expand_dims(features, axis=0), training=False)  # [1, T, E]
             enc = tf.squeeze(enc, axis=0)  # [T, E]
 
             T = tf.cast(shape_list(enc)[0], dtype=tf.int32)
@@ -330,21 +343,19 @@ class Transducer(Model):
                     Hypothesis(
                         tf.TensorShape([]),
                         tf.TensorShape([None]),
-                        tf.nest.map_structure(get_shape_invariants, new_hyps.states)
+                        tf.nest.map_structure(get_shape_invariants,
+                                              self.predict_net.get_initial_state())
                     ),
                     tf.TensorShape([])
                 )
             )
 
-            if streaming: self.kept_hyps = new_hyps
-
-            return new_hyps.prediction[None, ...]
+            return new_hyps
 
     @tf.function
     def recognize_beam(self,
                        features: tf.Tensor,
-                       lm: bool = False,
-                       streaming: bool = False) -> tf.Tensor:
+                       lm: bool = False) -> tf.Tensor:
         if lm: return self.recognize(features)
 
         b_i = tf.constant(0, dtype=tf.int32)
@@ -357,7 +368,7 @@ class Transducer(Model):
 
         def _body(b_i, B, features, decoded, lm):
             yseq = tf.py_function(self.perform_beam_search,
-                                  inp=[tf.expand_dims(features[b_i], axis=0), lm, False],
+                                  inp=[tf.expand_dims(features[b_i], axis=0), lm],
                                   Tout=tf.int32)
             yseq = self.text_featurizer.iextract(yseq)
             decoded = tf.concat([decoded, yseq], axis=0)
@@ -381,12 +392,10 @@ class Transducer(Model):
 
     def perform_beam_search(self,
                             features: tf.Tensor,
-                            lm: bool = False,
-                            streaming: bool = False) -> tf.Tensor:
+                            lm: bool = False) -> tf.Tensor:
         beam_width = self.text_featurizer.decoder_config["beam_width"]
         norm_score = self.text_featurizer.decoder_config["norm_score"]
         lm = lm.numpy()
-        streaming = streaming.numpy()
 
         kept_hyps = [
             BeamHypothesis(
@@ -396,8 +405,6 @@ class Transducer(Model):
                 lm_states=None
             )
         ]
-
-        if self.kept_hyps is not None: kept_hyps = self.kept_hyps
 
         enc = tf.squeeze(self.encoder(features, training=False), axis=0)  # [T, E]
 
@@ -457,8 +464,6 @@ class Transducer(Model):
                                reverse=True)[:beam_width]
         else:
             kept_hyps = sorted(B, key=lambda x: x.score, reverse=True)[:beam_width]
-
-        if streaming: self.kept_hyps = kept_hyps
 
         return tf.convert_to_tensor(kept_hyps[0].prediction, dtype=tf.int32)[None, ...]
 
