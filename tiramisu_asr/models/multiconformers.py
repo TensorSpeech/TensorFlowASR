@@ -21,7 +21,7 @@ from ..featurizers.speech_featurizers import SpeechFeaturizer
 from ..featurizers.text_featurizers import TextFeaturizer
 from ..utils.utils import get_shape_invariants, shape_list
 
-L2 = tf.keras.regularizers.L2(1e-6)
+L2 = tf.keras.regularizers.l2(1e-6)
 
 
 class MultiConformers(Model):

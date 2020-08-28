@@ -20,7 +20,7 @@ from .transducer import Transducer
 from ..utils.utils import merge_two_last_dims
 from .layers.positional_encoding import PositionalEncoding
 
-L2 = tf.keras.regularizers.L2(1e-6)
+L2 = tf.keras.regularizers.l2(1e-6)
 
 
 class ConvSubsampling(tf.keras.layers.Layer):

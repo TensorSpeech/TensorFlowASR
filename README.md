@@ -5,7 +5,7 @@
     <img alt="GitHub" src="https://img.shields.io/github/license/usimarit/TiramisuASR">
 </a>
 <img alt="python" src="https://img.shields.io/badge/python-%3E%3D3.6-blue">
-<img alt="tensorflow" src="https://img.shields.io/badge/tensorflow-%3E%3D2.3.0-orange">
+<img alt="tensorflow" src="https://img.shields.io/badge/tensorflow-%3E%3D2.2.0-orange">
 <img alt="ubuntu" src="https://img.shields.io/badge/ubuntu-%3E%3D18.04-yellowgreen">
 </p>
 </h1>

@@ -393,7 +393,6 @@ class BaseTester(BaseRunner):
 
     def run(self, test_dataset, batch_size=None):
         self.set_test_data_loader(test_dataset, batch_size)
-        self.create_test_step()
         self._test_epoch()
         self._finish()
 
@@ -420,14 +419,9 @@ class BaseTester(BaseRunner):
     @tf.function
     def _test_function(self, iterator):
         batch = next(iterator)
-        return self.test_step(batch)
+        return self._test_step(batch)
 
-    def create_test_step(self):
-        self.test_step = tf.function(
-            self._test_step,
-            input_signature=[self.test_data_loader.element_spec]
-        )
-
+    @tf.function(experimental_relax_shapes=True)
     def _test_step(self, batch):
         """
         One testing step
@@ -439,10 +433,11 @@ class BaseTester(BaseRunner):
         """
         file_paths, features, _, labels, _, _ = batch
 
-        labels = self.model.text_featurizer.iextract(labels)
-        greed_pred = self.model.recognize(features)
-        beam_pred = self.model.recognize_beam(features=features, lm=False)
-        beam_lm_pred = self.model.recognize_beam(features=features, lm=True)
+        with tf.device("/CPU:0"):  # avoid copy tf.string
+            labels = self.model.text_featurizer.iextract(labels)
+            greed_pred = self.model.recognize(features)
+            beam_pred = self.model.recognize_beam(features=features, lm=False)
+            beam_lm_pred = self.model.recognize_beam(features=features, lm=True)
 
         return file_paths, labels, greed_pred, beam_pred, beam_lm_pred
 
