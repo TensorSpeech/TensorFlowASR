@@ -24,6 +24,8 @@ def setup_environment():  # Set memory growth and only log ERRORs
 
     tf.get_logger().setLevel("ERROR")
 
+    tf.config.optimizer.set_experimental_options({"auto_mixed_precision": True})
+
 
 def setup_devices(devices):
     import tensorflow as tf

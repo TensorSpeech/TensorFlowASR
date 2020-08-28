@@ -48,8 +48,7 @@ parser.add_argument("--mxp", type=bool, default=False,
 
 args = parser.parse_args()
 
-if args.mxp:
-    tf.config.optimizer.set_experimental_options({"auto_mixed_precision": True})
+tf.config.optimizer.set_experimental_options({"auto_mixed_precision": args.mxp})
 
 strategy = setup_strategy(args.devices)
 

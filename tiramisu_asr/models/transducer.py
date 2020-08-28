@@ -218,6 +218,7 @@ class Transducer(Model):
         self.speech_featurizer = speech_featurizer
         self.text_featurizer = text_featurizer
 
+    @tf.function
     def recognize(self, features: tf.Tensor) -> tf.Tensor:
         b_i = tf.constant(0, dtype=tf.int32)
 
@@ -340,6 +341,7 @@ class Transducer(Model):
 
             return new_hyps
 
+    @tf.function
     def recognize_beam(self,
                        features: tf.Tensor,
                        lm: bool = False) -> tf.Tensor:

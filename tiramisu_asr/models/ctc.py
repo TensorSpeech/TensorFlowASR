@@ -53,6 +53,7 @@ class CtcModel(tf.keras.Model):
         outputs = self.fc(outputs, training=training)
         return outputs
 
+    @tf.function
     def recognize(self, features):
         logits = self(features, training=False)
         probs = tf.nn.softmax(logits)
@@ -90,6 +91,7 @@ class CtcModel(tf.keras.Model):
         transcript = self.text_featurizer.index2upoints(decoded)
         return transcript
 
+    @tf.function
     def recognize_beam(self, features, lm=False):
         logits = self(features, training=False)
         probs = tf.nn.softmax(logits)

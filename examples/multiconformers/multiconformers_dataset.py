@@ -183,6 +183,7 @@ class MultiConformersTFRecordDataset(MultiConformersDataset):
 
         return True
 
+    @tf.function
     def parse(self, record):
         feature_description = {
             "path": tf.io.FixedLenFeature([], tf.string),
@@ -222,6 +223,7 @@ class MultiConformersSliceDataset(MultiConformersDataset):
         data = super().preprocess(path.decode("utf-8"), transcript)
         return (path, *data)
 
+    @tf.function
     def parse(self, record):
         return tf.numpy_function(
             self.preprocess,

@@ -218,6 +218,7 @@ class MultiConformersTrainer(BaseTrainer):
 
         self._print_loss_weights()
 
+    @tf.function
     def _subset_function(self, iterator):
         batch = next(iterator)
         self.strategy.run(self._subset_step, args=(batch,))
