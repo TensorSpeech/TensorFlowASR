@@ -116,11 +116,7 @@ class MultiConformersTrainer(BaseTrainer):
                           self.lweights_metrics["lweights_lgs"] * train_loss_lgs)
 
         gradients = tape.gradient(train_loss, self.model.trainable_variables)
-        gradients = tf.distribute.get_replica_context().all_reduce('sum', gradients)
-        self.optimizer.apply_gradients(
-            zip(gradients, self.model.trainable_variables),
-            experimental_aggregate_gradients=False
-        )
+        self.optimizer.apply_gradients(zip(gradients, self.model.trainable_variables))
 
         self.train_metrics["rnnt_loss"].update_state(per_train_loss)
         self.train_metrics["rnnt_loss_lms"].update_state(per_train_loss_lms)
