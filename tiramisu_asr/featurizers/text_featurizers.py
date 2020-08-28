@@ -122,8 +122,7 @@ class TextFeaturizer:
         minus_one = -1 * tf.ones_like(feat, dtype=tf.int32)
         blank_like = self.blank * tf.ones_like(feat, dtype=tf.int32)
         feat = tf.where(feat == minus_one, blank_like, feat)
-        return tf.map_fn(self._idx_to_char, feat,
-                         fn_output_signature=tf.TensorSpec([], tf.string))
+        return tf.map_fn(self._idx_to_char, feat, dtype=tf.string)
 
     def _idx_to_char(self, arr: tf.Tensor) -> tf.Tensor:
         transcript = tf.constant("", dtype=tf.string)
