@@ -53,7 +53,6 @@ class CtcModel(tf.keras.Model):
         outputs = self.fc(outputs, training=training)
         return outputs
 
-    @tf.function
     def recognize(self, features):
         logits = self(features, training=False)
         probs = tf.nn.softmax(logits)
@@ -68,11 +67,6 @@ class CtcModel(tf.keras.Model):
         decoded = ctc_greedy_decoder(probs, vocabulary=self.text_featurizer.vocab_array)
         return tf.convert_to_tensor(decoded, dtype=tf.string)
 
-    @tf.function(
-        input_signature=[
-            tf.TensorSpec([None], dtype=tf.float32)
-        ]
-    )
     def recognize_tflite(self, signal):
         """
         Function to convert to tflite using greedy decoding
@@ -96,7 +90,6 @@ class CtcModel(tf.keras.Model):
         transcript = self.text_featurizer.index2upoints(decoded)
         return transcript
 
-    @tf.function
     def recognize_beam(self, features, lm=False):
         logits = self(features, training=False)
         probs = tf.nn.softmax(logits)
@@ -120,11 +113,6 @@ class CtcModel(tf.keras.Model):
 
         return tf.convert_to_tensor(decoded, dtype=tf.string)
 
-    @tf.function(
-        input_signature=[
-            tf.TensorSpec([None], dtype=tf.float32)
-        ]
-    )
     def recognize_beam_tflite(self, signal):
         features = self.speech_featurizer.tf_extract(signal)
         features = tf.expand_dims(features, axis=0)
@@ -140,6 +128,21 @@ class CtcModel(tf.keras.Model):
         decoded = tf.cast(decoded[0][0][0], dtype=tf.int32)
         transcript = self.text_featurizer.index2upoints(decoded)
         return transcript
+
+    def make_tflite_function(self, greedy: bool = False):
+        if greedy:
+            return tf.function(
+                self.recognize_tflite,
+                input_signature=[
+                    tf.TensorSpec([None], dtype=tf.float32)
+                ]
+            )
+        return tf.function(
+            self.recognize_beam_tflite,
+            input_signature=[
+                tf.TensorSpec([None], dtype=tf.float32)
+            ]
+        )
 
     def get_config(self):
         config = self.base_model.get_config()

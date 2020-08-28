@@ -177,17 +177,6 @@ class Transducer(Model):
             bias_regularizer=bias_regularizer,
             name=f"{name}_joint"
         )
-        self.recognize_tflite = tf.function(
-            self.perform_recognize_tflite,
-            input_signature=[
-                tf.TensorSpec([None], dtype=tf.float32),
-                (
-                    tf.TensorSpec([], dtype=tf.float32),
-                    tf.TensorSpec([1], dtype=tf.int32),
-                    tf.nest.map_structure(get_float_spec, self.predict_net.get_initial_state())
-                )
-            ]
-        )
 
     def _build(self, input_shape):
         inputs = tf.keras.Input(shape=input_shape, dtype=tf.float32)
@@ -229,7 +218,6 @@ class Transducer(Model):
         self.speech_featurizer = speech_featurizer
         self.text_featurizer = text_featurizer
 
-    @tf.function
     def recognize(self, features: tf.Tensor) -> tf.Tensor:
         b_i = tf.constant(0, dtype=tf.int32)
 
@@ -260,9 +248,9 @@ class Transducer(Model):
 
         return decoded
 
-    def perform_recognize_tflite(self,
-                                 signal: tf.Tensor,
-                                 prediction: Hypothesis) -> tf.Tensor:
+    def recognize_tflite(self,
+                         signal: tf.Tensor,
+                         prediction: Hypothesis) -> tf.Tensor:
         """
         Function to convert to tflite using greedy decoding (default streaming mode)
         Args:
@@ -352,7 +340,6 @@ class Transducer(Model):
 
             return new_hyps
 
-    @tf.function
     def recognize_beam(self,
                        features: tf.Tensor,
                        lm: bool = False) -> tf.Tensor:
@@ -466,6 +453,19 @@ class Transducer(Model):
             kept_hyps = sorted(B, key=lambda x: x.score, reverse=True)[:beam_width]
 
         return tf.convert_to_tensor(kept_hyps[0].prediction, dtype=tf.int32)[None, ...]
+
+    def make_tflite_function(self, greedy: bool = True):
+        return tf.function(
+            self.recognize_tflite,
+            input_signature=[
+                tf.TensorSpec([None], dtype=tf.float32),
+                (
+                    tf.TensorSpec([], dtype=tf.float32),
+                    tf.TensorSpec([1], dtype=tf.int32),
+                    tf.nest.map_structure(get_float_spec, self.predict_net.get_initial_state())
+                )
+            ]
+        )
 
     def get_config(self):
         conf = self.encoder.get_config()

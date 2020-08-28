@@ -143,7 +143,6 @@ class MultiConformers(Model):
         self.speech_featurizer_lgs = speech_featurizer_lgs
         self.text_featurizer = text_featurizer
 
-    @tf.function
     def recognize(self, lms: tf.Tensor, lgs: tf.Tensor) -> tf.Tensor:
         features = tf.stack([lms, lgs], axis=1)
 
@@ -219,7 +218,6 @@ class MultiConformers(Model):
 
             return new_hyps.prediction[None, ...]
 
-    @tf.function
     def recognize_beam(self,
                        lms: tf.Tensor,
                        lgs: tf.Tensor,

@@ -66,14 +66,12 @@ After converting to tflite, the tflite model is like a function that transforms 
 1. Install `tf-nightly` using `pip install tf-nightly`
 2. Build a model with the same architecture as the trained model _(if model has tflite argument, you must set it to True)_, then load the weights from trained model to the built model
 3. Load `TFSpeechFeaturizer` and `TextFeaturizer` to model using function `add_featurizers`
-4. Convert `recognize_tflite` or `recognize_beam_tflite` function to tflite as follows:
+4. Convert model's function to tflite as follows:
 
 ```python
-# concrete_func = model.recognize_tflite.get_concrete_function()
-concrete_func = model.recognize_beam_tflite.get_concrete_function()
-converter = tf.lite.TFLiteConverter.from_concrete_functions(
-    [concrete_func]
-)
+func = model.make_tflite_function(greedy=True) # or False
+concrete_func = func.get_concrete_function()
+converter = tf.lite.TFLiteConverter.from_concrete_functions([concrete_func])
 converter.experimental_new_converter = True
 converter.optimizations = [tf.lite.Optimize.DEFAULT]
 converter.target_spec.supported_ops = [tf.lite.OpsSet.TFLITE_BUILTINS,
