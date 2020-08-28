@@ -124,6 +124,7 @@ class TextFeaturizer:
         feat = tf.where(feat == minus_one, blank_like, feat)
         return tf.map_fn(self._idx_to_char, feat, dtype=tf.string)
 
+    @tf.function
     def _idx_to_char(self, arr: tf.Tensor) -> tf.Tensor:
         transcript = tf.constant("", dtype=tf.string)
         for i in arr: transcript = tf.strings.join([transcript, self.tf_vocab_array[i]])
