@@ -95,6 +95,7 @@ multiconformers = MultiConformers(
 multiconformers._build(speech_featurizer_lms.shape, speech_featurizer_lgs.shape)
 multiconformers.load_weights(args.saved)
 multiconformers.summary(line_length=100)
+multiconformers.add_featurizers(speech_featurizer_lms, speech_featurizer_lgs, text_featurizer)
 
 multiconformers_tester = MultiConformersTester(
     config=config["learning_config"]["running_config"])

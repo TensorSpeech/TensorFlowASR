@@ -129,7 +129,8 @@ class MultiConformers(Model):
         return outputs_lms, outputs, outputs_lgs
 
     def add_featurizers(self,
-                        speech_featurizer: SpeechFeaturizer,
+                        speech_featurizer_lms: SpeechFeaturizer,
+                        speech_featurizer_lgs: SpeechFeaturizer,
                         text_featurizer: TextFeaturizer):
         """
         Function to add featurizer to model to convert to end2end tflite
@@ -138,7 +139,8 @@ class MultiConformers(Model):
             text_featurizer: TextFeaturizer instance
             scorer: external language model scorer
         """
-        self.speech_featurizer = speech_featurizer
+        self.speech_featurizer_lms = speech_featurizer_lms
+        self.speech_featurizer_lgs = speech_featurizer_lgs
         self.text_featurizer = text_featurizer
 
     @tf.function
