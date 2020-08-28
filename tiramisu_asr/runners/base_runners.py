@@ -237,7 +237,6 @@ class BaseTrainer(BaseRunner):
         self.train_progbar.total = self.total_train_steps
         self.train_progbar.refresh()
 
-    @tf.function
     def _train_function(self, iterator):
         batch = next(iterator)
         self.strategy.run(self._train_step, args=(batch,))
@@ -289,7 +288,6 @@ class BaseTrainer(BaseRunner):
 
         print("> End evaluation ...")
 
-    @tf.function
     def _eval_function(self, iterator):
         batch = next(iterator)
         self.strategy.run(self._eval_step, args=(batch,))
@@ -416,7 +414,6 @@ class BaseTester(BaseRunner):
 
         progbar.close()
 
-    @tf.function
     def _test_function(self, iterator):
         batch = next(iterator)
         return self._test_step(batch)
