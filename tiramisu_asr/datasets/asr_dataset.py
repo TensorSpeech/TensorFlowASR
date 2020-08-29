@@ -112,7 +112,8 @@ class ASRDataset(BaseDataset):
                 tf.TensorShape([None])
             ),
             padding_values=("", 0., 0, self.text_featurizer.blank,
-                            0, self.text_featurizer.blank)
+                            0, self.text_featurizer.blank),
+            drop_remainder=True
         )
 
         # PREFETCH to improve speed of input length

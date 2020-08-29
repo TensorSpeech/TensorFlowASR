@@ -60,7 +60,7 @@ def bytes_to_string(array: np.ndarray, encoding: str = "utf-8"):
 
 
 def get_num_batches(samples, batch_size):
-    return math.ceil(float(samples) / float(batch_size))
+    return math.floor(float(samples) / float(batch_size))
 
 
 def merge_two_last_dims(x):
