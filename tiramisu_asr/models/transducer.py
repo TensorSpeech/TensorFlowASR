@@ -16,7 +16,7 @@ import collections
 import tensorflow as tf
 
 from . import Model
-from ..utils.utils import shape_list, get_shape_invariants, get_float_spec
+from ..utils.utils import get_shape_invariants, get_float_spec
 from ..featurizers.speech_featurizers import TFSpeechFeaturizer
 from ..featurizers.text_featurizers import TextFeaturizer
 from .layers.embedding import Embedding
@@ -261,26 +261,25 @@ class Transducer(Model):
     # -------------------------------- GREEDY -------------------------------------
 
     @tf.function
-    def recognize(self, features: tf.Tensor) -> tf.Tensor:
-        b_i = tf.constant(0, dtype=tf.int32)
-
-        B = shape_list(features)[0]
+    def recognize(self, features, swap_memory=False):
+        total = tf.shape(features)[0]
+        batch = tf.constant(0, dtype=tf.int32)
 
         decoded = tf.constant([], dtype=tf.string)
 
-        def _cond(b_i, B, features, decoded): return tf.less(b_i, B)
+        def condition(batch, total, features, decoded): return tf.less(batch, total)
 
-        def _body(b_i, B, features, decoded):
-            yseq = self.perform_greedy(features[b_i], swap_memory=True)
+        def body(batch, total, features, decoded):
+            yseq = self.perform_greedy(features[batch], swap_memory=swap_memory)
             yseq = self.text_featurizer.iextract(tf.expand_dims(yseq.prediction, axis=0))
             decoded = tf.concat([decoded, yseq], axis=0)
-            return b_i + 1, B, features, decoded
+            return batch + 1, total, features, decoded
 
-        _, _, _, decoded = tf.while_loop(
-            _cond,
-            _body,
-            loop_vars=(b_i, B, features, decoded),
-            swap_memory=True,
+        batch, total, features, decoded = tf.while_loop(
+            condition,
+            body,
+            loop_vars=(batch, total, features, decoded),
+            swap_memory=swap_memory,
             shape_invariants=(
                 tf.TensorShape([]),
                 tf.TensorShape([]),
@@ -291,9 +290,7 @@ class Transducer(Model):
 
         return decoded
 
-    def recognize_tflite(self,
-                         signal: tf.Tensor,
-                         prediction: tuple) -> tf.Tensor:
+    def recognize_tflite(self, signal, prediction):
         """
         Function to convert to tflite using greedy decoding (default streaming mode)
         Args:
@@ -316,10 +313,7 @@ class Transducer(Model):
             )
         )
 
-    def perform_greedy(self,
-                       features: tf.Tensor,
-                       prediction: tuple = None,
-                       swap_memory: bool = False) -> tf.Tensor:
+    def perform_greedy(self, features, prediction=None, swap_memory=False):
         with tf.name_scope("transducer_greedy"):
             initial_hypothesis = Hypothesis(
                 tf.constant(0.0, dtype=tf.float32),
@@ -391,46 +385,38 @@ class Transducer(Model):
     # -------------------------------- BEAM SEARCH -------------------------------------
 
     @tf.function
-    def recognize_beam(self,
-                       features: tf.Tensor,
-                       lm: bool = False) -> tf.Tensor:
-        if lm: return self.recognize(features)
-
-        b_i = tf.constant(0, dtype=tf.int32)
-
-        B = shape_list(features)[0]
+    def recognize_beam(self, features, lm=False, swap_memory=False):
+        total = tf.shape(features)[0]
+        batch = tf.constant(0, dtype=tf.int32)
 
         decoded = tf.constant([], dtype=tf.string)
 
-        def _cond(b_i, B, features, decoded, lm): return tf.less(b_i, B)
+        def condition(batch, total, features, decoded): return tf.less(batch, total)
 
-        def _body(b_i, B, features, decoded, lm):
+        def body(batch, total, features, decoded):
             yseq = tf.py_function(self.perform_beam_search,
-                                  inp=[tf.expand_dims(features[b_i], axis=0), lm],
+                                  inp=[features[batch], lm],
                                   Tout=tf.int32)
             yseq = self.text_featurizer.iextract(yseq)
             decoded = tf.concat([decoded, yseq], axis=0)
-            return b_i + 1, B, features, decoded, lm
+            return batch + 1, total, features, decoded
 
-        _, _, _, decoded, _ = tf.while_loop(
-            _cond,
-            _body,
-            loop_vars=(b_i, B, features, decoded, lm),
+        batch, total, features, decoded = tf.while_loop(
+            condition,
+            body,
+            loop_vars=(batch, total, features, decoded),
             swap_memory=True,
             shape_invariants=(
                 tf.TensorShape([]),
                 tf.TensorShape([]),
                 get_shape_invariants(features),
                 tf.TensorShape([None]),
-                tf.TensorShape([])
             )
         )
 
         return decoded
 
-    def perform_beam_search(self,
-                            features: tf.Tensor,
-                            lm: bool = False) -> tf.Tensor:
+    def perform_beam_search(self, features, lm=False):
         beam_width = self.text_featurizer.decoder_config["beam_width"]
         norm_score = self.text_featurizer.decoder_config["norm_score"]
         lm = lm.numpy()
@@ -445,10 +431,11 @@ class Transducer(Model):
         ]
 
         enc = self.encoder_inference(features)
+        total = tf.shape(enc)[0].numpy()
 
         B = kept_hyps
 
-        for i in range(shape_list(enc)[0]):  # [E]
+        for i in range(total):  # [E]
             A = B  # A = hyps
             B = []
 

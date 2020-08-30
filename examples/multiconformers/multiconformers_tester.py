@@ -19,7 +19,7 @@ from tiramisu_asr.runners.base_runners import BaseTester
 
 class MultiConformersTester(BaseTester):
 
-    @tf.function(experimental_relax_shapes=True)
+    @tf.function
     def _test_step(self, batch):
         """
         One testing step
@@ -33,8 +33,8 @@ class MultiConformersTester(BaseTester):
 
         with tf.device("/CPU:0"):  # avoid copy tf.string
             labels = self.model.text_featurizer.iextract(labels)
-            greed_pred = self.model.recognize(lms, lgs)
-            beam_pred = self.model.recognize_beam(lms, lgs, lm=False)
-            beam_lm_pred = self.model.recognize_beam(lms, lgs, lm=True)
+            greed_pred = self.model.recognize([lms, lgs])
+            beam_pred = self.model.recognize_beam([lms, lgs], lm=False)
+            beam_lm_pred = self.model.recognize_beam([lms, lgs], lm=True)
 
         return file_paths, labels, greed_pred, beam_pred, beam_lm_pred
