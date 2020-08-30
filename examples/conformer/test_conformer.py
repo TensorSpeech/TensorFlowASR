@@ -31,7 +31,7 @@ parser.add_argument("--config", type=str, default=DEFAULT_YAML,
 parser.add_argument("--saved", type=str, default=None,
                     help="Path to saved model")
 
-parser.add_argument("--tfrecords", type=bool, default=False,
+parser.add_argument("--tfrecords", default=False, action="store_true",
                     help="Whether to use tfrecords as dataset")
 
 parser.add_argument("--bs", type=int, default=None, help="Batch size")
@@ -59,17 +59,18 @@ assert args.saved
 
 if args.tfrecords:
     test_dataset = ASRTFRecordDataset(
-        config["learning_config"]["dataset_config"]["test_paths"],
-        config["learning_config"]["dataset_config"]["tfrecords_dir"],
-        speech_featurizer, text_featurizer, "test",
-        augmentations=config["learning_config"]["augmentations"], shuffle=False
+        data_paths=config["learning_config"]["dataset_config"]["test_paths"],
+        tfrecords_dir=config["learning_config"]["dataset_config"]["tfrecords_dir"],
+        speech_featurizer=speech_featurizer,
+        text_featurizer=text_featurizer,
+        stage="test", shuffle=False
     )
 else:
     test_dataset = ASRSliceDataset(
-        stage="test", speech_featurizer=speech_featurizer,
-        text_featurizer=text_featurizer,
         data_paths=config["learning_config"]["dataset_config"]["test_paths"],
-        shuffle=False
+        speech_featurizer=speech_featurizer,
+        text_featurizer=text_featurizer,
+        stage="test", shuffle=False
     )
 
 # build model

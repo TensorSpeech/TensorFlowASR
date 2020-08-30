@@ -35,12 +35,13 @@ class SeganAugTrainDataset(BaseDataset):
                  clean_dir: str,
                  noises_config: dict,
                  speech_config: dict,
+                 cache: bool = False,
                  shuffle: bool = False):
         self.clean_dir = preprocess_paths(clean_dir)
         self.noises = SignalNoise() if noises_config is None else SignalNoise(**noises_config)
         self.speech_config = speech_config
         super(SeganAugTrainDataset, self).__init__(
-            merge_dirs([self.clean_dir]), None, shuffle, stage)
+            merge_dirs([self.clean_dir]), None, cache, shuffle, stage)
 
     def parse(self, clean_wav):
         noisy_wav = self.noises.augment(clean_wav)
@@ -77,9 +78,14 @@ class SeganAugTrainDataset(BaseDataset):
                 tf.TensorShape([self.speech_config["window_size"]])
             )
         )
+
+        if self.cache:
+            dataset = dataset.cache()
+
         if self.shuffle:
             dataset = dataset.shuffle(16, reshuffle_each_iteration=True)
-        dataset = dataset.batch(batch_size)
+
+        dataset = dataset.batch(batch_size, drop_remainder=True)
         # Prefetch to improve speed of input length
         dataset = dataset.prefetch(tf.data.experimental.AUTOTUNE)
         return dataset
@@ -89,10 +95,9 @@ class SeganAugTestDataset(SeganAugTrainDataset):
     def __init__(self,
                  clean_dir: str,
                  noises_config: dict,
-                 speech_config: dict,
-                 shuffle: bool = False):
-        super(SeganAugTestDataset, self).__init__("test", clean_dir, noises_config,
-                                                  speech_config, shuffle)
+                 speech_config: dict):
+        super(SeganAugTestDataset, self).__init__(
+            "test", clean_dir, noises_config, speech_config)
 
     def parse(self, clean_wav):
         noisy_wav = self.noises.augment(clean_wav)
@@ -128,12 +133,13 @@ class SeganTrainDataset(BaseDataset):
                  clean_dir: str,
                  noisy_dir: str,
                  speech_config: dict,
+                 cache: bool = False,
                  shuffle: bool = False):
         self.speech_config = speech_config
         self.clean_dir = preprocess_paths(clean_dir)
         self.noisy_dir = preprocess_paths(noisy_dir)
         super(SeganTrainDataset, self).__init__(
-            merge_dirs([self.clean_dir]), None, shuffle, stage)
+            merge_dirs([self.clean_dir]), None, cache, shuffle, stage)
 
     def parse(self, clean_wav, noisy_wav):
         clean_wav = preemphasis(clean_wav, self.speech_config["preemphasis"])
@@ -169,9 +175,14 @@ class SeganTrainDataset(BaseDataset):
                 tf.TensorShape([self.speech_config["window_size"]])
             )
         )
+
+        if self.cache:
+            dataset = dataset.cache()
+
         if self.shuffle:
             dataset = dataset.shuffle(16, reshuffle_each_iteration=True)
-        dataset = dataset.batch(batch_size)
+
+        dataset = dataset.batch(batch_size, drop_remainder=True)
         # Prefetch to improve speed of input length
         dataset = dataset.prefetch(tf.data.experimental.AUTOTUNE)
         return dataset
@@ -181,10 +192,9 @@ class SeganTestDataset(SeganTrainDataset):
     def __init__(self,
                  clean_dir: str,
                  noisy_dir: str,
-                 speech_config: dict,
-                 shuffle: bool = False):
-        super(SeganTestDataset, self).__init__("test", clean_dir, noisy_dir,
-                                               speech_config, shuffle)
+                 speech_config: dict):
+        super(SeganTestDataset, self).__init__(
+            "test", clean_dir, noisy_dir, speech_config)
 
     def parse(self, noisy_wav):
         noisy_wav = preemphasis(noisy_wav, self.speech_config["preemphasis"])

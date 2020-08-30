@@ -31,10 +31,10 @@ parser.add_argument("--config", type=str, default=DEFAULT_YAML,
 parser.add_argument("--saved", type=str, default=None,
                     help="Path to saved model")
 
-parser.add_argument("--tfrecords", type=bool, default=False,
+parser.add_argument("--tfrecords", default=False, action="store_true",
                     help="Whether to use tfrecords")
 
-parser.add_argument("--nfx", type=bool, default=False,
+parser.add_argument("--nfx", default=False, action="store_true",
                     help="Whether to use numpy feature extraction")
 
 parser.add_argument("--bs", type=int, default=None,
@@ -76,16 +76,20 @@ assert args.saved
 
 if args.tfrecords:
     test_dataset = MultiConformersTFRecordDataset(
-        config["learning_config"]["dataset_config"]["test_paths"],
-        config["learning_config"]["dataset_config"]["tfrecords_dir"],
-        speech_featurizer_lms, speech_featurizer_lgs, text_featurizer,
-        "test", shuffle=True
+        data_paths=config["learning_config"]["dataset_config"]["test_paths"],
+        tfrecords_dir=config["learning_config"]["dataset_config"]["tfrecords_dir"],
+        speech_featurizer_lms=speech_featurizer_lms,
+        speech_featurizer_lgs=speech_featurizer_lgs,
+        text_featurizer=text_featurizer,
+        stage="test", shuffle=False
     )
 else:
     test_dataset = MultiConformersSliceDataset(
-        stage="test", speech_featurizer_lms=speech_featurizer_lms,
-        speech_featurizer_lgs=speech_featurizer_lgs, text_featurizer=text_featurizer,
-        data_paths=config["learning_config"]["dataset_config"]["test_paths"], shuffle=True
+        data_paths=config["learning_config"]["dataset_config"]["test_paths"],
+        speech_featurizer_lms=speech_featurizer_lms,
+        speech_featurizer_lgs=speech_featurizer_lgs,
+        text_featurizer=text_featurizer,
+        stage="test", shuffle=False
     )
 
 multiconformers = MultiConformers(

@@ -14,6 +14,7 @@
 
 
 def setup_environment():  # Set memory growth and only log ERRORs
+    """ Setting tensorflow running environment """
     import os
     import warnings
 
@@ -28,6 +29,11 @@ def setup_environment():  # Set memory growth and only log ERRORs
 
 
 def setup_devices(devices):
+    """Setting visible devices
+
+    Args:
+        devices (list): list of visible devices' indices
+    """
     import tensorflow as tf
 
     # Currently, memory growth needs to be the same across GPUs
@@ -39,6 +45,14 @@ def setup_devices(devices):
 
 
 def setup_strategy(devices):
+    """Setting mirrored strategy for training
+
+    Args:
+        devices (list): list of visible devices' indices
+
+    Returns:
+        tf.distribute.Strategy: MirroredStrategy for training one or multiple gpus
+    """
     import tensorflow as tf
 
     setup_devices(devices)
@@ -46,11 +60,11 @@ def setup_strategy(devices):
     return tf.distribute.MirroredStrategy()
 
 
-def setup_tpu(tpu_address):
-    import tensorflow as tf
+# def setup_tpu(tpu_address):
+#     import tensorflow as tf
 
-    resolver = tf.distribute.cluster_resolver.TPUClusterResolver(tpu='grpc://' + tpu_address)
-    tf.config.experimental_connect_to_cluster(resolver)
-    tf.tpu.experimental.initialize_tpu_system(resolver)
-    print("All TPUs: ", tf.config.list_logical_devices('TPU'))
-    return resolver
+#     resolver = tf.distribute.cluster_resolver.TPUClusterResolver(tpu='grpc://' + tpu_address)
+#     tf.config.experimental_connect_to_cluster(resolver)
+#     tf.tpu.experimental.initialize_tpu_system(resolver)
+#     print("All TPUs: ", tf.config.list_logical_devices('TPU'))
+#     return resolver

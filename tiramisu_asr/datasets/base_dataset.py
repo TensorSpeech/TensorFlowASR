@@ -23,10 +23,12 @@ class BaseDataset(metaclass=abc.ABCMeta):
     def __init__(self,
                  data_paths: list,
                  augmentations: dict = None,
+                 cache: bool = False,
                  shuffle: bool = False,
                  stage: str = "train"):
         self.data_paths = preprocess_paths(data_paths) if data_paths else []
         self.augmentations = UserAugmentation(augmentations)  # apply augmentation
+        self.cache = cache  # whether to cache WHOLE transformed dataset to memory
         self.shuffle = shuffle  # whether to shuffle tf.data.Dataset
         self.stage = stage  # for defining tfrecords files
         self.total_steps = None  # for better training visualization

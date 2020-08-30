@@ -18,6 +18,15 @@ from .utils import bytes_to_string
 
 
 def wer(decode: np.ndarray, target: np.ndarray) -> (tf.Tensor, tf.Tensor):
+    """Word Error Rate
+
+    Args:
+        decode (np.ndarray): array of prediction texts
+        target (np.ndarray): array of groundtruth texts
+
+    Returns:
+        tuple: a tuple of tf.Tensor of (edit distances, number of words) of each text
+    """
     decode = bytes_to_string(decode)
     target = bytes_to_string(target)
     dis = 0.0
@@ -35,6 +44,15 @@ def wer(decode: np.ndarray, target: np.ndarray) -> (tf.Tensor, tf.Tensor):
 
 
 def cer(decode: np.ndarray, target: np.ndarray) -> (tf.Tensor, tf.Tensor):
+    """Character Error Rate
+
+    Args:
+        decode (np.ndarray): array of prediction texts
+        target (np.ndarray): array of groundtruth texts
+
+    Returns:
+        tuple: a tuple of tf.Tensor of (edit distances, number of characters) of each text
+    """
     decode = bytes_to_string(decode)
     target = bytes_to_string(target)
     dis = 0

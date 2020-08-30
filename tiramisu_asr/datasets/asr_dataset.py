@@ -56,8 +56,9 @@ class ASRDataset(BaseDataset):
                  text_featurizer: TextFeaturizer,
                  data_paths: list,
                  augmentations: dict = None,
+                 cache: bool = False,
                  shuffle: bool = False):
-        super(ASRDataset, self).__init__(data_paths, augmentations, shuffle, stage)
+        super(ASRDataset, self).__init__(data_paths, augmentations, cache, shuffle, stage)
         self.speech_featurizer = speech_featurizer
         self.text_featurizer = text_featurizer
 
@@ -97,8 +98,12 @@ class ASRDataset(BaseDataset):
 
     def process(self, dataset, batch_size):
         dataset = dataset.map(self.parse, num_parallel_calls=AUTOTUNE)
+
+        if self.cache:
+            dataset = dataset.cache()
+
         if self.shuffle:
-            dataset = dataset.shuffle(TFRECORD_SHARDS)
+            dataset = dataset.shuffle(TFRECORD_SHARDS, reshuffle_each_iteration=True)
 
         # PADDED BATCH the dataset
         dataset = dataset.padded_batch(
@@ -144,9 +149,12 @@ class ASRTFRecordDataset(ASRDataset):
                  text_featurizer: TextFeaturizer,
                  stage: str,
                  augmentations: dict = None,
+                 cache: bool = False,
                  shuffle: bool = False):
-        super(ASRTFRecordDataset, self).__init__(stage, speech_featurizer, text_featurizer,
-                                                 data_paths, augmentations, shuffle)
+        super(ASRTFRecordDataset, self).__init__(
+            stage, speech_featurizer, text_featurizer,
+            data_paths, augmentations, cache, shuffle
+        )
         self.tfrecords_dir = tfrecords_dir
         if not os.path.exists(self.tfrecords_dir):
             os.makedirs(self.tfrecords_dir)

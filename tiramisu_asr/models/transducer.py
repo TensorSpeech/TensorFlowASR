@@ -187,6 +187,19 @@ class Transducer(Model):
         self.encoder.summary(line_length=line_length, **kwargs)
         super(Transducer, self).summary(line_length=line_length, **kwargs)
 
+    def add_featurizers(self,
+                        speech_featurizer: TFSpeechFeaturizer,
+                        text_featurizer: TextFeaturizer):
+        """
+        Function to add featurizer to model to convert to end2end tflite
+        Args:
+            speech_featurizer: SpeechFeaturizer instance
+            text_featurizer: TextFeaturizer instance
+            scorer: external language model scorer
+        """
+        self.speech_featurizer = speech_featurizer
+        self.text_featurizer = text_featurizer
+
     def call(self, inputs, training=False):
         """
         Transducer Model call function
@@ -205,18 +218,13 @@ class Transducer(Model):
         outputs = self.joint_net([enc, pred], training=training)
         return outputs
 
-    def add_featurizers(self,
-                        speech_featurizer: TFSpeechFeaturizer,
-                        text_featurizer: TextFeaturizer):
-        """
-        Function to add featurizer to model to convert to end2end tflite
-        Args:
-            speech_featurizer: SpeechFeaturizer instance
-            text_featurizer: TextFeaturizer instance
-            scorer: external language model scorer
-        """
-        self.speech_featurizer = speech_featurizer
-        self.text_featurizer = text_featurizer
+    def get_config(self):
+        conf = self.encoder.get_config()
+        conf.update(self.predict_net.get_config())
+        conf.update(self.joint_net.get_config())
+        return conf
+
+    # -------------------------------- GREEDY -------------------------------------
 
     @tf.function
     def recognize(self, features: tf.Tensor) -> tf.Tensor:
@@ -341,6 +349,8 @@ class Transducer(Model):
 
             return new_hyps
 
+    # -------------------------------- BEAM SEARCH -------------------------------------
+
     @tf.function
     def recognize_beam(self,
                        features: tf.Tensor,
@@ -456,6 +466,8 @@ class Transducer(Model):
 
         return tf.convert_to_tensor(kept_hyps[0].prediction, dtype=tf.int32)[None, ...]
 
+    # -------------------------------- TFLITE -------------------------------------
+
     def make_tflite_function(self, greedy: bool = True):
         return tf.function(
             self.recognize_tflite,
@@ -468,9 +480,3 @@ class Transducer(Model):
                 )
             ]
         )
-
-    def get_config(self):
-        conf = self.encoder.get_config()
-        conf.update(self.predict_net.get_config())
-        conf.update(self.joint_net.get_config())
-        return conf

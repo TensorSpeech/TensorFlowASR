@@ -53,6 +53,13 @@ class CtcModel(tf.keras.Model):
         outputs = self.fc(outputs, training=training)
         return outputs
 
+    def get_config(self):
+        config = self.base_model.get_config()
+        config.update(self.fc.get_config())
+        return config
+
+    # -------------------------------- GREEDY -------------------------------------
+
     @tf.function
     def recognize(self, features):
         logits = self(features, training=False)
@@ -90,6 +97,8 @@ class CtcModel(tf.keras.Model):
         decoded = tf.cast(decoded[0][0][0], dtype=tf.int32)
         transcript = self.text_featurizer.index2upoints(decoded)
         return transcript
+
+    # -------------------------------- BEAM SEARCH -------------------------------------
 
     @tf.function
     def recognize_beam(self, features, lm=False):
@@ -131,6 +140,8 @@ class CtcModel(tf.keras.Model):
         transcript = self.text_featurizer.index2upoints(decoded)
         return transcript
 
+    # -------------------------------- TFLITE -------------------------------------
+
     def make_tflite_function(self, greedy: bool = False):
         if greedy:
             return tf.function(
@@ -146,7 +157,3 @@ class CtcModel(tf.keras.Model):
             ]
         )
 
-    def get_config(self):
-        config = self.base_model.get_config()
-        config.update(self.fc.get_config())
-        return config

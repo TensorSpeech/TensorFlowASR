@@ -15,7 +15,7 @@ parser.add_argument("--config", "-c", type=str, default=DEFAULT_YAML,
 parser.add_argument("--saved", type=str, default=None,
                     help="Path to saved model")
 
-parser.add_argument("--tfrecords", type=bool, default=False,
+parser.add_argument("--tfrecords", default=False, action="store_true",
                     help="Whether to use tfrecords")
 
 parser.add_argument("--device", type=int, default=0,
@@ -58,17 +58,18 @@ satt_ds2_model.add_featurizers(speech_featurizer, text_featurizer)
 
 if args.tfrecords:
     test_dataset = ASRTFRecordDataset(
-        config["learning_config"]["dataset_config"]["test_paths"],
-        config["learning_config"]["dataset_config"]["tfrecords_dir"],
-        speech_featurizer, text_featurizer, "test",
-        augmentations=config["learning_config"]["augmentations"], shuffle=False
+        data_paths=config["learning_config"]["dataset_config"]["test_paths"],
+        tfrecords_dir=config["learning_config"]["dataset_config"]["tfrecords_dir"],
+        speech_featurizer=speech_featurizer,
+        text_featurizer=text_featurizer,
+        stage="test", shuffle=False
     )
 else:
     test_dataset = ASRSliceDataset(
-        stage="test", speech_featurizer=speech_featurizer,
-        text_featurizer=text_featurizer,
         data_paths=config["learning_config"]["dataset_config"]["test_paths"],
-        augmentations=config["learning_config"]["augmentations"], shuffle=False
+        speech_featurizer=speech_featurizer,
+        text_featurizer=text_featurizer,
+        stage="test", shuffle=False
     )
 
 ctc_tester = BaseTester(config=config["learning_config"]["running_config"])

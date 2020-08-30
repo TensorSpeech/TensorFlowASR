@@ -171,6 +171,7 @@ class BaseTrainer(BaseRunner):
                 self.ckpt.restore(self.ckpt_manager.latest_checkpoint)
 
     def save_model_weights(self):
+        """ Save the latest model's weights at each save_interval_steps """
         pass
 
     # -------------------------------- RUNNING -------------------------------------

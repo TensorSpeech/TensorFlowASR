@@ -58,8 +58,10 @@ class MultiConformersDataset(BaseDataset):
                  text_featurizer: TextFeaturizer,
                  data_paths: list,
                  augmentations: dict = None,
+                 cache: bool = False,
                  shuffle: bool = False):
-        super().__init__(data_paths, augmentations, shuffle, stage)
+        super(MultiConformersDataset, self).__init__(data_paths, augmentations,
+                                                     cache, shuffle, stage)
         self.speech_featurizer_lms = speech_featurizer_lms
         self.speech_featurizer_lgs = speech_featurizer_lgs
         self.text_featurizer = text_featurizer
@@ -103,8 +105,12 @@ class MultiConformersDataset(BaseDataset):
 
     def process(self, dataset, batch_size):
         dataset = dataset.map(self.parse, num_parallel_calls=AUTOTUNE)
+
+        if self.cache:
+            dataset = dataset.cache()
+
         if self.shuffle:
-            dataset = dataset.shuffle(TFRECORD_SHARDS)
+            dataset = dataset.shuffle(TFRECORD_SHARDS, reshuffle_each_iteration=True)
 
         # PADDED BATCH the dataset
         dataset = dataset.padded_batch(
@@ -152,9 +158,12 @@ class MultiConformersTFRecordDataset(MultiConformersDataset):
                  text_featurizer: TextFeaturizer,
                  stage: str,
                  augmentations: dict = None,
+                 cache: bool = False,
                  shuffle: bool = False):
-        super().__init__(stage, speech_featurizer_lms, speech_featurizer_lgs,
-                         text_featurizer, data_paths, augmentations, shuffle)
+        super(MultiConformersTFRecordDataset, self).__init__(
+            stage, speech_featurizer_lms, speech_featurizer_lgs,
+            text_featurizer, data_paths, augmentations, cache, shuffle
+        )
         self.tfrecords_dir = tfrecords_dir
         if not os.path.exists(self.tfrecords_dir):
             os.makedirs(self.tfrecords_dir)

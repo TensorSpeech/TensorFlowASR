@@ -34,8 +34,11 @@ parser.add_argument("--tbs", type=int, default=None,
 parser.add_argument("--devices", type=int, nargs="*", default=[0],
                     help="Devices' ids to apply distributed training")
 
-parser.add_argument("--mxp", type=bool, default=False,
+parser.add_argument("--mxp", default=False, action="store_true",
                     help="Enable mixed precision")
+
+parser.add_argument("--cache", default=False, action="store_true",
+                    help="Enable caching for dataset")
 
 args = parser.parse_args()
 
@@ -56,7 +59,7 @@ dataset = SeganTrainDataset(
     stage="train",
     clean_dir=config["learning_config"]["dataset_config"]["train_paths"]["clean"],
     noisy_dir=config["learning_config"]["dataset_config"]["train_paths"]["noisy"],
-    speech_config=config["speech_config"], shuffle=True
+    speech_config=config["speech_config"], cache=args.cache, shuffle=True
 )
 
 segan_trainer = SeganTrainer(config["learning_config"]["running_config"])

@@ -27,6 +27,7 @@ class ASRTFRecordDataset(ASRDataset):
                  text_featurizer: TextFeaturizer,
                  stage: str,
                  augmentations: dict = None,
+                 cache: bool = False,
                  shuffle: bool = False)
 
 class ASRSliceDataset(ASRDataset):
@@ -37,6 +38,7 @@ class ASRSliceDataset(ASRDataset):
                  text_featurizer: TextFeaturizer,
                  data_paths: list,
                  augmentations: dict = None,
+                 cache: bool = False,
                  shuffle: bool = False)
 ```
 
@@ -61,6 +63,7 @@ class SeganAugTrainDataset(BaseDataset):
                  clean_dir: str,
                  noisy_dir: str,
                  speech_config: dict,
+                 cache: bool = False,
                  shuffle: bool = False)
                  
 class SeganTrainDataset(BaseDataset):
@@ -69,6 +72,7 @@ class SeganTrainDataset(BaseDataset):
                  clean_dir: str,
                  noisy_dir: str,
                  speech_config: dict,
+                 cache: bool = False,
                  shuffle: bool = False):
 ```
 

@@ -30,7 +30,7 @@ parser.add_argument("--config", "-c", type=str, default=DEFAULT_YAML,
 parser.add_argument("--max_ckpts", type=int, default=10,
                     help="Max number of checkpoints to keep")
 
-parser.add_argument("--tfrecords", type=bool, default=False,
+parser.add_argument("--tfrecords", default=False, action="store_true",
                     help="Whether to use tfrecords")
 
 parser.add_argument("--tbs", type=int, default=None,
@@ -42,8 +42,11 @@ parser.add_argument("--ebs", type=int, default=None,
 parser.add_argument("--devices", type=int, nargs="*", default=[0],
                     help="Devices' ids to apply distributed training")
 
-parser.add_argument("--mxp", type=bool, default=False,
+parser.add_argument("--mxp", default=False, action="store_true",
                     help="Enable mixed precision")
+
+parser.add_argument("--cache", default=False, action="store_true",
+                    help="Enable caching for dataset")
 
 args = parser.parse_args()
 
@@ -71,28 +74,33 @@ ctc_trainer = CTCTrainer(text_featurizer,
 
 if args.tfrecords:
     train_dataset = ASRTFRecordDataset(
-        config["learning_config"]["dataset_config"]["train_paths"],
-        config["learning_config"]["dataset_config"]["tfrecords_dir"],
-        speech_featurizer, text_featurizer, "train",
-        augmentations=config["learning_config"]["augmentations"], shuffle=True,
+        data_paths=config["learning_config"]["dataset_config"]["train_paths"],
+        tfrecords_dir=config["learning_config"]["dataset_config"]["tfrecords_dir"],
+        speech_featurizer=speech_featurizer,
+        text_featurizer=text_featurizer,
+        augmentations=config["learning_config"]["augmentations"],
+        stage="train", cache=args.cache, shuffle=True
     )
     eval_dataset = ASRTFRecordDataset(
-        config["learning_config"]["dataset_config"]["eval_paths"],
-        config["learning_config"]["dataset_config"]["tfrecords_dir"],
-        speech_featurizer, text_featurizer, "eval", shuffle=False
+        data_paths=config["learning_config"]["dataset_config"]["eval_paths"],
+        tfrecords_dir=config["learning_config"]["dataset_config"]["tfrecords_dir"],
+        speech_featurizer=speech_featurizer,
+        text_featurizer=text_featurizer,
+        stage="eval", cache=args.cache, shuffle=True
     )
 else:
     train_dataset = ASRSliceDataset(
-        stage="train", speech_featurizer=speech_featurizer,
-        text_featurizer=text_featurizer,
         data_paths=config["learning_config"]["dataset_config"]["train_paths"],
-        augmentations=config["learning_config"]["augmentations"], shuffle=True,
+        speech_featurizer=speech_featurizer,
+        text_featurizer=text_featurizer,
+        augmentations=config["learning_config"]["augmentations"],
+        stage="train", cache=args.cache, shuffle=True
     )
     eval_dataset = ASRSliceDataset(
-        stage="eval", speech_featurizer=speech_featurizer,
-        text_featurizer=text_featurizer,
         data_paths=config["learning_config"]["dataset_config"]["eval_paths"],
-        shuffle=False
+        speech_featurizer=speech_featurizer,
+        text_featurizer=text_featurizer,
+        stage="eval", cache=args.cache, shuffle=True
     )
 
 # Build DS2 model
