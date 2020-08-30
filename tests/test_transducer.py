@@ -73,6 +73,12 @@ print(pred)
 # writer = tf.summary.create_file_writer(logdir)
 #
 signal = read_raw_audio("/home/nlhuy/Desktop/test/11003.wav", speech_featurizer.sample_rate)
+hyps, states = model.recognize_tflite(
+    signal,
+    None
+)
+
+print(hyps)
 #
 # tf.summary.trace_on(graph=True, profiler=True)
 # hyps = model.recognize_tflite(signal)
@@ -87,9 +93,6 @@ signal = read_raw_audio("/home/nlhuy/Desktop/test/11003.wav", speech_featurizer.
 # # hyps = model.recognize_beam(features)
 #
 #
-# # hyps = model.recognize_tflite(signal)
-#
-# print(hyps)
 
 # hyps = model.recognize_beam(tf.expand_dims(speech_featurizer.tf_extract(signal), 0))
 
@@ -99,7 +102,7 @@ signal = read_raw_audio("/home/nlhuy/Desktop/test/11003.wav", speech_featurizer.
 
 # print(hyps.numpy().decode("utf-8"))
 
-concrete_func = model.recognize_tflite.get_concrete_function()
+concrete_func = model.make_tflite_function(greedy=True).get_concrete_function()
 converter = tf.lite.TFLiteConverter.from_concrete_functions([concrete_func])
 converter.optimizations = [tf.lite.Optimize.DEFAULT]
 converter.experimental_new_converter = True
@@ -109,18 +112,18 @@ tflite = converter.convert()
 
 tflitemodel = tf.lite.Interpreter(model_content=tflite)
 
-input_details = tflitemodel.get_input_details()
-output_details = tflitemodel.get_output_details()
-# tflitemodel.resize_tensor_input(input_details[0]["index"], [1, 50, 80, 1])
-# tflitemodel.resize_tensor_input(input_details[1]["index"], [1, 1])
-tflitemodel.resize_tensor_input(input_details[0]["index"], signal.shape)
-tflitemodel.resize_tensor_input(input_details[1]["index"], [1])
-tflitemodel.allocate_tensors()
-# tflitemodel.set_tensor(input_details[0]["index"], features)
-# tflitemodel.set_tensor(input_details[1]["index"], tf.constant([[0]], dtype=tf.int32))
-tflitemodel.set_tensor(input_details[0]["index"], signal)
-tflitemodel.set_tensor(input_details[1]["index"], tf.constant([0], dtype=tf.int32))
-tflitemodel.invoke()
-hyp = tflitemodel.get_tensor(output_details[0]["index"])
+# input_details = tflitemodel.get_input_details()
+# output_details = tflitemodel.get_output_details()
+# # tflitemodel.resize_tensor_input(input_details[0]["index"], [1, 50, 80, 1])
+# # tflitemodel.resize_tensor_input(input_details[1]["index"], [1, 1])
+# tflitemodel.resize_tensor_input(input_details[0]["index"], signal.shape)
+# tflitemodel.resize_tensor_input(input_details[1]["index"], [1])
+# tflitemodel.allocate_tensors()
+# # tflitemodel.set_tensor(input_details[0]["index"], features)
+# # tflitemodel.set_tensor(input_details[1]["index"], tf.constant([[0]], dtype=tf.int32))
+# tflitemodel.set_tensor(input_details[0]["index"], signal)
+# tflitemodel.set_tensor(input_details[1]["index"], tf.constant([0], dtype=tf.int32))
+# tflitemodel.invoke()
+# hyp = tflitemodel.get_tensor(output_details[0]["index"])
 
 print(hyp)
