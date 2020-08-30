@@ -16,37 +16,29 @@ import argparse
 from tiramisu_asr.utils.utils import preprocess_paths
 from tiramisu_asr.datasets.asr_dataset import ASRTFRecordDataset
 
+modes = ["train", "eval", "test"]
 
-def main():
-    modes = ["train", "eval", "test"]
+parser = argparse.ArgumentParser(prog="TFRecords Creation")
 
-    parser = argparse.ArgumentParser(prog="TFRecords Creation")
+parser.add_argument("--mode", "-m", type=str,
+                    default=None, help=f"Mode in {modes}")
 
-    parser.add_argument("--mode", "-m", type=str,
-                        default=None, help=f"Mode in {modes}")
+parser.add_argument("--tfrecords_dir", type=str, default=None,
+                    help="Directory to tfrecords")
 
-    parser.add_argument("--tfrecords_dir", type=str, default=None,
-                        help="Directory to tfrecords")
+parser.add_argument("transcripts", nargs="+", type=str,
+                    default=None, help="Paths to transcript files")
 
-    parser.add_argument("transcripts", nargs="+", type=str,
-                        default=None, help="Paths to transcript files")
+args = parser.parse_args()
 
-    def run(args):
-        assert args.mode in modes, f"Mode must in {modes}"
+assert args.mode in modes, f"Mode must in {modes}"
 
-        transcripts = preprocess_paths(args.transcripts)
-        tfrecords_dir = preprocess_paths(args.tfrecords_dir)
+transcripts = preprocess_paths(args.transcripts)
+tfrecords_dir = preprocess_paths(args.tfrecords_dir)
 
-        if args.mode == "train":
-            ASRTFRecordDataset(transcripts, tfrecords_dir, None, None,
-                               args.mode, shuffle=True).create_tfrecords()
-        else:
-            ASRTFRecordDataset(transcripts, tfrecords_dir, None, None,
-                               args.mode, shuffle=False).create_tfrecords()
-
-    args = parser.parse_args()
-    return run(args)
-
-
-if __name__ == "__main__":
-    main()
+if args.mode == "train":
+    ASRTFRecordDataset(transcripts, tfrecords_dir, None, None,
+                       args.mode, shuffle=True).create_tfrecords()
+else:
+    ASRTFRecordDataset(transcripts, tfrecords_dir, None, None,
+                       args.mode, shuffle=False).create_tfrecords()

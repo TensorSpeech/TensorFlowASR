@@ -136,17 +136,18 @@ class MultiConformers(Transducer):
         Returns:
             tf.Tensor: output of encoders with shape [T, E]
         """
-        lms, lgs = features
-        lms = tf.expand_dims(lms, axis=0)
-        lgs = tf.expand_dims(lgs, axis=0)
+        with tf.name_scope(f"{self.name}_encoder"):
+            lms, lgs = features
+            lms = tf.expand_dims(lms, axis=0)
+            lgs = tf.expand_dims(lgs, axis=0)
 
-        enc_lms_out = self.encoder_lms(lms, training=False)
-        enc_lgs_out = self.encoder_lgs(lgs, training=False)
+            enc_lms_out = self.encoder_lms(lms, training=False)
+            enc_lgs_out = self.encoder_lgs(lgs, training=False)
 
-        outputs = self.concat([enc_lms_out, enc_lgs_out], training=False)
-        outputs = self.encoder_joint(outputs, training=False)
+            outputs = self.concat([enc_lms_out, enc_lgs_out], training=False)
+            outputs = self.encoder_joint(outputs, training=False)
 
-        return tf.squeeze(outputs, axis=0)
+            return tf.squeeze(outputs, axis=0)
 
     def get_config(self):
         conf = self.encoder_lms.get_config()
@@ -158,7 +159,7 @@ class MultiConformers(Transducer):
 
     # -------------------------------- GREEDY -------------------------------------
 
-    @tf.function
+    @tf.function(experimental_relax_shapes=True)
     def recognize(self, features, swap_memory=False):
         lms, lgs = features
 
@@ -181,8 +182,8 @@ class MultiConformers(Transducer):
             loop_vars=(batch, total, lms, lgs, decoded),
             swap_memory=swap_memory,
             shape_invariants=(
-                tf.TensorShape([]),
-                tf.TensorShape([]),
+                batch.get_shape(),
+                total.get_shape(),
                 get_shape_invariants(lms),
                 get_shape_invariants(lgs),
                 tf.TensorShape([None])
@@ -193,7 +194,7 @@ class MultiConformers(Transducer):
 
     # -------------------------------- BEAM SEARCH -------------------------------------
 
-    @tf.function
+    @tf.function(experimental_relax_shapes=True)
     def recognize_beam(self, features, lm=False, swap_memory=False):
         lms, lgs = features
 
@@ -218,8 +219,8 @@ class MultiConformers(Transducer):
             loop_vars=(batch, total, lms, lgs, decoded),
             swap_memory=True,
             shape_invariants=(
-                tf.TensorShape([]),
-                tf.TensorShape([]),
+                batch.get_shape(),
+                total.get_shape(),
                 get_shape_invariants(lms),
                 get_shape_invariants(lgs),
                 tf.TensorShape([None]),

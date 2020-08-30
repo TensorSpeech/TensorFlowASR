@@ -49,7 +49,7 @@ enc_model = tf.keras.Model(inputs=inp, outputs=enc)
 model = Transducer(
     encoder=enc_model,
     vocabulary_size=text_featurizer.num_classes,
-    embed_dim=350, embed_dropout=0.0, num_lstms=2, lstm_units=320, joint_dim=1024
+    embed_dim=350, embed_dropout=0.0, num_lstms=1, lstm_units=320, joint_dim=1024
 )
 
 model._build(speech_featurizer.shape)
@@ -62,11 +62,11 @@ model.add_featurizers(
     text_featurizer=text_featurizer
 )
 
-features = tf.random.normal(shape=[1, 50, 80, 1], stddev=127., mean=247.)
+features = tf.random.normal(shape=[5, 50, 80, 1], stddev=127., mean=247.)
 pred = model.recognize(features)
 print(pred)
-pred = model.recognize_beam(features)
-print(pred)
+# pred = model.recognize_beam(features)
+# print(pred)
 
 # stamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
 # logdir = '/tmp/logs/func/%s' % stamp

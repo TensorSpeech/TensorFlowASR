@@ -28,10 +28,15 @@ parser.add_argument("--config", "-c", type=str, default=DEFAULT_YAML,
 parser.add_argument("--saved", type=str, default=None,
                     help="Path to saved model")
 
+parser.add_argument("--mxp", default=False, action="store_true",
+                    help="Enable mixed precision")
+
 parser.add_argument("--device", type=int, default=0,
                     help="Device's id to run test on")
 
 args = parser.parse_args()
+
+tf.config.optimizer.set_experimental_options({"auto_mixed_precision": args.mxp})
 
 setup_devices([args.device])
 

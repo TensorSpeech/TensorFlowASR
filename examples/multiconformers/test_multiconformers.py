@@ -34,6 +34,9 @@ parser.add_argument("--saved", type=str, default=None,
 parser.add_argument("--tfrecords", default=False, action="store_true",
                     help="Whether to use tfrecords")
 
+parser.add_argument("--mxp", default=False, action="store_true",
+                    help="Enable mixed precision")
+
 parser.add_argument("--nfx", default=False, action="store_true",
                     help="Whether to use numpy feature extraction")
 
@@ -44,6 +47,8 @@ parser.add_argument("--device", type=int, default=0,
                     help="Device's id to run test on")
 
 args = parser.parse_args()
+
+tf.config.optimizer.set_experimental_options({"auto_mixed_precision": args.mxp})
 
 setup_devices([args.device])
 

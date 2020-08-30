@@ -23,7 +23,7 @@ from .layers.embedding import Embedding
 
 Hypothesis = collections.namedtuple(
     "Hypothesis",
-    ("score", "prediction", "states")
+    ("prediction", "states")
 )
 
 BeamHypothesis = collections.namedtuple(
@@ -77,7 +77,7 @@ class TransducerPrediction(tf.keras.layers.Layer):
             outputs, _, _ = lstm(outputs, training=training)
         return outputs
 
-    def inference(self, inputs, states):
+    def recognize(self, inputs, states):
         # inputs has shape [B, U]
         outputs = self.embed(inputs, training=False)
         outputs = self.do(outputs, training=False)
@@ -184,7 +184,8 @@ class Transducer(Model):
         self([inputs, pred], training=False)
 
     def summary(self, line_length=None, **kwargs):
-        self.encoder.summary(line_length=line_length, **kwargs)
+        if self.encoder is not None:
+            self.encoder.summary(line_length=line_length, **kwargs)
         super(Transducer, self).summary(line_length=line_length, **kwargs)
 
     def add_featurizers(self,
@@ -227,30 +228,32 @@ class Transducer(Model):
         Returns:
             tf.Tensor: output of encoders with shape [T, E]
         """
-        outputs = tf.expand_dims(features, axis=0)
-        outputs = self.encoder(outputs, training=False)
-        return tf.squeeze(outputs, axis=0)
+        with tf.name_scope(f"{self.name}_encoder"):
+            outputs = tf.expand_dims(features, axis=0)
+            outputs = self.encoder(outputs, training=False)
+            return tf.squeeze(outputs, axis=0)
 
     def decoder_inference(self, encoded, predicted, states):
-        """Infer function for decoder 
+        """Infer function for decoder
 
         Args:
             encoded (tf.Tensor): output of encoder at each time step => shape [E]
             predicted (tf.Tensor): last character index of predicted sequence => shape []
-            states (nested lists of tf.Tensor): states returned by rnn layers 
+            states (nested lists of tf.Tensor): states returned by rnn layers
 
         Returns:
-            (ytu, new_states) 
+            (ytu, new_states)
         """
-        encoded = tf.reshape(encoded, [1, 1, -1])  # [E] => [1, 1, E]
-        predicted = tf.reshape(predicted, [1, 1])  # [] => [1, 1]
-        y, new_states = self.predict_net.inference(
-            inputs=predicted,
-            states=states
-        )  # [1, 1, P], states shape
-        ytu = tf.nn.log_softmax(self.joint_net([encoded, y], training=False))  # [1, 1, V]
-        ytu = tf.squeeze(ytu, axis=None)  # [1, 1, V] => [V]
-        return ytu, new_states
+        with tf.name_scope(f"{self.name}_decoder"):
+            encoded = tf.reshape(encoded, [1, 1, -1])  # [E] => [1, 1, E]
+            predicted = tf.reshape(predicted, [1, 1])  # [] => [1, 1]
+            y, new_states = self.predict_net.recognize(
+                inputs=predicted,
+                states=states
+            )  # [1, 1, P], states shape
+            ytu = tf.nn.log_softmax(self.joint_net([encoded, y], training=False))  # [1, 1, V]
+            ytu = tf.squeeze(ytu, axis=None)  # [1, 1, V] => [V]
+            return ytu, new_states
 
     def get_config(self):
         conf = self.encoder.get_config()
@@ -260,7 +263,7 @@ class Transducer(Model):
 
     # -------------------------------- GREEDY -------------------------------------
 
-    @tf.function
+    @tf.function(experimental_relax_shapes=True)
     def recognize(self, features, swap_memory=False):
         total = tf.shape(features)[0]
         batch = tf.constant(0, dtype=tf.int32)
@@ -281,8 +284,8 @@ class Transducer(Model):
             loop_vars=(batch, total, features, decoded),
             swap_memory=swap_memory,
             shape_invariants=(
-                tf.TensorShape([]),
-                tf.TensorShape([]),
+                batch.get_shape(),
+                total.get_shape(),
                 get_shape_invariants(features),
                 tf.TensorShape([None])
             )
@@ -307,33 +310,31 @@ class Transducer(Model):
         return (
             transcript,
             (
-                hypothesis.score,
                 tf.reshape(hypothesis.prediction[-1], [1]),
                 hypothesis.states
             )
         )
 
+    @tf.function(experimental_relax_shapes=True)
     def perform_greedy(self, features, prediction=None, swap_memory=False):
-        with tf.name_scope("transducer_greedy"):
-            initial_hypothesis = Hypothesis(
-                tf.constant(0.0, dtype=tf.float32),
-                tf.constant([self.text_featurizer.blank], dtype=tf.int32),
-                self.predict_net.get_initial_state()
+        with tf.name_scope(f"{self.name}_greedy"):
+            hypothesis = Hypothesis(
+                prediction=tf.constant([self.text_featurizer.blank], dtype=tf.int32),
+                states=self.predict_net.get_initial_state()
             )
 
             if prediction is not None:
-                initial_hypothesis = Hypothesis(
-                    score=tf.convert_to_tensor(prediction[0]),
-                    prediction=tf.convert_to_tensor(prediction[1]),
+                hypothesis = Hypothesis(
+                    prediction=tf.convert_to_tensor(prediction[0]),
                     states=tf.nest.map_structure(
-                        lambda x: tf.convert_to_tensor(x), prediction[2])
+                        lambda x: tf.convert_to_tensor(x), prediction[1])
                 )
 
-            initial_encoded = self.encoder_inference(features)  # [T, E]
+            encoded = self.encoder_inference(features)  # [T, E]
 
-            initial_time = tf.constant(0, dtype=tf.int32)
+            time = tf.constant(0, dtype=tf.int32)
 
-            initial_total = tf.shape(initial_encoded)[0]
+            total = tf.shape(encoded)[0]
 
             def condition(time, total, encoded, hypothesis): return tf.less(time, total)
 
@@ -343,48 +344,37 @@ class Transducer(Model):
                     predicted=hypothesis.prediction[-1],
                     states=hypothesis.states
                 )
-                ytu += hypothesis.score
                 char_index = tf.argmax(ytu, axis=-1, output_type=tf.int32)  # => argmax []
 
                 if char_index != self.text_featurizer.blank:
-                    next_hypothesis = Hypothesis(
-                        score=ytu[char_index],
+                    hypothesis = Hypothesis(
                         prediction=tf.concat([hypothesis.prediction, [char_index]], axis=0),
                         states=new_states
                     )
-                else:
-                    next_hypothesis = hypothesis
 
-                return time + 1, total, encoded, next_hypothesis
+                return time + 1, total, encoded, hypothesis
 
-            results = tf.while_loop(
+            time, total, encoded, hypothesis = tf.while_loop(
                 condition,
                 body,
-                loop_vars=(
-                    initial_time,
-                    initial_total,
-                    initial_encoded,
-                    initial_hypothesis
-                ),
+                loop_vars=(time, total, encoded, hypothesis),
                 swap_memory=swap_memory,
                 shape_invariants=(
-                    tf.TensorShape([]),
-                    tf.TensorShape([]),
-                    get_shape_invariants(initial_encoded),
+                    time.get_shape(),
+                    total.get_shape(),
+                    get_shape_invariants(encoded),
                     Hypothesis(
-                        score=tf.TensorShape([]),
                         prediction=tf.TensorShape([None]),
-                        states=tf.nest.map_structure(get_shape_invariants,
-                                                     self.predict_net.get_initial_state())
+                        states=tf.nest.map_structure(get_shape_invariants, hypothesis.states)
                     )
                 )
             )
 
-            return results[-1]
+            return hypothesis
 
     # -------------------------------- BEAM SEARCH -------------------------------------
 
-    @tf.function
+    @tf.function(experimental_relax_shapes=True)
     def recognize_beam(self, features, lm=False, swap_memory=False):
         total = tf.shape(features)[0]
         batch = tf.constant(0, dtype=tf.int32)
@@ -407,8 +397,8 @@ class Transducer(Model):
             loop_vars=(batch, total, features, decoded),
             swap_memory=True,
             shape_invariants=(
-                tf.TensorShape([]),
-                tf.TensorShape([]),
+                batch.get_shape(),
+                total.get_shape(),
                 get_shape_invariants(features),
                 tf.TensorShape([None]),
             )
@@ -498,7 +488,6 @@ class Transducer(Model):
             input_signature=[
                 tf.TensorSpec([None], dtype=tf.float32),
                 (
-                    tf.TensorSpec([], dtype=tf.float32),
                     tf.TensorSpec([1], dtype=tf.int32),
                     tf.nest.map_structure(get_float_spec, self.predict_net.get_initial_state())
                 )
