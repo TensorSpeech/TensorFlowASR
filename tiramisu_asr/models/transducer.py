@@ -93,7 +93,7 @@ class TransducerPrediction(tf.keras.layers.Layer):
 
         Returns:
             tf.Tensor: outputs with shape [1, 1, P]
-            tf.Tensor: new states with shape [num_lstms, 2, B, P]
+            tf.Tensor: new states with shape [num_lstms, 2, 1, P]
         """
         outputs = self.embed(inputs, training=False)
         outputs = self.do(outputs, training=False)
@@ -315,12 +315,12 @@ class Transducer(Model):
         """
         Function to convert to tflite using greedy decoding (default streaming mode)
         Args:
-        Args:
             signal: tf.Tensor with shape [None] indicating a single audio signal
 
         Return:
             transcript: tf.Tensor of Unicode Code Points with shape [None] and dtype tf.int32
-            hypothesis: tuple of (last index prediction, states)
+            predicted: last predicted character with shape []
+            states: lastest lstm states with shape [num_lstms, 2, 1, P]
         """
         features = self.speech_featurizer.tf_extract(signal)
         hypothesis = self.perform_greedy(features, predicted, states, swap_memory=False)
