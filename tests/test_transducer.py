@@ -42,14 +42,15 @@ speech_featurizer = TFSpeechFeaturizer({
 
 inp = tf.keras.Input(shape=[None, 80, 1])
 enc = tf.keras.layers.Reshape([-1, 80])(inp)
-enc = tf.keras.layers.Dense(350)(enc)
+enc = tf.keras.layers.LSTM(256)(enc)
+enc = tf.keras.layers.Dense(512)(enc)
 
 enc_model = tf.keras.Model(inputs=inp, outputs=enc)
 
 model = Transducer(
     encoder=enc_model,
     vocabulary_size=text_featurizer.num_classes,
-    embed_dim=350, embed_dropout=0.0, num_lstms=1, lstm_units=320, joint_dim=1024
+    embed_dim=256, embed_dropout=0.0, num_lstms=1, lstm_units=320, joint_dim=320
 )
 
 model._build(speech_featurizer.shape)
@@ -73,12 +74,6 @@ print(pred)
 # writer = tf.summary.create_file_writer(logdir)
 #
 signal = read_raw_audio("/home/nlhuy/Desktop/test/11003.wav", speech_featurizer.sample_rate)
-hyps, states = model.recognize_tflite(
-    signal,
-    None
-)
-
-print(hyps)
 #
 # tf.summary.trace_on(graph=True, profiler=True)
 # hyps = model.recognize_tflite(signal)
@@ -121,10 +116,14 @@ tflitemodel.allocate_tensors()
 # tflitemodel.set_tensor(input_details[0]["index"], features)
 # tflitemodel.set_tensor(input_details[1]["index"], tf.constant([[0]], dtype=tf.int32))
 tflitemodel.set_tensor(input_details[0]["index"], signal)
-tflitemodel.set_tensor(input_details[1]["index"], (
-    tf.constant(0, dtype=tf.int32),
-    [[tf.zeros([1, 320], dtype=tf.float32), tf.zeros([1, 320], dtype=tf.float32)]]
-))
+tflitemodel.set_tensor(
+    input_details[1]["index"],
+    tf.constant(text_featurizer.blank, dtype=tf.int32)
+)
+tflitemodel.set_tensor(
+    input_details[2]["index"],
+    tf.zeros([1, 2, 1, 320], dtype=tf.float32)
+)
 tflitemodel.invoke()
 hyp = tflitemodel.get_tensor(output_details[0]["index"])
 

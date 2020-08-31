@@ -19,6 +19,7 @@ TiramisuASR implements some speech recognition and speech enhancement architectu
 
 ## What's New?
 
+- Support `transducer` tflite greedy decoding (conversion and invocation) 
 - Distributed training using `tf.distribute.MirroredStrategy`
 - Fixed transducer beam search
 - Add `log_gammatone_spectrogram`
