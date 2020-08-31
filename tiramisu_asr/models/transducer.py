@@ -23,7 +23,7 @@ from .layers.embedding import Embedding
 
 Hypothesis = collections.namedtuple(
     "Hypothesis",
-    ("prediction", "states")
+    ("index", "prediction", "states")
 )
 
 BeamHypothesis = collections.namedtuple(
@@ -273,7 +273,8 @@ class Transducer(Model):
         def condition(batch, total, features, decoded): return tf.less(batch, total)
 
         def body(batch, total, features, decoded):
-            yseq = self.perform_greedy(features[batch], swap_memory=swap_memory)
+            encoded = self.encoder_inference(features[batch])
+            yseq = self.perform_greedy(encoded, swap_memory=swap_memory)
             yseq = self.text_featurizer.iextract(tf.expand_dims(yseq.prediction, axis=0))
             decoded = tf.concat([decoded, yseq], axis=0)
             return batch + 1, total, features, decoded
@@ -302,72 +303,106 @@ class Transducer(Model):
 
         Return:
             transcript: tf.Tensor of Unicode Code Points with shape [None] and dtype tf.int32
-            hypothesis: tuple of score, prediction and states
+            hypothesis: tuple of (last index prediction, states)
         """
         features = self.speech_featurizer.tf_extract(signal)
-        hypothesis = self.perform_greedy(features, prediction, swap_memory=False)
+        encoded = self.encoder_inference(features)
+        hypothesis = self.perform_greedy(encoded, prediction, swap_memory=False)
         transcript = self.text_featurizer.index2upoints(hypothesis.prediction)
         return (
             transcript,
             (
-                tf.reshape(hypothesis.prediction[-1], [1]),
+                hypothesis.prediction[-1],
                 hypothesis.states
             )
         )
 
-    @tf.function(experimental_relax_shapes=True)
-    def perform_greedy(self, features, prediction=None, swap_memory=False):
+    def perform_greedy(self, encoded, prediction=None, swap_memory=False):
         with tf.name_scope(f"{self.name}_greedy"):
-            hypothesis = Hypothesis(
-                prediction=tf.constant([self.text_featurizer.blank], dtype=tf.int32),
-                states=self.predict_net.get_initial_state()
+            # Initialize prediction with a blank
+            # Prediction can not be longer than the encoded of audio plus blank
+            predicted = tf.TensorArray(
+                dtype=tf.int32,
+                size=(tf.shape(encoded)[0] + 1),
+                dynamic_size=False,
+                element_shape=tf.TensorShape([]),
+                clear_after_read=False
             )
+            blank = tf.convert_to_tensor(self.text_featurizer.blank,
+                                         dtype=tf.int32, name="blank")
+            time = tf.constant(0, dtype=tf.int32, name="time")
+            finished = tf.constant(False, dtype=tf.bool, name="finished")
 
-            if prediction is not None:
+            if prediction is None:
                 hypothesis = Hypothesis(
-                    prediction=tf.convert_to_tensor(prediction[0]),
+                    index=tf.constant(0, dtype=tf.int32),
+                    prediction=predicted.write(0, blank),
+                    states=self.predict_net.get_initial_state()
+                )
+            else:
+                hypothesis = Hypothesis(
+                    index=tf.constant(0, dtype=tf.int32),
+                    prediction=predicted.write(0, prediction[0]),
                     states=tf.nest.map_structure(
                         lambda x: tf.convert_to_tensor(x), prediction[1])
                 )
 
-            encoded = self.encoder_inference(features)  # [T, E]
+            def condition(time, finished, encoded, hypothesis,
+                          blank): return tf.logical_not(finished)
 
-            time = tf.constant(0, dtype=tf.int32)
-
-            total = tf.shape(encoded)[0]
-
-            def condition(time, total, encoded, hypothesis): return tf.less(time, total)
-
-            def body(time, total, encoded, hypothesis):
+            def body(time, finished, encoded, hypothesis, blank):
                 ytu, new_states = self.decoder_inference(
                     encoded=encoded[time],
-                    predicted=hypothesis.prediction[-1],
+                    predicted=hypothesis.prediction.read(hypothesis.index),
                     states=hypothesis.states
                 )
                 char_index = tf.argmax(ytu, axis=-1, output_type=tf.int32)  # => argmax []
 
-                if char_index != self.text_featurizer.blank:
-                    hypothesis = Hypothesis(
-                        prediction=tf.concat([hypothesis.prediction, [char_index]], axis=0),
-                        states=new_states
+                def false_fn():
+                    return (
+                        hypothesis.index + 1,
+                        char_index,
+                        new_states
                     )
 
-                return time + 1, total, encoded, hypothesis
+                def true_fn():
+                    return (
+                        hypothesis.index,
+                        hypothesis.prediction.read(hypothesis.index),
+                        hypothesis.states
+                    )
 
-            time, total, encoded, hypothesis = tf.while_loop(
+                index, char_index, new_states = tf.cond(
+                    tf.equal(char_index, blank),
+                    true_fn=true_fn, false_fn=false_fn, name="cond_is_blank"
+                )
+
+                hypothesis = Hypothesis(
+                    index=index,
+                    prediction=hypothesis.prediction.write(index, char_index),
+                    states=new_states
+                )
+
+                time = time + 1
+                finished = tf.greater_equal(time, tf.shape(encoded)[0])
+
+                return time, finished, encoded, hypothesis, blank
+
+            time, finished, encoded, hypothesis, blank = tf.while_loop(
                 condition,
                 body,
-                loop_vars=(time, total, encoded, hypothesis),
-                swap_memory=swap_memory,
-                shape_invariants=(
-                    time.get_shape(),
-                    total.get_shape(),
-                    get_shape_invariants(encoded),
-                    Hypothesis(
-                        prediction=tf.TensorShape([None]),
-                        states=tf.nest.map_structure(get_shape_invariants, hypothesis.states)
-                    )
-                )
+                loop_vars=(time, finished, encoded, hypothesis, blank),
+                swap_memory=swap_memory
+            )
+
+            # Gather predicted sequence
+            hypothesis = Hypothesis(
+                index=hypothesis.index,
+                prediction=tf.gather_nd(
+                    params=hypothesis.prediction.stack(),
+                    indices=tf.expand_dims(tf.range(hypothesis.index + 1), axis=-1)
+                ),
+                states=hypothesis.states
             )
 
             return hypothesis
@@ -488,7 +523,7 @@ class Transducer(Model):
             input_signature=[
                 tf.TensorSpec([None], dtype=tf.float32),
                 (
-                    tf.TensorSpec([1], dtype=tf.int32),
+                    tf.TensorSpec([], dtype=tf.int32),
                     tf.nest.map_structure(get_float_spec, self.predict_net.get_initial_state())
                 )
             ]

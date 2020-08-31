@@ -41,7 +41,7 @@ class Embedding(tf.keras.layers.Layer):
         self.built = True
 
     def call(self, inputs):
-        outputs = tf.cast(inputs[..., None], dtype=tf.int32)
+        outputs = tf.cast(tf.expand_dims(inputs, axis=-1), dtype=tf.int32)
         return tf.gather_nd(self.embeddings, outputs)
 
     def get_config(self):

@@ -112,18 +112,20 @@ tflite = converter.convert()
 
 tflitemodel = tf.lite.Interpreter(model_content=tflite)
 
-# input_details = tflitemodel.get_input_details()
-# output_details = tflitemodel.get_output_details()
-# # tflitemodel.resize_tensor_input(input_details[0]["index"], [1, 50, 80, 1])
-# # tflitemodel.resize_tensor_input(input_details[1]["index"], [1, 1])
-# tflitemodel.resize_tensor_input(input_details[0]["index"], signal.shape)
-# tflitemodel.resize_tensor_input(input_details[1]["index"], [1])
-# tflitemodel.allocate_tensors()
-# # tflitemodel.set_tensor(input_details[0]["index"], features)
-# # tflitemodel.set_tensor(input_details[1]["index"], tf.constant([[0]], dtype=tf.int32))
-# tflitemodel.set_tensor(input_details[0]["index"], signal)
-# tflitemodel.set_tensor(input_details[1]["index"], tf.constant([0], dtype=tf.int32))
-# tflitemodel.invoke()
-# hyp = tflitemodel.get_tensor(output_details[0]["index"])
+input_details = tflitemodel.get_input_details()
+output_details = tflitemodel.get_output_details()
+# tflitemodel.resize_tensor_input(input_details[0]["index"], [1, 50, 80, 1])
+# tflitemodel.resize_tensor_input(input_details[1]["index"], [1, 1])
+tflitemodel.resize_tensor_input(input_details[0]["index"], signal.shape)
+tflitemodel.allocate_tensors()
+# tflitemodel.set_tensor(input_details[0]["index"], features)
+# tflitemodel.set_tensor(input_details[1]["index"], tf.constant([[0]], dtype=tf.int32))
+tflitemodel.set_tensor(input_details[0]["index"], signal)
+tflitemodel.set_tensor(input_details[1]["index"], (
+    tf.constant(0, dtype=tf.int32),
+    [[tf.zeros([1, 320], dtype=tf.float32), tf.zeros([1, 320], dtype=tf.float32)]]
+))
+tflitemodel.invoke()
+hyp = tflitemodel.get_tensor(output_details[0]["index"])
 
 print(hyp)
