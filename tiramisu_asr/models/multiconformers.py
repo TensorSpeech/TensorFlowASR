@@ -160,7 +160,7 @@ class MultiConformers(Transducer):
     # -------------------------------- GREEDY -------------------------------------
 
     @tf.function
-    def recognize(self, features, swap_memory=False):
+    def recognize(self, features):
         lms, lgs = features
 
         total = tf.shape(lms)[0]
@@ -175,7 +175,7 @@ class MultiConformers(Transducer):
                 [lms[batch], lgs[batch]],
                 predicted=tf.constant(self.text_featurizer.blank, dtype=tf.int32),
                 states=self.predict_net.get_initial_state(),
-                swap_memory=swap_memory
+                swap_memory=True
             )
             yseq = self.text_featurizer.iextract(tf.expand_dims(yseq.prediction, axis=0))
             decoded = tf.concat([decoded, yseq], axis=0)
@@ -185,7 +185,7 @@ class MultiConformers(Transducer):
             condition,
             body,
             loop_vars=(batch, total, lms, lgs, decoded),
-            swap_memory=swap_memory,
+            swap_memory=True,
             shape_invariants=(
                 batch.get_shape(),
                 total.get_shape(),
@@ -200,7 +200,7 @@ class MultiConformers(Transducer):
     # -------------------------------- BEAM SEARCH -------------------------------------
 
     @tf.function
-    def recognize_beam(self, features, lm=False, swap_memory=False):
+    def recognize_beam(self, features, lm=False):
         lms, lgs = features
 
         total = tf.shape(lms)[0]

@@ -277,7 +277,7 @@ class Transducer(Model):
     # -------------------------------- GREEDY -------------------------------------
 
     @tf.function
-    def recognize(self, features, swap_memory=False):
+    def recognize(self, features):
         total = tf.shape(features)[0]
         batch = tf.constant(0, dtype=tf.int32)
 
@@ -290,7 +290,7 @@ class Transducer(Model):
                 features[batch],
                 predicted=tf.constant(self.text_featurizer.blank, dtype=tf.int32),
                 states=self.predict_net.get_initial_state(),
-                swap_memory=swap_memory
+                swap_memory=True
             )
             yseq = self.text_featurizer.iextract(tf.expand_dims(yseq.prediction, axis=0))
             decoded = tf.concat([decoded, yseq], axis=0)
@@ -300,7 +300,7 @@ class Transducer(Model):
             condition,
             body,
             loop_vars=(batch, total, features, decoded),
-            swap_memory=swap_memory,
+            swap_memory=True,
             shape_invariants=(
                 batch.get_shape(),
                 total.get_shape(),
@@ -406,7 +406,7 @@ class Transducer(Model):
     # -------------------------------- BEAM SEARCH -------------------------------------
 
     @tf.function
-    def recognize_beam(self, features, lm=False, swap_memory=False):
+    def recognize_beam(self, features, lm=False):
         total = tf.shape(features)[0]
         batch = tf.constant(0, dtype=tf.int32)
 
