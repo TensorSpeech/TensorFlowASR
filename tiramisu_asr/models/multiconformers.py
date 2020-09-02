@@ -43,6 +43,18 @@ class MultiConformers(Transducer):
                  bias_regularizer=L2,
                  name="multi-conformers",
                  **kwargs):
+        super(MultiConformers, self).__init__(
+            encoder=None,
+            vocabulary_size=vocabulary_size,
+            embed_dim=embed_dim,
+            embed_dropout=embed_dropout,
+            num_lstms=num_lstms,
+            lstm_units=lstm_units,
+            joint_dim=joint_dim,
+            kernel_regularizer=kernel_regularizer,
+            bias_regularizer=bias_regularizer,
+            name=name,
+        )
         self.time_reduction_factor = reduction_factor
         self.encoder_lms = ConformerEncoder(
             dmodel=dmodel,
@@ -72,18 +84,6 @@ class MultiConformers(Transducer):
         )
         self.concat = tf.keras.layers.Concatenate(axis=-1, name=f"{name}_concat")
         self.encoder_joint = tf.keras.layers.Dense(dmodel, name=f"{name}_enc_joint")
-        super(MultiConformers, self).__init__(
-            encoder=None,
-            vocabulary_size=vocabulary_size,
-            embed_dim=embed_dim,
-            embed_dropout=embed_dropout,
-            num_lstms=num_lstms,
-            lstm_units=lstm_units,
-            joint_dim=joint_dim,
-            kernel_regularizer=kernel_regularizer,
-            bias_regularizer=bias_regularizer,
-            name=name,
-        )
 
     def _build(self, lms_shape, lgs_shape):
         lms = tf.keras.Input(shape=lms_shape, dtype=tf.float32)

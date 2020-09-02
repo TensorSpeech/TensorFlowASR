@@ -64,7 +64,7 @@ generator = Generator(
     **config["model_config"]
 )
 generator._build()
-generator.load_weights(args.saved)
+generator.load_weights(args.saved, by_name=True)
 generator.summary(line_length=150)
 
 segan_tester.compile(generator)

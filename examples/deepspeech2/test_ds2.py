@@ -67,8 +67,8 @@ ds2_model = DeepSpeech2(input_shape=speech_featurizer.shape,
                         num_classes=text_featurizer.num_classes,
                         name="deepspeech2")
 ds2_model._build(speech_featurizer.shape)
+ds2_model.load_weights(args.saved, by_name=True)
 ds2_model.summary(line_length=150)
-ds2_model.load_weights(args.saved)
 ds2_model.add_featurizers(speech_featurizer, text_featurizer)
 
 if args.tfrecords:

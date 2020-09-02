@@ -102,7 +102,7 @@ multiconformers = MultiConformers(
     vocabulary_size=text_featurizer.num_classes
 )
 multiconformers._build(speech_featurizer_lms.shape, speech_featurizer_lgs.shape)
-multiconformers.load_weights(args.saved)
+multiconformers.load_weights(args.saved, by_name=True)
 multiconformers.summary(line_length=100)
 multiconformers.add_featurizers(speech_featurizer_lms, speech_featurizer_lgs, text_featurizer)
 
