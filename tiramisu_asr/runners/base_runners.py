@@ -371,11 +371,14 @@ class BaseTester(BaseRunner):
             "greed_cer": ErrorRate(func=cer, name="test_greed_cer", dtype=tf.float32)
         }
 
+    def set_output_file(self, batch_size=None):
+        if not batch_size: batch_size = self.config["batch_size"]
+
         if os.path.exists(self.output_file_path):
             with open(self.output_file_path, "r", encoding="utf-8") as out:
                 self.processed_records = get_num_batches(
                     len(out.read().splitlines()) - 1,
-                    self.config["batch_size"]
+                    batch_size
                 )
         else:
             with open(self.output_file_path, "w") as out:
@@ -393,6 +396,7 @@ class BaseTester(BaseRunner):
         self.model = trained_model
 
     def run(self, test_dataset, batch_size=None):
+        self.set_output_file(batch_size)
         self.set_test_data_loader(test_dataset, batch_size)
         self._test_epoch()
         self._finish()

@@ -28,7 +28,7 @@ def setup_environment():  # Set memory growth and only log ERRORs
     tf.config.optimizer.set_experimental_options({"auto_mixed_precision": True})
 
 
-def setup_devices(devices):
+def setup_devices(devices, cpu=False):
     """Setting visible devices
 
     Args:
@@ -36,12 +36,15 @@ def setup_devices(devices):
     """
     import tensorflow as tf
 
-    # Currently, memory growth needs to be the same across GPUs
-    gpus = tf.config.list_physical_devices("GPU")
-    if gpus:
-        visible_gpus = [gpus[i] for i in devices]
-        tf.config.set_visible_devices(visible_gpus, "GPU")
-        print("Run on", len(visible_gpus), "Physical GPUs")
+    if cpu:
+        cpus = tf.config.list_physical_devices("CPU")
+        tf.config.set_visible_devices(cpus, "CPU")
+    else:
+        gpus = tf.config.list_physical_devices("GPU")
+        if gpus:
+            visible_gpus = [gpus[i] for i in devices]
+            tf.config.set_visible_devices(visible_gpus, "GPU")
+            print("Run on", len(visible_gpus), "Physical GPUs")
 
 
 def setup_strategy(devices):

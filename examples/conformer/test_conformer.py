@@ -42,11 +42,14 @@ parser.add_argument("--bs", type=int, default=None, help="Batch size")
 parser.add_argument("--device", type=int, default=0,
                     help="Device's id to run test on")
 
+parser.add_argument("--cpu", default=False, action="store_true",
+                    help="Whether to only use cpu")
+
 args = parser.parse_args()
 
 tf.config.optimizer.set_experimental_options({"auto_mixed_precision": args.mxp})
 
-setup_devices([args.device])
+setup_devices([args.device], cpu=args.cpu)
 
 from tiramisu_asr.configs.user_config import UserConfig
 from tiramisu_asr.datasets.asr_dataset import ASRTFRecordDataset, ASRSliceDataset
