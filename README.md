@@ -124,7 +124,9 @@ learning_config:
 
 See [examples](./examples/) for some predefined ASR models.
 
-## Corpus Sources
+## Corpus Sources and Pretrained Models
+
+For pretrained models, go to [drive](https://drive.google.com/drive/folders/1BD0AK30n8hc-yR28C5FW3LqzZxtLOQfl?usp=sharing)
 
 ### English
 
