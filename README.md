@@ -137,11 +137,11 @@ For pretrained models, go to [drive](https://drive.google.com/drive/folders/1BD0
 
 ### Vietnamese
 
-|                **Name**                |                              **Source**                              | **Hours** |
-| :------------------------------------: | :------------------------------------------------------------------: | :-------: |
-|                 Vivos                  | [https://ailab.hcmus.edu.vn/vivos](https://ailab.hcmus.edu.vn/vivos) |    15h    |
-|          InfoRe Technology 1           |         [InfoRe1](https://files.huylenguyen.com/25hours.zip)         |    25h    |
-| InfoRe Technology 2 (used in VLSP2019) |       [InfoRe2](https://files.huylenguyen.com/audiobooks.zip)        |   415h    |
+|                **Name**                |                                       **Source**                                       | **Hours** |
+| :------------------------------------: | :------------------------------------------------------------------------------------: | :-------: |
+|                 Vivos                  |          [https://ailab.hcmus.edu.vn/vivos](https://ailab.hcmus.edu.vn/vivos)          |    15h    |
+|          InfoRe Technology 1           |  [InfoRe1 (passwd: BroughtToYouByInfoRe)](https://files.huylenguyen.com/25hours.zip)   |    25h    |
+| InfoRe Technology 2 (used in VLSP2019) | [InfoRe2 (passwd: BroughtToYouByInfoRe)](https://files.huylenguyen.com/audiobooks.zip) |   415h    |
 
 ### German
 

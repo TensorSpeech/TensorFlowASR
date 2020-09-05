@@ -13,45 +13,41 @@
 # limitations under the License.
 
 import tensorflow as tf
-from ...utils.utils import shape_list
-
-
-def positional_encoding(batch_size, max_len, size):
-    pos = tf.expand_dims(tf.range(0, max_len, dtype=tf.float32), axis=1)
-    index = tf.expand_dims(tf.range(0, size, dtype=tf.float32), axis=0)
-
-    pe = pos * (1 / tf.pow(10000.0, (2 * (index // 2)) / size))
-
-    # Sin cos will be [max_len, size // 2]
-    # we add 0 between numbers by using padding and reshape
-    sin = tf.pad(tf.expand_dims(tf.sin(pe[:, 0::2]), -1),
-                 [[0, 0], [0, 0], [0, 1]], mode="CONSTANT", constant_values=0)
-    sin = tf.reshape(sin, [max_len, size])
-    cos = tf.pad(tf.expand_dims(tf.cos(pe[:, 1::2]), -1),
-                 [[0, 0], [0, 0], [1, 0]], mode="CONSTANT", constant_values=0)
-    cos = tf.reshape(cos, [max_len, size])
-    # Then add sin and cos, which results in [time, size]
-    pe = tf.add(sin, cos)
-
-    return tf.repeat(tf.expand_dims(pe, axis=0), repeats=batch_size, axis=0)  # [B, time, size]
 
 
 class PositionalEncoding(tf.keras.layers.Layer):
-    def __init__(self,
-                 name="pos_enc",
-                 **kwargs):
+    def __init__(self, name="pos_enc", **kwargs):
         super(PositionalEncoding, self).__init__(name=name, **kwargs)
+        self.dmodel = None
 
     def build(self, input_shape):
-        dmodel = input_shape[-1]
-        if dmodel % 2 != 0: raise ValueError(f"Input last dim must be even: {dmodel}")
+        self.dmodel = input_shape[-1]
+        if self.dmodel % 2 != 0: raise ValueError(f"Input last dim must be even: {self.dmodel}")
+
+    def encode(self, max_len):
+        pos = tf.expand_dims(tf.range(0, max_len, dtype=tf.float32), axis=1)
+        index = tf.expand_dims(tf.range(0, self.dmodel, dtype=tf.float32), axis=0)
+
+        pe = pos * (1 / tf.pow(10000.0, (2 * (index // 2)) / self.dmodel))
+
+        # Sin cos will be [max_len, size // 2]
+        # we add 0 between numbers by using padding and reshape
+        sin = tf.pad(tf.expand_dims(tf.sin(pe[:, 0::2]), -1),
+                     [[0, 0], [0, 0], [0, 1]], mode="CONSTANT", constant_values=0)
+        sin = tf.reshape(sin, [max_len, self.dmodel])
+        cos = tf.pad(tf.expand_dims(tf.cos(pe[:, 1::2]), -1),
+                     [[0, 0], [0, 0], [1, 0]], mode="CONSTANT", constant_values=0)
+        cos = tf.reshape(cos, [max_len, self.dmodel])
+        # Then add sin and cos, which results in [time, size]
+        pe = tf.add(sin, cos)
+        return tf.expand_dims(pe, axis=0)  # [1, time, size]
 
     def call(self, inputs, **kwargs):
         # inputs shape [B, T, V]
-        batch_size, max_sequence_length, size = shape_list(inputs)
-        pe = positional_encoding(batch_size, max_sequence_length, size)
+        pe = self.encode(tf.shape(inputs)[1])
         return tf.cast(pe, dtype=inputs.dtype)
 
     def get_config(self):
         conf = super(PositionalEncoding, self).get_config()
+        conf.update({"dmodel": self.dmodel})
         return conf

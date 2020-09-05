@@ -169,7 +169,7 @@ class RelPositionMultiHeadAttention(MultiHeadAttention):
         q = tf.transpose(q, perm=[0, 2, 1, 3])  # [B, T, H, S]
 
         p = self.pos(pe, training=training)
-        p = self.transpose_for_scores(p, tf.shape(pe)[0])  # [B, H, T, S]
+        p = self.transpose_for_scores(p, tf.shape(pe)[0])  # [1, H, T, S]
 
         # [B, T, H, S] => [B, H, T, S]
         q_with_bias_u = tf.transpose(q + self.pos_bias_u, perm=[0, 2, 1, 3])

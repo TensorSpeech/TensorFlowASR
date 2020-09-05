@@ -39,11 +39,11 @@ model_config:
   kernel_size: 32
   fc_factor: 0.5
   dropout: 0.1
-  embed_dim: 320
-  embed_dropout: 0.0
+  embed_dim: 512
+  embed_dropout: 0.1
   num_lstms: 1
   lstm_units: 320
-  joint_dim: 320
+  joint_dim: 1024
 
 learning_config:
   augmentations: null

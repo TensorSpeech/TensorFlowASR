@@ -136,13 +136,13 @@ class MHSAModule(tf.keras.layers.Layer):
                  name="mhsa_module",
                  **kwargs):
         super(MHSAModule, self).__init__(name=name, **kwargs)
-        self.pc = PositionalEncoding(name=f"{name}_pe")
+        self.pe = PositionalEncoding(name=f"{name}_pe")
         self.ln = tf.keras.layers.LayerNormalization(
             name=f"{name}_ln",
             gamma_regularizer=kernel_regularizer,
             beta_regularizer=bias_regularizer
         )
-        self.mha = RelPositionMultiHeadAttention(
+        self.rpmha = RelPositionMultiHeadAttention(
             name=f"{name}_mhsa",
             head_size=head_size, num_heads=num_heads,
             kernel_regularizer=kernel_regularizer
@@ -152,17 +152,17 @@ class MHSAModule(tf.keras.layers.Layer):
 
     def call(self, inputs, training=False, **kwargs):
         outputs = self.ln(inputs, training=training)
-        pe = self.pc(outputs)
-        outputs = self.mha([outputs, outputs, outputs, pe], training=training)
+        pe = self.pe(outputs)
+        outputs = self.rpmha([outputs, outputs, outputs, pe], training=training)
         outputs = self.do(outputs, training=training)
         outputs = self.res_add([inputs, outputs])
         return outputs
 
     def get_config(self):
         conf = super(MHSAModule, self).get_config()
-        conf.update(self.pc.get_config())
+        conf.update(self.pe.get_config())
         conf.update(self.ln.get_config())
-        conf.update(self.mha.get_config())
+        conf.update(self.rpmha.get_config())
         conf.update(self.do.get_config())
         conf.update(self.res_add.get_config())
         return conf
@@ -173,6 +173,7 @@ class ConvModule(tf.keras.layers.Layer):
                  input_dim,
                  kernel_size=32,
                  dropout=0.0,
+                 depth_multiplier=1,
                  kernel_regularizer=L2,
                  bias_regularizer=L2,
                  name="conv_module",
@@ -186,9 +187,10 @@ class ConvModule(tf.keras.layers.Layer):
             bias_regularizer=bias_regularizer
         )
         self.glu = GLU(name=f"{name}_glu")
-        self.dw_conv = tf.keras.layers.SeparableConv1D(
-            filters=2 * input_dim, kernel_size=kernel_size, strides=1,
-            padding="same", depth_multiplier=1, name=f"{name}_dw_conv",
+        self.dw_conv = tf.keras.layers.DepthwiseConv2D(
+            kernel_size=(1, kernel_size), strides=1,
+            padding="same", name=f"{name}_dw_conv",
+            depth_multiplier=depth_multiplier,
             depthwise_regularizer=kernel_regularizer,
             bias_regularizer=bias_regularizer
         )
@@ -212,7 +214,9 @@ class ConvModule(tf.keras.layers.Layer):
         outputs = self.ln(inputs, training=training)
         outputs = self.pw_conv_1(outputs, training=training)
         outputs = self.glu(outputs)
+        outputs = tf.expand_dims(outputs, axis=1)
         outputs = self.dw_conv(outputs, training=training)
+        outputs = tf.squeeze(outputs, axis=1)
         outputs = self.bn(outputs, training=training)
         outputs = self.swish(outputs)
         outputs = self.pw_conv_2(outputs, training=training)
@@ -242,6 +246,7 @@ class ConformerBlock(tf.keras.layers.Layer):
                  head_size=144,
                  num_heads=4,
                  kernel_size=32,
+                 depth_multiplier=1,
                  kernel_regularizer=L2,
                  bias_regularizer=L2,
                  name="conformer_block",
@@ -262,6 +267,7 @@ class ConformerBlock(tf.keras.layers.Layer):
         self.convm = ConvModule(
             input_dim=input_dim, kernel_size=kernel_size,
             dropout=dropout, name=f"{name}_conv_module",
+            depth_multiplier=depth_multiplier,
             kernel_regularizer=kernel_regularizer,
             bias_regularizer=bias_regularizer
         )
@@ -303,6 +309,7 @@ class ConformerEncoder(tf.keras.Model):
                  head_size=36,
                  num_heads=4,
                  kernel_size=32,
+                 depth_multiplier=1,
                  fc_factor=0.5,
                  dropout=0.0,
                  kernel_regularizer=L2,
@@ -325,9 +332,10 @@ class ConformerEncoder(tf.keras.Model):
                 head_size=head_size,
                 num_heads=num_heads,
                 kernel_size=kernel_size,
+                depth_multiplier=depth_multiplier,
                 kernel_regularizer=kernel_regularizer,
                 bias_regularizer=bias_regularizer,
-                name=f"conformer_block_{i}"
+                name=f"{name}_block_{i}"
             )
             self.conformer_blocks.append(conformer_block)
 
