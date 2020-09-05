@@ -66,8 +66,9 @@ def create_sattds2(input_shape: list,
                            dropout=arch_config["att"]["dropout"],
                            name=f"ffn1_{i}")(ffn)
         layer = tf.keras.layers.Add()([layer, 0.5 * ffn])
-        att = PositionalEncoding(name=f"pos_enc_{i}")(layer)
-        att = tf.keras.layers.LayerNormalization()(att)
+        layer = tf.keras.layers.LayerNormalization()(layer)
+        pe = PositionalEncoding(name=f"pos_enc_{i}")(layer)
+        att = tf.keras.layers.Add(name=f"pos_enc_add_{i}")([layer, pe])
         att = tfa.layers.MultiHeadAttention(head_size=arch_config["att"]["head_size"],
                                             num_heads=arch_config["att"]["num_heads"],
                                             name=f"mulhead_satt_{i}")([att, att, att])

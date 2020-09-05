@@ -13,12 +13,12 @@
 # limitations under the License.
 
 import tensorflow as tf
-import tensorflow_addons as tfa
 
 from .activations import GLU
 from .transducer import Transducer
 from ..utils.utils import merge_two_last_dims
 from .layers.positional_encoding import PositionalEncoding
+from .layers.multihead_attention import RelPositionMultiHeadAttention
 
 L2 = tf.keras.regularizers.l2(1e-6)
 
@@ -142,18 +142,18 @@ class MHSAModule(tf.keras.layers.Layer):
             gamma_regularizer=kernel_regularizer,
             beta_regularizer=bias_regularizer
         )
-        self.mha = tfa.layers.MultiHeadAttention(
-            head_size=head_size, num_heads=num_heads, name=f"{name}_mhsa",
-            kernel_regularizer=kernel_regularizer,
-            bias_regularizer=bias_regularizer
+        self.mha = RelPositionMultiHeadAttention(
+            name=f"{name}_mhsa",
+            head_size=head_size, num_heads=num_heads,
+            kernel_regularizer=kernel_regularizer
         )
         self.do = tf.keras.layers.Dropout(dropout, name=f"{name}_dropout")
         self.res_add = tf.keras.layers.Add(name=f"{name}_add")
 
     def call(self, inputs, training=False, **kwargs):
-        outputs = self.pc(inputs)
-        outputs = self.ln(outputs, training=training)
-        outputs = self.mha([outputs, outputs, outputs], training=training)
+        outputs = self.ln(inputs, training=training)
+        pe = self.pc(outputs)
+        outputs = self.mha([outputs, outputs, outputs, pe], training=training)
         outputs = self.do(outputs, training=training)
         outputs = self.res_add([inputs, outputs])
         return outputs

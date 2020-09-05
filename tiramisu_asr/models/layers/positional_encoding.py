@@ -16,23 +16,24 @@ import tensorflow as tf
 from ...utils.utils import shape_list
 
 
-def positional_encoding(max_len, size):
+def positional_encoding(batch_size, max_len, size):
     pos = tf.expand_dims(tf.range(0, max_len, dtype=tf.float32), axis=1)
     index = tf.expand_dims(tf.range(0, size, dtype=tf.float32), axis=0)
 
     pe = pos * (1 / tf.pow(10000.0, (2 * (index // 2)) / size))
 
-    # Sin cos will be [max_len, size // 2], we add 0 between number by using padding and reshape
+    # Sin cos will be [max_len, size // 2]
+    # we add 0 between numbers by using padding and reshape
     sin = tf.pad(tf.expand_dims(tf.sin(pe[:, 0::2]), -1),
                  [[0, 0], [0, 0], [0, 1]], mode="CONSTANT", constant_values=0)
     sin = tf.reshape(sin, [max_len, size])
     cos = tf.pad(tf.expand_dims(tf.cos(pe[:, 1::2]), -1),
                  [[0, 0], [0, 0], [1, 0]], mode="CONSTANT", constant_values=0)
     cos = tf.reshape(cos, [max_len, size])
-    # Then add sin and cos
+    # Then add sin and cos, which results in [time, size]
     pe = tf.add(sin, cos)
 
-    return tf.expand_dims(pe, axis=0)
+    return tf.repeat(tf.expand_dims(pe, axis=0), repeats=batch_size, axis=0)  # [B, time, size]
 
 
 class PositionalEncoding(tf.keras.layers.Layer):
@@ -41,12 +42,15 @@ class PositionalEncoding(tf.keras.layers.Layer):
                  **kwargs):
         super(PositionalEncoding, self).__init__(name=name, **kwargs)
 
+    def build(self, input_shape):
+        dmodel = input_shape[-1]
+        if dmodel % 2 != 0: raise ValueError(f"Input last dim must be even: {dmodel}")
+
     def call(self, inputs, **kwargs):
         # inputs shape [B, T, V]
-        _, max_sequence_length, size = shape_list(inputs)
-        if size % 2 != 0: raise ValueError(f"Input last dim must be even: {size}")
-        pe = positional_encoding(max_sequence_length, size)
-        return inputs + tf.cast(pe, dtype=inputs.dtype)
+        batch_size, max_sequence_length, size = shape_list(inputs)
+        pe = positional_encoding(batch_size, max_sequence_length, size)
+        return tf.cast(pe, dtype=inputs.dtype)
 
     def get_config(self):
         conf = super(PositionalEncoding, self).get_config()
