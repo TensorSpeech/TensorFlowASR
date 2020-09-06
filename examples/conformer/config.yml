@@ -37,10 +37,11 @@ model_config:
   num_blocks: 16
   head_size: 36
   num_heads: 4
+  mha_type: relmha
   kernel_size: 32
   fc_factor: 0.5
   dropout: 0.1
-  embed_dim: 512
+  embed_dim: 320
   embed_dropout: 0.1
   num_lstms: 1
   lstm_units: 320

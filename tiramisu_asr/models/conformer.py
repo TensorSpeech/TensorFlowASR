@@ -18,7 +18,7 @@ from .activations import GLU
 from .transducer import Transducer
 from ..utils.utils import merge_two_last_dims
 from .layers.positional_encoding import PositionalEncoding
-from .layers.multihead_attention import RelPositionMultiHeadAttention
+from .layers.multihead_attention import MultiHeadAttention, RelPositionMultiHeadAttention
 
 L2 = tf.keras.regularizers.l2(1e-6)
 
@@ -47,7 +47,7 @@ class VGG2L(tf.keras.layers.Layer):
             bias_regularizer=bias_regularizer
         )
         self.maxpool1 = tf.keras.layers.MaxPool2D(
-            pool_size=2, strides=(reduction_factor // 2),
+            pool_size=(reduction_factor // 2, 2),
             padding="same", name=f"{name}_maxpool_1"
         )
         self.conv3 = tf.keras.layers.Conv2D(
@@ -63,7 +63,7 @@ class VGG2L(tf.keras.layers.Layer):
             bias_regularizer=bias_regularizer
         )
         self.maxpool2 = tf.keras.layers.MaxPool2D(
-            pool_size=2, strides=2,
+            pool_size=(2, 2),
             padding="same", name=f"{name}_maxpool_2"
         )
         self.linear = tf.keras.layers.Dense(
@@ -103,7 +103,7 @@ class VGG2L(tf.keras.layers.Layer):
         return conf
 
 
-class Conv2DSubsampling(tf.keras.layers.Layer):
+class VGG1L(tf.keras.layers.Layer):
     def __init__(self,
                  odim: int,
                  reduction_factor: int = 4,
@@ -112,16 +112,20 @@ class Conv2DSubsampling(tf.keras.layers.Layer):
                  bias_regularizer=L2,
                  name="conv2d_subsampling",
                  **kwargs):
-        super(Conv2DSubsampling, self).__init__(name=name, **kwargs)
+        super(VGG1L, self).__init__(name=name, **kwargs)
         assert reduction_factor % 2 == 0, "reduction_factor must be divisible by 2"
         self.conv1 = tf.keras.layers.Conv2D(
-            filters=odim, kernel_size=3, strides=(reduction_factor // 2),
+            filters=odim, kernel_size=3, strides=1,
             padding="same", name=f"{name}_1",
             kernel_regularizer=kernel_regularizer,
             bias_regularizer=bias_regularizer
         )
+        self.maxpool1 = tf.keras.layers.MaxPool2D(
+            pool_size=(reduction_factor // 2, 2),
+            padding="same", name=f"{name}_maxpool_1"
+        )
         self.conv2 = tf.keras.layers.Conv2D(
-            filters=odim, kernel_size=3, strides=2,
+            filters=odim, kernel_size=3, strides=1,
             padding="same", name=f"{name}_2",
             kernel_regularizer=kernel_regularizer,
             bias_regularizer=bias_regularizer
@@ -131,21 +135,31 @@ class Conv2DSubsampling(tf.keras.layers.Layer):
             kernel_regularizer=kernel_regularizer,
             bias_regularizer=bias_regularizer
         )
+        self.maxpool2 = tf.keras.layers.MaxPool2D(
+            pool_size=(2, 2),
+            padding="same", name=f"{name}_maxpool_2"
+        )
         self.do = tf.keras.layers.Dropout(dropout, name=f"{name}_dropout")
 
     def call(self, inputs, training=False, **kwargs):
         outputs = self.conv1(inputs, training=training)
         outputs = tf.nn.relu(outputs)
+        outputs = self.maxpool1(outputs, training=training)
+
         outputs = self.conv2(outputs, training=training)
         outputs = tf.nn.relu(outputs)
+        outputs = self.maxpool2(outputs, training=training)
+
         outputs = merge_two_last_dims(outputs)
         outputs = self.linear(outputs, training=training)
         return self.do(outputs, training=training)
 
     def get_config(self):
-        conf = super(Conv2DSubsampling, self).get_config()
+        conf = super(VGG1L, self).get_config()
         conf.update(self.conv1.get_config())
+        conf.update(self.maxpool1.get_config())
         conf.update(self.conv2.get_config())
+        conf.update(self.maxpool2.get_config())
         conf.update(self.linear.get_config())
         conf.update(self.do.get_config())
         return conf
@@ -211,6 +225,7 @@ class MHSAModule(tf.keras.layers.Layer):
                  head_size,
                  num_heads,
                  dropout=0.0,
+                 mha_type="relmha",
                  kernel_regularizer=L2,
                  bias_regularizer=L2,
                  name="mhsa_module",
@@ -222,24 +237,41 @@ class MHSAModule(tf.keras.layers.Layer):
             gamma_regularizer=kernel_regularizer,
             beta_regularizer=bias_regularizer
         )
-        self.rpmha = RelPositionMultiHeadAttention(
-            name=f"{name}_mhsa",
-            head_size=head_size, num_heads=num_heads,
-            kernel_regularizer=kernel_regularizer
-        )
+        if mha_type == "relmha":
+            self.mha = RelPositionMultiHeadAttention(
+                name=f"{name}_mhsa",
+                head_size=head_size, num_heads=num_heads,
+                kernel_regularizer=kernel_regularizer,
+                bias_regularizer=bias_regularizer
+            )
+        elif mha_type == "mha":
+            self.mha = MultiHeadAttention(
+                name=f"{name}_mhsa",
+                head_size=head_size, num_heads=num_heads,
+                kernel_regularizer=kernel_regularizer,
+                bias_regularizer=bias_regularizer
+            )
+        else:
+            raise ValueError("mha_type must be either 'mha' or 'relmha'")
         self.do = tf.keras.layers.Dropout(dropout, name=f"{name}_dropout")
         self.res_add = tf.keras.layers.Add(name=f"{name}_add")
+        self.mha_type = mha_type
 
     def call(self, inputs, training=False, **kwargs):
         outputs = self.ln(inputs, training=training)
         pe = self.pe(outputs)
-        outputs = self.rpmha([outputs, outputs, outputs, pe], training=training)
+        if self.mha_type == "relmha":
+            outputs = self.mha([outputs, outputs, outputs, pe], training=training)
+        else:
+            outputs = outputs + pe
+            outputs = self.mha([outputs, outputs, outputs], training=training)
         outputs = self.do(outputs, training=training)
         outputs = self.res_add([inputs, outputs])
         return outputs
 
     def get_config(self):
         conf = super(MHSAModule, self).get_config()
+        conf.update({"mha_type": self.mha_type})
         conf.update(self.pe.get_config())
         conf.update(self.ln.get_config())
         conf.update(self.rpmha.get_config())
@@ -323,8 +355,9 @@ class ConformerBlock(tf.keras.layers.Layer):
                  input_dim,
                  dropout=0.0,
                  fc_factor=0.5,
-                 head_size=144,
+                 head_size=36,
                  num_heads=4,
+                 mha_type="relmha",
                  kernel_size=32,
                  depth_multiplier=1,
                  kernel_regularizer=L2,
@@ -339,6 +372,7 @@ class ConformerBlock(tf.keras.layers.Layer):
             bias_regularizer=bias_regularizer
         )
         self.mhsam = MHSAModule(
+            mha_type=mha_type,
             head_size=head_size, num_heads=num_heads,
             dropout=dropout, name=f"{name}_mhsa_module",
             kernel_regularizer=kernel_regularizer,
@@ -387,6 +421,7 @@ class ConformerEncoder(tf.keras.Model):
                  dmodel=144,
                  reduction_factor=4,
                  num_blocks=16,
+                 mha_type="relmha",
                  head_size=36,
                  num_heads=4,
                  kernel_size=32,
@@ -398,8 +433,8 @@ class ConformerEncoder(tf.keras.Model):
                  name="conformer_encoder",
                  **kwargs):
         super(ConformerEncoder, self).__init__(name=name, **kwargs)
-        if subsampling == "conv2d":
-            self.conv_subsampling = Conv2DSubsampling(
+        if subsampling == "vgg1l":
+            self.conv_subsampling = VGG1L(
                 odim=dmodel, reduction_factor=reduction_factor,
                 dropout=dropout, name=f"{name}_subsampling",
                 kernel_regularizer=kernel_regularizer,
@@ -413,7 +448,7 @@ class ConformerEncoder(tf.keras.Model):
                 bias_regularizer=bias_regularizer
             )
         else:
-            raise ValueError("subsampling must be eight 'conv2d' or 'vgg2l'")
+            raise ValueError("subsampling must be eight 'vgg1l' or 'vgg2l'")
 
         self.conformer_blocks = []
         for i in range(num_blocks):
@@ -423,6 +458,7 @@ class ConformerEncoder(tf.keras.Model):
                 fc_factor=fc_factor,
                 head_size=head_size,
                 num_heads=num_heads,
+                mha_type=mha_type,
                 kernel_size=kernel_size,
                 depth_multiplier=depth_multiplier,
                 kernel_regularizer=kernel_regularizer,
@@ -455,6 +491,7 @@ class Conformer(Transducer):
                  num_blocks: int = 16,
                  head_size: int = 36,
                  num_heads: int = 4,
+                 mha_type: str = "relmha",
                  kernel_size: int = 32,
                  fc_factor: float = 0.5,
                  dropout: float = 0,
@@ -475,6 +512,7 @@ class Conformer(Transducer):
                 num_blocks=num_blocks,
                 head_size=head_size,
                 num_heads=num_heads,
+                mha_type=mha_type,
                 kernel_size=kernel_size,
                 fc_factor=fc_factor,
                 dropout=dropout,
