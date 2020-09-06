@@ -49,7 +49,7 @@ class MultiHeadAttention(tf.keras.layers.Layer):
         self.use_projection_bias = use_projection_bias
         self.return_attn_coef = return_attn_coef
 
-        self.dropout = tf.keras.layers.Dropout(dropout, name=f"{self.name}_dropout")
+        self.dropout = tf.keras.layers.Dropout(dropout, name="dropout")
         self._droput_rate = dropout
 
     def build(self, input_shape):
@@ -224,7 +224,7 @@ class RelPositionMultiHeadAttention(MultiHeadAttention):
     def build(self, input_shape):
         num_pos_features = input_shape[-1][-1]
         self.pos_kernel = self.add_weight(
-            name="value_kernel",
+            name="pos_kernel",
             shape=[self.num_heads, num_pos_features, self.head_size],
             initializer=self.kernel_initializer,
             regularizer=self.kernel_regularizer,
