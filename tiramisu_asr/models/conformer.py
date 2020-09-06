@@ -47,7 +47,7 @@ class VGG2L(tf.keras.layers.Layer):
             bias_regularizer=bias_regularizer
         )
         self.maxpool1 = tf.keras.layers.MaxPool2D(
-            pool_size=(reduction_factor // 2, 3),
+            pool_size=2, strides=(reduction_factor // 2),
             padding="same", name=f"{name}_maxpool_1"
         )
         self.conv3 = tf.keras.layers.Conv2D(
@@ -63,7 +63,7 @@ class VGG2L(tf.keras.layers.Layer):
             bias_regularizer=bias_regularizer
         )
         self.maxpool2 = tf.keras.layers.MaxPool2D(
-            pool_size=(2, 2),
+            pool_size=2, strides=2,
             padding="same", name=f"{name}_maxpool_2"
         )
         self.linear = tf.keras.layers.Dense(

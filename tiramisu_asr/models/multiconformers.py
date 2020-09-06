@@ -25,9 +25,10 @@ L2 = tf.keras.regularizers.l2(1e-6)
 
 class MultiConformers(Transducer):
     def __init__(self,
-                 dmodel: int,
-                 reduction_factor: int,
-                 vocabulary_size: int,
+                 subsampling: str = "conv2d",
+                 dmodel: int = 144,
+                 reduction_factor: int = 4,
+                 vocabulary_size: int = 29,
                  num_blocks: int = 16,
                  head_size: int = 36,
                  num_heads: int = 4,
@@ -57,6 +58,7 @@ class MultiConformers(Transducer):
         )
         self.time_reduction_factor = reduction_factor
         self.encoder_lms = ConformerEncoder(
+            subsampling=subsampling,
             dmodel=dmodel,
             reduction_factor=reduction_factor,
             num_blocks=num_blocks,
@@ -70,6 +72,7 @@ class MultiConformers(Transducer):
             name=f"{name}_encoder_lms"
         )
         self.encoder_lgs = ConformerEncoder(
+            subsampling=subsampling,
             dmodel=dmodel,
             reduction_factor=reduction_factor,
             num_blocks=num_blocks,

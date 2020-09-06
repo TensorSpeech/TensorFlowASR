@@ -95,7 +95,7 @@ class CtcModel(tf.keras.Model):
             y_pred=probs, input_length=input_length, greedy=True
         )
         decoded = tf.cast(decoded[0][0][0], dtype=tf.int32)
-        transcript = self.text_featurizer.index2upoints(decoded)
+        transcript = self.text_featurizer.indices2upoints(decoded)
         return transcript
 
     # -------------------------------- BEAM SEARCH -------------------------------------
@@ -137,7 +137,7 @@ class CtcModel(tf.keras.Model):
             beam_width=self.text_featurizer.decoder_config["beam_width"]
         )
         decoded = tf.cast(decoded[0][0][0], dtype=tf.int32)
-        transcript = self.text_featurizer.index2upoints(decoded)
+        transcript = self.text_featurizer.indices2upoints(decoded)
         return transcript
 
     # -------------------------------- TFLITE -------------------------------------
@@ -156,4 +156,3 @@ class CtcModel(tf.keras.Model):
                 tf.TensorSpec([None], dtype=tf.float32)
             ]
         )
-

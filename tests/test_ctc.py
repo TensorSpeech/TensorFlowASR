@@ -7,9 +7,9 @@ from tiramisu_asr.featurizers.speech_featurizers import TFSpeechFeaturizer, read
 from tiramisu_asr.utils.utils import bytes_to_string, merge_two_last_dims
 
 decoder_config = {
-    "vocabulary": "/mnt/Projects/asrk16/TiramisuASR/examples/deepspeech2/vocabularies/vietnamese.txt",
+    "vocabulary": "/mnt/Projects/asrk16/TiramisuASR/vocabularies/vietnamese.txt",
     "beam_width": 100,
-    "blank_at_zero": True,
+    "blank_at_zero": False,
     "lm_config": {
         "model_path": "/mnt/Data/ML/NLP/vntc_asrtrain_5gram_trie.binary",
         "alpha": 2.0,
@@ -82,7 +82,7 @@ print(hyp.numpy())
 # hyp = model.recognize_beam_tflite(signal, lm=True)
 # print(hyp.numpy().decode("utf-8"))
 
-concrete_func = model.recognize_beam_tflite.get_concrete_function()
+concrete_func = model.make_tflite_function(greedy=False).get_concrete_function()
 converter = tf.lite.TFLiteConverter.from_concrete_functions(
     [concrete_func]
 )

@@ -24,14 +24,14 @@ speech_config:
   normalize_per_feature: False
 
 decoder_config:
-  vocabulary: /mnt/Projects/asrk16/TiramisuASR/vocabularies/vietnamese.txt
+  vocabulary: null
   blank_at_zero: True
   beam_width: 5
   norm_score: True
 
 model_config:
   name: conformer
-  subsampling: conv2d
+  subsampling: vgg2l
   dmodel: 144
   reduction_factor: 4
   num_blocks: 16
@@ -44,19 +44,20 @@ model_config:
   embed_dropout: 0.1
   num_lstms: 1
   lstm_units: 320
-  joint_dim: 512
+  joint_dim: 320
 
 learning_config:
   augmentations: null
 
   dataset_config:
     train_paths:
-      - /mnt/Data/ML/ASR/Preprocessed/Vivos/train/train_transcripts.tsv
+      - /mnt/Data/ML/ASR/Raw/LibriSpeech/train-clean-100/transcripts.tsv
     eval_paths:
-      - /mnt/Data/ML/ASR/Preprocessed/Vivos/train/eval_transcripts.tsv
+      - /mnt/Data/ML/ASR/Raw/LibriSpeech/dev-clean/transcripts.tsv
+      - /mnt/Data/ML/ASR/Raw/LibriSpeech/dev-other/transcripts.tsv
     test_paths:
-      - /mnt/Data/ML/ASR/Preprocessed/Vivos/test/transcripts.tsv
-    tfrecords_dir: /mnt/Data/ML/ASR/Preprocessed/Vivos/TFRecords
+      - /mnt/Data/ML/ASR/Raw/LibriSpeech/test-clean/transcripts.tsv
+    tfrecords_dir: null
 
   optimizer_config:
     warmup_steps: 10000
@@ -67,7 +68,7 @@ learning_config:
   running_config:
     batch_size: 4
     num_epochs: 20
-    outdir: /mnt/Projects/asrk16/trained/local/vivos/conformer
+    outdir: /mnt/Projects/asrk16/trained/local/librispeech/conformer
     log_interval_steps: 300
     eval_interval_steps: 500
     save_interval_steps: 1000

@@ -324,7 +324,7 @@ class Transducer(Model):
         """
         features = self.speech_featurizer.tf_extract(signal)
         hypothesis = self.perform_greedy(features, predicted, states, swap_memory=False)
-        transcript = self.text_featurizer.index2upoints(hypothesis.prediction)
+        transcript = self.text_featurizer.indices2upoints(hypothesis.prediction)
         return (
             transcript,
             hypothesis.prediction[-1],

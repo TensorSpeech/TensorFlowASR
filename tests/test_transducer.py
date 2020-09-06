@@ -24,7 +24,7 @@ from tiramisu_asr.featurizers.speech_featurizers import TFSpeechFeaturizer, read
 text_featurizer = TextFeaturizer({
     "vocabulary": None,
     "blank_at_zero": True,
-    "beam_width": 10,
+    "beam_width": 5,
     "norm_score": True
 })
 
@@ -63,11 +63,11 @@ model.add_featurizers(
     text_featurizer=text_featurizer
 )
 
-features = tf.random.normal(shape=[5, 50, 80, 1], stddev=127., mean=247.)
+features = tf.zeros(shape=[5, 50, 80, 1], dtype=tf.float32)
 pred = model.recognize(features)
 print(pred)
-# pred = model.recognize_beam(features)
-# print(pred)
+pred = model.recognize_beam(features)
+print(pred)
 
 # stamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
 # logdir = '/tmp/logs/func/%s' % stamp
