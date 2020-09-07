@@ -140,3 +140,11 @@ def log10(x):
     numerator = tf.math.log(x)
     denominator = tf.math.log(tf.constant(10, dtype=numerator.dtype))
     return numerator / denominator
+
+
+def factorial(x):
+    return tf.exp(tf.math.lgamma(x + 1))
+
+
+def nCr(n, r):
+    return factorial(n) // factorial(r) // factorial(n - r)

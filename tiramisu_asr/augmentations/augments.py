@@ -106,28 +106,6 @@ class SignalVtlp(naa.VtlpAug):
         super(SignalVtlp, self).__init__(sample_rate, zone=zone, coverage=coverage,
                                          duration=None, fhi=fhi, factor=factor)
 
-# class SeganAugment(Augmentation):
-#     def __init__(self, params: dict):
-#         with tf.device("/device:CPU:0"):
-#             self.segan_inferencer = SeganTFLite(
-#                 speech_config=params["speech_config"],
-#                 saved_path=params["saved_path"]
-#             )
-#             self.segan_inferencer.compile()
-#         super(SeganAugment, self).__init__({})
-#
-#     def func(self, *args, **kwargs):
-#         if random.choice([0, 1]) == 0: return kwargs["signal"]
-#         with tf.device("/device:CPU:0"):  # keep gpu for training main model
-#             gen_signal = self.segan_inferencer.infer(kwargs["signal"])
-#         if self.segan_inferencer.speech_config["sample_rate"] != kwargs["sample_rate"]:
-#             gen_signal = librosa.resample(
-#                 gen_signal,
-#                 self.segan_inferencer.speech_config["sample_rate"],
-#                 kwargs["sample_rate"]
-#             )
-#         return gen_signal
-
 
 class TimeMasking(SpectrogramAugmenter):
     def __init__(self,

@@ -14,7 +14,7 @@
 </h2>
 
 <p align="center">
-TiramisuASR implements some speech recognition and speech enhancement architectures such as CTC-based models (Deep Speech 2, etc.), Speech Enhancement Generative Adversarial Network (SEGAN), RNN Transducer (Conformer, etc.). These models can be converted to TFLite to reduce memory and computation for deployment :smile:
+TiramisuASR implements some speech recognition architectures such as CTC-based models (Deep Speech 2, etc.), RNN Transducer (Conformer, etc.). These models can be converted to TFLite to reduce memory and computation for deployment :smile:
 </p>
 
 ## What's New?
@@ -27,7 +27,6 @@ TiramisuASR implements some speech recognition and speech enhancement architectu
 ## :yum: Supported Models
 
 - **CTCModel** (End2end models using CTC Loss for training)
-- **SEGAN** (Refer to [https://github.com/santi-pdp/segan](https://github.com/santi-pdp/segan)), see [examples/segan](./examples/segan)
 - **Transducer Models** (End2end models using RNNT Loss for training)
 - **Conformer Transducer** (Reference: [https://arxiv.org/abs/2005.08100](https://arxiv.org/abs/2005.08100))
   See [examples/conformer](./examples/conformer)
@@ -49,8 +48,6 @@ For **setting up datasets**, see [datasets](./tiramisu_asr/datasets/README.md)
 - For _training, testing and using_ **CTC Models**, run `./scripts/install_ctc_decoders.sh`
 
 - For _training_ **Transducer Models**, export `CUDA_HOME` and run `./scripts/install_rnnt_loss.sh`
-
-- For _testing_ **Speech Enhancement Model** (i.e SEGAN), install `octave` and run `./scripts/install_semetrics.sh`
 
 - Method `tiramisu_asr.utils.setup_environment()` _automatically_ enable **mixed_precision** if available.
 
@@ -150,7 +147,6 @@ For pretrained models, go to [drive](https://drive.google.com/drive/folders/1BD0
 ## References & Credits
 
 1. [NVIDIA OpenSeq2Seq Toolkit](https://github.com/NVIDIA/OpenSeq2Seq)
-2. [https://github.com/santi-pdp/segan](https://github.com/santi-pdp/segan)
 3. [https://github.com/noahchalifour/warp-transducer](https://github.com/noahchalifour/warp-transducer)
 4. [Sequence Transduction with Recurrent Neural Network](https://arxiv.org/abs/1211.3711)
 5. [End-to-End Speech Processing Toolkit in PyTorch](https://github.com/espnet/espnet)

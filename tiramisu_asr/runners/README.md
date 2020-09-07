@@ -14,7 +14,7 @@ The trainers use `BaseTrainer` for training models. To create a custom trainer, 
 
 _Testers only run in 1 GPU_ because we have to use `tf.py_function` or `tf.numpy_function` to calculate WER, CER, Semetrics, ...
 
-The testers for **acoustic** models are combined into single class `BaseTester`. Therefore you don't need to define any custom tester for **acoustic** models, any models which is not **acoustic** such as `segan` must define its own tester class.
+The testers for **acoustic** models are combined into single class `BaseTester`. Therefore you don't need to define any custom tester for **acoustic** models.
 
 The `BaseTester` do the steps as follows:
 
