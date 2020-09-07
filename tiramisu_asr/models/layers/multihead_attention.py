@@ -99,7 +99,6 @@ class MultiHeadAttention(tf.keras.layers.Layer):
             )
         else:
             self.projection_bias = None
-        super(MultiHeadAttention, self).build(input_shape)
 
     def call_qkv(self, query, key, value, training=False):
         # verify shapes
@@ -228,7 +227,7 @@ class RelPositionMultiHeadAttention(MultiHeadAttention):
             shape=[self.num_heads, num_pos_features, self.head_size],
             initializer=self.kernel_initializer,
             regularizer=self.kernel_regularizer,
-            constraint=self.kernel_constraint,
+            constraint=self.kernel_constraint
         )
         self.pos_bias_u = self.add_weight(
             name="pos_bias_u",
@@ -246,12 +245,12 @@ class RelPositionMultiHeadAttention(MultiHeadAttention):
         )
         super(RelPositionMultiHeadAttention, self).build(input_shape[:-1])
 
-    def rel_shift(self, x):
+    @staticmethod
+    def relative_shift(x):
         x_shape = tf.shape(x)
         x = tf.pad(x, [[0, 0], [0, 0], [0, 0], [1, 0]])
         x = tf.reshape(x, [x_shape[0], x_shape[1], x_shape[3] + 1, x_shape[2]])
-        x = tf.slice(x, [0, 0, 1, 0], [-1, -1, -1, -1])
-        x = tf.reshape(x, x_shape)
+        x = tf.reshape(x[:, :, 1:, :], x_shape)
         return x
 
     def call(self, inputs, training=False, mask=None):
@@ -266,7 +265,7 @@ class RelPositionMultiHeadAttention(MultiHeadAttention):
 
         logits_with_u = tf.einsum("...NHO,...MHO->...HNM", query_with_u, key)
         logits_with_v = tf.einsum("...NHO,...MHO->...HNM", query_with_v, pos)
-        logits_with_v = self.rel_shift(logits_with_v)
+        logits_with_v = self.relative_shift(logits_with_v)
 
         logits = logits_with_u + logits_with_v
 

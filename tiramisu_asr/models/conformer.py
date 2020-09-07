@@ -130,14 +130,14 @@ class VGG1L(tf.keras.layers.Layer):
             kernel_regularizer=kernel_regularizer,
             bias_regularizer=bias_regularizer
         )
+        self.maxpool2 = tf.keras.layers.MaxPool2D(
+            pool_size=(2, 2),
+            padding="same", name=f"{name}_maxpool_2"
+        )
         self.linear = tf.keras.layers.Dense(
             odim, name=f"{name}_linear",
             kernel_regularizer=kernel_regularizer,
             bias_regularizer=bias_regularizer
-        )
-        self.maxpool2 = tf.keras.layers.MaxPool2D(
-            pool_size=(2, 2),
-            padding="same", name=f"{name}_maxpool_2"
         )
         self.do = tf.keras.layers.Dropout(dropout, name=f"{name}_dropout")
 

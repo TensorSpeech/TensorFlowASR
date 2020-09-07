@@ -12,16 +12,32 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import sys
+import tensorflow as tf
 import matplotlib.pyplot as plt
-from tiramisu_asr.models.layers.positional_encoding import positional_encoding
+from tiramisu_asr.models.layers.positional_encoding import PositionalEncoding
+from tiramisu_asr.models.layers.multihead_attention import RelPositionMultiHeadAttention
 
-pos_encoding = positional_encoding(50, 512)
+pos_encoding = PositionalEncoding.encode(500, 144)
 print(pos_encoding.shape)
 
 plt.pcolormesh(pos_encoding[0], cmap='RdBu')
 plt.xlabel('Depth')
-plt.xlim((0, 512))
+plt.xlim((0, 144))
 plt.ylabel('Position')
 plt.colorbar()
-plt.savefig(sys.argv[1])
+plt.show()
+
+rel = tf.ones([1, 1, 20, 10])
+rel_shift = RelPositionMultiHeadAttention.relative_shift(rel)
+print(tf.reduce_all(tf.equal(rel, rel_shift)))
+
+plt.figure(figsize=(15, 5))
+
+plt.subplot(2, 1, 1)
+plt.imshow(tf.transpose(rel[0][0]))
+plt.colorbar()
+
+plt.subplot(2, 1, 2)
+plt.imshow(tf.transpose(rel_shift[0][0]))
+plt.colorbar()
+plt.show()
