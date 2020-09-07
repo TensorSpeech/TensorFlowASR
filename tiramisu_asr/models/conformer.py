@@ -110,7 +110,7 @@ class VGG1L(tf.keras.layers.Layer):
                  dropout: float = 0.0,
                  kernel_regularizer=L2,
                  bias_regularizer=L2,
-                 name="conv2d_subsampling",
+                 name="vgg1l_subsampling",
                  **kwargs):
         super(VGG1L, self).__init__(name=name, **kwargs)
         assert reduction_factor % 2 == 0, "reduction_factor must be divisible by 2"
@@ -160,6 +160,54 @@ class VGG1L(tf.keras.layers.Layer):
         conf.update(self.maxpool1.get_config())
         conf.update(self.conv2.get_config())
         conf.update(self.maxpool2.get_config())
+        conf.update(self.linear.get_config())
+        conf.update(self.do.get_config())
+        return conf
+
+
+class Conv2DSubsampling(tf.keras.layers.Layer):
+    def __init__(self,
+                 odim: int,
+                 reduction_factor: int = 4,
+                 dropout: float = 0.0,
+                 kernel_regularizer=L2,
+                 bias_regularizer=L2,
+                 name="conv2d_subsampling",
+                 **kwargs):
+        super(Conv2DSubsampling, self).__init__(name=name, **kwargs)
+        assert reduction_factor % 2 == 0, "reduction_factor must be divisible by 2"
+        self.conv1 = tf.keras.layers.Conv2D(
+            filters=odim, kernel_size=3, strides=(reduction_factor // 2),
+            padding="same", name=f"{name}_1",
+            kernel_regularizer=kernel_regularizer,
+            bias_regularizer=bias_regularizer
+        )
+        self.conv2 = tf.keras.layers.Conv2D(
+            filters=odim, kernel_size=3, strides=2,
+            padding="same", name=f"{name}_2",
+            kernel_regularizer=kernel_regularizer,
+            bias_regularizer=bias_regularizer
+        )
+        self.linear = tf.keras.layers.Dense(
+            odim, name=f"{name}_linear",
+            kernel_regularizer=kernel_regularizer,
+            bias_regularizer=bias_regularizer
+        )
+        self.do = tf.keras.layers.Dropout(dropout, name=f"{name}_dropout")
+
+    def call(self, inputs, training=False, **kwargs):
+        outputs = self.conv1(inputs, training=training)
+        outputs = tf.nn.relu(outputs)
+        outputs = self.conv2(outputs, training=training)
+        outputs = tf.nn.relu(outputs)
+        outputs = merge_two_last_dims(outputs)
+        outputs = self.linear(outputs, training=training)
+        return self.do(outputs, training=training)
+
+    def get_config(self):
+        conf = super(Conv2DSubsampling, self).get_config()
+        conf.update(self.conv1.get_config())
+        conf.update(self.conv2.get_config())
         conf.update(self.linear.get_config())
         conf.update(self.do.get_config())
         return conf
@@ -231,7 +279,6 @@ class MHSAModule(tf.keras.layers.Layer):
                  name="mhsa_module",
                  **kwargs):
         super(MHSAModule, self).__init__(name=name, **kwargs)
-        self.pe = PositionalEncoding(name=f"{name}_pe")
         self.ln = tf.keras.layers.LayerNormalization(
             name=f"{name}_ln",
             gamma_regularizer=kernel_regularizer,
@@ -258,12 +305,12 @@ class MHSAModule(tf.keras.layers.Layer):
         self.mha_type = mha_type
 
     def call(self, inputs, training=False, **kwargs):
+        inputs, pos = inputs  # pos is positional encoding
         outputs = self.ln(inputs, training=training)
-        pe = self.pe(outputs)
         if self.mha_type == "relmha":
-            outputs = self.mha([outputs, outputs, outputs, pe], training=training)
+            outputs = self.mha([outputs, outputs, outputs, pos], training=training)
         else:
-            outputs = outputs + pe
+            outputs = outputs + pos
             outputs = self.mha([outputs, outputs, outputs], training=training)
         outputs = self.do(outputs, training=training)
         outputs = self.res_add([inputs, outputs])
@@ -272,9 +319,8 @@ class MHSAModule(tf.keras.layers.Layer):
     def get_config(self):
         conf = super(MHSAModule, self).get_config()
         conf.update({"mha_type": self.mha_type})
-        conf.update(self.pe.get_config())
         conf.update(self.ln.get_config())
-        conf.update(self.rpmha.get_config())
+        conf.update(self.mha.get_config())
         conf.update(self.do.get_config())
         conf.update(self.res_add.get_config())
         return conf
@@ -398,8 +444,9 @@ class ConformerBlock(tf.keras.layers.Layer):
         )
 
     def call(self, inputs, training=False, **kwargs):
+        inputs, pos = inputs  # pos is positional encoding
         outputs = self.ffm1(inputs, training=training)
-        outputs = self.mhsam(outputs, training=training)
+        outputs = self.mhsam([outputs, pos], training=training)
         outputs = self.convm(outputs, training=training)
         outputs = self.ffm2(outputs, training=training)
         outputs = self.ln(outputs, training=training)
@@ -434,21 +481,22 @@ class ConformerEncoder(tf.keras.Model):
                  **kwargs):
         super(ConformerEncoder, self).__init__(name=name, **kwargs)
         if subsampling == "vgg1l":
-            self.conv_subsampling = VGG1L(
-                odim=dmodel, reduction_factor=reduction_factor,
-                dropout=dropout, name=f"{name}_subsampling",
-                kernel_regularizer=kernel_regularizer,
-                bias_regularizer=bias_regularizer
-            )
+            subsampling_class = VGG1L
         elif subsampling == "vgg2l":
-            self.conv_subsampling = VGG2L(
-                odim=dmodel, reduction_factor=reduction_factor,
-                dropout=dropout, name=f"{name}_subsampling",
-                kernel_regularizer=kernel_regularizer,
-                bias_regularizer=bias_regularizer
-            )
+            subsampling_class = VGG2L
+        elif subsampling == "conv2d":
+            subsampling_class = Conv2DSubsampling
         else:
-            raise ValueError("subsampling must be eight 'vgg1l' or 'vgg2l'")
+            raise ValueError("subsampling must be eight 'conv2d', 'vgg1l' or 'vgg2l'")
+
+        self.conv_subsampling = subsampling_class(
+            odim=dmodel, reduction_factor=reduction_factor,
+            dropout=dropout, name=f"{name}_subsampling",
+            kernel_regularizer=kernel_regularizer,
+            bias_regularizer=bias_regularizer
+        )
+
+        self.pe = PositionalEncoding(name=f"{name}_pe")
 
         self.conformer_blocks = []
         for i in range(num_blocks):
@@ -470,13 +518,15 @@ class ConformerEncoder(tf.keras.Model):
     def call(self, inputs, training=False, **kwargs):
         # input with shape [B, T, V1, V2]
         outputs = self.conv_subsampling(inputs, training=training)
+        pe = self.pe(outputs)
         for cblock in self.conformer_blocks:
-            outputs = cblock(outputs, training=training)
+            outputs = cblock([outputs, pe], training=training)
         return outputs
 
     def get_config(self):
         conf = super(ConformerEncoder, self).get_config()
         conf.update(self.conv_subsampling.get_config())
+        conf.update(self.pe.get_config())
         for cblock in self.conformer_blocks:
             conf.update(cblock.get_config())
         return conf

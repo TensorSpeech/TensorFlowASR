@@ -31,7 +31,7 @@ decoder_config:
 
 model_config:
   name: conformer
-  subsampling: vgg2l
+  subsampling: conv2d
   dmodel: 144
   reduction_factor: 4
   num_blocks: 16
@@ -41,7 +41,7 @@ model_config:
   kernel_size: 32
   fc_factor: 0.5
   dropout: 0.1
-  embed_dim: 320
+  embed_dim: 512
   embed_dropout: 0.1
   num_lstms: 1
   lstm_units: 320

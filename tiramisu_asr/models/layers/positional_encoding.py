@@ -17,9 +17,6 @@ from ...utils.utils import shape_list
 
 
 class PositionalEncoding(tf.keras.layers.Layer):
-    def __init__(self, name="pos_enc", **kwargs):
-        super(PositionalEncoding, self).__init__(name=name, **kwargs)
-
     def build(self, input_shape):
         dmodel = input_shape[-1]
         assert dmodel % 2 == 0, f"Input last dim must be even: {dmodel}"
