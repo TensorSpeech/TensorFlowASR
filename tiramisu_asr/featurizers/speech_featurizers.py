@@ -19,7 +19,6 @@ import numpy as np
 import librosa
 import soundfile as sf
 import tensorflow as tf
-import gammatone.fftweight as gam_w
 
 from ..utils.utils import log10
 from .gammatone import fft_weights
@@ -356,14 +355,14 @@ class NumpySpeechFeaturizer(SpeechFeaturizer):
     def compute_log_gammatone_spectrogram(self, signal: np.ndarray) -> np.ndarray:
         S = self.stft(signal)
 
-        gammatone = gam_w.fft_weights(self.nfft, self.sample_rate,
-                                      self.num_feature_bins, width=1.0,
-                                      fmin=0, fmax=int(self.sample_rate / 2),
-                                      maxlen=(self.nfft / 2 + 1))
+        gammatone = fft_weights(self.nfft, self.sample_rate,
+                                self.num_feature_bins, width=1.0,
+                                fmin=0, fmax=int(self.sample_rate / 2),
+                                maxlen=(self.nfft / 2 + 1))
 
-        gammatone = gammatone[0].astype(np.float32)
+        gammatone = gammatone.numpy().astype(np.float32)
 
-        gammatone_spectrogram = np.dot(S.T, gammatone.T)
+        gammatone_spectrogram = np.dot(S.T, gammatone)
 
         return self.power_to_db(gammatone_spectrogram)
 

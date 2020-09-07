@@ -18,7 +18,7 @@ with open("README.md", "r") as fh:
     long_description = fh.read()
 
 requirements = [
-    "tensorflow>=2.2.0",
+    "tensorflow>=2.3.0",
     "tensorflow-addons>=0.10.0",
     "setuptools>=47.1.1",
     "librosa>=0.7.2",
@@ -31,8 +31,7 @@ requirements = [
     "numba==0.49.1",
     "tqdm>=4.47.0",
     "colorama>=0.4.3",
-    "nlpaug>=0.0.14",
-    "gammatone>=1.0"
+    "nlpaug>=0.0.14"
 ]
 
 setuptools.setup(

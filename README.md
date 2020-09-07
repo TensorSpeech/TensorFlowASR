@@ -5,7 +5,7 @@
   <img alt="GitHub" src="https://img.shields.io/github/license/usimarit/TiramisuASR?style=for-the-badge&logo=apache">
 </a>
 <img alt="python" src="https://img.shields.io/badge/python-%3E%3D3.6-blue?style=for-the-badge&logo=python">
-<img alt="tensorflow" src="https://img.shields.io/badge/tensorflow-%3E%3D2.2.0-orange?style=for-the-badge&logo=tensorflow">
+<img alt="tensorflow" src="https://img.shields.io/badge/tensorflow-%3E%3D2.3.0-orange?style=for-the-badge&logo=tensorflow">
 <img alt="ubuntu" src="https://img.shields.io/badge/ubuntu-%3E%3D18.04-blueviolet?style=for-the-badge&logo=ubuntu">
 </p>
 </h1>
@@ -39,8 +39,6 @@ TiramisuASR implements some speech recognition and speech enhancement architectu
 - Tensorflow 2.2+: `pip install tensorflow`
 
 ## Setup Environment and Datasets
-
-Install gammatone: `pip3 install git+https://github.com/detly/gammatone.git`
 
 Install tensorflow: `pip3 install tensorflow` or `pip3 install tf-nightly` (for using tflite)
 
