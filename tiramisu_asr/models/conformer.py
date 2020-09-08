@@ -17,7 +17,7 @@ import tensorflow as tf
 from .activations import GLU
 from .transducer import Transducer
 from ..utils.utils import merge_two_last_dims
-from .layers.positional_encoding import PositionalEncoding
+from .layers.positional_encoding import PositionalEncodingConcat
 from .layers.multihead_attention import MultiHeadAttention, RelPositionMultiHeadAttention
 
 L2 = tf.keras.regularizers.l2(1e-6)
@@ -496,7 +496,7 @@ class ConformerEncoder(tf.keras.Model):
             bias_regularizer=bias_regularizer
         )
 
-        self.pe = PositionalEncoding(name=f"{name}_pe")
+        self.pe = PositionalEncodingConcat(name=f"{name}_pe")
 
         self.conformer_blocks = []
         for i in range(num_blocks):

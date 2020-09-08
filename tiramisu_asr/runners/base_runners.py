@@ -217,8 +217,7 @@ class BaseTrainer(BaseRunner):
             self.train_progbar.update(1)
             train_steps += 1
 
-            # Run logging
-            self._check_log_interval()
+            # Run save checkpoint
             self._check_save_interval()
 
             # Print epoch info
@@ -227,6 +226,9 @@ class BaseTrainer(BaseRunner):
 
             # Print train info to progress bar
             self._print_train_metrics(self.train_progbar)
+
+            # Run logging
+            self._check_log_interval()
 
             # Run evaluation
             self._check_eval_interval()

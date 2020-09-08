@@ -14,10 +14,10 @@
 
 import tensorflow as tf
 import matplotlib.pyplot as plt
-from tiramisu_asr.models.layers.positional_encoding import PositionalEncoding
+from tiramisu_asr.models.layers.positional_encoding import PositionalEncodingConcat
 from tiramisu_asr.models.layers.multihead_attention import RelPositionMultiHeadAttention
 
-pos_encoding = PositionalEncoding.encode(500, 144)
+pos_encoding = PositionalEncodingConcat.encode(500, 144)
 print(pos_encoding.shape)
 
 plt.pcolormesh(pos_encoding[0], cmap='RdBu')
@@ -27,17 +27,17 @@ plt.ylabel('Position')
 plt.colorbar()
 plt.show()
 
-rel = tf.ones([1, 1, 20, 10])
+rel = tf.constant([[1, 2, 3], [4, 5, 6], [7, 8, 9]])[None, None, ...]
 rel_shift = RelPositionMultiHeadAttention.relative_shift(rel)
 print(tf.reduce_all(tf.equal(rel, rel_shift)))
 
 plt.figure(figsize=(15, 5))
 
 plt.subplot(2, 1, 1)
-plt.imshow(tf.transpose(rel[0][0]))
+plt.imshow(rel[0][0])
 plt.colorbar()
 
 plt.subplot(2, 1, 2)
-plt.imshow(tf.transpose(rel_shift[0][0]))
+plt.imshow(rel_shift[0][0])
 plt.colorbar()
 plt.show()
