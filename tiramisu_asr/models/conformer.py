@@ -28,6 +28,7 @@ class VGG2L(tf.keras.layers.Layer):
                  odim: int,
                  reduction_factor: int = 4,
                  dropout: float = 0.0,
+                 kernel_size: int or list or tuple = 3,
                  kernel_regularizer=L2,
                  bias_regularizer=L2,
                  name="vgg2l_subsampling",
@@ -35,13 +36,13 @@ class VGG2L(tf.keras.layers.Layer):
         super(VGG2L, self).__init__(name=name, **kwargs)
         assert reduction_factor % 2 == 0, "reduction_factor must be divisible by 2"
         self.conv1 = tf.keras.layers.Conv2D(
-            filters=64, kernel_size=3, strides=1,
+            filters=64, kernel_size=kernel_size, strides=1,
             padding="same", name=f"{name}_conv_1",
             kernel_regularizer=kernel_regularizer,
             bias_regularizer=bias_regularizer
         )
         self.conv2 = tf.keras.layers.Conv2D(
-            filters=64, kernel_size=3, strides=1,
+            filters=64, kernel_size=kernel_size, strides=1,
             padding="same", name=f"{name}_conv_2",
             kernel_regularizer=kernel_regularizer,
             bias_regularizer=bias_regularizer
@@ -51,13 +52,13 @@ class VGG2L(tf.keras.layers.Layer):
             padding="same", name=f"{name}_maxpool_1"
         )
         self.conv3 = tf.keras.layers.Conv2D(
-            filters=128, kernel_size=3, strides=1,
+            filters=128, kernel_size=kernel_size, strides=1,
             padding="same", name=f"{name}_conv_3",
             kernel_regularizer=kernel_regularizer,
             bias_regularizer=bias_regularizer
         )
         self.conv4 = tf.keras.layers.Conv2D(
-            filters=128, kernel_size=3, strides=1,
+            filters=128, kernel_size=kernel_size, strides=1,
             padding="same", name=f"{name}_conv_4",
             kernel_regularizer=kernel_regularizer,
             bias_regularizer=bias_regularizer
@@ -66,12 +67,6 @@ class VGG2L(tf.keras.layers.Layer):
             pool_size=(2, 2),
             padding="same", name=f"{name}_maxpool_2"
         )
-        self.linear = tf.keras.layers.Dense(
-            odim, name=f"{name}_linear",
-            kernel_regularizer=kernel_regularizer,
-            bias_regularizer=bias_regularizer
-        )
-        self.do = tf.keras.layers.Dropout(dropout, name=f"{name}_dropout")
 
     def call(self, inputs, training=False, **kwargs):
         outputs = self.conv1(inputs, training=training)
@@ -86,9 +81,7 @@ class VGG2L(tf.keras.layers.Layer):
         outputs = tf.nn.relu(outputs)
         outputs = self.maxpool2(outputs, training=training)
 
-        outputs = merge_two_last_dims(outputs)
-        outputs = self.linear(outputs, training=training)
-        return self.do(outputs, training=training)
+        return merge_two_last_dims(outputs)
 
     def get_config(self):
         conf = super(VGG2L, self).get_config()
@@ -98,118 +91,77 @@ class VGG2L(tf.keras.layers.Layer):
         conf.update(self.conv3.get_config())
         conf.update(self.conv4.get_config())
         conf.update(self.maxpool2.get_config())
-        conf.update(self.linear.get_config())
-        conf.update(self.do.get_config())
         return conf
 
 
-class VGG1L(tf.keras.layers.Layer):
+class Conv2Subsampling(tf.keras.layers.Layer):
     def __init__(self,
                  odim: int,
                  reduction_factor: int = 4,
                  dropout: float = 0.0,
-                 kernel_regularizer=L2,
-                 bias_regularizer=L2,
-                 name="vgg1l_subsampling",
-                 **kwargs):
-        super(VGG1L, self).__init__(name=name, **kwargs)
-        assert reduction_factor % 2 == 0, "reduction_factor must be divisible by 2"
-        self.conv1 = tf.keras.layers.Conv2D(
-            filters=odim, kernel_size=3, strides=1,
-            padding="same", name=f"{name}_1",
-            kernel_regularizer=kernel_regularizer,
-            bias_regularizer=bias_regularizer
-        )
-        self.maxpool1 = tf.keras.layers.MaxPool2D(
-            pool_size=(reduction_factor // 2, 2),
-            padding="same", name=f"{name}_maxpool_1"
-        )
-        self.conv2 = tf.keras.layers.Conv2D(
-            filters=odim, kernel_size=3, strides=1,
-            padding="same", name=f"{name}_2",
-            kernel_regularizer=kernel_regularizer,
-            bias_regularizer=bias_regularizer
-        )
-        self.maxpool2 = tf.keras.layers.MaxPool2D(
-            pool_size=(2, 2),
-            padding="same", name=f"{name}_maxpool_2"
-        )
-        self.linear = tf.keras.layers.Dense(
-            odim, name=f"{name}_linear",
-            kernel_regularizer=kernel_regularizer,
-            bias_regularizer=bias_regularizer
-        )
-        self.do = tf.keras.layers.Dropout(dropout, name=f"{name}_dropout")
-
-    def call(self, inputs, training=False, **kwargs):
-        outputs = self.conv1(inputs, training=training)
-        outputs = tf.nn.relu(outputs)
-        outputs = self.maxpool1(outputs, training=training)
-
-        outputs = self.conv2(outputs, training=training)
-        outputs = tf.nn.relu(outputs)
-        outputs = self.maxpool2(outputs, training=training)
-
-        outputs = merge_two_last_dims(outputs)
-        outputs = self.linear(outputs, training=training)
-        return self.do(outputs, training=training)
-
-    def get_config(self):
-        conf = super(VGG1L, self).get_config()
-        conf.update(self.conv1.get_config())
-        conf.update(self.maxpool1.get_config())
-        conf.update(self.conv2.get_config())
-        conf.update(self.maxpool2.get_config())
-        conf.update(self.linear.get_config())
-        conf.update(self.do.get_config())
-        return conf
-
-
-class Conv2DSubsampling(tf.keras.layers.Layer):
-    def __init__(self,
-                 odim: int,
-                 reduction_factor: int = 4,
-                 dropout: float = 0.0,
+                 kernel_size: int or list or tuple = 3,
                  kernel_regularizer=L2,
                  bias_regularizer=L2,
                  name="conv2d_subsampling",
                  **kwargs):
-        super(Conv2DSubsampling, self).__init__(name=name, **kwargs)
+        super(Conv2Subsampling, self).__init__(name=name, **kwargs)
         assert reduction_factor % 2 == 0, "reduction_factor must be divisible by 2"
         self.conv1 = tf.keras.layers.Conv2D(
-            filters=odim, kernel_size=3, strides=(reduction_factor // 2),
+            filters=odim, kernel_size=kernel_size,
+            strides=(reduction_factor // 2),
             padding="same", name=f"{name}_1",
             kernel_regularizer=kernel_regularizer,
             bias_regularizer=bias_regularizer
         )
         self.conv2 = tf.keras.layers.Conv2D(
-            filters=odim, kernel_size=3, strides=2,
+            filters=odim, kernel_size=kernel_size, strides=2,
             padding="same", name=f"{name}_2",
             kernel_regularizer=kernel_regularizer,
             bias_regularizer=bias_regularizer
         )
-        self.linear = tf.keras.layers.Dense(
-            odim, name=f"{name}_linear",
-            kernel_regularizer=kernel_regularizer,
-            bias_regularizer=bias_regularizer
-        )
-        self.do = tf.keras.layers.Dropout(dropout, name=f"{name}_dropout")
 
     def call(self, inputs, training=False, **kwargs):
         outputs = self.conv1(inputs, training=training)
         outputs = tf.nn.relu(outputs)
         outputs = self.conv2(outputs, training=training)
         outputs = tf.nn.relu(outputs)
-        outputs = merge_two_last_dims(outputs)
-        outputs = self.linear(outputs, training=training)
-        return self.do(outputs, training=training)
+        return merge_two_last_dims(outputs)
 
     def get_config(self):
-        conf = super(Conv2DSubsampling, self).get_config()
+        conf = super(Conv2Subsampling, self).get_config()
         conf.update(self.conv1.get_config())
         conf.update(self.conv2.get_config())
-        conf.update(self.linear.get_config())
-        conf.update(self.do.get_config())
+        return conf
+
+
+class ConvSubsampling(tf.keras.layers.Layer):
+    def __init__(self,
+                 odim: int,
+                 reduction_factor: int = 4,
+                 dropout: float = 0.0,
+                 kernel_size: int or list or tuple = 3,
+                 kernel_regularizer=L2,
+                 bias_regularizer=L2,
+                 name="conv2d_subsampling",
+                 **kwargs):
+        super(ConvSubsampling, self).__init__(name=name, **kwargs)
+        assert reduction_factor % 2 == 0, "reduction_factor must be divisible by 2"
+        self.conv = tf.keras.layers.Conv2D(
+            filters=odim, kernel_size=kernel_size,
+            strides=(reduction_factor, 2),
+            padding="same", name=f"{name}_1",
+            kernel_regularizer=kernel_regularizer,
+            bias_regularizer=bias_regularizer
+        )
+
+    def call(self, inputs, training=False, **kwargs):
+        outputs = self.conv(inputs, training=training)
+        outputs = tf.nn.relu(outputs)
+        return merge_two_last_dims(outputs)
+
+    def get_config(self):
+        conf = super(ConvSubsampling, self).get_config()
+        conf.update(self.conv.get_config())
         return conf
 
 
@@ -338,15 +290,15 @@ class ConvModule(tf.keras.layers.Layer):
                  **kwargs):
         super(ConvModule, self).__init__(name=name, **kwargs)
         self.ln = tf.keras.layers.LayerNormalization()
-        self.pw_conv_1 = tf.keras.layers.Conv1D(
+        self.pw_conv_1 = tf.keras.layers.Conv2D(
             filters=2 * input_dim, kernel_size=1, strides=1,
-            padding="same", name=f"{name}_pw_conv_1",
+            padding="valid", name=f"{name}_pw_conv_1",
             kernel_regularizer=kernel_regularizer,
             bias_regularizer=bias_regularizer
         )
         self.glu = GLU(name=f"{name}_glu")
         self.dw_conv = tf.keras.layers.DepthwiseConv2D(
-            kernel_size=(1, kernel_size), strides=1,
+            kernel_size=(kernel_size, 1), strides=1,
             padding="same", name=f"{name}_dw_conv",
             depth_multiplier=depth_multiplier,
             depthwise_regularizer=kernel_regularizer,
@@ -359,9 +311,9 @@ class ConvModule(tf.keras.layers.Layer):
         )
         self.swish = tf.keras.layers.Activation(
             tf.keras.activations.swish, name=f"{name}_swish_activation")
-        self.pw_conv_2 = tf.keras.layers.Conv1D(
+        self.pw_conv_2 = tf.keras.layers.Conv2D(
             filters=input_dim, kernel_size=1, strides=1,
-            padding="same", name=f"{name}_pw_conv_2",
+            padding="valid", name=f"{name}_pw_conv_2",
             kernel_regularizer=kernel_regularizer,
             bias_regularizer=bias_regularizer
         )
@@ -370,14 +322,14 @@ class ConvModule(tf.keras.layers.Layer):
 
     def call(self, inputs, training=False, **kwargs):
         outputs = self.ln(inputs, training=training)
+        outputs = tf.expand_dims(outputs, axis=2)
         outputs = self.pw_conv_1(outputs, training=training)
         outputs = self.glu(outputs)
-        outputs = tf.expand_dims(outputs, axis=1)
         outputs = self.dw_conv(outputs, training=training)
-        outputs = tf.squeeze(outputs, axis=1)
         outputs = self.bn(outputs, training=training)
         outputs = self.swish(outputs)
         outputs = self.pw_conv_2(outputs, training=training)
+        outputs = tf.squeeze(outputs, axis=2)
         outputs = self.do(outputs, training=training)
         outputs = self.res_add([inputs, outputs])
         return outputs
@@ -464,7 +416,8 @@ class ConformerBlock(tf.keras.layers.Layer):
 
 class ConformerEncoder(tf.keras.Model):
     def __init__(self,
-                 subsampling="vgg2l",
+                 subsampling="conv",
+                 subsampling_kernel=3,
                  dmodel=144,
                  reduction_factor=4,
                  num_blocks=16,
@@ -480,23 +433,31 @@ class ConformerEncoder(tf.keras.Model):
                  name="conformer_encoder",
                  **kwargs):
         super(ConformerEncoder, self).__init__(name=name, **kwargs)
-        if subsampling == "vgg1l":
-            subsampling_class = VGG1L
-        elif subsampling == "vgg2l":
+        if subsampling == "vgg2l":
             subsampling_class = VGG2L
+        elif subsampling == "conv":
+            subsampling_class = ConvSubsampling
         elif subsampling == "conv2d":
-            subsampling_class = Conv2DSubsampling
+            subsampling_class = Conv2Subsampling
         else:
-            raise ValueError("subsampling must be eight 'conv2d', 'vgg1l' or 'vgg2l'")
+            raise ValueError("subsampling must be eight 'conv2', 'conv' or 'vgg2l'")
 
         self.conv_subsampling = subsampling_class(
             odim=dmodel, reduction_factor=reduction_factor,
+            kernel_size=subsampling_kernel,
             dropout=dropout, name=f"{name}_subsampling",
             kernel_regularizer=kernel_regularizer,
             bias_regularizer=bias_regularizer
         )
 
         self.pe = PositionalEncodingConcat(name=f"{name}_pe")
+
+        self.linear = tf.keras.layers.Dense(
+            dmodel, name=f"{name}_linear",
+            kernel_regularizer=kernel_regularizer,
+            bias_regularizer=bias_regularizer
+        )
+        self.do = tf.keras.layers.Dropout(dropout, name=f"{name}_dropout")
 
         self.conformer_blocks = []
         for i in range(num_blocks):
@@ -518,6 +479,8 @@ class ConformerEncoder(tf.keras.Model):
     def call(self, inputs, training=False, **kwargs):
         # input with shape [B, T, V1, V2]
         outputs = self.conv_subsampling(inputs, training=training)
+        outputs = self.linear(outputs, training=training)
+        outputs = self.do(outputs, training=training)
         pe = self.pe(outputs)
         for cblock in self.conformer_blocks:
             outputs = cblock([outputs, pe], training=training)
@@ -526,6 +489,8 @@ class ConformerEncoder(tf.keras.Model):
     def get_config(self):
         conf = super(ConformerEncoder, self).get_config()
         conf.update(self.conv_subsampling.get_config())
+        conf.update(self.linear.get_config())
+        conf.update(self.do.get_config())
         conf.update(self.pe.get_config())
         for cblock in self.conformer_blocks:
             conf.update(cblock.get_config())
@@ -534,7 +499,8 @@ class ConformerEncoder(tf.keras.Model):
 
 class Conformer(Transducer):
     def __init__(self,
-                 subsampling: str = "vgg2l",
+                 subsampling: str = "conv",
+                 subsampling_kernel: int or tuple or list = 3,
                  dmodel: int = 144,
                  reduction_factor: int = 4,
                  vocabulary_size: int = 29,
@@ -557,6 +523,7 @@ class Conformer(Transducer):
         super(Conformer, self).__init__(
             encoder=ConformerEncoder(
                 subsampling=subsampling,
+                subsampling_kernel=subsampling_kernel,
                 dmodel=dmodel,
                 reduction_factor=reduction_factor,
                 num_blocks=num_blocks,
