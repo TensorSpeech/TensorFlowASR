@@ -66,8 +66,6 @@ config = UserConfig(DEFAULT_YAML, args.config, learning=True)
 speech_featurizer = TFSpeechFeaturizer(config["speech_config"])
 text_featurizer = TextFeaturizer(config["decoder_config"])
 
-tf.random.set_seed(2020)
-
 ctc_trainer = CTCTrainer(text_featurizer,
                          config["learning_config"]["running_config"],
                          strategy=strategy)

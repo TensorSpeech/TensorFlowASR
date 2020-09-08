@@ -195,9 +195,6 @@ class BaseTrainer(BaseRunner):
         while not self._finished():
             self._train_epoch()
 
-        self.save_checkpoint()
-        self.save_model_weights()
-
         self.train_progbar.close()
         print("> Finish training")
 
@@ -316,7 +313,8 @@ class BaseTrainer(BaseRunner):
 
     def _check_log_interval(self):
         """Save log interval."""
-        if self.steps % self.config["log_interval_steps"] == 0:
+        if self.steps % self.config["log_interval_steps"] == 0 or \
+                self.steps >= self.total_train_steps:
             self._write_to_tensorboard(self.train_metrics, self.steps, stage="train")
             """Reset train metrics after save it to tensorboard."""
             for metric in self.train_metrics.keys():
@@ -324,7 +322,8 @@ class BaseTrainer(BaseRunner):
 
     def _check_save_interval(self):
         """Save log interval."""
-        if self.steps % self.config["save_interval_steps"] == 0:
+        if self.steps % self.config["save_interval_steps"] == 0 or \
+                self.steps >= self.total_train_steps:
             self.save_checkpoint()
             self.save_model_weights()
 

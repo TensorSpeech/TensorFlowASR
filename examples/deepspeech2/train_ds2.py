@@ -66,8 +66,6 @@ config = UserConfig(DEFAULT_YAML, args.config, learning=True)
 speech_featurizer = TFSpeechFeaturizer(config["speech_config"])
 text_featurizer = TextFeaturizer(config["decoder_config"])
 
-tf.random.set_seed(2020)
-
 if args.tfrecords:
     train_dataset = ASRTFRecordDataset(
         data_paths=config["learning_config"]["dataset_config"]["train_paths"],

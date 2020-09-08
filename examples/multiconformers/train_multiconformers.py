@@ -84,8 +84,6 @@ else:
 
 text_featurizer = TextFeaturizer(config["decoder_config"])
 
-tf.random.set_seed(2020)
-
 if args.tfrecords:
     train_dataset = MultiConformersTFRecordDataset(
         data_paths=config["learning_config"]["dataset_config"]["train_paths"],
