@@ -25,9 +25,8 @@ L2 = tf.keras.regularizers.l2(1e-6)
 
 class MultiConformers(Transducer):
     def __init__(self,
-                 subsampling: str = "conv2d",
+                 subsampling: dict,
                  dmodel: int = 144,
-                 reduction_factor: int = 4,
                  vocabulary_size: int = 29,
                  num_blocks: int = 16,
                  head_size: int = 36,
@@ -57,11 +56,9 @@ class MultiConformers(Transducer):
             bias_regularizer=bias_regularizer,
             name=name,
         )
-        self.time_reduction_factor = reduction_factor
         self.encoder_lms = ConformerEncoder(
             subsampling=subsampling,
             dmodel=dmodel,
-            reduction_factor=reduction_factor,
             num_blocks=num_blocks,
             head_size=head_size,
             num_heads=num_heads,
@@ -76,7 +73,6 @@ class MultiConformers(Transducer):
         self.encoder_lgs = ConformerEncoder(
             subsampling=subsampling,
             dmodel=dmodel,
-            reduction_factor=reduction_factor,
             num_blocks=num_blocks,
             head_size=head_size,
             num_heads=num_heads,
@@ -90,6 +86,7 @@ class MultiConformers(Transducer):
         )
         self.concat = tf.keras.layers.Concatenate(axis=-1, name=f"{name}_concat")
         self.encoder_joint = tf.keras.layers.Dense(dmodel, name=f"{name}_enc_joint")
+        self.time_reduction_factor = self.encoder_lms.conv_subsampling.time_reduction_factor
 
     def _build(self, lms_shape, lgs_shape):
         lms = tf.keras.Input(shape=lms_shape, dtype=tf.float32)

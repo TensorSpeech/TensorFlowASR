@@ -13,24 +13,22 @@
 # limitations under the License.
 """ Augmentation on spectrogram: http://arxiv.org/abs/1904.08779 """
 import numpy as np
+
+from nlpaug.flow import Sequential
+from nlpaug.util import Action
 from nlpaug.model.spectrogram import Spectrogram
+from nlpaug.augmenter.spectrogram import SpectrogramAugmenter
 
-
-# import tensorflow as tf
-# import tensorflow_addons as tfa
+# ---------------------------- FREQ MASKING ----------------------------
 
 
 class FreqMaskingModel(Spectrogram):
-    def __init__(self,
-                 num_masks: int = 1,
-                 mask_factor: int = 27):
+    def __init__(self, mask_factor: int = 27):
         """
         Args:
-            num_freq_mask: number of frequency masks, default 1
-            freq_mask_param: parameter F of frequency masking, default 10
+            freq_mask_param: parameter F of frequency masking
         """
         super(FreqMaskingModel, self).__init__()
-        self.num_masks = num_masks
         self.mask_factor = mask_factor
 
     def mask(self, data: np.ndarray) -> np.ndarray:
@@ -39,31 +37,54 @@ class FreqMaskingModel(Spectrogram):
         Args:
             spectrogram: shape (T, num_feature_bins, V)
         Returns:
-            a tensor that's applied freq masking
+            frequency masked spectrogram
         """
         spectrogram = data.copy()
-        for _ in range(self.num_masks):
-            freq = np.random.randint(0, self.mask_factor + 1)
-            freq = min(freq, spectrogram.shape[1])
-            freq0 = np.random.randint(0, spectrogram.shape[1] - freq + 1)
-            spectrogram[:, freq0:freq0 + freq, :] = 0  # masking
+        freq = np.random.randint(0, self.mask_factor + 1)
+        freq = min(freq, spectrogram.shape[1])
+        freq0 = np.random.randint(0, spectrogram.shape[1] - freq + 1)
+        spectrogram[:, freq0:freq0 + freq, :] = 0  # masking
         return spectrogram
 
 
-class TimeMaskingModel(Spectrogram):
+class FreqMaskingAugmenter(SpectrogramAugmenter):
     def __init__(self,
-                 num_masks: int = 1,
-                 mask_factor: int = 100,
-                 p_upperbound: float = 0.05):
+                 mask_factor=27,
+                 name="FreqMaskingAugmenter",
+                 verbose=0):
+        super(FreqMaskingAugmenter, self).__init__(
+            action=Action.SUBSTITUTE, name=name, device="cpu", verbose=verbose)
+        self.model = FreqMaskingModel(mask_factor)
+
+    def substitute(self, data):
+        return self.model.mask(data)
+
+
+class FreqMasking(SpectrogramAugmenter):
+    def __init__(self,
+                 num_masks=1,
+                 mask_factor=27,
+                 name="FreqMasking",
+                 verbose=0):
+        super(FreqMasking, self).__init__(
+            action=Action.SUBSTITUTE, name=name, device="cpu", verbose=verbose)
+        self.flow = Sequential([FreqMaskingAugmenter(mask_factor) for _ in range(num_masks)])
+
+    def substitute(self, data):
+        return self.flow.augment(data)
+
+# ---------------------------- TIME MASKING ----------------------------
+
+
+class TimeMaskingModel(Spectrogram):
+    def __init__(self, mask_factor: int = 100, p_upperbound: float = 1.0):
         """
         Args:
-            num_time_mask: number of time masks, default 1
-            time_mask_param: parameter W of time masking, default 50
+            time_mask_param: parameter W of time masking
             p_upperbound: an upperbound so that the number of masked time
-                steps must not exceed p_upperbound * total_time_steps, default 1.0
+                steps must not exceed p_upperbound * total_time_steps
         """
         super(TimeMaskingModel, self).__init__()
-        self.num_masks = num_masks
         self.mask_factor = mask_factor
         self.p_upperbound = p_upperbound
         assert 0.0 <= self.p_upperbound <= 1.0, "0.0 <= p_upperbound <= 1.0"
@@ -77,61 +98,40 @@ class TimeMaskingModel(Spectrogram):
             a tensor that's applied time masking
         """
         spectrogram = data.copy()
-        for _ in range(self.num_masks):
-            time = np.random.randint(0, self.mask_factor + 1)
-            time = min(time, spectrogram.shape[0])
-            time0 = np.random.randint(0, spectrogram.shape[0] - time + 1)
-            time = min(time, int(self.p_upperbound * spectrogram.shape[0]))
-            spectrogram[time0:time0 + time, :, :] = 0
+        time = np.random.randint(0, self.mask_factor + 1)
+        time = min(time, spectrogram.shape[0])
+        time0 = np.random.randint(0, spectrogram.shape[0] - time + 1)
+        time = min(time, int(self.p_upperbound * spectrogram.shape[0]))
+        spectrogram[time0:time0 + time, :, :] = 0
         return spectrogram
 
 
-# def time_warping(spectrogram: np.ndarray, time_warp_param: int = 50) -> np.ndarray:
-#     """
-#     Warping the spectrogram as image with 2 point along the middle
-#     horizontal line with a distance to the left or right
-#     :param spectrogram: shape (time_steps, num_feature_bins, 1)
-#     :param time_warp_param: parameter W of time warping, default 50
-#     :return: a tensor that's applied time warping
-#     """
-#     time_warp_param = time_warp_param \
-#         if 0 <= time_warp_param <= spectrogram.shape[0] \
-#         else spectrogram.shape[0]
-#     vertical = int(spectrogram.shape[1])
-#     # Choose a random source point
-#     a = time_warp_param
-#     b = spectrogram.shape[0] - time_warp_param
-#     if a > b:
-#         a, b = b, a
-#     h_source_point = np.random.randint(a, b)
-#     distance = int(np.random.uniform(0.0, time_warp_param + 1.0))
-#     direction = np.random.randint(1, 3)
-#     # Choose a random destination point
-#     h_dest_point = h_source_point + distance if direction == 1 \
-#        else h_source_point - distance
-#     h_dest_point = 0 if h_dest_point < 0 \
-#        else spectrogram.shape[0] if h_dest_point > spectrogram.shape[0] else h_dest_point
-#     if h_source_point == h_dest_point:
-#         return spectrogram
-#     # Expand to shape (1, time_steps, num_feature_bins, channels)
-#     spectrogram = tf.expand_dims(spectrogram, axis=0)
-#     spectrogram = tf.cast(spectrogram, dtype=tf.float32)
-#     # Convert to tensor with dtype=float32 to avoid TypeError
-#     source_control_point_locations = tf.constant(
-# [[[h_source_point, vertical], [h_source_point, 0], [h_source_point, vertical // 2]]],
-#                                                  dtype=tf.float32)
-#     dest_control_point_locations = tf.constant(
-# [[[h_dest_point, vertical], [h_dest_point, 0], [h_dest_point, vertical // 2]]],
-#                                                dtype=tf.float32)
-#     try:
-#         spectrogram, _ = tfa.image.sparse_image_warp(
-#             image=spectrogram,
-#             source_control_point_locations=source_control_point_locations,
-#             dest_control_point_locations=dest_control_point_locations,
-#             interpolation_order=2,
-#             num_boundary_points=1
-#         )
-#     except Exception:
-#         pass
-#     spectrogram = tf.squeeze(spectrogram, axis=0)
-#     return spectrogram.numpy()
+class TimeMaskingAugmenter(SpectrogramAugmenter):
+    def __init__(self,
+                 mask_factor=100,
+                 p_upperbound=1,
+                 name="TimeMaskingAugmenter",
+                 verbose=0):
+        super(TimeMaskingAugmenter, self).__init__(
+            action=Action.SUBSTITUTE, name=name, device="cpu", verbose=verbose)
+        self.model = TimeMaskingModel(mask_factor, p_upperbound)
+
+    def substitute(self, data):
+        return self.model.mask(data)
+
+
+class TimeMasking(SpectrogramAugmenter):
+    def __init__(self,
+                 num_masks=1,
+                 mask_factor=100,
+                 p_upperbound=1,
+                 name="TimeMasking",
+                 verbose=0):
+        super(TimeMasking, self).__init__(
+            action=Action.SUBSTITUTE, name=name, device="cpu", verbose=verbose)
+        self.flow = Sequential([
+            TimeMaskingAugmenter(mask_factor, p_upperbound) for _ in range(num_masks)
+        ])
+
+    def substitute(self, data):
+        return self.flow.augment(data)

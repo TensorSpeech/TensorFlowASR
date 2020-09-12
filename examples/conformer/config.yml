@@ -31,10 +31,12 @@ decoder_config:
 
 model_config:
   name: conformer
-  subsampling: conv
-  subsampling_kernel: 3
+  subsampling:
+    type: conv2
+    filters: 128
+    kernel_size: [7, 7]
+    strides: [2, 2]
   dmodel: 144
-  reduction_factor: 4
   num_blocks: 16
   head_size: 36
   num_heads: 4
@@ -49,7 +51,15 @@ model_config:
   joint_dim: 320
 
 learning_config:
-  augmentations: null
+  augmentations:
+    after:
+      time_masking:
+        num_masks: 10
+        mask_factor: 100
+        p_upperbound: 0.05
+      freq_masking:
+        num_masks: 1
+        mask_factor: 27
 
   dataset_config:
     train_paths:
