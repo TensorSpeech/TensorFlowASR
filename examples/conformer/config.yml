@@ -47,8 +47,10 @@ model_config:
   dropout: 0.1
   embed_dim: 320
   embed_dropout: 0.1
-  num_lstms: 1
-  lstm_units: 320
+  num_rnns: 1
+  rnn_units: 320
+  rnn_type: lstm
+  layer_norm: True
   joint_dim: 320
 
 learning_config:

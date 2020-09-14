@@ -11,12 +11,13 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+""" https://arxiv.org/pdf/1811.06621.pdf """
 
 import collections
 import tensorflow as tf
 
 from . import Model
-from ..utils.utils import get_shape_invariants
+from ..utils.utils import get_shape_invariants, get_rnn
 from ..featurizers.speech_featurizers import TFSpeechFeaturizer
 from ..featurizers.text_featurizers import TextFeaturizer
 from .layers.embedding import Embedding
@@ -32,13 +33,15 @@ BeamHypothesis = collections.namedtuple(
 )
 
 
-class TransducerPrediction(tf.keras.layers.Layer):
+class TransducerPrediction(tf.keras.Model):
     def __init__(self,
                  vocabulary_size: int,
                  embed_dim: int,
                  embed_dropout: float = 0,
-                 num_lstms: int = 1,
-                 lstm_units: int = 512,
+                 num_rnns: int = 1,
+                 rnn_units: int = 512,
+                 rnn_type: str = "lstm",
+                 layer_norm=True,
                  kernel_regularizer=None,
                  bias_regularizer=None,
                  name="transducer_prediction",
@@ -47,28 +50,33 @@ class TransducerPrediction(tf.keras.layers.Layer):
         self.embed = Embedding(vocabulary_size, embed_dim,
                                regularizer=kernel_regularizer, name=f"{name}_embedding")
         self.do = tf.keras.layers.Dropout(embed_dropout, name=f"{name}_dropout")
-        self.lstms = []
-        # lstms units must equal (for using beam search)
-        for i in range(num_lstms):
-            lstm = tf.keras.layers.LSTM(
-                units=lstm_units, return_sequences=True,
+        # Initialize rnn layers
+        RNN = get_rnn(rnn_type)
+        self.rnns = []
+        for i in range(num_rnns):
+            rnn = RNN(
+                units=rnn_units, return_sequences=True,
                 name=f"{name}_lstm_{i}", return_state=True,
                 kernel_regularizer=kernel_regularizer,
                 bias_regularizer=bias_regularizer
             )
-            self.lstms.append(lstm)
+            if layer_norm:
+                ln = tf.keras.layers.LayerNormalization(name=f"{name}_ln_{i}")
+            else:
+                ln = None
+            self.rnns.append({"rnn": rnn, "ln": ln})
 
     def get_initial_state(self):
         """Get zeros states
 
         Returns:
-            tf.Tensor: states having shape [num_lstms, 2, B, P]
+            tf.Tensor: states having shape [num_rnns, 1 or 2, B, P]
         """
         states = []
-        for lstm in self.lstms:
+        for rnn in self.rnns:
             states.append(
                 tf.stack(
-                    lstm.get_initial_state(
+                    rnn["rnn"].get_initial_state(
                         tf.zeros([1, 1, 1], dtype=tf.float32)
                     ), axis=0
                 )
@@ -80,8 +88,11 @@ class TransducerPrediction(tf.keras.layers.Layer):
         # use tf.gather_nd instead of tf.gather for tflite conversion
         outputs = self.embed(inputs, training=training)
         outputs = self.do(outputs, training=training)
-        for lstm in self.lstms:
-            outputs, _, _ = lstm(outputs, training=training)
+        for rnn in self.rnns:
+            outputs = rnn["rnn"](outputs, training=training)
+            outputs = outputs[0]
+            if rnn["ln"] is not None:
+                outputs = rnn["ln"](outputs, training=training)
         return outputs
 
     def recognize(self, inputs, states):
@@ -98,23 +109,26 @@ class TransducerPrediction(tf.keras.layers.Layer):
         outputs = self.embed(inputs, training=False)
         outputs = self.do(outputs, training=False)
         new_states = []
-        for i, lstm in enumerate(self.lstms):
-            outputs = lstm(outputs, training=False,
-                           initial_state=tf.unstack(states[i], axis=0))
+        for i, rnn in enumerate(self.rnns):
+            outputs = rnn["rnn"](outputs, training=False,
+                                 initial_state=tf.unstack(states[i], axis=0))
             new_states.append(tf.stack(outputs[1:]))
             outputs = outputs[0]
+            if rnn["ln"] is not None:
+                outputs = rnn["ln"](outputs, training=False)
         return outputs, tf.stack(new_states, axis=0)
 
     def get_config(self):
-        conf = super(TransducerPrediction, self).get_config()
-        conf.update(self.embed.get_config())
+        conf = self.embed.get_config()
         conf.update(self.do.get_config())
-        for lstm in self.lstms:
-            conf.update(lstm.get_config())
+        for rnn in self.rnns:
+            conf.update(rnn["rnn"].get_config())
+            if rnn["ln"] is not None:
+                conf.update(rnn["ln"].get_config())
         return conf
 
 
-class TransducerJoint(tf.keras.layers.Layer):
+class TransducerJoint(tf.keras.Model):
     def __init__(self,
                  vocabulary_size: int,
                  joint_dim: int = 1024,
@@ -142,17 +156,16 @@ class TransducerJoint(tf.keras.layers.Layer):
         # enc has shape [B, T, E]
         # pred has shape [B, U, P]
         enc_out, pred_out = inputs
+        enc_out = self.ffn_enc(enc_out, training=training)  # [B, T, E] => [B, T, V]
+        pred_out = self.ffn_pred(pred_out, training=training)  # [B, U, P] => [B, U, V]
         enc_out = tf.expand_dims(enc_out, axis=2)
         pred_out = tf.expand_dims(pred_out, axis=1)
-        enc_out = self.ffn_enc(enc_out, training=training)  # [B, T, 1, E] => [B, T, 1, V]
-        pred_out = self.ffn_pred(pred_out, training=training)  # [B, 1, U, P] => [B, 1, U, V]
         outputs = tf.nn.tanh(enc_out + pred_out)  # => [B, T, U, V]
         outputs = self.ffn_out(outputs, training=training)
         return outputs
 
     def get_config(self):
-        conf = super(TransducerJoint, self).get_config()
-        conf.update(self.ffn_enc.get_config())
+        conf = self.ffn_enc.get_config()
         conf.update(self.ffn_pred.get_config())
         conf.update(self.ffn_out.get_config())
         return conf
@@ -166,8 +179,10 @@ class Transducer(Model):
                  vocabulary_size: int,
                  embed_dim: int = 512,
                  embed_dropout: float = 0,
-                 num_lstms: int = 1,
-                 lstm_units: int = 320,
+                 num_rnns: int = 1,
+                 rnn_units: int = 320,
+                 rnn_type: str = "lstm",
+                 layer_norm: bool = True,
                  joint_dim: int = 1024,
                  kernel_regularizer=None,
                  bias_regularizer=None,
@@ -179,8 +194,10 @@ class Transducer(Model):
             vocabulary_size=vocabulary_size,
             embed_dim=embed_dim,
             embed_dropout=embed_dropout,
-            num_lstms=num_lstms,
-            lstm_units=lstm_units,
+            num_rnns=num_rnns,
+            rnn_units=rnn_units,
+            rnn_type=rnn_type,
+            layer_norm=layer_norm,
             kernel_regularizer=kernel_regularizer,
             bias_regularizer=bias_regularizer,
             name=f"{name}_prediction"
@@ -201,6 +218,8 @@ class Transducer(Model):
     def summary(self, line_length=None, **kwargs):
         if self.encoder is not None:
             self.encoder.summary(line_length=line_length, **kwargs)
+        self.predict_net.summary(line_length=line_length, **kwargs)
+        self.joint_net.summary(line_length=line_length, **kwargs)
         super(Transducer, self).summary(line_length=line_length, **kwargs)
 
     def add_featurizers(self,
@@ -262,8 +281,7 @@ class Transducer(Model):
         with tf.name_scope(f"{self.name}_decoder"):
             encoded = tf.reshape(encoded, [1, 1, -1])  # [E] => [1, 1, E]
             predicted = tf.reshape(predicted, [1, 1])  # [] => [1, 1]
-            y, new_states = self.predict_net.recognize(predicted, states)
-            # [1, 1, P], states shape
+            y, new_states = self.predict_net.recognize(predicted, states)  # [1, 1, P], states
             ytu = tf.nn.log_softmax(self.joint_net([encoded, y], training=False))  # [1, 1, V]
             ytu = tf.squeeze(ytu, axis=None)  # [1, 1, V] => [V]
             return ytu, new_states
@@ -316,11 +334,13 @@ class Transducer(Model):
         Function to convert to tflite using greedy decoding (default streaming mode)
         Args:
             signal: tf.Tensor with shape [None] indicating a single audio signal
+            predicted: last predicted character with shape []
+            states: lastest rnn states with shape [num_rnns, 1 or 2, 1, P]
 
         Return:
             transcript: tf.Tensor of Unicode Code Points with shape [None] and dtype tf.int32
             predicted: last predicted character with shape []
-            states: lastest lstm states with shape [num_lstms, 2, 1, P]
+            states: lastest rnn states with shape [num_rnns, 1 or 2, 1, P]
         """
         features = self.speech_featurizer.tf_extract(signal)
         hypothesis = self.perform_greedy(features, predicted, states, swap_memory=False)
@@ -356,7 +376,8 @@ class Transducer(Model):
 
             def body(time, total, encoded, hypothesis):
                 ytu, new_states = self.decoder_inference(
-                    encoded=encoded[time],
+                    # avoid using [index] in tflite
+                    encoded=tf.gather_nd(encoded, tf.expand_dims(time, axis=-1)),
                     predicted=hypothesis.prediction.read(hypothesis.index),
                     states=hypothesis.states
                 )

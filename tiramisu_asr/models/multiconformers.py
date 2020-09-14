@@ -23,9 +23,27 @@ from ..utils.utils import get_shape_invariants
 L2 = tf.keras.regularizers.l2(1e-6)
 
 
+class Concatenation(tf.keras.layers.Layer):
+    def __init__(self, dmodel, **kwargs):
+        super(Concatenation, self).__init__(**kwargs)
+        self.concat = tf.keras.layers.Concatenate(axis=-1, name=f"{self.name}_concat")
+        self.joint = tf.keras.layers.Dense(dmodel, name=f"{self.name}_joint")
+
+    def call(self, inputs, training=False):
+        outputs = self.concat(inputs)
+        return self.joint(outputs, training=training)
+
+    def get_config(self):
+        conf = super(Concatenation).get_config()
+        conf.update(self.concat.get_config())
+        conf.update(self.joint.get_config())
+        return conf
+
+
 class MultiConformers(Transducer):
     def __init__(self,
                  subsampling: dict,
+                 positional_encoding: str = "sinusoid",
                  dmodel: int = 144,
                  vocabulary_size: int = 29,
                  num_blocks: int = 16,
@@ -37,8 +55,11 @@ class MultiConformers(Transducer):
                  dropout: float = 0,
                  embed_dim: int = 512,
                  embed_dropout: int = 0,
-                 num_lstms: int = 1,
-                 lstm_units: int = 320,
+                 num_rnns: int = 1,
+                 rnn_units: int = 320,
+                 rnn_type: str = "lstm",
+                 layer_norm: bool = True,
+                 encoder_joint_mode: str = "concat",
                  joint_dim: int = 1024,
                  kernel_regularizer=L2,
                  bias_regularizer=L2,
@@ -49,8 +70,10 @@ class MultiConformers(Transducer):
             vocabulary_size=vocabulary_size,
             embed_dim=embed_dim,
             embed_dropout=embed_dropout,
-            num_lstms=num_lstms,
-            lstm_units=lstm_units,
+            num_rnns=num_rnns,
+            rnn_units=rnn_units,
+            rnn_type=rnn_type,
+            layer_norm=layer_norm,
             joint_dim=joint_dim,
             kernel_regularizer=kernel_regularizer,
             bias_regularizer=bias_regularizer,
@@ -58,6 +81,7 @@ class MultiConformers(Transducer):
         )
         self.encoder_lms = ConformerEncoder(
             subsampling=subsampling,
+            positional_encoding=positional_encoding,
             dmodel=dmodel,
             num_blocks=num_blocks,
             head_size=head_size,
@@ -72,6 +96,7 @@ class MultiConformers(Transducer):
         )
         self.encoder_lgs = ConformerEncoder(
             subsampling=subsampling,
+            positional_encoding=positional_encoding,
             dmodel=dmodel,
             num_blocks=num_blocks,
             head_size=head_size,
@@ -84,8 +109,12 @@ class MultiConformers(Transducer):
             bias_regularizer=bias_regularizer,
             name=f"{name}_encoder_lgs"
         )
-        self.concat = tf.keras.layers.Concatenate(axis=-1, name=f"{name}_concat")
-        self.encoder_joint = tf.keras.layers.Dense(dmodel, name=f"{name}_enc_joint")
+        if encoder_joint_mode == "concat":
+            self.encoder_joint = Concatenation(dmodel, name=f"{name}_enc_concat")
+        elif encoder_joint_mode == "add":
+            self.encoder_joint = tf.keras.layers.Add(name=f"{name}_enc_add")
+        else:
+            raise ValueError("encoder_joint_mode must be either 'concat' or 'add'")
         self.time_reduction_factor = self.encoder_lms.conv_subsampling.time_reduction_factor
 
     def _build(self, lms_shape, lgs_shape):
@@ -124,8 +153,7 @@ class MultiConformers(Transducer):
         enc_lgs_out = self.encoder_lgs(lgs, training=training)
         outputs_lgs = self.joint_net([enc_lgs_out, pred], training=training)
 
-        enc = self.concat([enc_lms_out, enc_lgs_out], training=training)
-        enc = self.encoder_joint(enc, training=training)
+        enc = self.encoder_joint([enc_lms_out, enc_lgs_out], training=training)
         outputs = self.joint_net([enc, pred], training=training)
 
         return outputs_lms, outputs, outputs_lgs
@@ -147,8 +175,7 @@ class MultiConformers(Transducer):
             enc_lms_out = self.encoder_lms(lms, training=False)
             enc_lgs_out = self.encoder_lgs(lgs, training=False)
 
-            outputs = self.concat([enc_lms_out, enc_lgs_out], training=False)
-            outputs = self.encoder_joint(outputs, training=False)
+            outputs = self.encoder_joint([enc_lms_out, enc_lgs_out], training=False)
 
             return tf.squeeze(outputs, axis=0)
 

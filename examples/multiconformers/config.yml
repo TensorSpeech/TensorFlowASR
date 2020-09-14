@@ -31,9 +31,14 @@ decoder_config:
 
 model_config:
   name: conformer
+  subsampling:
+    type: conv2
+    kernel_size: 3
+    filters: 144
+    strides: 2
+  positional_encoding: subsampling
   dmodel: 144
-  reduction_factor: 4
-  num_blocks: 4
+  num_blocks: 16
   head_size: 36
   num_heads: 4
   kernel_size: 32
@@ -41,8 +46,10 @@ model_config:
   dropout: 0.1
   embed_dim: 320
   embed_dropout: 0.0
-  num_lstms: 1
-  lstm_units: 320
+  num_rnns: 1
+  rnn_units: 320
+  rnn_type: lstm
+  encoder_joint_mode: concat
   joint_dim: 320
 
 learning_config:
