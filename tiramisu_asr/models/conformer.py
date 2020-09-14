@@ -275,6 +275,7 @@ class ConformerBlock(tf.keras.layers.Layer):
 class ConformerEncoder(tf.keras.Model):
     def __init__(self,
                  subsampling,
+                 positional_encoding="sinusoid",
                  dmodel=144,
                  num_blocks=16,
                  mha_type="relmha",
@@ -306,7 +307,12 @@ class ConformerEncoder(tf.keras.Model):
             bias_regularizer=bias_regularizer
         )
 
-        self.pe = PositionalEncodingConcat(name=f"{name}_pe")
+        if positional_encoding == "sinusoid":
+            self.pe = PositionalEncodingConcat(name=f"{name}_pe")
+        elif positional_encoding == "subsampling":
+            self.pe = tf.keras.layers.Activation("linear", name=f"{name}_pe")
+        else:
+            raise ValueError("positional_encoding must be either 'sinusoid' or 'subsampling'")
 
         self.linear = tf.keras.layers.Dense(
             dmodel, name=f"{name}_linear",
@@ -336,8 +342,8 @@ class ConformerEncoder(tf.keras.Model):
         # input with shape [B, T, V1, V2]
         outputs = self.conv_subsampling(inputs, training=training)
         outputs = self.linear(outputs, training=training)
-        outputs = self.do(outputs, training=training)
         pe = self.pe(outputs)
+        outputs = self.do(outputs, training=training)
         for cblock in self.conformer_blocks:
             outputs = cblock([outputs, pe], training=training)
         return outputs
@@ -356,6 +362,7 @@ class ConformerEncoder(tf.keras.Model):
 class Conformer(Transducer):
     def __init__(self,
                  subsampling: dict,
+                 positional_encoding: str = "sinusoid",
                  dmodel: int = 144,
                  vocabulary_size: int = 29,
                  num_blocks: int = 16,
@@ -377,6 +384,7 @@ class Conformer(Transducer):
         super(Conformer, self).__init__(
             encoder=ConformerEncoder(
                 subsampling=subsampling,
+                positional_encoding=positional_encoding,
                 dmodel=dmodel,
                 num_blocks=num_blocks,
                 head_size=head_size,

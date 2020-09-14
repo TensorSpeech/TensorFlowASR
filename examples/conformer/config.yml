@@ -33,9 +33,10 @@ model_config:
   name: conformer
   subsampling:
     type: conv2
-    filters: 128
-    kernel_size: [7, 7]
-    strides: [2, 2]
+    filters: 144
+    kernel_size: 3
+    strides: 2
+  positional_encoding: subsampling
   dmodel: 144
   num_blocks: 16
   head_size: 36

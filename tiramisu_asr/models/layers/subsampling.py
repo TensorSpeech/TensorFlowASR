@@ -19,45 +19,47 @@ from ...utils.utils import merge_two_last_dims
 
 class VGG2L(tf.keras.layers.Layer):
     def __init__(self,
+                 filters: tuple or list = (32, 64),
                  kernel_size: int or list or tuple = 3,
+                 strides: int or list or tuple = 2,
                  kernel_regularizer=None,
                  bias_regularizer=None,
                  name="vgg2lsubsampling",
                  **kwargs):
         super(VGG2L, self).__init__(name=name, **kwargs)
         self.conv1 = tf.keras.layers.Conv2D(
-            filters=64, kernel_size=kernel_size, strides=1,
+            filters=filters[0], kernel_size=kernel_size, strides=1,
             padding="same", name=f"{name}_conv_1",
             kernel_regularizer=kernel_regularizer,
             bias_regularizer=bias_regularizer
         )
         self.conv2 = tf.keras.layers.Conv2D(
-            filters=64, kernel_size=kernel_size, strides=1,
+            filters=filters[0], kernel_size=kernel_size, strides=1,
             padding="same", name=f"{name}_conv_2",
             kernel_regularizer=kernel_regularizer,
             bias_regularizer=bias_regularizer
         )
         self.maxpool1 = tf.keras.layers.MaxPool2D(
-            pool_size=(2, 2),
+            pool_size=strides,
             padding="same", name=f"{name}_maxpool_1"
         )
         self.conv3 = tf.keras.layers.Conv2D(
-            filters=128, kernel_size=kernel_size, strides=1,
+            filters=filters[1], kernel_size=kernel_size, strides=1,
             padding="same", name=f"{name}_conv_3",
             kernel_regularizer=kernel_regularizer,
             bias_regularizer=bias_regularizer
         )
         self.conv4 = tf.keras.layers.Conv2D(
-            filters=128, kernel_size=kernel_size, strides=1,
+            filters=filters[1], kernel_size=kernel_size, strides=1,
             padding="same", name=f"{name}_conv_4",
             kernel_regularizer=kernel_regularizer,
             bias_regularizer=bias_regularizer
         )
         self.maxpool2 = tf.keras.layers.MaxPool2D(
-            pool_size=(2, 2),
+            pool_size=strides,
             padding="same", name=f"{name}_maxpool_2"
         )
-        self.time_reduction_factor = 4
+        self.time_reduction_factor = self.maxpool1.pool_size[0] + self.maxpool2.pool_size[0]
 
     def call(self, inputs, training=False, **kwargs):
         outputs = self.conv1(inputs, training=training)
