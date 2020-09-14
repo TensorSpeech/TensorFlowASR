@@ -42,19 +42,19 @@ speech_featurizer = TFSpeechFeaturizer({
 
 inp = tf.keras.Input(shape=[None, 80, 1])
 enc = tf.keras.layers.Reshape([-1, 80])(inp)
-enc = tf.keras.layers.LSTM(256)(enc)
-enc = tf.keras.layers.Dense(512)(enc)
+enc = tf.keras.layers.LSTM(256, return_sequences=True)(enc)
 
 enc_model = tf.keras.Model(inputs=inp, outputs=enc)
 
 model = Transducer(
     encoder=enc_model,
     vocabulary_size=text_featurizer.num_classes,
-    embed_dim=256, embed_dropout=0.0, num_lstms=1, lstm_units=320, joint_dim=320
+    embed_dim=256, embed_dropout=0.0, num_rnns=1, rnn_units=320,
+    rnn_type="gru", layer_norm=True, joint_dim=320
 )
 
 model._build(speech_featurizer.shape)
-model.summary(line_length=150)
+model.summary(line_length=100)
 
 model.save_weights("/tmp/transducer.h5")
 
@@ -76,14 +76,14 @@ print(pred)
 signal = read_raw_audio("/home/nlhuy/Desktop/test/11003.wav", speech_featurizer.sample_rate)
 #
 # tf.summary.trace_on(graph=True, profiler=True)
-# hyps = model.recognize_tflite(signal)
+# hyps = model.recognize_tflite(signal, 0, tf.zeros([1, 2, 1, 320], dtype=tf.float32))
 # with writer.as_default():
 #     tf.summary.trace_export(
 #         name="recognize_tflite",
 #         step=0,
 #         profiler_outdir=logdir)
 #
-# print(hyps)
+# print(hyps[0])
 #
 # # hyps = model.recognize_beam(features)
 #
@@ -109,12 +109,8 @@ tflitemodel = tf.lite.Interpreter(model_content=tflite)
 
 input_details = tflitemodel.get_input_details()
 output_details = tflitemodel.get_output_details()
-# tflitemodel.resize_tensor_input(input_details[0]["index"], [1, 50, 80, 1])
-# tflitemodel.resize_tensor_input(input_details[1]["index"], [1, 1])
 tflitemodel.resize_tensor_input(input_details[0]["index"], signal.shape)
 tflitemodel.allocate_tensors()
-# tflitemodel.set_tensor(input_details[0]["index"], features)
-# tflitemodel.set_tensor(input_details[1]["index"], tf.constant([[0]], dtype=tf.int32))
 tflitemodel.set_tensor(input_details[0]["index"], signal)
 tflitemodel.set_tensor(
     input_details[1]["index"],
@@ -122,7 +118,7 @@ tflitemodel.set_tensor(
 )
 tflitemodel.set_tensor(
     input_details[2]["index"],
-    tf.zeros([1, 2, 1, 320], dtype=tf.float32)
+    tf.zeros([1, 1, 1, 320], dtype=tf.float32)
 )
 tflitemodel.invoke()
 hyp = tflitemodel.get_tensor(output_details[0]["index"])
