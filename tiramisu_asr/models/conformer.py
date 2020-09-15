@@ -16,8 +16,8 @@ import tensorflow as tf
 
 from .activations import GLU
 from .transducer import Transducer
-from .layers.subsampling import VGG2L, Conv2dSubsampling, Conv2dSubsampling2
-from .layers.positional_encoding import PositionalEncodingConcat
+from .layers.subsampling import VggSubsampling, Conv2dSubsampling, Conv2dSubsampling2
+from .layers.positional_encoding import PositionalEncoding, PositionalEncodingConcat
 from .layers.multihead_attention import MultiHeadAttention, RelPositionMultiHeadAttention
 
 L2 = tf.keras.regularizers.l2(1e-6)
@@ -292,8 +292,8 @@ class ConformerEncoder(tf.keras.Model):
         super(ConformerEncoder, self).__init__(name=name, **kwargs)
 
         subsampling_name = subsampling.pop("type", "conv2")
-        if subsampling_name == "vgg2l":
-            subsampling_class = VGG2L
+        if subsampling_name == "vgg":
+            subsampling_class = VggSubsampling
         elif subsampling_name == "conv":
             subsampling_class = Conv2dSubsampling
         elif subsampling_name == "conv2":
@@ -308,6 +308,8 @@ class ConformerEncoder(tf.keras.Model):
         )
 
         if positional_encoding == "sinusoid":
+            self.pe = PositionalEncoding(name=f"{name}_pe")
+        elif positional_encoding == "sinusoid_concat":
             self.pe = PositionalEncodingConcat(name=f"{name}_pe")
         elif positional_encoding == "subsampling":
             self.pe = tf.keras.layers.Activation("linear", name=f"{name}_pe")

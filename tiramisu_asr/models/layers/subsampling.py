@@ -17,16 +17,16 @@ import tensorflow as tf
 from ...utils.utils import merge_two_last_dims
 
 
-class VGG2L(tf.keras.layers.Layer):
+class VggSubsampling(tf.keras.layers.Layer):
     def __init__(self,
                  filters: tuple or list = (32, 64),
                  kernel_size: int or list or tuple = 3,
                  strides: int or list or tuple = 2,
                  kernel_regularizer=None,
                  bias_regularizer=None,
-                 name="vgg2lsubsampling",
+                 name="VggSubsampling",
                  **kwargs):
-        super(VGG2L, self).__init__(name=name, **kwargs)
+        super(VggSubsampling, self).__init__(name=name, **kwargs)
         self.conv1 = tf.keras.layers.Conv2D(
             filters=filters[0], kernel_size=kernel_size, strides=1,
             padding="same", name=f"{name}_conv_1",
@@ -77,7 +77,7 @@ class VGG2L(tf.keras.layers.Layer):
         return merge_two_last_dims(outputs)
 
     def get_config(self):
-        conf = super(VGG2L, self).get_config()
+        conf = super(VggSubsampling, self).get_config()
         conf.update(self.conv1.get_config())
         conf.update(self.conv2.get_config())
         conf.update(self.maxpool1.get_config())
@@ -94,7 +94,7 @@ class Conv2dSubsampling2(tf.keras.layers.Layer):
                  kernel_size: int or list or tuple = 3,
                  kernel_regularizer=None,
                  bias_regularizer=None,
-                 name="conv2dsubsampling2",
+                 name="Conv2dSubsampling2",
                  **kwargs):
         super(Conv2dSubsampling2, self).__init__(name=name, **kwargs)
         self.conv1 = tf.keras.layers.Conv2D(
@@ -132,7 +132,7 @@ class Conv2dSubsampling(tf.keras.layers.Layer):
                  kernel_size: int or list or tuple = 3,
                  kernel_regularizer=None,
                  bias_regularizer=None,
-                 name="conv2dsubsampling",
+                 name="Conv2dSubsampling",
                  **kwargs):
         super(Conv2dSubsampling, self).__init__(name=name, **kwargs)
         self.conv = tf.keras.layers.Conv2D(

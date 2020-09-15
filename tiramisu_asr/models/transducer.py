@@ -486,7 +486,7 @@ class Transducer(Model):
                 A.remove(y_hat)
 
                 ytu, new_states = self.decoder_inference(
-                    encoded=enc[i],
+                    encoded=tf.gather_nd(enc, tf.expand_dims(i, axis=-1)),
                     predicted=y_hat.prediction[-1],
                     states=y_hat.states
                 )
