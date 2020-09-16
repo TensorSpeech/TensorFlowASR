@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import abc
 import codecs
 import unicodedata
 import tensorflow as tf
@@ -20,7 +21,31 @@ from ..utils.utils import preprocess_paths
 from . import ENGLISH
 
 
-class TextFeaturizer:
+class TextFeaturizer(abc.ABCMeta):
+    def __init__(self, decoder_config: dict):
+        self.decoder_config = decoder_config
+        if not self.decoder_config.get("vocabulary", None):
+            self.decoder_config["vocabulary"] = ENGLISH  # Default language is english
+        self.decoder_config["vocabulary"] = preprocess_paths(self.decoder_config["vocabulary"])
+        self.blank = None
+        self.tokens2indices = {}
+        self.tokens = []
+        self.num_classes = None
+
+    @abc.abstractclassmethod
+    def extract(self, text):
+        raise NotImplementedError()
+
+    @abc.abstractclassmethod
+    def iextract(self, indices):
+        raise NotImplementedError()
+
+    @abc.abstractclassmethod
+    def indices2upoints(self, indices):
+        raise NotImplementedError()
+
+
+class CharFeaturizer(TextFeaturizer):
     """
     Extract text feature based on char-level granularity.
     By looking up the vocabulary table, each line of transcript will be
@@ -38,15 +63,9 @@ class TextFeaturizer:
             }
         }
         """
+        super(CharFeaturizer, self).__init__(decoder_config)
         self.scorer = None
-        self._preprocess_decoder(decoder_config)
         self._preprocess_vocabulary()
-
-    def _preprocess_decoder(self, decoder_config):
-        self.decoder_config = decoder_config
-        if not self.decoder_config["vocabulary"]:
-            self.decoder_config["vocabulary"] = ENGLISH  # Default language is english
-        self.decoder_config["vocabulary"] = preprocess_paths(self.decoder_config["vocabulary"])
 
     def _preprocess_vocabulary(self):
         lines = []
