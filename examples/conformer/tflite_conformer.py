@@ -21,7 +21,7 @@ import tensorflow as tf
 
 from tiramisu_asr.configs.user_config import UserConfig
 from tiramisu_asr.featurizers.speech_featurizers import TFSpeechFeaturizer
-from tiramisu_asr.featurizers.text_featurizers import TextFeaturizer
+from tiramisu_asr.featurizers.text_featurizers import CharFeaturizer
 from tiramisu_asr.models.conformer import Conformer
 
 DEFAULT_YAML = os.path.join(os.path.abspath(os.path.dirname(__file__)), "config.yml")
@@ -45,7 +45,7 @@ assert args.saved and args.output
 
 config = UserConfig(DEFAULT_YAML, args.config, learning=True)
 speech_featurizer = TFSpeechFeaturizer(config["speech_config"])
-text_featurizer = TextFeaturizer(config["decoder_config"])
+text_featurizer = CharFeaturizer(config["decoder_config"])
 
 # build model
 conformer = Conformer(

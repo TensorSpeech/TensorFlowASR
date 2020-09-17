@@ -22,7 +22,7 @@ import tensorflow as tf
 
 from tiramisu_asr.datasets.base_dataset import BaseDataset
 from tiramisu_asr.featurizers.speech_featurizers import read_raw_audio, SpeechFeaturizer
-from tiramisu_asr.featurizers.text_featurizers import TextFeaturizer
+from tiramisu_asr.featurizers.text_featurizers import CharFeaturizer
 from tiramisu_asr.utils.utils import bytestring_feature, print_one_line, get_num_batches
 
 AUTOTUNE = tf.data.experimental.AUTOTUNE
@@ -55,7 +55,7 @@ class MultiConformersDataset(BaseDataset):
                  stage: str,
                  speech_featurizer_lms: SpeechFeaturizer,
                  speech_featurizer_lgs: SpeechFeaturizer,
-                 text_featurizer: TextFeaturizer,
+                 text_featurizer: CharFeaturizer,
                  data_paths: list,
                  augmentations: dict = None,
                  cache: bool = False,
@@ -155,7 +155,7 @@ class MultiConformersTFRecordDataset(MultiConformersDataset):
                  tfrecords_dir: str,
                  speech_featurizer_lms: SpeechFeaturizer,
                  speech_featurizer_lgs: SpeechFeaturizer,
-                 text_featurizer: TextFeaturizer,
+                 text_featurizer: CharFeaturizer,
                  stage: str,
                  augmentations: dict = None,
                  cache: bool = False,

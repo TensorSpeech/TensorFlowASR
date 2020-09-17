@@ -19,6 +19,7 @@ TiramisuASR implements some speech recognition architectures such as CTC-based m
 
 ## What's New?
 
+- (9/18/2020) Support `word-pieces` (aka `subwords`) using `tensorflow-datasets`
 - Support `transducer` tflite greedy decoding (conversion and invocation) 
 - Distributed training using `tf.distribute.MirroredStrategy`
 - Fixed transducer beam search

@@ -54,13 +54,13 @@ setup_devices([args.device], cpu=args.cpu)
 from tiramisu_asr.configs.user_config import UserConfig
 from tiramisu_asr.datasets.asr_dataset import ASRTFRecordDataset, ASRSliceDataset
 from tiramisu_asr.featurizers.speech_featurizers import TFSpeechFeaturizer
-from tiramisu_asr.featurizers.text_featurizers import TextFeaturizer
+from tiramisu_asr.featurizers.text_featurizers import CharFeaturizer
 from tiramisu_asr.runners.base_runners import BaseTester
 from tiramisu_asr.models.conformer import Conformer
 
 config = UserConfig(DEFAULT_YAML, args.config, learning=True)
 speech_featurizer = TFSpeechFeaturizer(config["speech_config"])
-text_featurizer = TextFeaturizer(config["decoder_config"])
+text_featurizer = CharFeaturizer(config["decoder_config"])
 
 tf.random.set_seed(0)
 assert args.saved
