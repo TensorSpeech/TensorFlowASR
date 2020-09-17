@@ -17,7 +17,7 @@ from tqdm import tqdm
 from colorama import Fore
 import tensorflow as tf
 
-from tiramisu_asr.featurizers.text_featurizers import TextFeaturizer
+from tiramisu_asr.featurizers.text_featurizers import CharFeaturizer
 from tiramisu_asr.models.multiconformers import MultiConformers
 from tiramisu_asr.runners.base_runners import BaseTrainer
 from tiramisu_asr.losses.rnnt_losses import rnnt_loss
@@ -29,7 +29,7 @@ class MultiConformersTrainer(BaseTrainer):
 
     def __init__(self,
                  config: dict,
-                 text_featurizer: TextFeaturizer,
+                 text_featurizer: CharFeaturizer,
                  strategy: tf.distribute.Strategy = None):
         super(MultiConformersTrainer, self).__init__(config, strategy=strategy)
         self.text_featurizer = text_featurizer

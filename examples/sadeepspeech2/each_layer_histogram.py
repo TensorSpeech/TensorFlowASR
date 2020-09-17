@@ -9,7 +9,7 @@ import tensorflow as tf
 import numpy as np
 
 from tiramisu_asr.featurizers.speech_featurizers import SpeechFeaturizer, read_raw_audio
-from tiramisu_asr.featurizers.text_featurizers import TextFeaturizer
+from tiramisu_asr.featurizers.text_featurizers import CharFeaturizer
 from tiramisu_asr.configs.user_config import UserConfig
 from tiramisu_asr.utils.utils import bytes_to_string
 from ctc_decoders import Scorer
@@ -38,7 +38,7 @@ def main():
 
     config = UserConfig(args.config, args.config, learning=False)
     speech_featurizer = SpeechFeaturizer(config["speech_config"])
-    text_featurizer = TextFeaturizer(config["decoder_config"])
+    text_featurizer = CharFeaturizer(config["decoder_config"])
     text_featurizer.add_scorer(Scorer(**text_featurizer.decoder_config["lm_config"],
                                       vocabulary=text_featurizer.vocab_array))
 

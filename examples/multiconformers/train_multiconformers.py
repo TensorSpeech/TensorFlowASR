@@ -63,7 +63,7 @@ from tiramisu_asr.configs.user_config import UserConfig
 from tiramisu_asr.models.multiconformers import MultiConformers
 from tiramisu_asr.featurizers.speech_featurizers import TFSpeechFeaturizer
 from tiramisu_asr.featurizers.speech_featurizers import NumpySpeechFeaturizer
-from tiramisu_asr.featurizers.text_featurizers import TextFeaturizer
+from tiramisu_asr.featurizers.text_featurizers import CharFeaturizer
 from tiramisu_asr.optimizers.schedules import TransformerSchedule
 
 from multiconformers_trainer import MultiConformersTrainer
@@ -82,7 +82,7 @@ else:
     speech_featurizer_lms = TFSpeechFeaturizer(lms_config)
     speech_featurizer_lgs = TFSpeechFeaturizer(lgs_config)
 
-text_featurizer = TextFeaturizer(config["decoder_config"])
+text_featurizer = CharFeaturizer(config["decoder_config"])
 
 if args.tfrecords:
     train_dataset = MultiConformersTFRecordDataset(

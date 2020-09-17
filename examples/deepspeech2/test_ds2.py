@@ -51,7 +51,7 @@ setup_devices([args.device])
 from tiramisu_asr.configs.user_config import UserConfig
 from tiramisu_asr.datasets.asr_dataset import ASRTFRecordDataset, ASRSliceDataset
 from tiramisu_asr.featurizers.speech_featurizers import TFSpeechFeaturizer
-from tiramisu_asr.featurizers.text_featurizers import TextFeaturizer
+from tiramisu_asr.featurizers.text_featurizers import CharFeaturizer
 from tiramisu_asr.runners.base_runners import BaseTester
 from model import DeepSpeech2
 
@@ -60,7 +60,7 @@ assert args.export
 
 config = UserConfig(DEFAULT_YAML, args.config, learning=True)
 speech_featurizer = TFSpeechFeaturizer(config["speech_config"])
-text_featurizer = TextFeaturizer(config["decoder_config"])
+text_featurizer = CharFeaturizer(config["decoder_config"])
 # Build DS2 model
 ds2_model = DeepSpeech2(input_shape=speech_featurizer.shape,
                         arch_config=config["model_config"],

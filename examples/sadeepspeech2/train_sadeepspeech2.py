@@ -57,14 +57,14 @@ strategy = setup_strategy(args.devices)
 from tiramisu_asr.configs.user_config import UserConfig
 from tiramisu_asr.datasets.asr_dataset import ASRTFRecordDataset, ASRSliceDataset
 from tiramisu_asr.featurizers.speech_featurizers import TFSpeechFeaturizer
-from tiramisu_asr.featurizers.text_featurizers import TextFeaturizer
+from tiramisu_asr.featurizers.text_featurizers import CharFeaturizer
 from tiramisu_asr.runners.ctc_runners import CTCTrainer
 from model import SelfAttentionDS2
 from optimizer import create_optimizer
 
 config = UserConfig(DEFAULT_YAML, args.config, learning=True)
 speech_featurizer = TFSpeechFeaturizer(config["speech_config"])
-text_featurizer = TextFeaturizer(config["decoder_config"])
+text_featurizer = CharFeaturizer(config["decoder_config"])
 
 ctc_trainer = CTCTrainer(text_featurizer,
                          config["learning_config"]["running_config"],

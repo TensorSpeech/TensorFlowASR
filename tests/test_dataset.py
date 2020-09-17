@@ -6,7 +6,7 @@ from tiramisu_asr.utils import setup_environment
 setup_environment()
 from tiramisu_asr.datasets.asr_dataset import ASRSliceDataset
 from tiramisu_asr.featurizers.speech_featurizers import TFSpeechFeaturizer
-from tiramisu_asr.featurizers.text_featurizers import TextFeaturizer
+from tiramisu_asr.featurizers.text_featurizers import CharFeaturizer
 
 
 augments = {
@@ -34,7 +34,7 @@ augments = {
 
 data = "/mnt/Data/ML/ASR/Raw/LibriSpeech/train-clean-100/transcripts.tsv"
 
-text_featurizer = TextFeaturizer({
+text_featurizer = CharFeaturizer({
     "vocabulary": None,
     "blank_at_zero": True,
     "beam_width": 5,

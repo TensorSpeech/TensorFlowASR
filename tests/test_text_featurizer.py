@@ -1,6 +1,6 @@
-from tiramisu_asr.featurizers.text_featurizers import TextFeaturizer
+from tiramisu_asr.featurizers.text_featurizers import CharFeaturizer
 
-txf = TextFeaturizer(None, blank_at_zero=True)
+txf = CharFeaturizer(None, blank_at_zero=True)
 
 a = txf.extract("fkaff aksfbfnak kcjhoiu")
 

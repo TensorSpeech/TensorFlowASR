@@ -18,10 +18,10 @@ os.environ["TF_CPP_MIN_LOG_LEVEL"] = "0"
 import tensorflow as tf
 
 from tiramisu_asr.models.transducer import Transducer
-from tiramisu_asr.featurizers.text_featurizers import TextFeaturizer
+from tiramisu_asr.featurizers.text_featurizers import CharFeaturizer
 from tiramisu_asr.featurizers.speech_featurizers import TFSpeechFeaturizer, read_raw_audio
 
-text_featurizer = TextFeaturizer({
+text_featurizer = CharFeaturizer({
     "vocabulary": None,
     "blank_at_zero": True,
     "beam_width": 5,

@@ -2,7 +2,7 @@ import tensorflow as tf
 
 from ctc_decoders import Scorer
 from tiramisu_asr.models.ctc import CtcModel
-from tiramisu_asr.featurizers.text_featurizers import TextFeaturizer
+from tiramisu_asr.featurizers.text_featurizers import CharFeaturizer
 from tiramisu_asr.featurizers.speech_featurizers import TFSpeechFeaturizer, read_raw_audio
 from tiramisu_asr.utils.utils import bytes_to_string, merge_two_last_dims
 
@@ -16,7 +16,7 @@ decoder_config = {
         "beta": 2.0
     }
 }
-text_featurizer = TextFeaturizer(decoder_config)
+text_featurizer = CharFeaturizer(decoder_config)
 text_featurizer.add_scorer(Scorer(**decoder_config["lm_config"],
                                   vocabulary=text_featurizer.vocab_array))
 speech_featurizer = TFSpeechFeaturizer({
