@@ -179,7 +179,7 @@ class BaseTrainer(BaseRunner):
     def _finished(self):
         if self.train_steps_per_epoch is None:
             return False
-        return self.steps.numpy() >= (self.config["num_epochs"] * self.train_steps_per_epoch)
+        return self.steps.numpy() >= self.total_train_steps
 
     def run(self):
         """Run training."""
@@ -194,6 +194,10 @@ class BaseTrainer(BaseRunner):
 
         while not self._finished():
             self._train_epoch()
+
+        # save when training is done
+        self.save_checkpoint()
+        self.save_model_weights()
 
         self.train_progbar.close()
         print("> Finish training")

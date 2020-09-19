@@ -59,8 +59,10 @@ def bytes_to_string(array: np.ndarray, encoding: str = "utf-8"):
     return [transcript.decode(encoding) for transcript in array]
 
 
-def get_num_batches(samples, batch_size):
-    return math.floor(float(samples) / float(batch_size))
+def get_num_batches(samples, batch_size, drop_remainders=True):
+    if drop_remainders:
+        return math.floor(float(samples) / float(batch_size))
+    return math.ceil(float(samples) / float(batch_size))
 
 
 def merge_two_last_dims(x):
