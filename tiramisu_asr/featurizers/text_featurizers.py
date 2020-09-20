@@ -176,7 +176,10 @@ class SubwordFeaturizer(TextFeaturizer):
     def __init__(self, decoder_config: dict, subwords=None):
         """
         decoder_config = {
-            "vocabulary": str,
+            "target_vocab_size": int,
+            "max_subword_length": 4,
+            "max_corpus_chars": None,
+            "reserved_tokens": None,
             "beam_width": int,
             "lm_config": {
                 ...
@@ -200,7 +203,7 @@ class SubwordFeaturizer(TextFeaturizer):
                     yield line[-1]
         subwords = tds.features.text.SubwordTextEncoder.build_from_corpus(
             corpus_generator(),
-            decoder_config.get("target_vocab_size", 4096),
+            decoder_config.get("target_vocab_size", 1024),
             decoder_config.get("max_subword_length", 4),
             decoder_config.get("max_corpus_chars", None),
             decoder_config.get("reserved_tokens", None)
