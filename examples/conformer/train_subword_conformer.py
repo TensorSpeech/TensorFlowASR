@@ -50,8 +50,11 @@ parser.add_argument("--mxp", default=False, action="store_true",
 parser.add_argument("--cache", default=False, action="store_true",
                     help="Enable caching for dataset")
 
-parser.add_argument("--subwords", type=str, default=None,
-                    help="File that stores generated subwords")
+parser.add_argument("--subwords_prefix", type=str, default=None,
+                    help="Prefix of file that stores generated subwords")
+
+parser.add_argument("--subwords_corpus", nargs="*", type=str, default=[],
+                    help="Transcript files for generating subwords")
 
 args = parser.parse_args()
 
@@ -69,7 +72,18 @@ from tiramisu_asr.optimizers.schedules import TransformerSchedule
 
 config = UserConfig(DEFAULT_YAML, args.config, learning=True)
 speech_featurizer = TFSpeechFeaturizer(config["speech_config"])
-text_featurizer = SubwordFeaturizer.load_from_file(config["decoder_config"], args.subwords)
+
+if args.subwords_prefix and os.path.exists(f"{args.subwords_prefix}.subwords"):
+    print("Loading subwords ...")
+    text_featurizer = SubwordFeaturizer.load_from_file(config["decoder_config"],
+                                                       args.subwords_prefix)
+else:
+    print("Generating subwords ...")
+    text_featurizer = SubwordFeaturizer.build_from_corpus(
+        config["decoder_config"],
+        corpus_files=args.subwords_corpus
+    )
+    text_featurizer.subwords.save_to_file(args.subwords_prefix)
 
 if args.tfrecords:
     train_dataset = ASRTFRecordDataset(
