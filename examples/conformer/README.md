@@ -11,27 +11,43 @@ speech_config:
   sample_rate: 16000
   frame_ms: 25
   stride_ms: 10
-  num_feature_bins: 80
   feature_type: log_mel_spectrogram
+  num_feature_bins: 80
   preemphasis: 0.97
   normalize_signal: True
   normalize_feature: True
   normalize_per_feature: False
 
+decoder_config:
+  vocabulary: null
+  target_vocab_size: 1024
+  max_subword_length: 4
+  blank_at_zero: True
+  beam_width: 5
+  norm_score: True
+
 model_config:
   name: conformer
+  subsampling:
+    type: conv2
+    kernel_size: 3
+    strides: 2
+    filters: 144
+  positional_encoding: sinusoid_concat
   dmodel: 144
-  reduction_factor: 4
   num_blocks: 16
   head_size: 36
   num_heads: 4
+  mha_type: relmha
   kernel_size: 32
   fc_factor: 0.5
   dropout: 0.1
   embed_dim: 320
   embed_dropout: 0.0
-  num_lstms: 1
-  lstm_units: 320
+  num_rnns: 1
+  rnn_units: 320
+  rnn_type: lstm
+  layer_norm: True
   joint_dim: 320
 
 learning_config:
@@ -74,17 +90,24 @@ Testing, see `python examples/conformer/train_conformer.py --help`
 
 TFLite Conversion, see `python examples/conformer/tflite_conformer.py --help`
 
-## Results on LibriSpeech 100h
+## Conformer Subwords - Results on LibriSpeech
 
-LibriSpeech 100h Conformer is trained with [config](./pretrained/librispeech-100h/libri-clean-100.yml) in 19 hours using 1 RTX 2080Ti 11GB.
+**Summary**
+
+- Number of subwords: 1031
+- Maxium length of a subword: 4
+- Subwords corpus: all training sets, dev sets and test-clean
+- Number of parameters: 10,341,639
+- Positional Encoding Type: sinusoid concatenation
+
+**Pretrained and Config**, go to [drive](https://drive.google.com/drive/folders/1VAihgSB5vGXwIVTl3hkUk95joxY1YbfW?usp=sharing)
 
 **Transducer Loss**
 
-<img src="./figs/libri_100_transducer_loss.svg" alt="conformer_libri_100_loss" width="300px" />
+<img src="./figs/subword_conformer_loss.svg" alt="conformer_subword" width="300px" />
 
 **Error Rates**
 
-|  Test-clean   |    WER (%)     |    CER (%)     |
-| :-----------: | :------------: | :------------: |
-|   _Greedy_    |   34.4447212   |   16.1116848   |
-| _Beam Search_ | **13.7398481** | **5.45213652** |
+| Test-clean |  WER (%)  |  CER (%)   |
+| :--------: | :-------: | :--------: |
+|  _Greedy_  | 6.4476862 | 2.51828337 |
