@@ -1,6 +1,7 @@
 import argparse
 import tensorflow as tf
-import tensorflow_datasets as tds
+
+from tiramisu_asr.featurizers.text_featurizers import SubwordFeaturizer
 
 parser = argparse.ArgumentParser(prog="test subword")
 
@@ -8,31 +9,25 @@ parser.add_argument("transcripts", nargs="+", type=str, default=[None])
 
 args = parser.parse_args()
 
+config = {
+    "vocabulary": None,
+    "target_vocab_size": 1024,
+    "max_subword_length": 4,
+    "blank_at_zero": True,
+    "beam_width": 5,
+    "norm_score": True
+}
 
-def corpus_generator():
-    for file in args.transcripts:
-        with open(file, "r", encoding="utf-8") as f:
-            lines = f.read().splitlines()
-            lines = lines[1:]
-        for line in lines:
-            line = line.split("\t")
-            yield line[-1]
+text_featurizer = SubwordFeaturizer.build_from_corpus(config, args.transcripts)
 
+print(len(text_featurizer.subwords.subwords))
+print(text_featurizer.upoints)
+print(text_featurizer.num_classes)
 
-subwords = tds.features.text.SubwordTextEncoder.build_from_corpus(
-    corpus_generator(), target_vocab_size=1024, max_subword_length=4,
-)
+a = text_featurizer.extract("hello world")
 
-print(subwords.vocab_size)
+print(a)
 
-print(subwords.subwords)
+b = text_featurizer.indices2upoints(a)
 
-a = subwords.encode("hello world")
-
-decode = tf.function(subwords.decode)
-
-print(decode(a))
-
-print(decode([0, 0, 0, 0]))
-
-subwords.save_to_file("/tmp/subwords.txt")
+tf.print(tf.strings.unicode_encode(b, "UTF-8"))

@@ -15,6 +15,8 @@
 import abc
 import codecs
 import unicodedata
+
+import numpy as np
 import tensorflow as tf
 import tensorflow_datasets as tds
 
@@ -34,7 +36,7 @@ class TextFeaturizer(metaclass=abc.ABCMeta):
         self.tokens = []
         self.num_classes = None
 
-    def _preprocess_text(self, text):
+    def preprocess_text(self, text):
         text = unicodedata.normalize("NFC", text.lower())
         return text.strip("\n")  # remove trailing newline
 
@@ -92,9 +94,9 @@ class CharFeaturizer(TextFeaturizer):
         }
         """
         super(CharFeaturizer, self).__init__(decoder_config)
-        self._preprocess_vocabulary()
+        self.__init_vocabulary()
 
-    def _preprocess_vocabulary(self):
+    def __init_vocabulary(self):
         lines = []
         with codecs.open(self.decoder_config["vocabulary"], "r", "utf-8") as fin:
             lines.extend(fin.readlines())
@@ -103,7 +105,7 @@ class CharFeaturizer(TextFeaturizer):
         self.tokens = []
         index = 1 if self.blank == 0 else 0
         for line in lines:
-            line = self._preprocess_text(line)
+            line = self.preprocess_text(line)
             if line.startswith("#") or not line: continue
             self.tokens2indices[line[0]] = index
             self.tokens.append(line[0])
@@ -127,7 +129,7 @@ class CharFeaturizer(TextFeaturizer):
         Returns:
             sequence of ints in tf.Tensor
         """
-        text = self._preprocess_text(text)
+        text = self.preprocess_text(text)
         text = list(text.strip())  # remove trailing space
         indices = [self.tokens2indices[token] for token in text]
         return tf.convert_to_tensor(indices, dtype=tf.int32)
@@ -190,6 +192,15 @@ class SubwordFeaturizer(TextFeaturizer):
         self.subwords = subwords
         self.blank = 0  # subword treats blank as 0
         self.num_classes = self.subwords.vocab_size
+        # create upoints
+        self.__init_upoints()
+
+    def __init_upoints(self):
+        text = [""]
+        for idx in np.arange(1, self.num_classes, dtype=np.int32):
+            text.append(self.subwords.decode([idx]))
+        self.upoints = tf.strings.unicode_decode(text, "UTF-8")
+        self.upoints = self.upoints.to_tensor()  # [num_classes, max_subword_length]
 
     @classmethod
     def build_from_corpus(cls, decoder_config: dict, corpus_files: list):
@@ -224,7 +235,7 @@ class SubwordFeaturizer(TextFeaturizer):
         Returns:
             sequence of ints in tf.Tensor
         """
-        text = self._preprocess_text(text)
+        text = self.preprocess_text(text)
         text = text.strip()  # remove trailing space
         indices = self.subwords.encode(text)
         return tf.convert_to_tensor(indices, dtype=tf.int32)
@@ -239,8 +250,17 @@ class SubwordFeaturizer(TextFeaturizer):
             transcripts: tf.Tensor of dtype tf.string with dim [B]
         """
         indices = self.normalize_indices(indices)
-        text = self.subwords.decode(indices)
-        return tf.convert_to_tensor(text, dtype=tf.string)
+
+        def decode(x):
+            if x[0] == self.blank: x = x[1:]
+            return self.subwords.decode(x)
+
+        text = tf.map_fn(
+            lambda x: tf.numpy_function(decode, inp=[x], Tout=tf.string),
+            indices,
+            fn_output_signature=tf.TensorSpec([], dtype=tf.string)
+        )
+        return text
 
     @tf.function(
         input_signature=[
@@ -256,4 +276,9 @@ class SubwordFeaturizer(TextFeaturizer):
         Returns:
             unicode code points transcript with dtype tf.int32 and shape [None]
         """
-        pass
+        with tf.name_scope("indices2upoints"):
+            indices = self.normalize_indices(indices)
+            upoints = tf.gather_nd(self.upoints, tf.expand_dims(indices, axis=-1))
+            # upoints now has shape [None, max_subword_length]
+            shape = tf.shape(upoints)
+            return tf.reshape(upoints, [shape[0] * shape[1]])  # flatten
