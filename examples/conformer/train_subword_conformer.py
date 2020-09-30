@@ -128,7 +128,7 @@ with conformer_trainer.strategy.scope():
         vocabulary_size=text_featurizer.num_classes
     )
     conformer._build(speech_featurizer.shape)
-    conformer.summary(line_length=150)
+    conformer.summary(line_length=120)
 
     optimizer_config = config["learning_config"]["optimizer_config"]
     optimizer = tf.keras.optimizers.Adam(

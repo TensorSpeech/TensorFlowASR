@@ -16,7 +16,7 @@ import tensorflow as tf
 
 from .activations import GLU
 from .transducer import Transducer
-from .layers.subsampling import VggSubsampling, Conv2dSubsampling, Conv2dSubsampling2
+from .layers.subsampling import VggSubsampling, Conv2dSubsampling
 from .layers.positional_encoding import PositionalEncoding, PositionalEncodingConcat
 from .layers.multihead_attention import MultiHeadAttention, RelPositionMultiHeadAttention
 
@@ -294,12 +294,10 @@ class ConformerEncoder(tf.keras.Model):
         subsampling_name = subsampling.pop("type", "conv2")
         if subsampling_name == "vgg":
             subsampling_class = VggSubsampling
-        elif subsampling_name == "conv":
+        elif subsampling_name == "conv2d":
             subsampling_class = Conv2dSubsampling
-        elif subsampling_name == "conv2":
-            subsampling_class = Conv2dSubsampling2
         else:
-            raise ValueError("subsampling must be either  'conv2', 'conv' or 'vgg2l'")
+            raise ValueError("subsampling must be either  'conv2d' or 'vgg'")
 
         self.conv_subsampling = subsampling_class(
             **subsampling, name=f"{name}_subsampling",

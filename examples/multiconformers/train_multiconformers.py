@@ -130,7 +130,7 @@ with multiconformers_trainer.strategy.scope():
         vocabulary_size=text_featurizer.num_classes
     )
     multiconformers._build(speech_featurizer_lms.shape, speech_featurizer_lgs.shape)
-    multiconformers.summary(line_length=150)
+    multiconformers.summary(line_length=120)
 
     optimizer_config = config["learning_config"]["optimizer_config"]
     optimizer = tf.keras.optimizers.Adam(

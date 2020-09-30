@@ -34,7 +34,7 @@ decoder_config:
 model_config:
   name: conformer
   subsampling:
-    type: conv2
+    type: conv2d
     filters: 144
     kernel_size: 3
     strides: 2
