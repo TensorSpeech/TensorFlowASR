@@ -37,8 +37,6 @@ parser.add_argument("--tfrecords", default=False, action="store_true",
 parser.add_argument("--mxp", default=False, action="store_true",
                     help="Enable mixed precision")
 
-parser.add_argument("--bs", type=int, default=None, help="Batch size")
-
 parser.add_argument("--device", type=int, default=0,
                     help="Device's id to run test on")
 
@@ -47,6 +45,9 @@ parser.add_argument("--cpu", default=False, action="store_true",
 
 parser.add_argument("--subwords_prefix", type=str, default=None,
                     help="Prefix of file that stores generated subwords")
+
+parser.add_argument("--output_name", type=str, default="test",
+                    help="Result filename name prefix")
 
 args = parser.parse_args()
 
@@ -100,6 +101,9 @@ conformer.load_weights(args.saved, by_name=True)
 conformer.summary(line_length=120)
 conformer.add_featurizers(speech_featurizer, text_featurizer)
 
-conformer_tester = BaseTester(config=config["learning_config"]["running_config"])
+conformer_tester = BaseTester(
+    config=config["learning_config"]["running_config"],
+    output_name=args.output_name
+)
 conformer_tester.compile(conformer)
-conformer_tester.run(test_dataset, batch_size=args.bs)
+conformer_tester.run(test_dataset)

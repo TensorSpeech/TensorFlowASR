@@ -145,7 +145,8 @@ class CharFeaturizer(TextFeaturizer):
         """
         indices = self.normalize_indices(indices)
         tokens = tf.gather_nd(self.tokens, tf.expand_dims(indices, axis=-1))
-        tokens = tf.strings.reduce_join(tokens, axis=-1)
+        with tf.device("/CPU:0"):  # string data is not supported on GPU
+            tokens = tf.strings.reduce_join(tokens, axis=-1)
         return tokens
 
     @tf.function(
@@ -250,16 +251,16 @@ class SubwordFeaturizer(TextFeaturizer):
             transcripts: tf.Tensor of dtype tf.string with dim [B]
         """
         indices = self.normalize_indices(indices)
+        with tf.device("/CPU:0"):  # string data is not supported on GPU
+            def decode(x):
+                if x[0] == self.blank: x = x[1:]
+                return self.subwords.decode(x)
 
-        def decode(x):
-            if x[0] == self.blank: x = x[1:]
-            return self.subwords.decode(x)
-
-        text = tf.map_fn(
-            lambda x: tf.numpy_function(decode, inp=[x], Tout=tf.string),
-            indices,
-            fn_output_signature=tf.TensorSpec([], dtype=tf.string)
-        )
+            text = tf.map_fn(
+                lambda x: tf.numpy_function(decode, inp=[x], Tout=tf.string),
+                indices,
+                fn_output_signature=tf.TensorSpec([], dtype=tf.string)
+            )
         return text
 
     @tf.function(

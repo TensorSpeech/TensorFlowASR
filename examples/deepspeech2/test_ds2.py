@@ -37,10 +37,11 @@ parser.add_argument("--tfrecords", default=False, action="store_true",
 parser.add_argument("--mxp", default=False, action="store_true",
                     help="Enable mixed precision")
 
-parser.add_argument("--bs", type=int, default=None, help="Batch size")
-
 parser.add_argument("--device", type=int, default=0,
                     help="Device's id to run test on")
+
+parser.add_argument("--output_name", type=str, default="test",
+                    help="Result filename name prefix")
 
 args = parser.parse_args()
 
@@ -87,6 +88,9 @@ else:
         stage="test", shuffle=False
     )
 
-ctc_tester = BaseTester(config=config["learning_config"]["running_config"])
+ctc_tester = BaseTester(
+    config=config["learning_config"]["running_config"],
+    output_name=args.output_name
+)
 ctc_tester.compile(ds2_model)
-ctc_tester.run(test_dataset, batch_size=args.bs)
+ctc_tester.run(test_dataset)
