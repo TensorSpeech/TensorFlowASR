@@ -68,7 +68,7 @@ class VggSubsampling(tf.keras.layers.Layer):
         outputs = tf.nn.relu(outputs)
         outputs = self.maxpool1(outputs, training=training)
 
-        outputs = self.conv3(inputs, training=training)
+        outputs = self.conv3(outputs, training=training)
         outputs = tf.nn.relu(outputs)
         outputs = self.conv4(outputs, training=training)
         outputs = tf.nn.relu(outputs)
@@ -87,16 +87,16 @@ class VggSubsampling(tf.keras.layers.Layer):
         return conf
 
 
-class Conv2dSubsampling2(tf.keras.layers.Layer):
+class Conv2dSubsampling(tf.keras.layers.Layer):
     def __init__(self,
                  filters: int,
                  strides: list or tuple or int = 2,
                  kernel_size: int or list or tuple = 3,
                  kernel_regularizer=None,
                  bias_regularizer=None,
-                 name="Conv2dSubsampling2",
+                 name="Conv2dSubsampling",
                  **kwargs):
-        super(Conv2dSubsampling2, self).__init__(name=name, **kwargs)
+        super(Conv2dSubsampling, self).__init__(name=name, **kwargs)
         self.conv1 = tf.keras.layers.Conv2D(
             filters=filters, kernel_size=kernel_size,
             strides=strides, padding="same", name=f"{name}_1",
@@ -119,36 +119,7 @@ class Conv2dSubsampling2(tf.keras.layers.Layer):
         return merge_two_last_dims(outputs)
 
     def get_config(self):
-        conf = super(Conv2dSubsampling2, self).get_config()
+        conf = super(Conv2dSubsampling, self).get_config()
         conf.update(self.conv1.get_config())
         conf.update(self.conv2.get_config())
-        return conf
-
-
-class Conv2dSubsampling(tf.keras.layers.Layer):
-    def __init__(self,
-                 filters: int,
-                 strides: list or tuple or int = 2,
-                 kernel_size: int or list or tuple = 3,
-                 kernel_regularizer=None,
-                 bias_regularizer=None,
-                 name="Conv2dSubsampling",
-                 **kwargs):
-        super(Conv2dSubsampling, self).__init__(name=name, **kwargs)
-        self.conv = tf.keras.layers.Conv2D(
-            filters=filters, kernel_size=kernel_size,
-            strides=strides, padding="same", name=f"{name}_1",
-            kernel_regularizer=kernel_regularizer,
-            bias_regularizer=bias_regularizer
-        )
-        self.time_reduction_factor = self.conv.strides[0]
-
-    def call(self, inputs, training=False, **kwargs):
-        outputs = self.conv(inputs, training=training)
-        outputs = tf.nn.relu(outputs)
-        return merge_two_last_dims(outputs)
-
-    def get_config(self):
-        conf = super(Conv2dSubsampling, self).get_config()
-        conf.update(self.conv.get_config())
         return conf

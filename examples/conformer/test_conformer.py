@@ -88,7 +88,7 @@ conformer = Conformer(
 )
 conformer._build(speech_featurizer.shape)
 conformer.load_weights(args.saved, by_name=True)
-conformer.summary(line_length=150)
+conformer.summary(line_length=120)
 conformer.add_featurizers(speech_featurizer, text_featurizer)
 
 conformer_tester = BaseTester(config=config["learning_config"]["running_config"])

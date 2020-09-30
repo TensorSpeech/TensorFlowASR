@@ -32,11 +32,11 @@ decoder_config:
 model_config:
   name: conformer
   subsampling:
-    type: conv2
+    type: conv2d
     kernel_size: 3
     filters: 144
     strides: 2
-  positional_encoding: subsampling
+  positional_encoding: sinusoid_concat
   dmodel: 144
   num_blocks: 16
   head_size: 36

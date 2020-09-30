@@ -522,7 +522,7 @@ class Transducer(Model):
 
                         A.append(beam_hyp)
 
-                if len(B) >= beam_width: break
+                if len(B) > beam_width: break
 
         if norm_score:
             kept_hyps = sorted(B, key=lambda x: x.score / len(x.prediction),

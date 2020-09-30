@@ -1,4 +1,4 @@
-# Copyright 2020 Huy Le Nguyen (@usimarit)
+# Copyright 2020 Huy Le Nguyen (@usimarit) and Huy Phan (@pquochuy)
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -24,7 +24,7 @@ DEFAULT_YAML = os.path.join(os.path.abspath(os.path.dirname(__file__)), "config.
 
 tf.keras.backend.clear_session()
 
-parser = argparse.ArgumentParser(prog="Conformer Training")
+parser = argparse.ArgumentParser(prog="MultiConformers Training")
 
 parser.add_argument("--config", type=str, default=DEFAULT_YAML,
                     help="The file path of model configuration file")
@@ -34,6 +34,9 @@ parser.add_argument("--max_ckpts", type=int, default=10,
 
 parser.add_argument("--tfrecords", default=False, action="store_true",
                     help="Whether to use tfrecords")
+
+parser.add_argument("--nfx", default=False, action="store_true",
+                    help="Whether to use numpy feature extraction")
 
 parser.add_argument("--tbs", type=int, default=None,
                     help="Train batch size per replicas")
@@ -50,6 +53,12 @@ parser.add_argument("--mxp", default=False, action="store_true",
 parser.add_argument("--cache", default=False, action="store_true",
                     help="Enable caching for dataset")
 
+parser.add_argument("--subwords_prefix", type=str, default=None,
+                    help="Prefix of file that stores generated subwords")
+
+parser.add_argument("--subwords_corpus", nargs="*", type=str, default=[],
+                    help="Transcript files for generating subwords")
+
 args = parser.parse_args()
 
 tf.config.optimizer.set_experimental_options({"auto_mixed_precision": args.mxp})
@@ -57,61 +66,87 @@ tf.config.optimizer.set_experimental_options({"auto_mixed_precision": args.mxp})
 strategy = setup_strategy(args.devices)
 
 from tiramisu_asr.configs.user_config import UserConfig
-from tiramisu_asr.datasets.asr_dataset import ASRTFRecordDataset, ASRSliceDataset
+from tiramisu_asr.models.multiconformers import MultiConformers
 from tiramisu_asr.featurizers.speech_featurizers import TFSpeechFeaturizer
-from tiramisu_asr.featurizers.text_featurizers import CharFeaturizer
-from tiramisu_asr.runners.transducer_runners import TransducerTrainer
-from tiramisu_asr.models.conformer import Conformer
+from tiramisu_asr.featurizers.speech_featurizers import NumpySpeechFeaturizer
+from tiramisu_asr.featurizers.text_featurizers import SubwordFeaturizer
 from tiramisu_asr.optimizers.schedules import TransformerSchedule
 
+from multiconformers_trainer import MultiConformersTrainer
+from multiconformers_dataset import MultiConformersTFRecordDataset, MultiConformersSliceDataset
+
 config = UserConfig(DEFAULT_YAML, args.config, learning=True)
-speech_featurizer = TFSpeechFeaturizer(config["speech_config"])
-text_featurizer = CharFeaturizer(config["decoder_config"])
+lms_config = config["speech_config"]
+lms_config["feature_type"] = "log_mel_spectrogram"
+lgs_config = config["speech_config"]
+lgs_config["feature_type"] = "log_gammatone_spectrogram"
+
+if args.nfx:
+    speech_featurizer_lms = NumpySpeechFeaturizer(lms_config)
+    speech_featurizer_lgs = NumpySpeechFeaturizer(lgs_config)
+else:
+    speech_featurizer_lms = TFSpeechFeaturizer(lms_config)
+    speech_featurizer_lgs = TFSpeechFeaturizer(lgs_config)
+
+if args.subwords_prefix and os.path.exists(f"{args.subwords_prefix}.subwords"):
+    print("Loading subwords ...")
+    text_featurizer = SubwordFeaturizer.load_from_file(config["decoder_config"],
+                                                       args.subwords_prefix)
+else:
+    print("Generating subwords ...")
+    text_featurizer = SubwordFeaturizer.build_from_corpus(
+        config["decoder_config"],
+        corpus_files=args.subwords_corpus
+    )
+    text_featurizer.subwords.save_to_file(args.subwords_prefix)
 
 if args.tfrecords:
-    train_dataset = ASRTFRecordDataset(
+    train_dataset = MultiConformersTFRecordDataset(
         data_paths=config["learning_config"]["dataset_config"]["train_paths"],
         tfrecords_dir=config["learning_config"]["dataset_config"]["tfrecords_dir"],
-        speech_featurizer=speech_featurizer,
-        text_featurizer=text_featurizer,
+        speech_featurizer_lms=speech_featurizer_lms,
+        speech_featurizer_lgs=speech_featurizer_lgs,
+        text_featurizer=text_featurizer, stage="train",
         augmentations=config["learning_config"]["augmentations"],
-        stage="train", cache=args.cache, shuffle=True
+        cache=args.cache, shuffle=True,
     )
-    eval_dataset = ASRTFRecordDataset(
+    eval_dataset = MultiConformersTFRecordDataset(
         data_paths=config["learning_config"]["dataset_config"]["eval_paths"],
         tfrecords_dir=config["learning_config"]["dataset_config"]["tfrecords_dir"],
-        speech_featurizer=speech_featurizer,
+        speech_featurizer_lms=speech_featurizer_lms,
+        speech_featurizer_lgs=speech_featurizer_lgs,
         text_featurizer=text_featurizer,
         stage="eval", cache=args.cache, shuffle=True
     )
 else:
-    train_dataset = ASRSliceDataset(
-        data_paths=config["learning_config"]["dataset_config"]["train_paths"],
-        speech_featurizer=speech_featurizer,
+    train_dataset = MultiConformersSliceDataset(
+        speech_featurizer_lms=speech_featurizer_lms,
+        speech_featurizer_lgs=speech_featurizer_lgs,
         text_featurizer=text_featurizer,
+        data_paths=config["learning_config"]["dataset_config"]["train_paths"],
         augmentations=config["learning_config"]["augmentations"],
         stage="train", cache=args.cache, shuffle=True
     )
-    eval_dataset = ASRSliceDataset(
-        data_paths=config["learning_config"]["dataset_config"]["eval_paths"],
-        speech_featurizer=speech_featurizer,
+    eval_dataset = MultiConformersSliceDataset(
+        speech_featurizer_lms=speech_featurizer_lms,
+        speech_featurizer_lgs=speech_featurizer_lgs,
         text_featurizer=text_featurizer,
+        data_paths=config["learning_config"]["dataset_config"]["eval_paths"],
         stage="eval", cache=args.cache, shuffle=True
     )
 
-conformer_trainer = TransducerTrainer(
+multiconformers_trainer = MultiConformersTrainer(
     config=config["learning_config"]["running_config"],
     text_featurizer=text_featurizer, strategy=strategy
 )
 
-with conformer_trainer.strategy.scope():
-    # build model
-    conformer = Conformer(
+with multiconformers_trainer.strategy.scope():
+    multiconformers = MultiConformers(
         **config["model_config"],
         vocabulary_size=text_featurizer.num_classes
     )
-    conformer._build(speech_featurizer.shape)
-    conformer.summary(line_length=120)
+    multiconformers._build(speech_featurizer_lms.shape, speech_featurizer_lgs.shape)
+    multiconformers.summary(line_length=120)
 
     optimizer_config = config["learning_config"]["optimizer_config"]
     optimizer = tf.keras.optimizers.Adam(
@@ -125,7 +160,8 @@ with conformer_trainer.strategy.scope():
         epsilon=optimizer_config["epsilon"]
     )
 
-conformer_trainer.compile(model=conformer, optimizer=optimizer,
-                          max_to_keep=args.max_ckpts)
+multiconformers_trainer.compile(model=multiconformers, optimizer=optimizer,
+                                max_to_keep=args.max_ckpts)
 
-conformer_trainer.fit(train_dataset, eval_dataset, train_bs=args.tbs, eval_bs=args.ebs)
+multiconformers_trainer.fit(config["learning_config"]["gradpolicy"],
+                            train_dataset, eval_dataset, train_bs=args.tbs, eval_bs=args.ebs)

@@ -59,7 +59,7 @@ from tiramisu_asr.configs.user_config import UserConfig
 from tiramisu_asr.models.multiconformers import MultiConformers
 from tiramisu_asr.featurizers.speech_featurizers import TFSpeechFeaturizer
 from tiramisu_asr.featurizers.speech_featurizers import NumpySpeechFeaturizer
-from tiramisu_asr.featurizers.text_featurizers import CharFeaturizer
+from tiramisu_asr.featurizers.text_featurizers import SubwordFeaturizer
 
 from multiconformers_tester import MultiConformersTester
 from multiconformers_dataset import MultiConformersTFRecordDataset, MultiConformersSliceDataset
@@ -77,7 +77,12 @@ else:
     speech_featurizer_lms = TFSpeechFeaturizer(lms_config)
     speech_featurizer_lgs = TFSpeechFeaturizer(lgs_config)
 
-text_featurizer = CharFeaturizer(config["decoder_config"])
+if args.subwords_prefix and os.path.exists(f"{args.subwords_prefix}.subwords"):
+    print("Loading subwords ...")
+    text_featurizer = SubwordFeaturizer.load_from_file(config["decoder_config"],
+                                                       args.subwords_prefix)
+else:
+    raise ValueError("subwords_prefix must be set")
 
 tf.random.set_seed(0)
 assert args.saved
