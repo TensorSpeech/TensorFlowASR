@@ -31,10 +31,12 @@ class MultiConformersTester(BaseTester):
         """
         file_paths, lms, lgs, _, labels, _, _ = batch
 
-        with tf.device("/CPU:0"):  # avoid copy tf.string
-            labels = self.model.text_featurizer.iextract(labels)
-            greed_pred = self.model.recognize([lms, lgs])
+        labels = self.model.text_featurizer.iextract(labels)
+        greed_pred = self.model.recognize([lms, lgs])
+        if self.model.text_featurizer.decoder_config["beam_width"] > 0:
             beam_pred = self.model.recognize_beam([lms, lgs], lm=False)
             beam_lm_pred = self.model.recognize_beam([lms, lgs], lm=True)
+        else:
+            beam_pred = beam_lm_pred = tf.constant("", dtype=tf.string)
 
         return file_paths, labels, greed_pred, beam_pred, beam_lm_pred

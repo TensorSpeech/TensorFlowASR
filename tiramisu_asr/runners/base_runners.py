@@ -361,12 +361,12 @@ class BaseTester(BaseRunner):
     After writing finished, it will calculate testing metrics
     """
 
-    def __init__(self, config: dict):
+    def __init__(self, config: dict, output_name: str = "test"):
         super(BaseTester, self).__init__(config)
         self.test_data_loader = None
         self.processed_records = 0
 
-        self.output_file_path = os.path.join(self.config["outdir"], "test.tsv")
+        self.output_file_path = os.path.join(self.config["outdir"], f"{output_name}.tsv")
         self.test_metrics = {
             "beam_wer": ErrorRate(func=wer, name="test_beam_wer", dtype=tf.float32),
             "beam_cer": ErrorRate(func=cer, name="test_beam_cer", dtype=tf.float32),
@@ -376,23 +376,20 @@ class BaseTester(BaseRunner):
             "greed_cer": ErrorRate(func=cer, name="test_greed_cer", dtype=tf.float32)
         }
 
-    def set_output_file(self, batch_size=None):
-        if not batch_size: batch_size = self.config["batch_size"]
-
+    def set_output_file(self):
         if os.path.exists(self.output_file_path):
             with open(self.output_file_path, "r", encoding="utf-8") as out:
                 self.processed_records = get_num_batches(
                     len(out.read().splitlines()) - 1,
-                    batch_size
+                    batch_size=1
                 )
         else:
             with open(self.output_file_path, "w") as out:
                 out.write("PATH\tGROUNDTRUTH\tGREEDY\tBEAMSEARCH\tBEAMSEARCHLM\n")
 
-    def set_test_data_loader(self, test_dataset, batch_size=None):
+    def set_test_data_loader(self, test_dataset):
         """Set train data loader (MUST)."""
-        if not batch_size: batch_size = self.config["batch_size"]
-        self.test_data_loader = test_dataset.create(batch_size)
+        self.test_data_loader = test_dataset.create(batch_size=1)
 
     # -------------------------------- RUNNING -------------------------------------
 
@@ -400,9 +397,9 @@ class BaseTester(BaseRunner):
         """ Set loaded trained model """
         self.model = trained_model
 
-    def run(self, test_dataset, batch_size=None):
-        self.set_output_file(batch_size)
-        self.set_test_data_loader(test_dataset, batch_size)
+    def run(self, test_dataset):
+        self.set_output_file()
+        self.set_test_data_loader(test_dataset)
         self._test_epoch()
         self._finish()
 
@@ -443,11 +440,13 @@ class BaseTester(BaseRunner):
         """
         file_paths, features, _, labels, _, _ = batch
 
-        with tf.device("/CPU:0"):  # avoid copy tf.string
-            labels = self.model.text_featurizer.iextract(labels)
-            greed_pred = self.model.recognize(features)
+        labels = self.model.text_featurizer.iextract(labels)
+        greed_pred = self.model.recognize(features)
+        if self.model.text_featurizer.decoder_config["beam_width"] > 0:
             beam_pred = self.model.recognize_beam(features=features, lm=False)
             beam_lm_pred = self.model.recognize_beam(features=features, lm=True)
+        else:
+            beam_pred = beam_lm_pred = tf.constant([""], dtype=tf.string)
 
         return file_paths, labels, greed_pred, beam_pred, beam_lm_pred
 
@@ -457,6 +456,7 @@ class BaseTester(BaseRunner):
         tf.print("\n> Calculating evaluation metrics ...")
         with open(self.output_file_path, "r", encoding="utf-8") as out:
             lines = out.read().splitlines()
+            lines = lines[1:]  # skip header
 
         for line in lines:
             line = line.split("\t")

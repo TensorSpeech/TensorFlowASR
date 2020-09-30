@@ -40,14 +40,14 @@ parser.add_argument("--mxp", default=False, action="store_true",
 parser.add_argument("--nfx", default=False, action="store_true",
                     help="Whether to use numpy feature extraction")
 
-parser.add_argument("--bs", type=int, default=None,
-                    help="Batch size")
-
 parser.add_argument("--device", type=int, default=0,
                     help="Device's id to run test on")
 
 parser.add_argument("--cpu", default=False, action="store_true",
                     help="Whether to only use cpu")
+
+parser.add_argument("--output_name", type=str, default="test",
+                    help="Result filename name prefix")
 
 args = parser.parse_args()
 
@@ -115,7 +115,9 @@ multiconformers.summary(line_length=120)
 multiconformers.add_featurizers(speech_featurizer_lms, speech_featurizer_lgs, text_featurizer)
 
 multiconformers_tester = MultiConformersTester(
-    config=config["learning_config"]["running_config"])
+    config=config["learning_config"]["running_config"],
+    output_name=args.output_name
+)
 multiconformers_tester.compile(multiconformers)
 
-multiconformers_tester.run(test_dataset, batch_size=args.bs)
+multiconformers_tester.run(test_dataset)
