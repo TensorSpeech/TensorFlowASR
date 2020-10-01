@@ -19,7 +19,7 @@ import tensorflow as tf
 
 from tiramisu_asr.models.transducer import Transducer
 from tiramisu_asr.featurizers.text_featurizers import CharFeaturizer
-from tiramisu_asr.featurizers.speech_featurizers import TFSpeechFeaturizer, read_raw_audio
+from tiramisu_asr.featurizers.speech_featurizers import TFSpeechFeaturizer
 
 text_featurizer = CharFeaturizer({
     "vocabulary": None,
@@ -73,7 +73,7 @@ print(pred)
 # logdir = '/tmp/logs/func/%s' % stamp
 # writer = tf.summary.create_file_writer(logdir)
 #
-signal = read_raw_audio("/home/nlhuy/Desktop/test/11003.wav", speech_featurizer.sample_rate)
+# signal = read_raw_audio("/home/nlhuy/Desktop/test/11003.wav", speech_featurizer.sample_rate)
 #
 # tf.summary.trace_on(graph=True, profiler=True)
 # hyps = model.recognize_tflite(signal, 0, tf.zeros([1, 2, 1, 320], dtype=tf.float32))
