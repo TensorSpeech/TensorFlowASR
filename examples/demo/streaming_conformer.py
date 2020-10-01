@@ -15,9 +15,9 @@
 import sys
 import argparse
 import soundfile as sf
-import time
 import sounddevice as sd
-from multiprocessing import Process, Queue, Event
+from multiprocessing import Process, Event, Manager
+import queue
 
 import numpy as np
 import tensorflow as tf
@@ -33,18 +33,14 @@ def int_or_str(text):
 
 parser = argparse.ArgumentParser(prog="Conformer audio file streaming")
 
-parser.add_argument(
-    '-l', '--list-devices', action='store_true',
-    help='show list of audio devices and exit')
+parser.add_argument('-l', '--list-devices', action='store_true',
+                    help='show list of audio devices and exit')
+
 args, remaining = parser.parse_known_args()
+
 if args.list_devices:
     print(sd.query_devices())
     parser.exit(0)
-
-parser = argparse.ArgumentParser(
-    description=__doc__,
-    formatter_class=argparse.RawDescriptionHelpFormatter,
-    parents=[parser])
 
 parser.add_argument('filename', metavar='FILENAME',
                     help='audio file to be played back')
@@ -52,7 +48,7 @@ parser.add_argument('filename', metavar='FILENAME',
 parser.add_argument('-d', '--device', type=int_or_str,
                     help='output device (numeric ID or substring)')
 
-parser.add_argument('-b', '--blocksize', type=int, default=2048,
+parser.add_argument('-b', '--blocksize', type=int, default=4096,
                     help='block size (default: %(default)s)')
 
 parser.add_argument('-q', '--buffersize', type=int, default=20,
@@ -68,12 +64,13 @@ if args.blocksize == 0:
 if args.buffersize < 1:
     parser.error('buffersize must be at least 1')
 
-q = Queue(maxsize=args.buffersize)
-Q = Queue()
+q = queue.Queue(maxsize=args.buffersize)
+m = Manager()
+Q = m.Queue()
 E = Event()
 
 
-def recognizer():
+def recognizer(Q):
     tflitemodel = tf.lite.Interpreter(model_path=args.tflite)
 
     input_details = tflitemodel.get_input_details()
@@ -83,16 +80,20 @@ def recognizer():
     tflitemodel.allocate_tensors()
 
     def recognize(signal, lastid, states):
+        if signal.shape[0] < args.blocksize:
+            signal = np.pad(signal, [[0, args.blocksize - signal.shape[0]]])
         tflitemodel.set_tensor(input_details[0]["index"], signal)
         tflitemodel.set_tensor(input_details[1]["index"], lastid)
         tflitemodel.set_tensor(input_details[2]["index"], states)
         tflitemodel.invoke()
-        upoints, lastid, states = tflitemodel.get_tensor(output_details[0]["index"])
+        upoints = tflitemodel.get_tensor(output_details[0]["index"])
+        lastid = tflitemodel.get_tensor(output_details[1]["index"])
+        states = tflitemodel.get_tensor(output_details[2]["index"])
         text = "".join([chr(u) for u in upoints])
         return text, lastid, states
 
-    lastid = 0
-    states = np.zeros(shape=[1, 1, 1, 320], dtype=np.float32)
+    lastid = np.zeros(shape=[], dtype=np.int32)
+    states = np.zeros(shape=[1, 2, 1, 320], dtype=np.float32)
     transcript = ""
 
     while True:
@@ -100,12 +101,12 @@ def recognizer():
             data = Q.get()
             text, lastid, states = recognize(data, lastid, states)
             transcript += text
-            print(transcript)
-        except Exception:
+            print(transcript, flush=True)
+        except queue.Empty:
             pass
 
 
-tflite_process = Process(target=recognizer)
+tflite_process = Process(target=recognizer, args=[Q])
 tflite_process.start()
 
 
@@ -117,8 +118,8 @@ def callback(outdata, frames, time, status):
     assert not status
     try:
         data = q.get_nowait()
-        Q.put(data)
-    except Queue.Empty as e:
+        Q.put(np.frombuffer(data, dtype=np.float32))
+    except queue.Empty as e:
         print('Buffer is empty: increase buffersize?', file=sys.stderr)
         raise sd.CallbackAbort from e
     if len(data) < len(outdata):
@@ -130,7 +131,7 @@ def callback(outdata, frames, time, status):
 
 
 try:
-    with sf.SoundFile(args.audio) as f:
+    with sf.SoundFile(args.filename) as f:
         for _ in range(args.buffersize):
             data = f.buffer_read(args.blocksize, dtype='float32')
             if not data:
@@ -149,8 +150,11 @@ try:
 
 except KeyboardInterrupt:
     parser.exit('\nInterrupted by user')
-except Queue.Full:
+except queue.Full:
     # A timeout occurred, i.e. there was an error in the callback
     parser.exit(1)
 except Exception as e:
     parser.exit(type(e).__name__ + ': ' + str(e))
+
+tflite_process.join()
+tflite_process.close()

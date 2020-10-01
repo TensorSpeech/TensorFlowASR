@@ -2,6 +2,7 @@ import argparse
 import tensorflow as tf
 
 from tiramisu_asr.featurizers.text_featurizers import SubwordFeaturizer
+from tiramisu_asr.featurizers.speech_featurizers import read_raw_audio
 
 parser = argparse.ArgumentParser(prog="test subword")
 
