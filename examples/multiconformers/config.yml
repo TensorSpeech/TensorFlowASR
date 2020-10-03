@@ -49,6 +49,7 @@ model_config:
   num_rnns: 1
   rnn_units: 320
   rnn_type: lstm
+  layer_norm: True
   encoder_joint_mode: concat
   joint_dim: 320
 
