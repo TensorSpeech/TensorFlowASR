@@ -32,12 +32,12 @@ requirements = [
     "numba==0.49.1",
     "tqdm>=4.47.0",
     "colorama>=0.4.3",
-    "nlpaug>=0.0.14"
+    "nlpaug>=1.0.1"
 ]
 
 setuptools.setup(
     name="tiramisu-asr",
-    version="0.2.1",
+    version="0.2.2",
     author="Huy Le Nguyen",
     author_email="nlhuy.cs.16@gmail.com",
     description="Automatic Speech Recognition using Tensorflow 2",

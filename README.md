@@ -19,11 +19,10 @@ TiramisuASR implements some speech recognition architectures such as CTC-based m
 
 ## What's New?
 
+- (10/6/2020) Change `nlpaug` version to `>=1.0.1`
 - (9/18/2020) Support `word-pieces` (aka `subwords`) using `tensorflow-datasets`
-- Support `transducer` tflite greedy decoding (conversion and invocation) 
+- Support `transducer` tflite greedy decoding (conversion and invocation)
 - Distributed training using `tf.distribute.MirroredStrategy`
-- Fixed transducer beam search
-- Add `log_gammatone_spectrogram`
 
 ## :yum: Supported Models
 
@@ -148,6 +147,6 @@ For pretrained models, go to [drive](https://drive.google.com/drive/folders/1BD0
 ## References & Credits
 
 1. [NVIDIA OpenSeq2Seq Toolkit](https://github.com/NVIDIA/OpenSeq2Seq)
-3. [https://github.com/noahchalifour/warp-transducer](https://github.com/noahchalifour/warp-transducer)
-4. [Sequence Transduction with Recurrent Neural Network](https://arxiv.org/abs/1211.3711)
-5. [End-to-End Speech Processing Toolkit in PyTorch](https://github.com/espnet/espnet)
+2. [https://github.com/noahchalifour/warp-transducer](https://github.com/noahchalifour/warp-transducer)
+3. [Sequence Transduction with Recurrent Neural Network](https://arxiv.org/abs/1211.3711)
+4. [End-to-End Speech Processing Toolkit in PyTorch](https://github.com/espnet/espnet)
