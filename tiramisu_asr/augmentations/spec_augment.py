@@ -53,7 +53,8 @@ class FreqMaskingAugmenter(SpectrogramAugmenter):
                  name="FreqMaskingAugmenter",
                  verbose=0):
         super(FreqMaskingAugmenter, self).__init__(
-            action=Action.SUBSTITUTE, name=name, device="cpu", verbose=verbose)
+            action=Action.SUBSTITUTE, zone=(0.2, 0.8), name=name, device="cpu", verbose=verbose,
+            coverage=1., factor=(40, 80), silence=False, stateless=True)
         self.model = FreqMaskingModel(mask_factor)
 
     def substitute(self, data):
@@ -67,7 +68,8 @@ class FreqMasking(SpectrogramAugmenter):
                  name="FreqMasking",
                  verbose=0):
         super(FreqMasking, self).__init__(
-            action=Action.SUBSTITUTE, name=name, device="cpu", verbose=verbose)
+            action=Action.SUBSTITUTE, zone=(0.2, 0.8), name=name, device="cpu", verbose=verbose,
+            coverage=1., factor=(40, 80), silence=False, stateless=True)
         self.flow = Sequential([FreqMaskingAugmenter(mask_factor) for _ in range(num_masks)])
 
     def substitute(self, data):
@@ -113,7 +115,8 @@ class TimeMaskingAugmenter(SpectrogramAugmenter):
                  name="TimeMaskingAugmenter",
                  verbose=0):
         super(TimeMaskingAugmenter, self).__init__(
-            action=Action.SUBSTITUTE, name=name, device="cpu", verbose=verbose)
+            action=Action.SUBSTITUTE, zone=(0.2, 0.8), name=name, device="cpu", verbose=verbose,
+            coverage=1., silence=False, stateless=True)
         self.model = TimeMaskingModel(mask_factor, p_upperbound)
 
     def substitute(self, data):
@@ -128,7 +131,8 @@ class TimeMasking(SpectrogramAugmenter):
                  name="TimeMasking",
                  verbose=0):
         super(TimeMasking, self).__init__(
-            action=Action.SUBSTITUTE, name=name, device="cpu", verbose=verbose)
+            action=Action.SUBSTITUTE, zone=(0.2, 0.8), name=name, device="cpu", verbose=verbose,
+            coverage=1., silence=False, stateless=True)
         self.flow = Sequential([
             TimeMaskingAugmenter(mask_factor, p_upperbound) for _ in range(num_masks)
         ])
