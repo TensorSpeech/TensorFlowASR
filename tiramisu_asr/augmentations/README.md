@@ -15,8 +15,3 @@ Where `before` and `after` are augmentation methods to use before and after feat
 **Supported Methods**
 
 All methods that supported my `nlpaug` for audio and spectrogram are supported.
-
-## Changes
-
--   remove `include_original` augmentation on probability
--   `noise_augment.py` file is deprecated

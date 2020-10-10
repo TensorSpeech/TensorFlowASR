@@ -37,10 +37,10 @@ requirements = [
 
 setuptools.setup(
     name="tiramisu-asr",
-    version="0.2.2",
+    version="0.2.3",
     author="Huy Le Nguyen",
     author_email="nlhuy.cs.16@gmail.com",
-    description="Automatic Speech Recognition using Tensorflow 2",
+    description="Almost State-of-the-art Automatic Speech Recognition using Tensorflow 2",
     long_description=long_description,
     long_description_content_type="text/markdown",
     url="https://github.com/usimarit/TiramisuASR",
@@ -52,9 +52,10 @@ setuptools.setup(
     classifiers=[
         "Programming Language :: Python :: 3.6",
         "Programming Language :: Python :: 3.7",
+        "Programming Language :: Python :: 3.8",
         "Intended Audience :: Science/Research",
         "Operating System :: POSIX :: Linux",
-        "License :: OSI Approved :: Apache-2.0 License",
+        "License :: OSI Approved :: Apache Software License",
         "Topic :: Software Development :: Libraries :: Python Modules"
     ],
     python_requires='>=3.6',

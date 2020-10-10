@@ -10,7 +10,7 @@
 </p>
 </h1>
 <h2 align="center">
-<p>The Newest Automatic Speech Recognition in Tensorflow 2</p>
+<p>Almost State-of-the-art Automatic Speech Recognition in Tensorflow 2</p>
 </h2>
 
 <p align="center">
@@ -19,6 +19,7 @@ TiramisuASR implements some speech recognition architectures such as CTC-based m
 
 ## What's New?
 
+- (10/10/2020) Update documents and upload package to pypi
 - (10/6/2020) Change `nlpaug` version to `>=1.0.1`
 - (9/18/2020) Support `word-pieces` (aka `subwords`) using `tensorflow-datasets`
 - Support `transducer` tflite greedy decoding (conversion and invocation)
@@ -31,17 +32,14 @@ TiramisuASR implements some speech recognition architectures such as CTC-based m
 - **Conformer Transducer** (Reference: [https://arxiv.org/abs/2005.08100](https://arxiv.org/abs/2005.08100))
   See [examples/conformer](./examples/conformer)
 
-## Requirements
-
-- Ubuntu distribution (`ctc-decoders` and `semetrics` require some packages from apt)
-- Python 3.6+
-- Tensorflow 2.2+: `pip install tensorflow`
-
 ## Setup Environment and Datasets
 
-Install tensorflow: `pip3 install tensorflow` or `pip3 install tf-nightly` (for using tflite)
+Install tensorflow: `pip3 install -U tensorflow` or `pip3 install tf-nightly` (for using tflite)
 
-Install packages: `python3 setup.py install`
+Install packages (choose _one_ of these options):
+
+- Run `pip3 install -U tiramisu-asr`
+- Clone the repo and run `python3 setup.py install` in the repo's directory
 
 For **setting up datasets**, see [datasets](./tiramisu_asr/datasets/README.md)
 
@@ -49,7 +47,7 @@ For **setting up datasets**, see [datasets](./tiramisu_asr/datasets/README.md)
 
 - For _training_ **Transducer Models**, export `CUDA_HOME` and run `./scripts/install_rnnt_loss.sh`
 
-- Method `tiramisu_asr.utils.setup_environment()` _automatically_ enable **mixed_precision** if available.
+- Method `tiramisu_asr.utils.setup_environment()` enable **mixed_precision** if available.
 
 - To enable XLA, run `TF_XLA_FLAGS=--tf_xla_auto_jit=2 $python_train_script`
 
@@ -117,7 +115,7 @@ learning_config:
     log_interval_steps: 500
 ```
 
-See [examples](./examples/) for some predefined ASR models.
+See [examples](./examples/) for some predefined ASR models and results
 
 ## Corpus Sources and Pretrained Models
 
