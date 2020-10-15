@@ -126,10 +126,16 @@ class BaseTrainer(BaseRunner):
         else:
             self.strategy = strategy
 
-    def set_train_data_loader(self, train_dataset, train_bs=None):
+    def set_train_data_loader(self, train_dataset, train_bs=None, train_acs=None):
         """ Set train data loader (MUST). """
         if not train_bs: train_bs = self.config["batch_size"]
         self.global_batch_size = train_bs * self.strategy.num_replicas_in_sync
+        self.config["batch_size"] = train_bs  # Update batch size fed from arguments
+
+        if not train_acs: train_acs = self.config.get("accumulation_steps", 1)
+        self.accumulation_bs = train_bs // train_acs
+        self.config["accumulation_steps"] = train_acs
+
         self.train_data = train_dataset.create(self.global_batch_size)
         self.train_data_loader = self.strategy.experimental_distribute_dataset(self.train_data)
         self.train_steps_per_epoch = train_dataset.total_steps
@@ -308,9 +314,9 @@ class BaseTrainer(BaseRunner):
         """ Function to initialize models and optimizers """
         raise NotImplementedError()
 
-    def fit(self, train_dataset, eval_dataset=None, train_bs=None, eval_bs=None):
+    def fit(self, train_dataset, eval_dataset=None, train_bs=None, train_acs=None, eval_bs=None):
         """ Function run start training, including executing "run" func """
-        self.set_train_data_loader(train_dataset, train_bs)
+        self.set_train_data_loader(train_dataset, train_bs, train_acs)
         self.set_eval_data_loader(eval_dataset, eval_bs)
         self.load_checkpoint()
         self.run()

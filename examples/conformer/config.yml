@@ -38,7 +38,7 @@ model_config:
     filters: 144
     kernel_size: 3
     strides: 2
-  positional_encoding: subsampling
+  positional_encoding: sinusoid_concat
   dmodel: 144
   num_blocks: 16
   head_size: 36
@@ -83,7 +83,8 @@ learning_config:
     epsilon: 1e-9
 
   running_config:
-    batch_size: 4
+    batch_size: 2
+    accumulation_steps: 1
     num_epochs: 20
     outdir: /mnt/Projects/asrk16/trained/local/librispeech/conformer
     log_interval_steps: 300

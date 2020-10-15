@@ -37,7 +37,7 @@ requirements = [
 
 setuptools.setup(
     name="tiramisu-asr",
-    version="0.2.3",
+    version="0.2.4",
     author="Huy Le Nguyen",
     author_email="nlhuy.cs.16@gmail.com",
     description="Almost State-of-the-art Automatic Speech Recognition using Tensorflow 2",

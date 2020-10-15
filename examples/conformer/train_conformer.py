@@ -36,10 +36,10 @@ parser.add_argument("--tfrecords", default=False, action="store_true",
                     help="Whether to use tfrecords")
 
 parser.add_argument("--tbs", type=int, default=None,
-                    help="Train batch size per replicas")
+                    help="Train batch size per replica")
 
 parser.add_argument("--ebs", type=int, default=None,
-                    help="Evaluation batch size per replicas")
+                    help="Evaluation batch size per replica")
 
 parser.add_argument("--devices", type=int, nargs="*", default=[0],
                     help="Devices' ids to apply distributed training")
