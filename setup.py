@@ -19,7 +19,7 @@ with open("README.md", "r") as fh:
 
 requirements = [
     "tensorflow>=2.3.0",
-    "tensorflow-datasets>=3.2.1",
+    "tensorflow-datasets>=3.2.1,<4.0.0",
     "tensorflow-addons>=0.10.0",
     "setuptools>=47.1.1",
     "librosa>=0.7.2",
