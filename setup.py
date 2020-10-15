@@ -36,14 +36,14 @@ requirements = [
 ]
 
 setuptools.setup(
-    name="tensorflow-asr",
+    name="TensorFlowASR",
     version="0.2.5",
     author="Huy Le Nguyen",
     author_email="nlhuy.cs.16@gmail.com",
     description="Almost State-of-the-art Automatic Speech Recognition using Tensorflow 2",
     long_description=long_description,
     long_description_content_type="text/markdown",
-    url="https://github.com/TensorSpeech/TensorflowASR",
+    url="https://github.com/TensorSpeech/TensorFlowASR",
     packages=setuptools.find_packages(include=["tensorflow_asr*"]),
     package_data={
         "tensorflow_asr": ["featurizers/*.txt"]

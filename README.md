@@ -1,8 +1,8 @@
 <h1 align="center">
-<p>TensorflowASR</p>
+<p>TensorFlowASR :zap:</p>
 <p align="center">
-<a href="https://github.com/TensorSpeech/TensorflowASR/blob/master/LICENSE">
-  <img alt="GitHub" src="https://img.shields.io/github/license/TensorSpeech/TensorflowASR?style=for-the-badge&logo=apache">
+<a href="https://github.com/TensorSpeech/TensorFlowASR/blob/main/LICENSE">
+  <img alt="GitHub" src="https://img.shields.io/github/license/TensorSpeech/TensorFlowASR?style=for-the-badge&logo=apache">
 </a>
 <img alt="python" src="https://img.shields.io/badge/python-%3E%3D3.6-blue?style=for-the-badge&logo=python">
 <img alt="tensorflow" src="https://img.shields.io/badge/tensorflow-%3E%3D2.3.0-orange?style=for-the-badge&logo=tensorflow">
@@ -14,7 +14,7 @@
 </h2>
 
 <p align="center">
-TensorflowASR implements some speech recognition architectures such as CTC-based models (Deep Speech 2, etc.), RNN Transducer (Conformer, etc.). These models can be converted to TFLite to reduce memory and computation for deployment :smile:
+TensorFlowASR implements some automatic speech recognition architectures such as DeepSpeech2, Conformer, etc. These models can be converted to TFLite to reduce memory and computation for deployment :smile:
 </p>
 
 ## What's New?
@@ -39,7 +39,7 @@ Install tensorflow: `pip3 install -U tensorflow` or `pip3 install tf-nightly` (f
 
 Install packages (choose _one_ of these options):
 
-- Run `pip3 install -U tensorflow-asr`
+- Run `pip3 install -U TensorFlowASR`
 - Clone the repo and run `python3 setup.py install` in the repo's directory
 
 For **setting up datasets**, see [datasets](./tensorflow_asr/datasets/README.md)
