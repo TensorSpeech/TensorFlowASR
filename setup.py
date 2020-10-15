@@ -36,17 +36,17 @@ requirements = [
 ]
 
 setuptools.setup(
-    name="tiramisu-asr",
-    version="0.2.4",
+    name="tensorflow-asr",
+    version="0.2.5",
     author="Huy Le Nguyen",
     author_email="nlhuy.cs.16@gmail.com",
     description="Almost State-of-the-art Automatic Speech Recognition using Tensorflow 2",
     long_description=long_description,
     long_description_content_type="text/markdown",
-    url="https://github.com/usimarit/TiramisuASR",
-    packages=setuptools.find_packages(include=["tiramisu_asr*"]),
+    url="https://github.com/TensorSpeech/TensorflowASR",
+    packages=setuptools.find_packages(include=["tensorflow_asr*"]),
     package_data={
-        "tiramisu_asr": ["featurizers/*.txt"]
+        "tensorflow_asr": ["featurizers/*.txt"]
     },
     install_requires=requirements,
     classifiers=[

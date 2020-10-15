@@ -13,8 +13,8 @@
 # limitations under the License.
 
 import argparse
-from tiramisu_asr.utils.utils import preprocess_paths
-from tiramisu_asr.datasets.asr_dataset import ASRTFRecordDataset
+from tensorflow_asr.utils.utils import preprocess_paths
+from tensorflow_asr.datasets.asr_dataset import ASRTFRecordDataset
 
 modes = ["train", "eval", "test"]
 

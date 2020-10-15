@@ -1,8 +1,8 @@
 <h1 align="center">
-<p>TiramisuASR :cake:</p>
+<p>TensorflowASR</p>
 <p align="center">
-<a href="https://github.com/usimarit/TiramisuASR/blob/master/LICENSE">
-  <img alt="GitHub" src="https://img.shields.io/github/license/usimarit/TiramisuASR?style=for-the-badge&logo=apache">
+<a href="https://github.com/TensorSpeech/TensorflowASR/blob/master/LICENSE">
+  <img alt="GitHub" src="https://img.shields.io/github/license/TensorSpeech/TensorflowASR?style=for-the-badge&logo=apache">
 </a>
 <img alt="python" src="https://img.shields.io/badge/python-%3E%3D3.6-blue?style=for-the-badge&logo=python">
 <img alt="tensorflow" src="https://img.shields.io/badge/tensorflow-%3E%3D2.3.0-orange?style=for-the-badge&logo=tensorflow">
@@ -14,11 +14,12 @@
 </h2>
 
 <p align="center">
-TiramisuASR implements some speech recognition architectures such as CTC-based models (Deep Speech 2, etc.), RNN Transducer (Conformer, etc.). These models can be converted to TFLite to reduce memory and computation for deployment :smile:
+TensorflowASR implements some speech recognition architectures such as CTC-based models (Deep Speech 2, etc.), RNN Transducer (Conformer, etc.). These models can be converted to TFLite to reduce memory and computation for deployment :smile:
 </p>
 
 ## What's New?
 
+- (10/15/2020) Add gradients accumulation and Refactor to TensorflowASR
 - (10/10/2020) Update documents and upload package to pypi
 - (10/6/2020) Change `nlpaug` version to `>=1.0.1`
 - (9/18/2020) Support `word-pieces` (aka `subwords`) using `tensorflow-datasets`
@@ -38,16 +39,16 @@ Install tensorflow: `pip3 install -U tensorflow` or `pip3 install tf-nightly` (f
 
 Install packages (choose _one_ of these options):
 
-- Run `pip3 install -U tiramisu-asr`
+- Run `pip3 install -U tensorflow-asr`
 - Clone the repo and run `python3 setup.py install` in the repo's directory
 
-For **setting up datasets**, see [datasets](./tiramisu_asr/datasets/README.md)
+For **setting up datasets**, see [datasets](./tensorflow_asr/datasets/README.md)
 
 - For _training, testing and using_ **CTC Models**, run `./scripts/install_ctc_decoders.sh`
 
 - For _training_ **Transducer Models**, export `CUDA_HOME` and run `./scripts/install_rnnt_loss.sh`
 
-- Method `tiramisu_asr.utils.setup_environment()` enable **mixed_precision** if available.
+- Method `tensorflow_asr.utils.setup_environment()` enable **mixed_precision** if available.
 
 - To enable XLA, run `TF_XLA_FLAGS=--tf_xla_auto_jit=2 $python_train_script`
 
@@ -86,11 +87,11 @@ with open(tflite_path, "wb") as tflite_out:
 
 ## Features Extraction
 
-See [features_extraction](./tiramisu_asr/featurizers/README.md)
+See [features_extraction](./tensorflow_asr/featurizers/README.md)
 
 ## Augmentations
 
-See [augmentations](./tiramisu_asr/augmentations/README.md)
+See [augmentations](./tensorflow_asr/augmentations/README.md)
 
 ## Training & Testing
 

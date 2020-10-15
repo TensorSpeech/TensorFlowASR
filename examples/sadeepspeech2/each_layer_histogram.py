@@ -1,17 +1,17 @@
 import os
 import argparse
 
-from tiramisu_asr.utils import setup_environment
+from tensorflow_asr.utils import setup_environment
 
 setup_environment()
 import matplotlib.pyplot as plt
 import tensorflow as tf
 import numpy as np
 
-from tiramisu_asr.featurizers.speech_featurizers import SpeechFeaturizer, read_raw_audio
-from tiramisu_asr.featurizers.text_featurizers import CharFeaturizer
-from tiramisu_asr.configs.user_config import UserConfig
-from tiramisu_asr.utils.utils import bytes_to_string
+from tensorflow_asr.featurizers.speech_featurizers import SpeechFeaturizer, read_raw_audio
+from tensorflow_asr.featurizers.text_featurizers import CharFeaturizer
+from tensorflow_asr.configs.user_config import UserConfig
+from tensorflow_asr.utils.utils import bytes_to_string
 from ctc_decoders import Scorer
 from model import SelfAttentionDS2
 

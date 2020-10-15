@@ -15,7 +15,7 @@
 import math
 import tensorflow as tf
 import matplotlib.pyplot as plt
-from tiramisu_asr.optimizers.schedules import SANSchedule, TransformerSchedule
+from tensorflow_asr.optimizers.schedules import SANSchedule, TransformerSchedule
 
 lr = SANSchedule(lamb=0.05, d_model=512, warmup_steps=4000)
 

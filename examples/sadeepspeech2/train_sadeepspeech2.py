@@ -13,7 +13,7 @@
 # limitations under the License.
 import os
 import argparse
-from tiramisu_asr.utils import setup_environment, setup_strategy
+from tensorflow_asr.utils import setup_environment, setup_strategy
 
 setup_environment()
 import tensorflow as tf
@@ -54,11 +54,11 @@ tf.config.optimizer.set_experimental_options({"auto_mixed_precision": args.mxp})
 
 strategy = setup_strategy(args.devices)
 
-from tiramisu_asr.configs.user_config import UserConfig
-from tiramisu_asr.datasets.asr_dataset import ASRTFRecordDataset, ASRSliceDataset
-from tiramisu_asr.featurizers.speech_featurizers import TFSpeechFeaturizer
-from tiramisu_asr.featurizers.text_featurizers import CharFeaturizer
-from tiramisu_asr.runners.ctc_runners import CTCTrainer
+from tensorflow_asr.configs.user_config import UserConfig
+from tensorflow_asr.datasets.asr_dataset import ASRTFRecordDataset, ASRSliceDataset
+from tensorflow_asr.featurizers.speech_featurizers import TFSpeechFeaturizer
+from tensorflow_asr.featurizers.text_featurizers import CharFeaturizer
+from tensorflow_asr.runners.ctc_runners import CTCTrainer
 from model import SelfAttentionDS2
 from optimizer import create_optimizer
 

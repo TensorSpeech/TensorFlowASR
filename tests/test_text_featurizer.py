@@ -1,4 +1,4 @@
-from tiramisu_asr.featurizers.text_featurizers import CharFeaturizer
+from tensorflow_asr.featurizers.text_featurizers import CharFeaturizer
 
 txf = CharFeaturizer(None, blank_at_zero=True)
 

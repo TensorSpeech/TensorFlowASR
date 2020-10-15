@@ -25,7 +25,7 @@ _Note_: `TFSpeechFeaturizer` class **should be used** if you want to deploy `tfl
 
 ## Text Features
 
-**Text features** are read as index from the file like the default `tiramisu_asr.featurizers.english.txt` plus 1 for the blank index.
+**Text features** are read as index from the file like the default `tensorflow_asr.featurizers.english.txt` plus 1 for the blank index.
 
 The **blank** index is either `0` or `num_classes - 1` where `num_classes` is number of characters in your language (exclude blank).
 

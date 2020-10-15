@@ -15,7 +15,7 @@
 import argparse
 import tensorflow as tf
 
-from tiramisu_asr.featurizers.speech_featurizers import read_raw_audio
+from tensorflow_asr.featurizers.speech_featurizers import read_raw_audio
 
 parser = argparse.ArgumentParser(prog="Conformer non streaming")
 

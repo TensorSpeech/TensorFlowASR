@@ -2,11 +2,11 @@ import os
 import psutil
 process = psutil.Process(os.getpid())
 
-from tiramisu_asr.utils import setup_environment
+from tensorflow_asr.utils import setup_environment
 setup_environment()
-from tiramisu_asr.datasets.asr_dataset import ASRSliceDataset
-from tiramisu_asr.featurizers.speech_featurizers import TFSpeechFeaturizer
-from tiramisu_asr.featurizers.text_featurizers import CharFeaturizer
+from tensorflow_asr.datasets.asr_dataset import ASRSliceDataset
+from tensorflow_asr.featurizers.speech_featurizers import TFSpeechFeaturizer
+from tensorflow_asr.featurizers.text_featurizers import CharFeaturizer
 
 
 augments = {

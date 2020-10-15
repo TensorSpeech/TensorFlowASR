@@ -18,12 +18,12 @@ to use cuDNN-LSTM
 import numpy as np
 import tensorflow as tf
 
-from tiramisu_asr.utils.utils import append_default_keys_dict, get_rnn
-from tiramisu_asr.models.layers.row_conv_1d import RowConv1D
-from tiramisu_asr.models.layers.sequence_wise_bn import SequenceBatchNorm
-from tiramisu_asr.models.layers.transpose_time_major import TransposeTimeMajor
-from tiramisu_asr.models.layers.merge_two_last_dims import Merge2LastDims
-from tiramisu_asr.models.ctc import CtcModel
+from tensorflow_asr.utils.utils import append_default_keys_dict, get_rnn
+from tensorflow_asr.models.layers.row_conv_1d import RowConv1D
+from tensorflow_asr.models.layers.sequence_wise_bn import SequenceBatchNorm
+from tensorflow_asr.models.layers.transpose_time_major import TransposeTimeMajor
+from tensorflow_asr.models.layers.merge_two_last_dims import Merge2LastDims
+from tensorflow_asr.models.ctc import CtcModel
 
 DEFAULT_CONV = {
     "conv_type": 2,

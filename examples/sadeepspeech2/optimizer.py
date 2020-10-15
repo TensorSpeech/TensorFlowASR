@@ -14,7 +14,7 @@
 
 import tensorflow as tf
 
-from tiramisu_asr.optimizers.schedules import TransformerSchedule, SANSchedule
+from tensorflow_asr.optimizers.schedules import TransformerSchedule, SANSchedule
 
 
 def create_optimizer(name, d_model, lamb=0.05, warmup_steps=4000):

@@ -16,16 +16,16 @@
 #
 # import os.path as o
 import sys
-from tiramisu_asr.utils import setup_environment
+from tensorflow_asr.utils import setup_environment
 setup_environment()
 import librosa
 import numpy as np
 # sys.path.append(o.abspath(o.join(o.dirname(sys.modules[__name__].__file__), "..")))
 #
 import matplotlib.pyplot as plt
-from tiramisu_asr.featurizers.speech_featurizers import read_raw_audio, \
+from tensorflow_asr.featurizers.speech_featurizers import read_raw_audio, \
     TFSpeechFeaturizer, NumpySpeechFeaturizer
-from tiramisu_asr.augmentations.augments import UserAugmentation
+from tensorflow_asr.augmentations.augments import UserAugmentation
 
 
 def main(argv):

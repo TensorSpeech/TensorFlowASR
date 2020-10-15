@@ -1,10 +1,10 @@
 import tensorflow as tf
 
 from ctc_decoders import Scorer
-from tiramisu_asr.models.ctc import CtcModel
-from tiramisu_asr.featurizers.text_featurizers import CharFeaturizer
-from tiramisu_asr.featurizers.speech_featurizers import TFSpeechFeaturizer, read_raw_audio
-from tiramisu_asr.utils.utils import bytes_to_string, merge_two_last_dims
+from tensorflow_asr.models.ctc import CtcModel
+from tensorflow_asr.featurizers.text_featurizers import CharFeaturizer
+from tensorflow_asr.featurizers.speech_featurizers import TFSpeechFeaturizer, read_raw_audio
+from tensorflow_asr.utils.utils import bytes_to_string, merge_two_last_dims
 
 decoder_config = {
     "vocabulary": "/mnt/Projects/asrk16/TiramisuASR/vocabularies/vietnamese.txt",

@@ -18,11 +18,11 @@ to use cuDNN-LSTM
 import tensorflow as tf
 import tensorflow_addons as tfa
 
-from tiramisu_asr.models.layers.positional_encoding import PositionalEncoding
-from tiramisu_asr.models.layers.point_wise_ffn import PointWiseFFN
-from tiramisu_asr.models.layers.sequence_wise_bn import SequenceBatchNorm
-from tiramisu_asr.utils.utils import merge_two_last_dims
-from tiramisu_asr.models.ctc import CtcModel
+from tensorflow_asr.models.layers.positional_encoding import PositionalEncoding
+from tensorflow_asr.models.layers.point_wise_ffn import PointWiseFFN
+from tensorflow_asr.models.layers.sequence_wise_bn import SequenceBatchNorm
+from tensorflow_asr.utils.utils import merge_two_last_dims
+from tensorflow_asr.models.ctc import CtcModel
 
 ARCH_CONFIG = {
     "subsampling": {

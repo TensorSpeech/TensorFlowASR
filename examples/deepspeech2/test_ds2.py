@@ -14,7 +14,7 @@
 
 import os
 import argparse
-from tiramisu_asr.utils import setup_environment, setup_devices
+from tensorflow_asr.utils import setup_environment, setup_devices
 
 setup_environment()
 import tensorflow as tf
@@ -49,11 +49,11 @@ tf.config.optimizer.set_experimental_options({"auto_mixed_precision": args.mxp})
 
 setup_devices([args.device])
 
-from tiramisu_asr.configs.user_config import UserConfig
-from tiramisu_asr.datasets.asr_dataset import ASRTFRecordDataset, ASRSliceDataset
-from tiramisu_asr.featurizers.speech_featurizers import TFSpeechFeaturizer
-from tiramisu_asr.featurizers.text_featurizers import CharFeaturizer
-from tiramisu_asr.runners.base_runners import BaseTester
+from tensorflow_asr.configs.user_config import UserConfig
+from tensorflow_asr.datasets.asr_dataset import ASRTFRecordDataset, ASRSliceDataset
+from tensorflow_asr.featurizers.speech_featurizers import TFSpeechFeaturizer
+from tensorflow_asr.featurizers.text_featurizers import CharFeaturizer
+from tensorflow_asr.runners.base_runners import BaseTester
 from model import DeepSpeech2
 
 tf.random.set_seed(0)

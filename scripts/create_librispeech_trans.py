@@ -19,7 +19,7 @@ import librosa
 from tqdm.auto import tqdm
 import unicodedata
 
-from tiramisu_asr.utils.utils import preprocess_paths
+from tensorflow_asr.utils.utils import preprocess_paths
 
 parser = argparse.ArgumentParser(prog="Setup LibriSpeech Transcripts")
 

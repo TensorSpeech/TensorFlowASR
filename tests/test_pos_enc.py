@@ -14,8 +14,8 @@
 
 import tensorflow as tf
 import matplotlib.pyplot as plt
-from tiramisu_asr.models.layers.positional_encoding import PositionalEncodingConcat
-from tiramisu_asr.models.layers.multihead_attention import RelPositionMultiHeadAttention
+from tensorflow_asr.models.layers.positional_encoding import PositionalEncodingConcat
+from tensorflow_asr.models.layers.multihead_attention import RelPositionMultiHeadAttention
 
 pos_encoding = PositionalEncodingConcat.encode(500, 144)
 print(pos_encoding.shape)
