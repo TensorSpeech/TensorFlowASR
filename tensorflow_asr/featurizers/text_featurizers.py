@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import os
 import abc
 import codecs
 import unicodedata
@@ -21,16 +22,17 @@ import tensorflow as tf
 import tensorflow_datasets as tds
 
 from ..utils.utils import preprocess_paths
-from . import ENGLISH
+
+ENGLISH_CHARACTERS = [" ", "a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m",
+                      "n", "o", "p", "q", "r", "s", "t", "u", "v", "w", "x", "y", "z", "'"]
 
 
 class TextFeaturizer(metaclass=abc.ABCMeta):
     def __init__(self, decoder_config: dict):
         self.scorer = None
         self.decoder_config = decoder_config
-        if not self.decoder_config.get("vocabulary", None):
-            self.decoder_config["vocabulary"] = ENGLISH  # Default language is english
-        self.decoder_config["vocabulary"] = preprocess_paths(self.decoder_config["vocabulary"])
+        if self.decoder_config.get("vocabulary", None) is not None:
+            self.decoder_config["vocabulary"] = preprocess_paths(self.decoder_config["vocabulary"])
         self.blank = None
         self.tokens2indices = {}
         self.tokens = []
@@ -98,9 +100,12 @@ class CharFeaturizer(TextFeaturizer):
 
     def __init_vocabulary(self):
         lines = []
-        with codecs.open(self.decoder_config["vocabulary"], "r", "utf-8") as fin:
-            lines.extend(fin.readlines())
-        self.blank = 0 if self.decoder_config["blank_at_zero"] else None
+        if self.decoder_config.get("vocabulary", None) is not None:
+            with codecs.open(self.decoder_config["vocabulary"], "r", "utf-8") as fin:
+                lines.extend(fin.readlines())
+        else:
+            lines = ENGLISH_CHARACTERS
+        self.blank = 0 if self.decoder_config.get("blank_at_zero", True) else None
         self.tokens2indices = {}
         self.tokens = []
         index = 1 if self.blank == 0 else 0
@@ -223,7 +228,11 @@ class SubwordFeaturizer(TextFeaturizer):
         return cls(decoder_config, subwords)
 
     @classmethod
-    def load_from_file(cls, decoder_config: dict, filename_prefix: str):
+    def load_from_file(cls, decoder_config: dict, filename: str = None):
+        if filename is not None:
+            filename_prefix = os.path.splitext(preprocess_paths(filename))[0]
+        else:
+            filename_prefix = decoder_config.get("vocabulary", None)
         subwords = tds.features.text.SubwordTextEncoder.load_from_file(filename_prefix)
         return cls(decoder_config, subwords)
 

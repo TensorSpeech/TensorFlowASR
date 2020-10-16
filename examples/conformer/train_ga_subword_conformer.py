@@ -66,7 +66,7 @@ from tensorflow_asr.configs.user_config import UserConfig
 from tensorflow_asr.datasets.asr_dataset import ASRTFRecordDataset, ASRSliceDataset
 from tensorflow_asr.featurizers.speech_featurizers import TFSpeechFeaturizer
 from tensorflow_asr.featurizers.text_featurizers import SubwordFeaturizer
-from tensorflow_asr.runners.transducer_runners import TransducerTrainer
+from tensorflow_asr.runners.transducer_runners import TransducerTrainerGA
 from tensorflow_asr.models.conformer import Conformer
 from tensorflow_asr.optimizers.schedules import TransformerSchedule
 
@@ -115,7 +115,7 @@ else:
         stage="eval", cache=args.cache, shuffle=True
     )
 
-conformer_trainer = TransducerTrainer(
+conformer_trainer = TransducerTrainerGA(
     config=config["learning_config"]["running_config"],
     text_featurizer=text_featurizer, strategy=strategy
 )

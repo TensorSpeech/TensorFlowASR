@@ -36,8 +36,8 @@ parser.add_argument("--config", type=str, default=DEFAULT_YAML,
 parser.add_argument("--saved", type=str, default=None,
                     help="Path to saved model")
 
-parser.add_argument("--subwords_prefix", type=str, default=None,
-                    help="Prefix of file that stores generated subwords")
+parser.add_argument("--subwords", type=str, default=None,
+                    help="Path to file that stores generated subwords")
 
 parser.add_argument("output", type=str, default=None,
                     help="TFLite file path to be exported")
@@ -49,12 +49,11 @@ assert args.saved and args.output
 config = UserConfig(DEFAULT_YAML, args.config, learning=True)
 speech_featurizer = TFSpeechFeaturizer(config["speech_config"])
 
-if args.subwords_prefix and os.path.exists(f"{args.subwords_prefix}.subwords"):
+if args.subwords and os.path.exists(args.subwords):
     print("Loading subwords ...")
-    text_featurizer = SubwordFeaturizer.load_from_file(config["decoder_config"],
-                                                       args.subwords_prefix)
+    text_featurizer = SubwordFeaturizer.load_from_file(config["decoder_config"], args.subwords)
 else:
-    raise ValueError("subwords_prefix must be set")
+    raise ValueError("subwords must be set")
 
 # build model
 conformer = Conformer(

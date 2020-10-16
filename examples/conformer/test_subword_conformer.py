@@ -43,8 +43,8 @@ parser.add_argument("--device", type=int, default=0,
 parser.add_argument("--cpu", default=False, action="store_true",
                     help="Whether to only use cpu")
 
-parser.add_argument("--subwords_prefix", type=str, default=None,
-                    help="Prefix of file that stores generated subwords")
+parser.add_argument("--subwords", type=str, default=None,
+                    help="Path to file that stores generated subwords")
 
 parser.add_argument("--output_name", type=str, default="test",
                     help="Result filename name prefix")
@@ -65,12 +65,11 @@ from tensorflow_asr.models.conformer import Conformer
 config = UserConfig(DEFAULT_YAML, args.config, learning=True)
 speech_featurizer = TFSpeechFeaturizer(config["speech_config"])
 
-if args.subwords_prefix and os.path.exists(f"{args.subwords_prefix}.subwords"):
+if args.subwords and os.path.exists(args.subwords):
     print("Loading subwords ...")
-    text_featurizer = SubwordFeaturizer.load_from_file(config["decoder_config"],
-                                                       args.subwords_prefix)
+    text_featurizer = SubwordFeaturizer.load_from_file(config["decoder_config"], args.subwords)
 else:
-    raise ValueError("subwords_prefix must be set")
+    raise ValueError("subwords must be set")
 
 tf.random.set_seed(0)
 assert args.saved
