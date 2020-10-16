@@ -17,6 +17,24 @@ import tensorflow as tf
 from ...utils.utils import merge_two_last_dims
 
 
+class TimeReduction(tf.keras.layers.Layer):
+    def __init__(self, factor: int, name: str = "TimeReduction", **kwargs):
+        super(TimeReduction, self).__init__(name=name, **kwargs)
+        self.factor = factor
+
+    def call(self, inputs, **kwargs):
+        # Ref: https://github.com/noahchalifour/rnnt-speech-recognition/blob/master/model.py
+        outputs = merge_two_last_dims(inputs)
+        shape = tf.shape(outputs)
+        outputs = tf.pad(inputs, [[0, 0], [0, tf.math.floormod(shape[1], self.factor)], [0, 0]])
+        return tf.reshape(outputs, [shape[0], -1, shape[-1] * self.factor])
+
+    def get_config(self):
+        config = super(TimeReduction, self).get_config()
+        config.update({"factor": self.factor})
+        return config
+
+
 class VggSubsampling(tf.keras.layers.Layer):
     def __init__(self,
                  filters: tuple or list = (32, 64),
