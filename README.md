@@ -19,6 +19,7 @@ TensorFlowASR implements some automatic speech recognition architectures such as
 
 ## What's New?
 
+- (10/18/2020) Supported Streaming Transducer [https://arxiv.org/abs/1811.06621](https://arxiv.org/abs/1811.06621)
 - (10/15/2020) Add gradients accumulation and Refactor to TensorflowASR
 - (10/10/2020) Update documents and upload package to pypi
 - (10/6/2020) Change `nlpaug` version to `>=1.0.1`
@@ -32,6 +33,8 @@ TensorFlowASR implements some automatic speech recognition architectures such as
 - **Transducer Models** (End2end models using RNNT Loss for training)
 - **Conformer Transducer** (Reference: [https://arxiv.org/abs/2005.08100](https://arxiv.org/abs/2005.08100))
   See [examples/conformer](./examples/conformer)
+- **Streaming Transducer** (Reference: [https://arxiv.org/abs/1811.06621](https://arxiv.org/abs/1811.06621))
+  See [examples/streaming_transducer](./examples/streaming_transducer)
 
 ## Setup Environment and Datasets
 

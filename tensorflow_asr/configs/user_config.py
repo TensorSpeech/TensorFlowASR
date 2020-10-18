@@ -50,7 +50,7 @@ class UserConfig(UserDict):
             # Check keys
             check_key_in_dict(
                 self.data["learning_config"],
-                ["augmentations", "dataset_config", "optimizer_config", "running_config"]
+                ["augmentations", "dataset_config", "running_config"]
             )
             check_key_in_dict(
                 self.data["learning_config"]["dataset_config"],

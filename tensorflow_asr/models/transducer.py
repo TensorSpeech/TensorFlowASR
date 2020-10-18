@@ -216,8 +216,7 @@ class Transducer(Model):
         self([inputs, pred], training=False)
 
     def summary(self, line_length=None, **kwargs):
-        if self.encoder is not None:
-            self.encoder.summary(line_length=line_length, **kwargs)
+        self.encoder.summary(line_length=line_length, **kwargs)
         self.predict_net.summary(line_length=line_length, **kwargs)
         self.joint_net.summary(line_length=line_length, **kwargs)
         super(Transducer, self).summary(line_length=line_length, **kwargs)
