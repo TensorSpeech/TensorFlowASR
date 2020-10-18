@@ -14,12 +14,13 @@
 
 import os
 # import datetime
+import sys
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "0"
 import tensorflow as tf
 
-from tensorflow_asr.models.transducer import Transducer
+from tensorflow_asr.models.streaming_transducer import StreamingTransducer
 from tensorflow_asr.featurizers.text_featurizers import CharFeaturizer
-from tensorflow_asr.featurizers.speech_featurizers import TFSpeechFeaturizer
+from tensorflow_asr.featurizers.speech_featurizers import TFSpeechFeaturizer, read_raw_audio
 
 text_featurizer = CharFeaturizer({
     "vocabulary": None,
@@ -40,21 +41,10 @@ speech_featurizer = TFSpeechFeaturizer({
     "normalize_per_feature": False
 })
 
-inp = tf.keras.Input(shape=[None, 80, 1])
-enc = tf.keras.layers.Reshape([-1, 80])(inp)
-enc = tf.keras.layers.LSTM(256, return_sequences=True)(enc)
-
-enc_model = tf.keras.Model(inputs=inp, outputs=enc)
-
-model = Transducer(
-    encoder=enc_model,
-    vocabulary_size=text_featurizer.num_classes,
-    embed_dim=256, embed_dropout=0.0, num_rnns=1, rnn_units=320,
-    rnn_type="gru", layer_norm=True, joint_dim=320
-)
+model = StreamingTransducer(vocabulary_size=text_featurizer.num_classes)
 
 model._build(speech_featurizer.shape)
-model.summary(line_length=100)
+model.summary(line_length=150)
 
 model.save_weights("/tmp/transducer.h5")
 
@@ -73,7 +63,7 @@ print(pred)
 # logdir = '/tmp/logs/func/%s' % stamp
 # writer = tf.summary.create_file_writer(logdir)
 #
-# signal = read_raw_audio("/home/nlhuy/Desktop/test/11003.wav", speech_featurizer.sample_rate)
+signal = read_raw_audio(sys.argv[1], speech_featurizer.sample_rate)
 #
 # tf.summary.trace_on(graph=True, profiler=True)
 # hyps = model.recognize_tflite(signal, 0, tf.zeros([1, 2, 1, 320], dtype=tf.float32))
@@ -118,7 +108,11 @@ tflitemodel.set_tensor(
 )
 tflitemodel.set_tensor(
     input_details[2]["index"],
-    tf.zeros([1, 1, 1, 320], dtype=tf.float32)
+    tf.zeros([8, 2, 1, 1024], dtype=tf.float32)
+)
+tflitemodel.set_tensor(
+    input_details[3]["index"],
+    tf.zeros([2, 2, 1, 1024], dtype=tf.float32)
 )
 tflitemodel.invoke()
 hyp = tflitemodel.get_tensor(output_details[0]["index"])

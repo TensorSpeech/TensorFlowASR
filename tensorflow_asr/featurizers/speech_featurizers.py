@@ -132,7 +132,7 @@ def tf_preemphasis(signal: tf.Tensor, coeff=0.97):
     return tf.concat([s0, s1], axis=-1)
 
 
-def deemphasis(signal: np.ndarray, coeff=0.97):
+def depreemphasis(signal: np.ndarray, coeff=0.97):
     if not coeff or coeff <= 0.0: return signal
     x = np.zeros(signal.shape[0], dtype=np.float32)
     x[0] = signal[0]
