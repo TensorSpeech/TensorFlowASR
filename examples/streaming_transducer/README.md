@@ -26,9 +26,8 @@ decoder_config:
 
 model_config:
   name: streaming_transducer
-  subsampling:
-    type: time_reduction
-    factor: 3
+  reduction_factor: 2
+  reduction_positions: [1]
   encoder_dim: 320
   encoder_units: 1024
   encoder_layers: 7
