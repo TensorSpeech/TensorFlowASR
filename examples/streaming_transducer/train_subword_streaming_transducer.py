@@ -80,7 +80,7 @@ else:
         config["decoder_config"],
         corpus_files=args.subwords_corpus
     )
-    text_featurizer.subwords.save_to_file(args.subwords_prefix)
+    text_featurizer.save_to_file(args.subwords)
 
 if args.tfrecords:
     train_dataset = ASRTFRecordDataset(
