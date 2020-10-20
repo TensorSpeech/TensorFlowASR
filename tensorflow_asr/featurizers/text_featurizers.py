@@ -236,6 +236,13 @@ class SubwordFeaturizer(TextFeaturizer):
         subwords = tds.features.text.SubwordTextEncoder.load_from_file(filename_prefix)
         return cls(decoder_config, subwords)
 
+    def save_to_file(self, filename: str = None):
+        if filename is not None:
+            filename_prefix = os.path.splitext(preprocess_paths(filename))[0]
+        else:
+            filename_prefix = self.decoder_config.get("vocabulary", None)
+        return self.subwords.save_to_file(filename_prefix)
+
     def extract(self, text: str) -> tf.Tensor:
         """
         Convert string to a list of integers

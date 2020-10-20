@@ -41,7 +41,8 @@ class TransducerPrediction(tf.keras.Model):
                  num_rnns: int = 1,
                  rnn_units: int = 512,
                  rnn_type: str = "lstm",
-                 layer_norm=True,
+                 layer_norm: bool = True,
+                 projection_units: int = 0,
                  kernel_regularizer=None,
                  bias_regularizer=None,
                  name="transducer_prediction",
@@ -64,7 +65,16 @@ class TransducerPrediction(tf.keras.Model):
                 ln = tf.keras.layers.LayerNormalization(name=f"{name}_ln_{i}")
             else:
                 ln = None
-            self.rnns.append({"rnn": rnn, "ln": ln})
+            if projection_units > 0:
+                projection = tf.keras.layers.Dense(
+                    projection_units,
+                    name=f"{name}_projection_{i}",
+                    kernel_regularizer=kernel_regularizer,
+                    bias_regularizer=bias_regularizer
+                )
+            else:
+                projection = None
+            self.rnns.append({"rnn": rnn, "ln": ln, "projection": projection})
 
     def get_initial_state(self):
         """Get zeros states
@@ -93,6 +103,8 @@ class TransducerPrediction(tf.keras.Model):
             outputs = outputs[0]
             if rnn["ln"] is not None:
                 outputs = rnn["ln"](outputs, training=training)
+            if rnn["projection"] is not None:
+                outputs = rnn["projection"](outputs, training=training)
         return outputs
 
     def recognize(self, inputs, states):
@@ -116,6 +128,8 @@ class TransducerPrediction(tf.keras.Model):
             outputs = outputs[0]
             if rnn["ln"] is not None:
                 outputs = rnn["ln"](outputs, training=False)
+            if rnn["projection"] is not None:
+                outputs = rnn["projection"](outputs, training=False)
         return outputs, tf.stack(new_states, axis=0)
 
     def get_config(self):
@@ -125,6 +139,8 @@ class TransducerPrediction(tf.keras.Model):
             conf.update(rnn["rnn"].get_config())
             if rnn["ln"] is not None:
                 conf.update(rnn["ln"].get_config())
+            if rnn["projection"] is not None:
+                conf.update(rnn["projection"].get_config())
         return conf
 
 
@@ -183,6 +199,7 @@ class Transducer(Model):
                  rnn_units: int = 320,
                  rnn_type: str = "lstm",
                  layer_norm: bool = True,
+                 projection_units: int = 0,
                  joint_dim: int = 1024,
                  kernel_regularizer=None,
                  bias_regularizer=None,
@@ -198,6 +215,7 @@ class Transducer(Model):
             rnn_units=rnn_units,
             rnn_type=rnn_type,
             layer_norm=layer_norm,
+            projection_units=projection_units,
             kernel_regularizer=kernel_regularizer,
             bias_regularizer=bias_regularizer,
             name=f"{name}_prediction"
