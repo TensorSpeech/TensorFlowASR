@@ -17,30 +17,25 @@ import tensorflow as tf
 
 from ctc_decoders import ctc_greedy_decoder, ctc_beam_search_decoder
 
+from . import Model
 from ..featurizers.speech_featurizers import TFSpeechFeaturizer
 from ..featurizers.text_featurizers import TextFeaturizer
 from ..utils.utils import shape_list
 
 
-class CtcModel(tf.keras.Model):
+class CtcModel(Model):
     def __init__(self,
-                 base_model: tf.keras.Model,
-                 num_classes: int,
+                 vocabulary_size: int,
                  name="ctc_model",
                  **kwargs):
         super(CtcModel, self).__init__(name=name, **kwargs)
-        self.base_model = base_model
         # Fully connected layer
-        self.fc = tf.keras.layers.Dense(units=num_classes, activation="linear",
+        self.fc = tf.keras.layers.Dense(units=vocabulary_size, activation="linear",
                                         use_bias=True, name=f"{name}_fc")
 
     def _build(self, input_shape):
         features = tf.keras.Input(input_shape, dtype=tf.float32)
         self(features, training=False)
-
-    def summary(self, line_length=None, **kwargs):
-        self.base_model.summary(line_length=line_length, **kwargs)
-        super(CtcModel, self).summary(line_length, **kwargs)
 
     def add_featurizers(self,
                         speech_featurizer: TFSpeechFeaturizer,
@@ -48,15 +43,11 @@ class CtcModel(tf.keras.Model):
         self.speech_featurizer = speech_featurizer
         self.text_featurizer = text_featurizer
 
-    def call(self, inputs, training=False, **kwargs):
-        outputs = self.base_model(inputs, training=training)
-        outputs = self.fc(outputs, training=training)
-        return outputs
+    def call(self, inputs, training=False):
+        return self.fc(inputs, training=training)
 
     def get_config(self):
-        config = self.base_model.get_config()
-        config.update(self.fc.get_config())
-        return config
+        return self.fc.get_config()
 
     # -------------------------------- GREEDY -------------------------------------
 
