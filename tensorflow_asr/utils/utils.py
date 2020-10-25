@@ -82,6 +82,15 @@ def get_rnn(rnn_type):
     return tf.keras.layers.SimpleRNN
 
 
+def get_conv(conv_type):
+    assert conv_type in ["conv1d", "conv2d"]
+
+    if conv_type == "conv1d":
+        return tf.keras.layers.Conv1D
+
+    return tf.keras.layers.Conv2D
+
+
 def print_one_line(*args):
     tf.print("\033[K", end="")
     tf.print("\r", *args, sep="", end=" ", output_stream=sys.stdout)

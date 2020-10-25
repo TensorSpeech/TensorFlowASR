@@ -19,7 +19,7 @@ from tensorflow_asr.utils import setup_environment, setup_strategy
 setup_environment()
 import tensorflow as tf
 
-DEFAULT_YAML = os.path.join(os.path.abspath(os.path.dirname(__file__)), "configs", "vivos.yml")
+DEFAULT_YAML = os.path.join(os.path.abspath(os.path.dirname(__file__)), "config.yml")
 
 tf.keras.backend.clear_session()
 
@@ -60,7 +60,7 @@ from tensorflow_asr.datasets.asr_dataset import ASRTFRecordDataset, ASRSliceData
 from tensorflow_asr.featurizers.speech_featurizers import TFSpeechFeaturizer
 from tensorflow_asr.featurizers.text_featurizers import CharFeaturizer
 from tensorflow_asr.runners.ctc_runners import CTCTrainer
-from model import DeepSpeech2
+from tensorflow_asr.models.deepspeech2 import DeepSpeech2
 
 config = UserConfig(DEFAULT_YAML, args.config, learning=True)
 speech_featurizer = TFSpeechFeaturizer(config["speech_config"])
@@ -100,12 +100,9 @@ else:
 ctc_trainer = CTCTrainer(text_featurizer, config["learning_config"]["running_config"])
 # Build DS2 model
 with ctc_trainer.strategy.scope():
-    ds2_model = DeepSpeech2(input_shape=speech_featurizer.shape,
-                            arch_config=config["model_config"],
-                            num_classes=text_featurizer.num_classes,
-                            name="deepspeech2")
+    ds2_model = DeepSpeech2(**config["model_config"], vocabulary_size=text_featurizer.num_classes)
     ds2_model._build(speech_featurizer.shape)
-    ds2_model.summary(line_length=150)
+    ds2_model.summary(line_length=120)
 # Compile
 ctc_trainer.compile(ds2_model, config["learning_config"]["optimizer_config"],
                     max_to_keep=args.max_ckpts)
