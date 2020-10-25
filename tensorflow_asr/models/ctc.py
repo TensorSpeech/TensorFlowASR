@@ -15,8 +15,6 @@
 import numpy as np
 import tensorflow as tf
 
-from ctc_decoders import ctc_greedy_decoder, ctc_beam_search_decoder
-
 from . import Model
 from ..featurizers.speech_featurizers import TFSpeechFeaturizer
 from ..featurizers.text_featurizers import TextFeaturizer
@@ -24,14 +22,8 @@ from ..utils.utils import shape_list
 
 
 class CtcModel(Model):
-    def __init__(self,
-                 vocabulary_size: int,
-                 name="ctc_model",
-                 **kwargs):
-        super(CtcModel, self).__init__(name=name, **kwargs)
-        # Fully connected layer
-        self.fc = tf.keras.layers.Dense(units=vocabulary_size, activation="linear",
-                                        use_bias=True, name=f"{name}_fc")
+    def __init__(self, **kwargs):
+        super(CtcModel, self).__init__(**kwargs)
 
     def _build(self, input_shape):
         features = tf.keras.Input(input_shape, dtype=tf.float32)
@@ -44,10 +36,7 @@ class CtcModel(Model):
         self.text_featurizer = text_featurizer
 
     def call(self, inputs, training=False):
-        return self.fc(inputs, training=training)
-
-    def get_config(self):
-        return self.fc.get_config()
+        raise NotImplementedError()
 
     # -------------------------------- GREEDY -------------------------------------
 
@@ -63,6 +52,7 @@ class CtcModel(Model):
         return tf.map_fn(map_fn, probs, dtype=tf.string)
 
     def perform_greedy(self, probs: np.ndarray):
+        from ctc_decoders import ctc_greedy_decoder
         decoded = ctc_greedy_decoder(probs, vocabulary=self.text_featurizer.vocab_array)
         return tf.convert_to_tensor(decoded, dtype=tf.string)
 
@@ -105,6 +95,7 @@ class CtcModel(Model):
     def perform_beam_search(self,
                             probs: np.ndarray,
                             lm: bool = False):
+        from ctc_decoders import ctc_beam_search_decoder
         decoded = ctc_beam_search_decoder(
             probs_seq=probs,
             vocabulary=self.text_featurizer.vocab_array,
@@ -116,6 +107,14 @@ class CtcModel(Model):
         return tf.convert_to_tensor(decoded, dtype=tf.string)
 
     def recognize_beam_tflite(self, signal):
+        """
+        Function to convert to tflite using beam search decoding
+        Args:
+            signal: tf.Tensor with shape [None] indicating a single audio signal
+
+        Return:
+            transcript: tf.Tensor of Unicode Code Points with shape [None] and dtype tf.int32
+        """
         features = self.speech_featurizer.tf_extract(signal)
         features = tf.expand_dims(features, axis=0)
         input_length = shape_list(features)[1]

@@ -24,6 +24,40 @@ class Reshape(tf.keras.layers.Layer):
     def call(self, inputs): return merge_two_last_dims(inputs)
 
 
+class ConvBlock(tf.keras.layers.Layer):
+    def __init__(self,
+                 conv_type: str = "conv2d",
+                 kernels: list = [11, 41],
+                 strides: list = [2, 2],
+                 filters: int = 32,
+                 dropout: float = 0.1,
+                 **kwargs):
+        super(ConvBlock, self).__init__(**kwargs)
+
+        CNN = get_conv(conv_type)
+        self.conv = CNN(filters=filters, kernel_size=kernels,
+                        strides=strides, padding="same",
+                        dtype=tf.float32, name=f"{self.name}_{conv_type}")
+        self.bn = tf.keras.layers.BatchNormalization(name=f"{self.name}_bn")
+        self.relu = tf.keras.layers.ReLU(name=f"{self.name}_relu")
+        self.do = tf.keras.layers.Dropout(dropout, name=f"{self.name}_dropout")
+
+    def call(self, inputs, training=False):
+        outputs = self.conv(inputs, training=training)
+        outputs = self.bn(outputs, training=training)
+        outputs = self.relu(outputs, training=training)
+        outputs = self.do(outputs, training=training)
+        return outputs
+
+    def get_config(self):
+        conf = super(ConvBlock, self).get_config()
+        conf.update(self.conv.get_config())
+        conf.update(self.bn.get_config())
+        conf.update(self.relu.get_config())
+        conf.update(self.do.get_config())
+        return conf
+
+
 class ConvModule(tf.keras.Model):
     def __init__(self,
                  conv_type: str = "conv2d",
@@ -38,21 +72,21 @@ class ConvModule(tf.keras.Model):
         assert dropout >= 0.0
 
         self.preprocess = None  # reshape from [B, T, F, C] to [B, T, F * C]
-        if conv_type == "conv2d": self.preprocess = Reshape(name=f"{self.name}_preprocess")
+        if conv_type == "conv1d": self.preprocess = Reshape(name=f"{self.name}_preprocess")
 
-        CNN = get_conv(conv_type)
-        self.blocks = []
-        for i, fil in enumerate(filters):
-            conv = CNN(filters=fil, kernel_size=kernels[i],
-                       strides=strides[i], padding="same",
-                       dtype=tf.float32, name=f"{self.name}_cnn_{i}")
-            bn = tf.keras.layers.BatchNormalization(name=f"{self.name}_bn_{i}")
-            relu = tf.keras.layers.ReLU(name=f"{self.name}_relu_{i}")
-            do = tf.keras.layers.Dropout(dropout, name=f"{self.name}_dropout_{i}")
-            self.blocks.append({"conv": conv, "bn": bn, "relu": relu, "do": do})
+        self.blocks = [
+            ConvBlock(
+                conv_type=conv_type,
+                kernels=kernels[i],
+                strides=strides[i],
+                filters=filters[i],
+                dropout=dropout,
+                name=f"{self.name}_block_{i}"
+            ) for i in range(len(filters))
+        ]
 
         self.postprocess = None  # reshape from [B, T, F, C] to [B, T, F * C]
-        if conv_type == "conv1d": self.postprocess = Reshape(name=f"{self.name}_postprocess")
+        if conv_type == "conv2d": self.postprocess = Reshape(name=f"{self.name}_postprocess")
 
         self.reduction_factor = 1
         for s in strides: self.reduction_factor *= s[0]
@@ -61,10 +95,7 @@ class ConvModule(tf.keras.Model):
         outputs = inputs
         if self.preprocess is not None: outputs = self.preprocess(outputs)
         for block in self.blocks:
-            outputs = block["conv"](outputs, training=training)
-            outputs = block["bn"](outputs, training=training)
-            outputs = block["relu"](outputs, training=training)
-            outputs = block["do"](outputs, training=training)
+            outputs = block(outputs, training=training)
         if self.postprocess is not None: outputs = self.postprocess(outputs)
         return outputs
 
@@ -72,9 +103,45 @@ class ConvModule(tf.keras.Model):
         conf = {}
         conf.update(self.preprocess.get_config())
         for block in self.blocks:
-            for value in block.values():
-                conf.update(value.get_config())
+            conf.update(block.get_config())
         conf.update(self.postprocess.get_config())
+        return conf
+
+
+class RnnBlock(tf.keras.layers.Layer):
+    def __init__(self,
+                 rnn_type: str = "lstm",
+                 units: int = 1024,
+                 bidirectional: bool = True,
+                 rowconv: int = 0,
+                 dropout: float = 0.1,
+                 **kwargs):
+        super(RnnBlock, self).__init__(**kwargs)
+
+        RNN = get_rnn(rnn_type)
+        self.rnn = RNN(units, dropout=dropout, return_sequences=True,
+                       use_bias=True, name=f"{self.name}_{rnn_type}")
+        if bidirectional:
+            self.rnn = tf.keras.layers.Bidirectional(self.rnn, name=f"{self.name}_b{rnn_type}")
+        self.bn = SequenceBatchNorm(time_major=False, name=f"{self.name}_bn")
+        self.rowconv = None
+        if not bidirectional and rowconv > 0:
+            self.rowconv = RowConv1D(filters=units, future_context=rowconv,
+                                     name=f"{self.name}_rowconv")
+
+    def call(self, inputs, training=False):
+        outputs = self.rnn(inputs, training=training)
+        outputs = self.bn(outputs, training=training)
+        if self.rowconv is not None:
+            outputs = self.rowconv(outputs, training=training)
+        return outputs
+
+    def get_config(self):
+        conf = super(RnnBlock, self).get_config()
+        conf.update(self.rnn.get_config())
+        conf.update(self.bn.get_config())
+        if self.rowconv is not None:
+            conf.update(self.rowconv.get_config())
         return conf
 
 
@@ -89,61 +156,85 @@ class RnnModule(tf.keras.Model):
                  **kwargs):
         super(RnnModule, self).__init__(**kwargs)
 
-        RNN = get_rnn(rnn_type)
-        self.blocks = []
-        for i in range(nlayers):
-            rnn = RNN(units, dropout=dropout, return_sequences=True,
-                      use_bias=True, name=f"{self.name}_{rnn_type}_{i}")
-            if bidirectional:
-                rnn = tf.keras.layers.Bidirectional(rnn, name=f"{self.name}_b{rnn_type}_{i}")
-            bn = SequenceBatchNorm(time_major=False, name=f"{self.name}_bn_{i}")
-            rowconv = None
-            if not bidirectional and rowconv > 0:
-                rowconv = RowConv1D(filters=units, future_context=rowconv,
-                                    name=f"{self.name}_rowconv_{i}")
-            self.blocks.append({"rnn": rnn, "bn": bn, "rowconv": rowconv})
+        self.blocks = [
+            RnnBlock(
+                rnn_type=rnn_type,
+                units=units,
+                bidirectional=bidirectional,
+                rowconv=rowconv,
+                dropout=dropout,
+                name=f"{self.name}_block_{i}"
+            ) for i in range(nlayers)
+        ]
 
     def call(self, inputs, training=False):
         outputs = inputs
         for block in self.blocks:
-            outputs = block["rnn"](outputs, training=training)
-            outputs = block["bn"](outputs, training=training)
-            if block["rowconv"] is not None:
-                outputs = block["rowconv"](outputs, training=training)
+            outputs = block(outputs, training=training)
         return outputs
 
     def get_config(self):
         conf = {}
         for block in self.blocks:
-            for value in block.values():
-                if value is not None: conf.update(value.get_config())
+            conf.update(block.get_config())
         return conf
 
 
-class FCModule(tf.keras.Model):
+class FcBlock(tf.keras.layers.Layer):
+    def __init__(self,
+                 units: int = 1024,
+                 dropout: float = 0.1,
+                 **kwargs):
+        super(FcBlock, self).__init__(**kwargs)
+
+        self.fc = tf.keras.layers.Dense(units, name=f"{self.name}_fc")
+        self.bn = tf.keras.layers.BatchNormalization(name=f"{self.name}_bn")
+        self.relu = tf.keras.layers.ReLU(name=f"{self.name}_relu")
+        self.do = tf.keras.layers.Dropout(dropout, name=f"{self.name}_dropout")
+
+    def call(self, inputs, training=False):
+        outputs = self.fc(inputs, training=training)
+        outputs = self.bn(outputs, training=training)
+        outputs = self.relu(outputs, training=training)
+        outputs = self.do(outputs, training=training)
+        return outputs
+
+    def get_config(self):
+        conf = super(FcBlock, self).get_config()
+        conf.update(self.fc.get_config())
+        conf.update(self.bn.get_config())
+        conf.update(self.relu.get_config())
+        conf.update(self.do.get_config())
+        return conf
+
+
+class FcModule(tf.keras.Model):
     def __init__(self,
                  nlayers: int = 0,
                  units: int = 1024,
                  dropout: float = 0.1,
                  **kwargs):
-        super(FCModule, self).__init__(**kwargs)
+        super(FcModule, self).__init__(**kwargs)
 
-        self.blocks = []
-        for i in range(nlayers):
-            fc = tf.keras.layers.Dense(units, name=f"{self.name}_fc_{i}")
-            bn = tf.keras.layers.BatchNormalization(name=f"{self.name}_bn_{i}")
-            relu = tf.keras.layers.ReLU(name=f"{self.name}_relu_{i}")
-            do = tf.keras.layers.Dropout(dropout, name=f"{self.name}_dropout_{i}")
-            self.blocks.append({"fc": fc, "bn": bn, "relu": relu, "do": do})
+        self.blocks = [
+            FcBlock(
+                units=units,
+                dropout=dropout,
+                name=f"{self.name}_block_{i}"
+            ) for i in range(nlayers)
+        ]
 
     def call(self, inputs, training=False):
         outputs = inputs
         for block in self.blocks:
-            outputs = block["fc"](outputs, training=training)
-            outputs = block["bn"](outputs, training=training)
-            outputs = block["relu"](outputs, training=training)
-            outputs = block["do"](outputs, training=training)
+            outputs = block(outputs, training=training)
         return outputs
+
+    def get_config(self):
+        conf = {}
+        for block in self.blocks:
+            conf.update(block.get_config())
+        return conf
 
 
 class DeepSpeech2(CtcModel):
@@ -163,8 +254,9 @@ class DeepSpeech2(CtcModel):
                  fc_nlayers: int = 0,
                  fc_units: int = 1024,
                  fc_dropout: float = 0.1,
-                 name: str = "deepspeech2"):
-        super(DeepSpeech2, self).__init__(vocabulary_size=vocabulary_size, name=name)
+                 name: str = "deepspeech2",
+                 **kwargs):
+        super(DeepSpeech2, self).__init__(name=name, **kwargs)
 
         self.conv_module = ConvModule(
             conv_type=conv_type,
@@ -185,12 +277,16 @@ class DeepSpeech2(CtcModel):
             name=f"{self.name}_rnn_module"
         )
 
-        self.fc_module = FCModule(
+        self.fc_module = FcModule(
             nlayers=fc_nlayers,
             units=fc_units,
             dropout=fc_dropout,
             name=f"{self.name}_fc_module"
         )
+
+        # Fully connected layer
+        self.fc = tf.keras.layers.Dense(units=vocabulary_size, activation="linear",
+                                        use_bias=True, name=f"{name}_fc")
 
         self.time_reduction_factor = self.conv_module.reduction_factor
 
@@ -198,7 +294,8 @@ class DeepSpeech2(CtcModel):
         outputs = self.conv_module(inputs, training=training)
         outputs = self.rnn_module(outputs, training=training)
         outputs = self.fc_module(outputs, training=training)
-        return super(DeepSpeech2, self).call(outputs, training=training)
+        outputs = self.fc(outputs, training=training)
+        return outputs
 
     def summary(self, line_length=100, **kwargs):
         self.conv_module.summary(line_length=line_length, **kwargs)

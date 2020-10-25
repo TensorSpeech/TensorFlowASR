@@ -19,7 +19,7 @@ from tensorflow_asr.utils import setup_environment, setup_devices
 setup_environment()
 import tensorflow as tf
 
-DEFAULT_YAML = os.path.join(os.path.abspath(os.path.dirname(__file__)), "configs", "vivos.yml")
+DEFAULT_YAML = os.path.join(os.path.abspath(os.path.dirname(__file__)), "config.yml")
 
 tf.keras.backend.clear_session()
 
@@ -54,7 +54,7 @@ from tensorflow_asr.datasets.asr_dataset import ASRTFRecordDataset, ASRSliceData
 from tensorflow_asr.featurizers.speech_featurizers import TFSpeechFeaturizer
 from tensorflow_asr.featurizers.text_featurizers import CharFeaturizer
 from tensorflow_asr.runners.base_runners import BaseTester
-from model import DeepSpeech2
+from tensorflow_asr.models.deepspeech2 import DeepSpeech2
 
 tf.random.set_seed(0)
 assert args.export
@@ -63,13 +63,10 @@ config = UserConfig(DEFAULT_YAML, args.config, learning=True)
 speech_featurizer = TFSpeechFeaturizer(config["speech_config"])
 text_featurizer = CharFeaturizer(config["decoder_config"])
 # Build DS2 model
-ds2_model = DeepSpeech2(input_shape=speech_featurizer.shape,
-                        arch_config=config["model_config"],
-                        num_classes=text_featurizer.num_classes,
-                        name="deepspeech2")
+ds2_model = DeepSpeech2(**config["model_config"], vocabulary_size=text_featurizer.num_classes)
 ds2_model._build(speech_featurizer.shape)
 ds2_model.load_weights(args.saved, by_name=True)
-ds2_model.summary(line_length=150)
+ds2_model.summary(line_length=120)
 ds2_model.add_featurizers(speech_featurizer, text_featurizer)
 
 if args.tfrecords:
