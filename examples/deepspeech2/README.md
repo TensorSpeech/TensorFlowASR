@@ -23,7 +23,7 @@ model_config:
 
 ## Architecture
 
-<img src="./figs/ds2_arch.png" alt="ds2_arch" width="500px" />
+<img src="./figs/ds2_arch.png" alt="ds2_arch" width="600px" />
 
 ## Training and Testing
 
