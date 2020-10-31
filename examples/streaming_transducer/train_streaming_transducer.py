@@ -55,57 +55,57 @@ tf.config.optimizer.set_experimental_options({"auto_mixed_precision": args.mxp})
 
 strategy = setup_strategy(args.devices)
 
-from tensorflow_asr.configs.user_config import UserConfig
+from tensorflow_asr.configs.config import Config
 from tensorflow_asr.datasets.asr_dataset import ASRTFRecordDataset, ASRSliceDataset
 from tensorflow_asr.featurizers.speech_featurizers import TFSpeechFeaturizer
 from tensorflow_asr.featurizers.text_featurizers import CharFeaturizer
 from tensorflow_asr.runners.transducer_runners import TransducerTrainer
 from tensorflow_asr.models.streaming_transducer import StreamingTransducer
 
-config = UserConfig(DEFAULT_YAML, args.config, learning=True)
-speech_featurizer = TFSpeechFeaturizer(config["speech_config"])
-text_featurizer = CharFeaturizer(config["decoder_config"])
+config = Config(args.config, learning=True)
+speech_featurizer = TFSpeechFeaturizer(config.speech_config)
+text_featurizer = CharFeaturizer(config.decoder_config)
 
 if args.tfrecords:
     train_dataset = ASRTFRecordDataset(
-        data_paths=config["learning_config"]["dataset_config"]["train_paths"],
-        tfrecords_dir=config["learning_config"]["dataset_config"]["tfrecords_dir"],
+        data_paths=config.learning_config.dataset_config.train_paths,
+        tfrecords_dir=config.learning_config.dataset_config.tfrecords_dir,
         speech_featurizer=speech_featurizer,
         text_featurizer=text_featurizer,
-        augmentations=config["learning_config"]["augmentations"],
+        augmentations=config.learning_config.augmentations,
         stage="train", cache=args.cache, shuffle=True
     )
     eval_dataset = ASRTFRecordDataset(
-        data_paths=config["learning_config"]["dataset_config"]["eval_paths"],
-        tfrecords_dir=config["learning_config"]["dataset_config"]["tfrecords_dir"],
+        data_paths=config.learning_config.dataset_config.eval_paths,
+        tfrecords_dir=config.learning_config.dataset_config.tfrecords_dir,
         speech_featurizer=speech_featurizer,
         text_featurizer=text_featurizer,
         stage="eval", cache=args.cache, shuffle=True
     )
 else:
     train_dataset = ASRSliceDataset(
-        data_paths=config["learning_config"]["dataset_config"]["train_paths"],
+        data_paths=config.learning_config.dataset_config.train_paths,
         speech_featurizer=speech_featurizer,
         text_featurizer=text_featurizer,
-        augmentations=config["learning_config"]["augmentations"],
+        augmentations=config.learning_config.augmentations,
         stage="train", cache=args.cache, shuffle=True
     )
     eval_dataset = ASRSliceDataset(
-        data_paths=config["learning_config"]["dataset_config"]["eval_paths"],
+        data_paths=config.learning_config.dataset_config.eval_paths,
         speech_featurizer=speech_featurizer,
         text_featurizer=text_featurizer,
         stage="eval", cache=args.cache, shuffle=True
     )
 
 streaming_transducer_trainer = TransducerTrainer(
-    config=config["learning_config"]["running_config"],
+    config=config.learning_config.running_config,
     text_featurizer=text_featurizer, strategy=strategy
 )
 
 with streaming_transducer_trainer.strategy.scope():
     # build model
     streaming_transducer = StreamingTransducer(
-        **config["model_config"],
+        **config.model_config,
         vocabulary_size=text_featurizer.num_classes
     )
     streaming_transducer._build(speech_featurizer.shape)

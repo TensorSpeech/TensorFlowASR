@@ -19,7 +19,7 @@ from tensorflow_asr.utils import setup_environment
 setup_environment()
 import tensorflow as tf
 
-from tensorflow_asr.configs.user_config import UserConfig
+from tensorflow_asr.configs.config import Config
 from tensorflow_asr.featurizers.speech_featurizers import TFSpeechFeaturizer
 from tensorflow_asr.featurizers.text_featurizers import SubwordFeaturizer
 from tensorflow_asr.models.conformer import Conformer
@@ -46,20 +46,17 @@ args = parser.parse_args()
 
 assert args.saved and args.output
 
-config = UserConfig(DEFAULT_YAML, args.config, learning=True)
-speech_featurizer = TFSpeechFeaturizer(config["speech_config"])
+config = Config(args.config, learning=True)
+speech_featurizer = TFSpeechFeaturizer(config.speech_config)
 
 if args.subwords and os.path.exists(args.subwords):
     print("Loading subwords ...")
-    text_featurizer = SubwordFeaturizer.load_from_file(config["decoder_config"], args.subwords)
+    text_featurizer = SubwordFeaturizer.load_from_file(config.decoder_config, args.subwords)
 else:
     raise ValueError("subwords must be set")
 
 # build model
-conformer = Conformer(
-    **config["model_config"],
-    vocabulary_size=text_featurizer.num_classes
-)
+conformer = Conformer(**config.model_config, vocabulary_size=text_featurizer.num_classes)
 conformer._build(speech_featurizer.shape)
 conformer.load_weights(args.saved)
 conformer.summary(line_length=150)

@@ -19,6 +19,7 @@ import os
 import numpy as np
 import tensorflow as tf
 
+from ..augmentations.augments import Augmentation
 from .base_dataset import BaseDataset
 from ..featurizers.speech_featurizers import read_raw_audio, SpeechFeaturizer
 from ..featurizers.text_featurizers import TextFeaturizer
@@ -55,7 +56,7 @@ class ASRDataset(BaseDataset):
                  speech_featurizer: SpeechFeaturizer,
                  text_featurizer: TextFeaturizer,
                  data_paths: list,
-                 augmentations: dict = None,
+                 augmentations: Augmentation = Augmentation(None),
                  cache: bool = False,
                  shuffle: bool = False):
         super(ASRDataset, self).__init__(data_paths, augmentations, cache, shuffle, stage)
@@ -82,11 +83,11 @@ class ASRDataset(BaseDataset):
         with tf.device("/CPU:0"):
             signal = read_raw_audio(audio, self.speech_featurizer.sample_rate)
 
-            signal = self.augmentations["before"].augment(signal)
+            signal = self.augmentations.before.augment(signal)
 
             features = self.speech_featurizer.extract(signal)
 
-            features = self.augmentations["after"].augment(features)
+            features = self.augmentations.after.augment(features)
 
             label = self.text_featurizer.extract(transcript.decode("utf-8"))
             label_length = tf.cast(tf.shape(label)[0], tf.int32)
@@ -148,7 +149,7 @@ class ASRTFRecordDataset(ASRDataset):
                  speech_featurizer: SpeechFeaturizer,
                  text_featurizer: TextFeaturizer,
                  stage: str,
-                 augmentations: dict = None,
+                 augmentations: Augmentation = Augmentation(None),
                  cache: bool = False,
                  shuffle: bool = False):
         super(ASRTFRecordDataset, self).__init__(

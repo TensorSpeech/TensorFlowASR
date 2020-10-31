@@ -14,6 +14,8 @@
 import os
 import sys
 import math
+from typing import Union, List
+
 import numpy as np
 import tensorflow as tf
 
@@ -45,7 +47,7 @@ def check_key_in_dict(dictionary, keys):
             raise ValueError("{} must be defined".format(key))
 
 
-def preprocess_paths(paths):
+def preprocess_paths(paths: Union[List, str]):
     if isinstance(paths, list):
         return [os.path.abspath(os.path.expanduser(path)) for path in paths]
     return os.path.abspath(os.path.expanduser(paths)) if paths else None

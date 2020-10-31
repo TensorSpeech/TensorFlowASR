@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from collections import UserDict
 import nlpaug.flow as naf
 
 from .signal_augment import SignalCropping, SignalLoudness, SignalMask, SignalNoise, \
@@ -34,15 +33,11 @@ AUGMENTATIONS = {
 }
 
 
-class UserAugmentation(UserDict):
+class Augmentation:
     def __init__(self, config: dict = None):
         if not config: config = {}
-        config["before"] = self.parse(config.get("before", {}))
-        config["after"] = self.parse(config.get("after", {}))
-        super(UserAugmentation, self).__init__(config)
-
-    def __missing__(self, key):
-        return None
+        self.before = self.parse(config.get("before", {}))
+        self.after = self.parse(config.get("after", {}))
 
     @staticmethod
     def parse(config: dict) -> list:

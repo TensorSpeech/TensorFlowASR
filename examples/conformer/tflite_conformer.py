@@ -19,7 +19,7 @@ from tensorflow_asr.utils import setup_environment
 setup_environment()
 import tensorflow as tf
 
-from tensorflow_asr.configs.user_config import UserConfig
+from tensorflow_asr.configs.config import Config
 from tensorflow_asr.featurizers.speech_featurizers import TFSpeechFeaturizer
 from tensorflow_asr.featurizers.text_featurizers import CharFeaturizer
 from tensorflow_asr.models.conformer import Conformer
@@ -43,15 +43,12 @@ args = parser.parse_args()
 
 assert args.saved and args.output
 
-config = UserConfig(DEFAULT_YAML, args.config, learning=True)
-speech_featurizer = TFSpeechFeaturizer(config["speech_config"])
-text_featurizer = CharFeaturizer(config["decoder_config"])
+config = Config(args.config, learning=True)
+speech_featurizer = TFSpeechFeaturizer(config.speech_config)
+text_featurizer = CharFeaturizer(config.decoder_config)
 
 # build model
-conformer = Conformer(
-    **config["model_config"],
-    vocabulary_size=text_featurizer.num_classes
-)
+conformer = Conformer(**config.model_config, vocabulary_size=text_featurizer.num_classes)
 conformer._build(speech_featurizer.shape)
 conformer.load_weights(args.saved)
 conformer.summary(line_length=150)

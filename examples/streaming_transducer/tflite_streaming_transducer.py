@@ -19,7 +19,7 @@ from tensorflow_asr.utils import setup_environment
 setup_environment()
 import tensorflow as tf
 
-from tensorflow_asr.configs.user_config import UserConfig
+from tensorflow_asr.configs.config import Config
 from tensorflow_asr.featurizers.speech_featurizers import TFSpeechFeaturizer
 from tensorflow_asr.featurizers.text_featurizers import CharFeaturizer
 from tensorflow_asr.models.streaming_transducer import StreamingTransducer
@@ -43,13 +43,13 @@ args = parser.parse_args()
 
 assert args.saved and args.output
 
-config = UserConfig(DEFAULT_YAML, args.config, learning=True)
-speech_featurizer = TFSpeechFeaturizer(config["speech_config"])
-text_featurizer = CharFeaturizer(config["decoder_config"])
+config = Config(args.config, learning=True)
+speech_featurizer = TFSpeechFeaturizer(config.speech_config)
+text_featurizer = CharFeaturizer(config.decoder_config)
 
 # build model
 streaming_transducer = StreamingTransducer(
-    **config["model_config"],
+    **config.model_config,
     vocabulary_size=text_featurizer.num_classes
 )
 streaming_transducer._build(speech_featurizer.shape)
