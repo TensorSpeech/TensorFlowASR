@@ -21,36 +21,27 @@ from colorama import Fore
 import numpy as np
 import tensorflow as tf
 
-from ..utils.utils import preprocess_paths, get_num_batches, bytes_to_string
+from ..configs.config import RunningConfig
+from ..utils.utils import get_num_batches, bytes_to_string
 from ..utils.metrics import ErrorRate, wer, cer
 
 
 class BaseRunner(metaclass=abc.ABCMeta):
     """ Customized runner module for all models """
 
-    def __init__(self, config: dict):
-        """
-        running_config:
-            batch_size: 8
-            num_epochs:          20
-            outdir:              ...
-            log_interval_steps:  200
-            eval_interval_steps: 200
-            save_interval_steps: 200
-        """
+    def __init__(self, config: RunningConfig):
         self.config = config
-        self.config["outdir"] = preprocess_paths(self.config["outdir"])
         # Writers
         self.writers = {
             "train": tf.summary.create_file_writer(
-                os.path.join(self.config["outdir"], "tensorboard", "train")),
+                os.path.join(self.config.outdir, "tensorboard", "train")),
             "eval": tf.summary.create_file_writer(
-                os.path.join(self.config["outdir"], "tensorboard", "eval"))
+                os.path.join(self.config.outdir, "tensorboard", "eval"))
         }
 
     def add_writer(self, stage: str):
         self.writers[stage] = tf.summary.create_file_writer(
-            os.path.join(self.config["outdir"], "tensorboard", stage))
+            os.path.join(self.config.outdir, "tensorboard", stage))
 
     def _write_to_tensorboard(self,
                               list_metrics: dict,
@@ -75,12 +66,8 @@ class BaseTrainer(BaseRunner):
     """Customized trainer module for all models."""
 
     def __init__(self,
-                 config: dict,
-                 strategy=None):
-        """
-        Args:
-            config: the 'learning_config' part in YAML config file
-        """
+                 config: RunningConfig,
+                 strategy: tf.distribute.Strategy = None):
         # Configurations
         super(BaseTrainer, self).__init__(config)
         self.set_strategy(strategy)
@@ -99,7 +86,7 @@ class BaseTrainer(BaseRunner):
     @property
     def total_train_steps(self):
         if self.train_steps_per_epoch is None: return None
-        return self.config["num_epochs"] * self.train_steps_per_epoch
+        return self.config.num_epochs * self.train_steps_per_epoch
 
     @property
     def epochs(self):
@@ -128,13 +115,13 @@ class BaseTrainer(BaseRunner):
 
     def set_train_data_loader(self, train_dataset, train_bs=None, train_acs=None):
         """ Set train data loader (MUST). """
-        if not train_bs: train_bs = self.config["batch_size"]
+        if not train_bs: train_bs = self.config.batch_size
         self.global_batch_size = train_bs * self.strategy.num_replicas_in_sync
-        self.config["batch_size"] = train_bs  # Update batch size fed from arguments
+        self.config.batch_size = train_bs  # Update batch size fed from arguments
 
-        if not train_acs: train_acs = self.config.get("accumulation_steps", 1)
+        if not train_acs: train_acs = self.config.accumulation_steps
         self.accumulation_bs = train_bs // train_acs
-        self.config["accumulation_steps"] = train_acs
+        self.config.accumulation_steps = train_acs  # update accum steps fed from arguments
 
         self.train_data = train_dataset.create(self.global_batch_size)
         self.train_data_loader = self.strategy.experimental_distribute_dataset(self.train_data)
@@ -147,7 +134,7 @@ class BaseTrainer(BaseRunner):
             self.eval_data = None
             self.eval_data_loader = None
             return
-        if not eval_bs: eval_bs = self.config["batch_size"]
+        if not eval_bs: eval_bs = self.config.batch_size
         self.eval_data = eval_dataset.create(eval_bs * self.strategy.num_replicas_in_sync)
         self.eval_data_loader = self.strategy.experimental_distribute_dataset(self.eval_data)
         self.eval_steps_per_epoch = eval_dataset.total_steps
@@ -158,7 +145,7 @@ class BaseTrainer(BaseRunner):
         """Create checkpoint management."""
         with self.strategy.scope():
             self.ckpt = tf.train.Checkpoint(steps=self.steps, **kwargs)
-            checkpoint_dir = os.path.join(self.config["outdir"], "checkpoints")
+            checkpoint_dir = os.path.join(self.config.outdir, "checkpoints")
             if not os.path.exists(checkpoint_dir):
                 os.makedirs(checkpoint_dir)
             self.ckpt_manager = tf.train.CheckpointManager(
@@ -232,7 +219,7 @@ class BaseTrainer(BaseRunner):
 
             # Print epoch info
             self.train_progbar.set_description_str(
-                f"[Train] [Epoch {self.epochs}/{self.config['num_epochs']}]")
+                f"[Train] [Epoch {self.epochs}/{self.config.num_epochs}]")
 
             # Print train info to progress bar
             self._print_train_metrics(self.train_progbar)
@@ -325,7 +312,7 @@ class BaseTrainer(BaseRunner):
 
     def _check_log_interval(self):
         """Save log interval."""
-        if self.steps % self.config["log_interval_steps"] == 0 or \
+        if self.steps % self.config.log_interval_steps == 0 or \
                 self.steps >= self.total_train_steps:
             self._write_to_tensorboard(self.train_metrics, self.steps, stage="train")
             """Reset train metrics after save it to tensorboard."""
@@ -334,14 +321,14 @@ class BaseTrainer(BaseRunner):
 
     def _check_save_interval(self):
         """Save log interval."""
-        if self.steps % self.config["save_interval_steps"] == 0 or \
+        if self.steps % self.config.save_interval_steps == 0 or \
                 self.steps >= self.total_train_steps:
             self.save_checkpoint()
             self.save_model_weights()
 
     def _check_eval_interval(self):
         """Save log interval."""
-        if self.steps % self.config["eval_interval_steps"] == 0:
+        if self.steps % self.config.eval_interval_steps == 0:
             self._eval_epoch()
 
     # -------------------------------- UTILS -------------------------------------
@@ -367,12 +354,14 @@ class BaseTester(BaseRunner):
     After writing finished, it will calculate testing metrics
     """
 
-    def __init__(self, config: dict, output_name: str = "test"):
+    def __init__(self,
+                 config: RunningConfig,
+                 output_name: str = "test"):
         super(BaseTester, self).__init__(config)
         self.test_data_loader = None
         self.processed_records = 0
 
-        self.output_file_path = os.path.join(self.config["outdir"], f"{output_name}.tsv")
+        self.output_file_path = os.path.join(self.config.outdir, f"{output_name}.tsv")
         self.test_metrics = {
             "beam_wer": ErrorRate(func=wer, name="test_beam_wer", dtype=tf.float32),
             "beam_cer": ErrorRate(func=cer, name="test_beam_cer", dtype=tf.float32),

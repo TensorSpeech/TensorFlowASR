@@ -13,8 +13,7 @@
 # limitations under the License.
 import abc
 
-from ..augmentations.augments import UserAugmentation
-from ..utils.utils import preprocess_paths
+from ..augmentations.augments import Augmentation
 
 
 class BaseDataset(metaclass=abc.ABCMeta):
@@ -22,12 +21,12 @@ class BaseDataset(metaclass=abc.ABCMeta):
 
     def __init__(self,
                  data_paths: list,
-                 augmentations: dict = None,
+                 augmentations: Augmentation = Augmentation(None),
                  cache: bool = False,
                  shuffle: bool = False,
                  stage: str = "train"):
-        self.data_paths = preprocess_paths(data_paths) if data_paths else []
-        self.augmentations = UserAugmentation(augmentations)  # apply augmentation
+        self.data_paths = data_paths
+        self.augmentations = augmentations  # apply augmentation
         self.cache = cache  # whether to cache WHOLE transformed dataset to memory
         self.shuffle = shuffle  # whether to shuffle tf.data.Dataset
         self.stage = stage  # for defining tfrecords files

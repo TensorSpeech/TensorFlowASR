@@ -15,6 +15,7 @@
 import os
 import tensorflow as tf
 
+from ..configs.config import RunningConfig
 from ..featurizers.text_featurizers import TextFeaturizer
 from ..losses.ctc_losses import ctc_loss
 from .base_runners import BaseTrainer
@@ -25,7 +26,7 @@ class CTCTrainer(BaseTrainer):
 
     def __init__(self,
                  text_featurizer: TextFeaturizer,
-                 config: dict,
+                 config: RunningConfig,
                  strategy: tf.distribute.Strategy = None):
         self.text_featurizer = text_featurizer
         super(CTCTrainer, self).__init__(config=config, strategy=strategy)
@@ -42,7 +43,7 @@ class CTCTrainer(BaseTrainer):
 
     def save_model_weights(self):
         with self.strategy.scope():
-            self.model.save_weights(os.path.join(self.config["outdir"], "latest.h5"))
+            self.model.save_weights(os.path.join(self.config.outdir, "latest.h5"))
 
     @tf.function(experimental_relax_shapes=True)
     def _train_step(self, batch):

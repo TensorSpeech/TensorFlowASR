@@ -19,7 +19,7 @@ from tensorflow_asr.utils import setup_environment
 setup_environment()
 import tensorflow as tf
 
-from tensorflow_asr.configs.user_config import UserConfig
+from tensorflow_asr.configs.config import Config
 from tensorflow_asr.featurizers.speech_featurizers import TFSpeechFeaturizer
 from tensorflow_asr.featurizers.text_featurizers import SubwordFeaturizer
 from tensorflow_asr.models.streaming_transducer import StreamingTransducer
@@ -46,18 +46,18 @@ args = parser.parse_args()
 
 assert args.saved and args.output
 
-config = UserConfig(DEFAULT_YAML, args.config, learning=True)
-speech_featurizer = TFSpeechFeaturizer(config["speech_config"])
+config = Config(args.config, learning=True)
+speech_featurizer = TFSpeechFeaturizer(config.speech_config)
 
 if args.subwords and os.path.exists(args.subwords):
     print("Loading subwords ...")
-    text_featurizer = SubwordFeaturizer.load_from_file(config["decoder_config"], args.subwords)
+    text_featurizer = SubwordFeaturizer.load_from_file(config.decoder_config, args.subwords)
 else:
     raise ValueError("subwords must be set")
 
 # build model
 streaming_transducer = StreamingTransducer(
-    **config["model_config"],
+    **config.model_config,
     vocabulary_size=text_featurizer.num_classes
 )
 streaming_transducer._build(speech_featurizer.shape)

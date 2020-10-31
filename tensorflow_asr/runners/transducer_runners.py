@@ -15,6 +15,7 @@
 import os
 import tensorflow as tf
 
+from ..configs.config import RunningConfig
 from ..optimizers.accumulation import GradientAccumulation
 from .base_runners import BaseTrainer
 from ..losses.rnnt_losses import rnnt_loss
@@ -24,7 +25,7 @@ from ..featurizers.text_featurizers import TextFeaturizer
 
 class TransducerTrainer(BaseTrainer):
     def __init__(self,
-                 config: dict,
+                 config: RunningConfig,
                  text_featurizer: TextFeaturizer,
                  strategy: tf.distribute.Strategy = None):
         self.text_featurizer = text_featurizer
@@ -41,7 +42,7 @@ class TransducerTrainer(BaseTrainer):
         }
 
     def save_model_weights(self):
-        self.model.save_weights(os.path.join(self.config["outdir"], "latest.h5"))
+        self.model.save_weights(os.path.join(self.config.outdir, "latest.h5"))
 
     @tf.function(experimental_relax_shapes=True)
     def _train_step(self, batch):
@@ -95,7 +96,7 @@ class TransducerTrainerGA(TransducerTrainer):
 
         self.accumulation.reset()
 
-        for accum_step in range(self.config.get("accumulation_steps", 1)):
+        for accum_step in range(self.config.accumulation_step):
 
             indices = tf.expand_dims(
                 tf.range(

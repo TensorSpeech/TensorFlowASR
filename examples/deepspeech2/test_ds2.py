@@ -49,7 +49,7 @@ tf.config.optimizer.set_experimental_options({"auto_mixed_precision": args.mxp})
 
 setup_devices([args.device])
 
-from tensorflow_asr.configs.user_config import UserConfig
+from tensorflow_asr.configs.config import Config
 from tensorflow_asr.datasets.asr_dataset import ASRTFRecordDataset, ASRSliceDataset
 from tensorflow_asr.featurizers.speech_featurizers import TFSpeechFeaturizer
 from tensorflow_asr.featurizers.text_featurizers import CharFeaturizer
@@ -59,11 +59,11 @@ from tensorflow_asr.models.deepspeech2 import DeepSpeech2
 tf.random.set_seed(0)
 assert args.export
 
-config = UserConfig(DEFAULT_YAML, args.config, learning=True)
-speech_featurizer = TFSpeechFeaturizer(config["speech_config"])
-text_featurizer = CharFeaturizer(config["decoder_config"])
+config = Config(args.config, learning=True)
+speech_featurizer = TFSpeechFeaturizer(config.speech_config)
+text_featurizer = CharFeaturizer(config.decoder_config)
 # Build DS2 model
-ds2_model = DeepSpeech2(**config["model_config"], vocabulary_size=text_featurizer.num_classes)
+ds2_model = DeepSpeech2(**config.model_config, vocabulary_size=text_featurizer.num_classes)
 ds2_model._build(speech_featurizer.shape)
 ds2_model.load_weights(args.saved, by_name=True)
 ds2_model.summary(line_length=120)
@@ -71,22 +71,22 @@ ds2_model.add_featurizers(speech_featurizer, text_featurizer)
 
 if args.tfrecords:
     test_dataset = ASRTFRecordDataset(
-        data_paths=config["learning_config"]["dataset_config"]["test_paths"],
-        tfrecords_dir=config["learning_config"]["dataset_config"]["tfrecords_dir"],
+        data_paths=config.learning_config.dataset_config.test_paths,
+        tfrecords_dir=config.learning_config.dataset_config.tfrecords_dir,
         speech_featurizer=speech_featurizer,
         text_featurizer=text_featurizer,
         stage="test", shuffle=False
     )
 else:
     test_dataset = ASRSliceDataset(
-        data_paths=config["learning_config"]["dataset_config"]["test_paths"],
+        data_paths=config.learning_config.dataset_config.test_paths,
         speech_featurizer=speech_featurizer,
         text_featurizer=text_featurizer,
         stage="test", shuffle=False
     )
 
 ctc_tester = BaseTester(
-    config=config["learning_config"]["running_config"],
+    config=config.learning_config.running_config,
     output_name=args.output_name
 )
 ctc_tester.compile(ds2_model)
