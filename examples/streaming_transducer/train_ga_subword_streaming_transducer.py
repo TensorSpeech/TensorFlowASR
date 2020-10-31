@@ -127,7 +127,7 @@ with streaming_transducer_trainer.strategy.scope():
     streaming_transducer._build(speech_featurizer.shape)
     streaming_transducer.summary(line_length=150)
 
-    optimizer = tf.keras.optimizers.Adam()
+    optimizer = tf.keras.optimizers.get(config.learning_config.optimizer_config)
 
 streaming_transducer_trainer.compile(model=streaming_transducer, optimizer=optimizer,
                                      max_to_keep=args.max_ckpts)
