@@ -19,6 +19,7 @@ TensorFlowASR implements some automatic speech recognition architectures such as
 
 ## What's New?
 
+- (10/31/2020) Update DeepSpeech2 and Supported Jasper [https://arxiv.org/abs/1904.03288](https://arxiv.org/abs/1904.03288)
 - (10/18/2020) Supported Streaming Transducer [https://arxiv.org/abs/1811.06621](https://arxiv.org/abs/1811.06621)
 - (10/15/2020) Add gradients accumulation and Refactor to TensorflowASR
 - (10/10/2020) Update documents and upload package to pypi
@@ -30,6 +31,10 @@ TensorFlowASR implements some automatic speech recognition architectures such as
 ## :yum: Supported Models
 
 - **CTCModel** (End2end models using CTC Loss for training)
+- **Deep Speech 2** (Reference: [https://arxiv.org/abs/1512.02595](https://arxiv.org/abs/1512.02595))
+  See [examples/deepspeech2](./examples/deepspeech2)
+- **Jasper** (Reference: [https://arxiv.org/abs/1904.03288](https://arxiv.org/abs/1904.03288))
+  See [examples/jasper](./examples/jasper)
 - **Transducer Models** (End2end models using RNNT Loss for training)
 - **Conformer Transducer** (Reference: [https://arxiv.org/abs/2005.08100](https://arxiv.org/abs/2005.08100))
   See [examples/conformer](./examples/conformer)
