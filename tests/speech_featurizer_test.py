@@ -25,25 +25,11 @@ import numpy as np
 import matplotlib.pyplot as plt
 from tensorflow_asr.featurizers.speech_featurizers import read_raw_audio, \
     TFSpeechFeaturizer, NumpySpeechFeaturizer
-from tensorflow_asr.augmentations.augments import UserAugmentation
 
 
 def main(argv):
     speech_file = argv[1]
     feature_type = argv[2]
-    augments = {
-        # "after": {
-        #     "time_masking": {
-        #         "num_masks": 10,
-        #         "mask_factor": 100,
-        #         "p_upperbound": 0.05
-        #     },
-        #     "freq_masking": {
-        #         "mask_factor": 27
-        #     }
-        # },
-    }
-    au = UserAugmentation(augments)
     speech_conf = {
         "sample_rate": 16000,
         "frame_ms": 25,
@@ -57,9 +43,13 @@ def main(argv):
     }
     signal = read_raw_audio(speech_file, speech_conf["sample_rate"])
 
-    sf = NumpySpeechFeaturizer(speech_conf)
+    nsf = NumpySpeechFeaturizer(speech_conf)
+    sf = TFSpeechFeaturizer(speech_conf)
+    ft = nsf.stft(signal)
+    print(ft.shape, np.mean(ft))
+    ft = sf.stft(signal).numpy()
+    print(ft.shape, np.mean(ft))
     ft = sf.extract(signal)
-    ft = au["after"].augment(ft)[:, :, 0]
 
     plt.figure(figsize=(16, 2.5))
     ax = plt.gca()

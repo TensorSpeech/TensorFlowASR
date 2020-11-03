@@ -245,7 +245,7 @@ class NumpySpeechFeaturizer(SpeechFeaturizer):
     def stft(self, signal):
         return np.square(
             np.abs(librosa.core.stft(signal, n_fft=self.nfft, hop_length=self.frame_step,
-                                     win_length=self.frame_length, center=True, window="hann")))
+                                     win_length=self.frame_length, center=False, window="hann")))
 
     def power_to_db(self, S, ref=1.0, amin=1e-10, top_db=80.0):
         return librosa.power_to_db(S, ref=ref, amin=amin, top_db=top_db)
@@ -302,7 +302,7 @@ class NumpySpeechFeaturizer(SpeechFeaturizer):
         pitches, _ = librosa.core.piptrack(
             y=signal, sr=self.sample_rate,
             n_fft=self.nfft, hop_length=self.frame_step,
-            fmin=0.0, fmax=int(self.sample_rate / 2), win_length=self.frame_length, center=True
+            fmin=0.0, fmax=int(self.sample_rate / 2), win_length=self.frame_length, center=False
         )
 
         pitches = pitches.T
