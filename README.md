@@ -19,6 +19,7 @@ TensorFlowASR implements some automatic speech recognition architectures such as
 
 ## What's New?
 
+- (11/3/2020) Reduce differences between `librosa.stft` and `tf.signal.stft`
 - (10/31/2020) Update DeepSpeech2 and Supported Jasper [https://arxiv.org/abs/1904.03288](https://arxiv.org/abs/1904.03288)
 - (10/18/2020) Supported Streaming Transducer [https://arxiv.org/abs/1811.06621](https://arxiv.org/abs/1811.06621)
 - (10/15/2020) Add gradients accumulation and Refactor to TensorflowASR
