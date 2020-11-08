@@ -120,6 +120,7 @@ class BaseTrainer(BaseRunner):
         self.config.batch_size = train_bs  # Update batch size fed from arguments
 
         if not train_acs: train_acs = self.config.accumulation_steps
+        assert train_bs % train_acs == 0, "Batch size must be a multiple of Accumulation Steps"
         self.accumulation_bs = train_bs // train_acs
         self.config.accumulation_steps = train_acs  # update accum steps fed from arguments
 

@@ -96,7 +96,7 @@ class TransducerTrainerGA(TransducerTrainer):
 
         self.accumulation.reset()
 
-        for accum_step in range(self.config.accumulation_step):
+        for accum_step in range(self.config.accumulation_steps):
 
             indices = tf.expand_dims(
                 tf.range(
