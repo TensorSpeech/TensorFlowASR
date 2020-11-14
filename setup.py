@@ -26,18 +26,19 @@ requirements = [
     "soundfile>=0.10.3",
     "PyYAML>=5.3.1",
     "matplotlib>=3.2.1",
-    "numpy>=1.18.5,<1.19.0",
+    "numpy>=1.16.0,<1.19.0",
     "sox>=1.3.7",
     "nltk>=3.5",
     "numba==0.49.1",
-    "tqdm>=4.47.0",
+    "tqdm>=4.51.0",
     "colorama>=0.4.3",
-    "nlpaug>=1.0.1"
+    "nlpaug>=1.0.1",
+    "absl-py>=0.9,<0.11"
 ]
 
 setuptools.setup(
     name="TensorFlowASR",
-    version="0.2.10",
+    version="0.3.0",
     author="Huy Le Nguyen",
     author_email="nlhuy.cs.16@gmail.com",
     description="Almost State-of-the-art Automatic Speech Recognition using Tensorflow 2",

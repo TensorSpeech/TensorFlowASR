@@ -24,11 +24,11 @@ speech_config:
   normalize_per_feature: False
 
 decoder_config:
-  vocabulary: ./vocabularies/vietnamese.characters
+  vocabulary: null
   blank_at_zero: False
   beam_width: 500
   lm_config:
-    model_path: /mnt/Data/ML/NLP/vntc_asr_5gram_trie.binary
+    model_path: null
     alpha: 2.0
     beta: 1.0
 
@@ -53,12 +53,13 @@ learning_config:
 
   dataset_config:
     train_paths:
-      - /mnt/Data/ML/ASR/Preprocessed/Vivos/train/train_transcripts.tsv
+      - /mnt/d/SpeechProcessing/Datasets/LibriSpeech/train-clean-100/transcripts.tsv
     eval_paths:
-      - /mnt/Data/ML/ASR/Preprocessed/Vivos/train/eval_transcripts.tsv
+      - /mnt/d/SpeechProcessing/Datasets/LibriSpeech/dev-clean/transcripts.tsv
+      - /mnt/d/SpeechProcessing/Datasets/LibriSpeech/dev-other/transcripts.tsv
     test_paths:
-      - /mnt/Data/ML/ASR/Preprocessed/Vivos/test/transcripts.tsv
-    tfrecords_dir: /mnt/Data/ML/ASR/Preprocessed/Vivos/TFRecords
+      - /mnt/d/SpeechProcessing/Datasets/LibriSpeech/test-clean/transcripts.tsv
+    tfrecords_dir: null
 
   optimizer_config:
     class_name: adam
@@ -68,7 +69,7 @@ learning_config:
   running_config:
     batch_size: 8
     num_epochs: 20
-    outdir: /mnt/Projects/asrk16/trained/local/vivos
+    outdir: /mnt/d/SpeechProcessing/Trained/local/deepspeech2
     log_interval_steps: 400
     save_interval_steps: 400
     eval_interval_steps: 800

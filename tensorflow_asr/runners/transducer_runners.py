@@ -90,48 +90,39 @@ class TransducerTrainer(BaseTrainer):
 class TransducerTrainerGA(TransducerTrainer):
     """ Transducer Trainer that uses Gradients Accumulation """
 
-    @tf.function(experimental_relax_shapes=True)
-    def _train_step(self, batch):
-        _, bfeatures, binput_length, blabels, blabel_length, bpred_inp = batch
+    @tf.function
+    def _train_function(self, iterator):
+        for _ in range(self.config.accumulation_steps):
+            batch = next(iterator)
+            self.strategy.run(self._train_step, args=(batch,))
+        self.strategy.run(self._apply_gradients, args=())
 
-        self.accumulation.reset()
-
-        for accum_step in range(self.config.accumulation_step):
-
-            indices = tf.expand_dims(
-                tf.range(
-                    accum_step * self.accumulation_bs,
-                    (accum_step + 1) * self.accumulation_bs,
-                    dtype=tf.int32
-                ),
-                axis=-1
-            )
-
-            features = tf.gather_nd(bfeatures, indices)
-            input_length = tf.gather_nd(binput_length, indices)
-            labels = tf.gather_nd(blabels, indices)
-            label_length = tf.gather_nd(blabel_length, indices)
-            pred_inp = tf.gather_nd(bpred_inp, indices)
-
-            with tf.GradientTape() as tape:
-                logits = self.model([features, pred_inp], training=True)
-                tape.watch(logits)
-                per_train_loss = rnnt_loss(
-                    logits=logits, labels=labels, label_length=label_length,
-                    logit_length=(input_length // self.model.time_reduction_factor),
-                    blank=self.text_featurizer.blank
-                )
-                train_loss = tf.nn.compute_average_loss(
-                    per_train_loss,
-                    global_batch_size=self.global_batch_size
-                )
-
-            step_gradients = tape.gradient(train_loss, self.model.trainable_variables)
-            self.accumulation.accumulate(step_gradients)
-            self.train_metrics["transducer_loss"].update_state(per_train_loss)
-
+    @tf.function
+    def _apply_gradients(self):
         self.optimizer.apply_gradients(
             zip(self.accumulation.gradients, self.model.trainable_variables))
+        self.accumulation.reset()
+
+    @tf.function(experimental_relax_shapes=True)
+    def _train_step(self, batch):
+        _, features, input_length, labels, label_length, pred_inp = batch
+
+        with tf.GradientTape() as tape:
+            logits = self.model([features, pred_inp], training=True)
+            tape.watch(logits)
+            per_train_loss = rnnt_loss(
+                logits=logits, labels=labels, label_length=label_length,
+                logit_length=(input_length // self.model.time_reduction_factor),
+                blank=self.text_featurizer.blank
+            )
+            train_loss = tf.nn.compute_average_loss(
+                per_train_loss,
+                global_batch_size=self.global_batch_size
+            )
+
+        gradients = tape.gradient(train_loss, self.model.trainable_variables)
+        self.accumulation.accumulate(gradients)
+        self.train_metrics["transducer_loss"].update_state(per_train_loss)
 
     def compile(self,
                 model: Transducer,

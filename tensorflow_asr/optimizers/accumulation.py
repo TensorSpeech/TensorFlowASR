@@ -19,25 +19,17 @@ class GradientAccumulation:
     def __init__(self, trainable_variables):
         self.gradients = [
             tf.Variable(
-                tf.zeros_like(self.flat_gradients(g)),
+                tf.zeros_like(g),
+                trainable=False,
                 synchronization=tf.VariableSynchronization.ON_READ
             ) for g in trainable_variables
         ]
 
-    @staticmethod
-    def flat_gradients(gradient):
-        """ Convert gradients if it's tf.IndexedSlices. """
-        if type(gradient) == tf.IndexedSlices:
-            return tf.scatter_nd(
-                tf.expand_dims(gradient.indices, 1),
-                gradient.values,
-                gradient.dense_shape
-            )
-        return gradient
-
     def reset(self):
-        for g in self.gradients: g.assign(tf.zeros_like(g))
+        for i, g in enumerate(self.gradients):
+            self.gradients[i].assign(tf.zeros_like(g))
 
     def accumulate(self, step_gradients):
         for i, g in enumerate(step_gradients):
-            self.gradients[i].assign_add(self.flat_gradients(g))
+            if g is None: continue
+            self.gradients[i].assign_add(g)
