@@ -20,12 +20,14 @@ class GradientAccumulation:
         self.gradients = [
             tf.Variable(
                 tf.zeros_like(g),
+                trainable=False,
                 synchronization=tf.VariableSynchronization.ON_READ
             ) for g in trainable_variables
         ]
 
     def reset(self):
-        for g in self.gradients: g.assign(tf.zeros_like(g))
+        for i, g in enumerate(self.gradients):
+            self.gradients[i].assign(tf.zeros_like(g))
 
     def accumulate(self, step_gradients):
         for i, g in enumerate(step_gradients):

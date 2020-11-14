@@ -72,7 +72,8 @@ class BaseTrainer(BaseRunner):
         super(BaseTrainer, self).__init__(config)
         self.set_strategy(strategy)
         # Steps and Epochs start from 0
-        self.steps = tf.Variable(0, dtype=tf.int64)  # Step must be int64 to use tf.summary
+        # Step must be int64 to use tf.summary
+        self.steps = tf.Variable(0, trainable=False, dtype=tf.int64)
         self.train_steps_per_epoch = None
         self.eval_steps_per_epoch = None
         # Dataset
@@ -120,13 +121,14 @@ class BaseTrainer(BaseRunner):
         self.config.batch_size = train_bs  # Update batch size fed from arguments
 
         if not train_acs: train_acs = self.config.accumulation_steps
-        assert train_bs % train_acs == 0, "Batch size must be a multiple of Accumulation Steps"
-        self.accumulation_bs = train_bs // train_acs
         self.config.accumulation_steps = train_acs  # update accum steps fed from arguments
 
         self.train_data = train_dataset.create(self.global_batch_size)
         self.train_data_loader = self.strategy.experimental_distribute_dataset(self.train_data)
-        self.train_steps_per_epoch = train_dataset.total_steps
+        if hasattr(self, "accumulation"):
+            self.train_steps_per_epoch = train_dataset.total_steps // self.config.accumulation_steps
+        else:
+            self.train_steps_per_epoch = train_dataset.total_steps
 
     def set_eval_data_loader(self, eval_dataset, eval_bs=None):
         """ Set eval data loader (MUST).

@@ -41,6 +41,9 @@ parser.add_argument("--tbs", type=int, default=None,
 parser.add_argument("--ebs", type=int, default=None,
                     help="Evaluation batch size per replica")
 
+parser.add_argument("--acs", type=int, default=None,
+                    help="Train accumulation steps")
+
 parser.add_argument("--devices", type=int, nargs="*", default=[0],
                     help="Devices' ids to apply distributed training")
 
@@ -125,4 +128,5 @@ with conformer_trainer.strategy.scope():
 conformer_trainer.compile(model=conformer, optimizer=optimizer,
                           max_to_keep=args.max_ckpts)
 
-conformer_trainer.fit(train_dataset, eval_dataset, train_bs=args.tbs, eval_bs=args.ebs)
+conformer_trainer.fit(train_dataset, eval_dataset,
+                      train_bs=args.tbs, eval_bs=args.ebs, train_acs=args.acs)

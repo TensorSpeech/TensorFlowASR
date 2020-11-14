@@ -18,7 +18,7 @@ with open("README.md", "r") as fh:
     long_description = fh.read()
 
 requirements = [
-    # "tensorflow>=2.3.0",
+    "tensorflow>=2.3.0",
     "tensorflow-datasets>=3.2.1,<4.0.0",
     "tensorflow-addons>=0.10.0",
     "setuptools>=47.1.1",
@@ -38,7 +38,7 @@ requirements = [
 
 setuptools.setup(
     name="TensorFlowASR",
-    version="0.2.10",
+    version="0.3.0",
     author="Huy Le Nguyen",
     author_email="nlhuy.cs.16@gmail.com",
     description="Almost State-of-the-art Automatic Speech Recognition using Tensorflow 2",
