@@ -11,13 +11,15 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+
+from typing import Tuple
 import numpy as np
 import tensorflow as tf
 from nltk.metrics import distance
 from .utils import bytes_to_string
 
 
-def wer(decode: np.ndarray, target: np.ndarray) -> (tf.Tensor, tf.Tensor):
+def wer(decode: np.ndarray, target: np.ndarray) -> Tuple[tf.Tensor, tf.Tensor]:
     """Word Error Rate
 
     Args:
@@ -43,7 +45,7 @@ def wer(decode: np.ndarray, target: np.ndarray) -> (tf.Tensor, tf.Tensor):
     return tf.convert_to_tensor(dis, tf.float32), tf.convert_to_tensor(length, tf.float32)
 
 
-def cer(decode: np.ndarray, target: np.ndarray) -> (tf.Tensor, tf.Tensor):
+def cer(decode: np.ndarray, target: np.ndarray) -> Tuple[tf.Tensor, tf.Tensor]:
     """Character Error Rate
 
     Args:

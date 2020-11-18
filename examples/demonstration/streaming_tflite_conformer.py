@@ -57,6 +57,18 @@ parser.add_argument('-q', '--buffersize', type=int, default=20,
 parser.add_argument("--tflite", type=str, default=None,
                     help="Path to conformer tflite")
 
+parser.add_argument("--blank", type=int, default=0,
+                    help="Path to conformer tflite")
+
+parser.add_argument("--num_rnns", type=int, default=1,
+                    help="Number of RNN layers in prediction network")
+
+parser.add_argument("--nstates", type=int, default=2,
+                    help="Number of RNN states in prediction network (1 for GRU and 2 for LSTM)")
+
+parser.add_argument("--statesize", type=int, default=320,
+                    help="Size of RNN state in prediction network")
+
 args = parser.parse_args(remaining)
 
 if args.blocksize == 0:
@@ -92,8 +104,8 @@ def recognizer(Q):
         text = "".join([chr(u) for u in upoints])
         return text, lastid, states
 
-    lastid = np.zeros(shape=[], dtype=np.int32)
-    states = np.zeros(shape=[1, 2, 1, 320], dtype=np.float32)
+    lastid = args.blank * np.ones(shape=[], dtype=np.int32)
+    states = np.zeros(shape=[args.num_rnns, args.nstates, 1, args.statesize], dtype=np.float32)
     transcript = ""
 
     while True:
