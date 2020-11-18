@@ -30,6 +30,28 @@ TensorFlowASR implements some automatic speech recognition architectures such as
 - Support `transducer` tflite greedy decoding (conversion and invocation)
 - Distributed training using `tf.distribute.MirroredStrategy`
 
+## Table of Contents
+<!-- TOC -->
+
+- [What's New?](#whats-new)
+- [Table of Contents](#table-of-contents)
+- [:yum: Supported Models](#yum-supported-models)
+- [Installation](#installation)
+  - [Installing via PyPi](#installing-via-pypi)
+  - [Installing from source](#installing-from-source)
+- [Setup training and testing](#setup-training-and-testing)
+- [TFLite Convertion](#tflite-convertion)
+- [Features Extraction](#features-extraction)
+- [Augmentations](#augmentations)
+- [Training & Testing](#training--testing)
+- [Corpus Sources and Pretrained Models](#corpus-sources-and-pretrained-models)
+  - [English](#english)
+  - [Vietnamese](#vietnamese)
+  - [German](#german)
+- [References & Credits](#references--credits)
+
+<!-- /TOC -->
+
 ## :yum: Supported Models
 
 - **CTCModel** (End2end models using CTC Loss for training)
@@ -43,26 +65,44 @@ TensorFlowASR implements some automatic speech recognition architectures such as
 - **Streaming Transducer** (Reference: [https://arxiv.org/abs/1811.06621](https://arxiv.org/abs/1811.06621))
   See [examples/streaming_transducer](./examples/streaming_transducer)
 
-## Setup Environment and Datasets
+## Installation
 
-Install tensorflow: `pip3 install -U tensorflow` or `pip3 install tf-nightly` (for using tflite)
+For training and testing, you should use `git clone` for installing necessary packages from other authors (`ctc_decoders`, `rnnt_loss`, etc.)
 
-Install packages (choose _one_ of these options):
+### Installing via PyPi
 
-- Run `pip3 install -U TensorFlowASR`
-- Clone the repo and run `python3 setup.py install` in the repo's directory
+Run `pip3 install -U TensorFlowASR`
 
-For **setting up datasets**, see [datasets](./tensorflow_asr/datasets/README.md)
+### Installing from source
+
+```bash
+git clone https://github.com/TensorSpeech/TensorFlowASR.git
+cd TensorFlowASR
+python3 setup.py install
+```
+
+For anaconda3:
+
+```bash
+conda create -y -n tfasr tensorflow-gpu python=3.7 # tensorflow if using CPU
+conda activate tfasr
+pip install -U tensorflow-gpu # upgrade to latest version of tensorflow 
+git clone https://github.com/TensorSpeech/TensorFlowASR.git
+cd TensorFlowASR
+python setup.py install
+```
+
+## Setup training and testing
+
+- For datasets, see [datasets](./tensorflow_asr/datasets/README.md)
 
 - For _training, testing and using_ **CTC Models**, run `./scripts/install_ctc_decoders.sh`
 
-- For _training_ **Transducer Models**, export `CUDA_HOME` and run `./scripts/install_rnnt_loss.sh`
+- For _training_ **Transducer Models**, run `export CUDA_HOME=/usr/local/cuda && ./scripts/install_rnnt_loss.sh` (**Note**: only `export CUDA_HOME` when you have CUDA)
 
-- Method `tensorflow_asr.utils.setup_environment()` enable **mixed_precision** if available.
+- For _mixed precision training_, use flag `--mxp` when running python scripts from [examples](./examples)
 
-- To enable XLA, run `TF_XLA_FLAGS=--tf_xla_auto_jit=2 $python_train_script`
-
-Clean up: `python3 setup.py clean --all` (this will remove `/build` contents)
+- For _enabling XLA_, run `TF_XLA_FLAGS=--tf_xla_auto_jit=2 python3 $path_to_py_script`)
 
 ## TFLite Convertion
 
