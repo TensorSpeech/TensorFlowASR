@@ -74,8 +74,9 @@ learning_config:
       learning_rate: 0.0001
 
   running_config:
-    batch_size: 8
+    batch_size: 4
     num_epochs: 20
+    accumulation_steps: 8
     outdir: /mnt/d/SpeechProcessing/Trained/local/jasper
     log_interval_steps: 400
     save_interval_steps: 400

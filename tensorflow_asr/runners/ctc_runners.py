@@ -19,6 +19,7 @@ from ..configs.config import RunningConfig
 from ..featurizers.text_featurizers import TextFeaturizer
 from ..losses.ctc_losses import ctc_loss
 from .base_runners import BaseTrainer
+from ..optimizers.accumulation import GradientAccumulation
 
 
 class CTCTrainer(BaseTrainer):
@@ -89,3 +90,49 @@ class CTCTrainer(BaseTrainer):
             self.model = model
             self.optimizer = tf.keras.optimizers.get(optimizer)
         self.create_checkpoint_manager(max_to_keep, model=self.model, optimizer=self.optimizer)
+
+
+class CTCTrainerGA(CTCTrainer):
+    """ Trainer for CTC Models """
+
+    @tf.function
+    def _train_function(self, iterator):
+        for _ in range(self.config.accumulation_steps):
+            batch = next(iterator)
+            self.strategy.run(self._train_step, args=(batch,))
+        self.strategy.run(self._apply_gradients, args=())
+
+    @tf.function
+    def _apply_gradients(self):
+        self.optimizer.apply_gradients(
+            zip(self.accumulation.gradients, self.model.trainable_variables))
+        self.accumulation.reset()
+
+    @tf.function(experimental_relax_shapes=True)
+    def _train_step(self, batch):
+        _, features, input_length, labels, label_length, _ = batch
+
+        with tf.GradientTape() as tape:
+            y_pred = self.model(features, training=True)
+            tape.watch(y_pred)
+            per_train_loss = ctc_loss(
+                y_true=labels, y_pred=y_pred,
+                input_length=(input_length // self.model.time_reduction_factor),
+                label_length=label_length,
+                blank=self.text_featurizer.blank
+            )
+            train_loss = tf.nn.compute_average_loss(per_train_loss,
+                                                    global_batch_size=self.global_batch_size)
+
+        gradients = tape.gradient(train_loss, self.model.trainable_variables)
+        self.accumulation.accumulate(gradients)
+        self.train_metrics["ctc_loss"].update_state(per_train_loss)
+
+    def compile(self, model: tf.keras.Model,
+                optimizer: any,
+                max_to_keep: int = 10):
+        with self.strategy.scope():
+            self.model = model
+            self.optimizer = tf.keras.optimizers.get(optimizer)
+        self.create_checkpoint_manager(max_to_keep, model=self.model, optimizer=self.optimizer)
+        self.accumulation = GradientAccumulation(self.model.trainable_variables)
