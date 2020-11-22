@@ -67,6 +67,8 @@ TensorFlowASR implements some automatic speech recognition architectures such as
 
 ## Installation
 
+Install `tensorflow>=2.3.0` or `tf-nightly`.
+
 For training and testing, you should use `git clone` for installing necessary packages from other authors (`ctc_decoders`, `rnnt_loss`, etc.)
 
 ### Installing via PyPi

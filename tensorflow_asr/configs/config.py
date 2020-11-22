@@ -24,6 +24,7 @@ class DatasetConfig:
         self.eval_paths = config.get("eval_paths", None)
         self.test_paths = config.get("test_paths", None)
         self.tfrecords_dir = config.get("tfrecords_dir", None)
+        self.additional_properties = config.get("additional_properties", {})
 
 
 class RunningConfig:
@@ -36,6 +37,7 @@ class RunningConfig:
         self.log_interval_steps = config.get("log_interval_steps", 500)
         self.save_interval_steps = config.get("save_interval_steps", 500)
         self.eval_interval_steps = config.get("eval_interval_steps", 1000)
+        self.additional_properties = config.get("additional_properties", {})
 
 
 class LearningConfig:
@@ -45,6 +47,7 @@ class LearningConfig:
         self.dataset_config = DatasetConfig(config.get("dataset_config"))
         self.optimizer_config = config.get("optimizer_config", {})
         self.running_config = RunningConfig(config.get("running_config"))
+        self.additional_properties = config.get("additional_properties", {})
 
 
 class Config:
@@ -55,5 +58,6 @@ class Config:
         self.speech_config = config.get("speech_config", {})
         self.decoder_config = config.get("decoder_config", {})
         self.model_config = config.get("model_config", {})
+        self.additional_properties = config.get("additional_properties", {})
         if learning:
             self.learning_config = LearningConfig(config.get("learning_config"))
