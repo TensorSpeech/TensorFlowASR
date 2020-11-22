@@ -80,7 +80,7 @@ learning_config:
     batch_size: 2
     accumulation_steps: 1
     num_epochs: 20
-    outdir: /mnt/SpeechProcessing/Trained/local/streaming_transducer
+    outdir: /mnt/d/SpeechProcessing/Trained/local/streaming_transducer
     log_interval_steps: 300
     eval_interval_steps: 500
     save_interval_steps: 1000

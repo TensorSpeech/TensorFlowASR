@@ -117,7 +117,7 @@ class MultiHeadAttention(tf.keras.layers.Layer):
     def call_attention(self, query, key, value, logits, training=False, mask=None):
         if mask is not None:
             if len(mask.shape) < 2:
-                raise ValueError("'mask' must have atleast 2 dimensions")
+                raise ValueError("'mask' must have at least 2 dimensions")
             if query.shape[-2] != mask.shape[-2]:
                 raise ValueError(
                     "mask's second to last dimension must be equal to "
