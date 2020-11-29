@@ -53,6 +53,7 @@ model_config:
   rnn_units: 320
   rnn_type: lstm
   layer_norm: True
+  projection_units: 0
   joint_dim: 320
 
 learning_config:
