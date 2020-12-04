@@ -60,12 +60,12 @@ learning_config:
 
   dataset_config:
     train_paths:
-      - /mnt/d/SpeechProcessing/Datasets/LibriSpeech/train-clean-100/transcripts.tsv
+      - /mnt/d/Datasets/Speech/LibriSpeech/train-clean-100/transcripts.tsv
     eval_paths:
-      - /mnt/d/SpeechProcessing/Datasets/LibriSpeech/dev-clean/transcripts.tsv
-      - /mnt/d/SpeechProcessing/Datasets/LibriSpeech/dev-other/transcripts.tsv
+      - /mnt/d/Datasets/Speech/LibriSpeech/dev-clean/transcripts.tsv
+      - /mnt/d/Datasets/Speech/LibriSpeech/dev-other/transcripts.tsv
     test_paths:
-      - /mnt/d/SpeechProcessing/Datasets/LibriSpeech/test-clean/transcripts.tsv
+      - /mnt/d/Datasets/Speech/LibriSpeech/test-clean/transcripts.tsv
     tfrecords_dir: null
 
   optimizer_config:
@@ -77,7 +77,7 @@ learning_config:
     batch_size: 4
     num_epochs: 20
     accumulation_steps: 8
-    outdir: /mnt/d/SpeechProcessing/Trained/local/jasper
+    outdir: /mnt/d/Models/local/jasper
     log_interval_steps: 400
     save_interval_steps: 400
     eval_interval_steps: 800
