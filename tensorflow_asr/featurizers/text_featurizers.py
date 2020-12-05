@@ -21,6 +21,7 @@ import numpy as np
 import tensorflow as tf
 import tensorflow_datasets as tds
 
+from ..configs.config import DecoderConfig
 from ..utils.utils import preprocess_paths
 
 ENGLISH_CHARACTERS = [" ", "a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m",
@@ -30,9 +31,7 @@ ENGLISH_CHARACTERS = [" ", "a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k"
 class TextFeaturizer(metaclass=abc.ABCMeta):
     def __init__(self, decoder_config: dict):
         self.scorer = None
-        self.decoder_config = decoder_config
-        if self.decoder_config.get("vocabulary", None) is not None:
-            self.decoder_config["vocabulary"] = preprocess_paths(self.decoder_config["vocabulary"])
+        self.decoder_config = DecoderConfig(decoder_config)
         self.blank = None
         self.tokens2indices = {}
         self.tokens = []
@@ -100,12 +99,12 @@ class CharFeaturizer(TextFeaturizer):
 
     def __init_vocabulary(self):
         lines = []
-        if self.decoder_config.get("vocabulary", None) is not None:
-            with codecs.open(self.decoder_config["vocabulary"], "r", "utf-8") as fin:
+        if self.decoder_config.vocabulary is not None:
+            with codecs.open(self.decoder_config.vocabulary, "r", "utf-8") as fin:
                 lines.extend(fin.readlines())
         else:
             lines = ENGLISH_CHARACTERS
-        self.blank = 0 if self.decoder_config.get("blank_at_zero", True) else None
+        self.blank = 0 if self.decoder_config.blank_at_zero else None
         self.tokens2indices = {}
         self.tokens = []
         index = 1 if self.blank == 0 else 0
@@ -240,7 +239,7 @@ class SubwordFeaturizer(TextFeaturizer):
         if filename is not None:
             filename_prefix = os.path.splitext(preprocess_paths(filename))[0]
         else:
-            filename_prefix = self.decoder_config.get("vocabulary", None)
+            filename_prefix = self.decoder_config.vocabulary
         return self.subwords.save_to_file(filename_prefix)
 
     def extract(self, text: str) -> tf.Tensor:
