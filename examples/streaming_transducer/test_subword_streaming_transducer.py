@@ -56,7 +56,7 @@ tf.config.optimizer.set_experimental_options({"auto_mixed_precision": args.mxp})
 setup_devices([args.device], cpu=args.cpu)
 
 from tensorflow_asr.configs.config import Config
-from tensorflow_asr.datasets.asr_dataset import ASRTFRecordDataset, ASRSliceDataset
+from tensorflow_asr.datasets.asr_dataset import ASRTFRecordTestDataset, ASRSliceTestDataset
 from tensorflow_asr.featurizers.speech_featurizers import TFSpeechFeaturizer
 from tensorflow_asr.featurizers.text_featurizers import SubwordFeaturizer
 from tensorflow_asr.runners.base_runners import BaseTester
@@ -75,7 +75,7 @@ tf.random.set_seed(0)
 assert args.saved
 
 if args.tfrecords:
-    test_dataset = ASRTFRecordDataset(
+    test_dataset = ASRTFRecordTestDataset(
         data_paths=config.learning_config.dataset_config.test_paths,
         tfrecords_dir=config.learning_config.dataset_config.tfrecords_dir,
         speech_featurizer=speech_featurizer,
@@ -83,7 +83,7 @@ if args.tfrecords:
         stage="test", shuffle=False
     )
 else:
-    test_dataset = ASRSliceDataset(
+    test_dataset = ASRSliceTestDataset(
         data_paths=config.learning_config.dataset_config.test_paths,
         speech_featurizer=speech_featurizer,
         text_featurizer=text_featurizer,

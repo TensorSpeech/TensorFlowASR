@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import os
 import argparse
 from tensorflow_asr.utils import setup_environment, setup_devices
 
@@ -32,6 +33,8 @@ parser.add_argument("--saved", type=str, default=None,
 parser.add_argument("--blank", type=int, default=0,
                     help="Path to conformer tflite")
 
+parser.add_argument("--beam_width", type=int, default=0, help="Beam width")
+
 parser.add_argument("--num_rnns", type=int, default=1,
                     help="Number of RNN layers in prediction network")
 
@@ -47,6 +50,12 @@ parser.add_argument("--device", type=int, default=0,
 parser.add_argument("--cpu", default=False, action="store_true",
                     help="Whether to only use cpu")
 
+parser.add_argument("--subwords", type=str, default=None,
+                    help="Path to file that stores generated subwords")
+
+parser.add_argument("--output_name", type=str, default="test",
+                    help="Result filename name prefix")
+
 args = parser.parse_args()
 
 setup_devices([args.device], cpu=args.cpu)
@@ -54,12 +63,17 @@ setup_devices([args.device], cpu=args.cpu)
 from tensorflow_asr.configs.config import Config
 from tensorflow_asr.featurizers.speech_featurizers import read_raw_audio
 from tensorflow_asr.featurizers.speech_featurizers import TFSpeechFeaturizer
-from tensorflow_asr.featurizers.text_featurizers import CharFeaturizer
+from tensorflow_asr.featurizers.text_featurizers import CharFeaturizer, SubwordFeaturizer
 from tensorflow_asr.models.conformer import Conformer
 
 config = Config(args.config, learning=False)
 speech_featurizer = TFSpeechFeaturizer(config.speech_config)
-text_featurizer = CharFeaturizer(config.decoder_config)
+if args.subwords and os.path.exists(args.subwords):
+    print("Loading subwords ...")
+    text_featurizer = SubwordFeaturizer.load_from_file(config.decoder_config, args.subwords)
+else:
+    text_featurizer = CharFeaturizer(config.decoder_config)
+text_featurizer.decoder_config.beam_width = args.beam_width
 
 # build model
 conformer = Conformer(**config.model_config, vocabulary_size=text_featurizer.num_classes)
@@ -69,9 +83,10 @@ conformer.summary(line_length=120)
 conformer.add_featurizers(speech_featurizer, text_featurizer)
 
 signal = read_raw_audio(args.filename)
-predicted = tf.constant(args.blank, dtype=tf.int32)
-states = tf.zeros([args.num_rnns, args.nstates, 1, args.statesize], dtype=tf.float32)
 
-hyp, _, _ = conformer.recognize_tflite(signal, predicted, states)
+if (args.beam_width):
+    transcript = conformer.recognize_beam(signal[None, ...])
+else:
+    transcript = conformer.recognize(signal[None, ...])
 
-print("".join([chr(u) for u in hyp]))
+tf.print("Transcript:", transcript[0])

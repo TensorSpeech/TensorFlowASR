@@ -17,13 +17,26 @@ from ..augmentations.augments import Augmentation
 from ..utils.utils import preprocess_paths
 
 
+class DecoderConfig:
+    def __init__(self, config: dict = None):
+        if not config: config = {}
+        self.vocabulary = preprocess_paths(config.get("vocabulary", None))
+        self.beam_width = config.get("beam_width", 0)
+        self.blank_at_zero = config.get("blank_at_zero", True)
+        self.target_vocab_size = config.get("target_vocab_size", 1024)
+        self.max_subword_length = config.get("max_subword_length", 4)
+        self.norm_score = config.get("norm_score", True)
+        self.lm_config = config.get("lm_config", {})
+        self.additional_properties = config.get("additional_properties", {})
+
+
 class DatasetConfig:
     def __init__(self, config: dict = None):
         if not config: config = {}
-        self.train_paths = config.get("train_paths", None)
-        self.eval_paths = config.get("eval_paths", None)
-        self.test_paths = config.get("test_paths", None)
-        self.tfrecords_dir = config.get("tfrecords_dir", None)
+        self.train_paths = preprocess_paths(config.get("train_paths", None))
+        self.eval_paths = preprocess_paths(config.get("eval_paths", None))
+        self.test_paths = preprocess_paths(config.get("test_paths", None))
+        self.tfrecords_dir = preprocess_paths(config.get("tfrecords_dir", None))
         self.additional_properties = config.get("additional_properties", {})
 
 

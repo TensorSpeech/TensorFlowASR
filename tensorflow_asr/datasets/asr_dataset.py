@@ -242,3 +242,115 @@ class ASRSliceDataset(ASRDataset):
         dataset = tf.data.Dataset.from_tensor_slices(entries)
 
         return self.process(dataset, batch_size)
+
+
+class ASRTFRecordTestDataset(ASRTFRecordDataset):
+    def preprocess(self, path, transcript):
+        with tf.device("/CPU:0"):
+            signal = read_raw_audio(path.decode("utf-8"), self.speech_featurizer.sample_rate)
+            label = self.text_featurizer.extract(transcript.decode("utf-8"))
+            return path, signal, tf.convert_to_tensor(label, dtype=tf.int32)
+
+    @tf.function
+    def parse(self, record):
+        feature_description = {
+            "path": tf.io.FixedLenFeature([], tf.string),
+            "audio": tf.io.FixedLenFeature([], tf.string),
+            "transcript": tf.io.FixedLenFeature([], tf.string)
+        }
+        example = tf.io.parse_single_example(record, feature_description)
+
+        return tf.numpy_function(
+            self.preprocess,
+            inp=[example["audio"], example["transcript"]],
+            Tout=(tf.string, tf.float32, tf.int32)
+        )
+
+    def process(self, dataset, batch_size):
+        dataset = dataset.map(self.parse, num_parallel_calls=AUTOTUNE)
+
+        if self.cache:
+            dataset = dataset.cache()
+
+        if self.shuffle:
+            dataset = dataset.shuffle(TFRECORD_SHARDS, reshuffle_each_iteration=True)
+
+        # PADDED BATCH the dataset
+        dataset = dataset.padded_batch(
+            batch_size=batch_size,
+            padded_shapes=(
+                tf.TensorShape([]),
+                tf.TensorShape([None]),
+                tf.TensorShape([None]),
+            ),
+            padding_values=("", 0.0, self.text_featurizer.blank),
+            drop_remainder=True
+        )
+
+        # PREFETCH to improve speed of input length
+        dataset = dataset.prefetch(AUTOTUNE)
+        self.total_steps = get_num_batches(self.total_steps, batch_size)
+        return dataset
+
+    def create(self, batch_size):
+        # Create TFRecords dataset
+        have_data = self.create_tfrecords()
+        if not have_data: return None
+
+        pattern = os.path.join(self.tfrecords_dir, f"{self.stage}*.tfrecord")
+        files_ds = tf.data.Dataset.list_files(pattern)
+        ignore_order = tf.data.Options()
+        ignore_order.experimental_deterministic = False
+        files_ds = files_ds.with_options(ignore_order)
+        dataset = tf.data.TFRecordDataset(files_ds, compression_type='ZLIB', num_parallel_reads=AUTOTUNE)
+
+        return self.process(dataset, batch_size)
+
+
+class ASRSliceTestDataset(ASRDataset):
+    def preprocess(self, path, transcript):
+        with tf.device("/CPU:0"):
+            signal = read_raw_audio(path.decode("utf-8"), self.speech_featurizer.sample_rate)
+            label = self.text_featurizer.extract(transcript.decode("utf-8"))
+            return path, signal, tf.convert_to_tensor(label, dtype=tf.int32)
+
+    @tf.function
+    def parse(self, record):
+        return tf.numpy_function(
+            self.preprocess,
+            inp=[record[0], record[1]],
+            Tout=[tf.string, tf.float32, tf.int32]
+        )
+
+    def process(self, dataset, batch_size):
+        dataset = dataset.map(self.parse, num_parallel_calls=AUTOTUNE)
+
+        if self.cache:
+            dataset = dataset.cache()
+
+        if self.shuffle:
+            dataset = dataset.shuffle(TFRECORD_SHARDS, reshuffle_each_iteration=True)
+
+        # PADDED BATCH the dataset
+        dataset = dataset.padded_batch(
+            batch_size=batch_size,
+            padded_shapes=(
+                tf.TensorShape([]),
+                tf.TensorShape([None]),
+                tf.TensorShape([None]),
+            ),
+            padding_values=("", 0.0, self.text_featurizer.blank),
+            drop_remainder=True
+        )
+
+        # PREFETCH to improve speed of input length
+        dataset = dataset.prefetch(AUTOTUNE)
+        self.total_steps = get_num_batches(self.total_steps, batch_size)
+        return dataset
+
+    def create(self, batch_size):
+        entries = self.read_entries()
+        if len(entries) == 0: return None
+        entries = np.delete(entries, 1, 1)  # Remove unused duration
+        dataset = tf.data.Dataset.from_tensor_slices(entries)
+        return self.process(dataset, batch_size)

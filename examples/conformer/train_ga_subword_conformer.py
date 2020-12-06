@@ -129,16 +129,15 @@ with conformer_trainer.strategy.scope():
     conformer._build(speech_featurizer.shape)
     conformer.summary(line_length=120)
 
-    optimizer_config = config.learning_config.optimizer_config
     optimizer = tf.keras.optimizers.Adam(
         TransformerSchedule(
-            d_model=config.model_config["dmodel"],
-            warmup_steps=optimizer_config["warmup_steps"],
-            max_lr=(0.05 / math.sqrt(config.model_config["dmodel"]))
+            d_model=config.model_config["encoder_dmodel"],
+            warmup_steps=config.learning_config.optimizer_config["warmup_steps"],
+            max_lr=(0.05 / math.sqrt(config.model_config["encoder_dmodel"]))
         ),
-        beta_1=optimizer_config["beta1"],
-        beta_2=optimizer_config["beta2"],
-        epsilon=optimizer_config["epsilon"]
+        beta_1=config.learning_config.optimizer_config["beta1"],
+        beta_2=config.learning_config.optimizer_config["beta2"],
+        epsilon=config.learning_config.optimizer_config["epsilon"]
     )
 
 conformer_trainer.compile(model=conformer, optimizer=optimizer,

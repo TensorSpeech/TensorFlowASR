@@ -22,7 +22,6 @@ class GradientAccumulation:
                 tf.zeros_like(g),
                 trainable=False,
                 synchronization=tf.VariableSynchronization.ON_READ,
-                aggregation=tf.VariableAggregation.ONLY_FIRST_REPLICA
             ) for g in trainable_variables
         ]
 
