@@ -108,6 +108,10 @@ TFLite Conversion, see `python examples/conformer/tflite_conformer.py --help`
 
 **Error Rates**
 
-| Test-clean |  WER (%)  |  CER (%)   |
-| :--------: | :-------: | :--------: |
-|  _Greedy_  | 6.4476862 | 2.51828337 |
+| **Test-clean** |  WER (%)  |  CER (%)   |
+| :------------: | :-------: | :--------: |
+|    _Greedy_    | 6.4476862 | 2.51828337 |
+
+| **Test-other** |  WER (%)   |  CER (%)   |
+| :------------: | :--------: | :--------: |
+|    _Greedy_    | 15.7308521 | 7.67273521 |
