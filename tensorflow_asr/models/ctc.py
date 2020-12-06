@@ -41,15 +41,17 @@ class CtcModel(Model):
     # -------------------------------- GREEDY -------------------------------------
 
     @tf.function
-    def recognize(self, features):
+    def recognize(self, signals):
+
+        def extract_fn(signal): return self.speech_featurizer.tf_extract(signal)
+
+        features = tf.map_fn(extract_fn, signals, fn_output_signature=tf.TensorSpec(self.speech_featurizer.shape, dtype=tf.float32))
         logits = self(features, training=False)
         probs = tf.nn.softmax(logits)
 
-        def map_fn(prob):
-            return tf.numpy_function(self.perform_greedy,
-                                     inp=[prob], Tout=tf.string)
+        def map_fn(prob): return tf.numpy_function(self.perform_greedy, inp=[prob], Tout=tf.string)
 
-        return tf.map_fn(map_fn, probs, dtype=tf.string)
+        return tf.map_fn(map_fn, probs, fn_output_signature=tf.TensorSpec([], dtype=tf.string))
 
     def perform_greedy(self, probs: np.ndarray):
         from ctc_decoders import ctc_greedy_decoder
@@ -82,19 +84,19 @@ class CtcModel(Model):
     # -------------------------------- BEAM SEARCH -------------------------------------
 
     @tf.function
-    def recognize_beam(self, features, lm=False):
+    def recognize_beam(self, signals, lm=False):
+
+        def extract_fn(signal): return self.speech_featurizer.tf_extract(signal)
+
+        features = tf.map_fn(extract_fn, signals, fn_output_signature=tf.TensorSpec(self.speech_featurizer.shape, dtype=tf.float32))
         logits = self(features, training=False)
         probs = tf.nn.softmax(logits)
 
-        def map_fn(prob):
-            return tf.numpy_function(self.perform_beam_search,
-                                     inp=[prob, lm], Tout=tf.string)
+        def map_fn(prob): return tf.numpy_function(self.perform_beam_search, inp=[prob, lm], Tout=tf.string)
 
         return tf.map_fn(map_fn, probs, dtype=tf.string)
 
-    def perform_beam_search(self,
-                            probs: np.ndarray,
-                            lm: bool = False):
+    def perform_beam_search(self, probs: np.ndarray, lm: bool = False):
         from ctc_decoders import ctc_beam_search_decoder
         decoded = ctc_beam_search_decoder(
             probs_seq=probs,

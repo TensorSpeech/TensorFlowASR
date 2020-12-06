@@ -41,6 +41,7 @@ class TransducerPrediction(tf.keras.Model):
                  num_rnns: int = 1,
                  rnn_units: int = 512,
                  rnn_type: str = "lstm",
+                 rnn_implementation: int = 2,
                  layer_norm: bool = True,
                  projection_units: int = 0,
                  kernel_regularizer=None,
@@ -58,6 +59,7 @@ class TransducerPrediction(tf.keras.Model):
             rnn = RNN(
                 units=rnn_units, return_sequences=True,
                 name=f"{name}_lstm_{i}", return_state=True,
+                implementation=rnn_implementation,
                 kernel_regularizer=kernel_regularizer,
                 bias_regularizer=bias_regularizer
             )
@@ -198,6 +200,7 @@ class Transducer(Model):
                  num_rnns: int = 1,
                  rnn_units: int = 320,
                  rnn_type: str = "lstm",
+                 rnn_implementation: int = 2,
                  layer_norm: bool = True,
                  projection_units: int = 0,
                  joint_dim: int = 1024,
@@ -214,6 +217,7 @@ class Transducer(Model):
             num_rnns=num_rnns,
             rnn_units=rnn_units,
             rnn_type=rnn_type,
+            rnn_implementation=rnn_implementation,
             layer_norm=layer_norm,
             projection_units=projection_units,
             kernel_regularizer=kernel_regularizer,
@@ -312,7 +316,7 @@ class Transducer(Model):
     # -------------------------------- GREEDY -------------------------------------
 
     @tf.function
-    def recognize(self, signals: tf.Tensor) -> tf.Tensor:
+    def recognize(self, signals):
         """
         RNN Transducer Greedy decoding
         Args:
@@ -323,8 +327,9 @@ class Transducer(Model):
         """
         def execute(signal: tf.Tensor):
             features = self.speech_featurizer.tf_extract(signal)
+            encoded = self.encoder_inference(features)
             hypothesis = self.perform_greedy(
-                features,
+                encoded,
                 predicted=tf.constant(self.text_featurizer.blank, dtype=tf.int32),
                 states=self.predict_net.get_initial_state(),
                 swap_memory=True
@@ -348,7 +353,8 @@ class Transducer(Model):
             states: lastest rnn states with shape [num_rnns, 1 or 2, 1, P]
         """
         features = self.speech_featurizer.tf_extract(signal)
-        hypothesis = self.perform_greedy(features, predicted, states, swap_memory=False)
+        encoded = self.encoder_inference(features)
+        hypothesis = self.perform_greedy(encoded, predicted, states, swap_memory=False)
         transcript = self.text_featurizer.indices2upoints(hypothesis.prediction)
         return (
             transcript,
@@ -356,9 +362,8 @@ class Transducer(Model):
             hypothesis.states
         )
 
-    def perform_greedy(self, features, predicted, states, swap_memory=False):
+    def perform_greedy(self, encoded, predicted, states, swap_memory=False):
         with tf.name_scope(f"{self.name}_greedy"):
-            encoded = self.encoder_inference(features)
             time = tf.constant(0, dtype=tf.int32)
             total = tf.shape(encoded)[0]
             # Initialize prediction with a blank
@@ -432,7 +437,7 @@ class Transducer(Model):
     # -------------------------------- BEAM SEARCH -------------------------------------
 
     @tf.function
-    def recognize_beam(self, signals: tf.Tensor, lm=False) -> tf.Tensor:
+    def recognize_beam(self, signals, lm=False):
         """
         RNN Transducer Beam Search
         Args:
@@ -444,7 +449,8 @@ class Transducer(Model):
         """
         def execute(signal: tf.Tensor):
             features = self.speech_featurizer.tf_extract(signal)
-            hypothesis = self.perform_beam_search(features)
+            encoded = self.encoder_inference(features)
+            hypothesis = self.perform_beam_search(encoded, lm)
             prediction = tf.map_fn(lambda x: tf.strings.to_number(x, tf.int32),
                                    tf.strings.split(hypothesis.prediction), fn_output_signature=tf.TensorSpec([], dtype=tf.int32))
             transcripts = self.text_featurizer.iextract(tf.expand_dims(prediction, axis=0))
@@ -452,40 +458,13 @@ class Transducer(Model):
 
         return tf.map_fn(execute, signals, fn_output_signature=tf.TensorSpec([], dtype=tf.string))
 
-    @tf.function
-    def recognize_beam_tflite(self, signal):
-        """
-        Function to convert to tflite using greedy decoding (default streaming mode)
-        Args:
-            signal: tf.Tensor with shape [None] indicating a single audio signal
-            predicted: last predicted character with shape []
-            states: lastest rnn states with shape [num_rnns, 1 or 2, 1, P]
-
-        Return:
-            transcript: tf.Tensor of Unicode Code Points with shape [None] and dtype tf.int32
-            predicted: last predicted character with shape []
-            states: lastest rnn states with shape [num_rnns, 1 or 2, 1, P]
-        """
-        features = self.speech_featurizer.tf_extract(signal)
-        hypothesis = self.perform_beam_search(features)
-        tf.print(hypothesis.prediction)
-        prediction = tf.map_fn(lambda x: tf.strings.to_number(x, tf.int32),
-                               tf.strings.split(hypothesis.prediction), fn_output_signature=tf.TensorSpec([], dtype=tf.int32))
-        transcript = self.text_featurizer.indices2upoints(prediction)
-        return (
-            transcript,
-            hypothesis.index,
-            hypothesis.states
-        )
-
-    def perform_beam_search(self, features: tf.Tensor, lm=False):
+    def perform_beam_search(self, encoded, lm=False):
         with tf.name_scope(f"{self.name}_beam_search"):
             beam_width = tf.cond(
                 tf.less(self.text_featurizer.decoder_config.beam_width, self.text_featurizer.num_classes),
                 true_fn=lambda: self.text_featurizer.decoder_config.beam_width,
                 false_fn=lambda: self.text_featurizer.num_classes - 1
             )
-            encoded = self.encoder_inference(features)
             total = tf.shape(encoded)[0]
 
             def initialize_beam(dynamic=False):

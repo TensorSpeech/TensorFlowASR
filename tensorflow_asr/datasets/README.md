@@ -42,8 +42,14 @@ class ASRSliceDataset(ASRDataset):
                  shuffle: bool = False)
 ```
 
-**Outputs when iterating**
+**Outputs when iterating in train step**
 
 ```python
 (path, features, input_lengths, labels, label_lengths, pred_inp)
+```
+
+**Outputs when iterating in test step**
+
+```python
+(path, signals, labels)
 ```

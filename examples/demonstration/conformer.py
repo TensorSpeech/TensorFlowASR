@@ -83,12 +83,10 @@ conformer.summary(line_length=120)
 conformer.add_featurizers(speech_featurizer, text_featurizer)
 
 signal = read_raw_audio(args.filename)
-predicted = tf.constant(args.blank, dtype=tf.int32)
-states = tf.zeros([args.num_rnns, args.nstates, 1, args.statesize], dtype=tf.float32)
 
 if (args.beam_width):
-    hyp, _, _ = conformer.recognize_beam_tflite(signal)
+    transcript = conformer.recognize_beam(signal[None, ...])
 else:
-    hyp, _, _ = conformer.recognize_tflite(signal, predicted, states)
+    transcript = conformer.recognize(signal[None, ...])
 
-print("".join([chr(u) for u in hyp]))
+tf.print("Transcript:", transcript[0])

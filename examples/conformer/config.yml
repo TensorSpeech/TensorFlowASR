@@ -33,27 +33,28 @@ decoder_config:
 
 model_config:
   name: conformer
-  subsampling:
+  encoder_subsampling:
     type: conv2d
     filters: 144
     kernel_size: 3
     strides: 2
-  positional_encoding: sinusoid_concat
-  dmodel: 144
-  num_blocks: 16
-  head_size: 36
-  num_heads: 4
-  mha_type: relmha
-  kernel_size: 32
-  fc_factor: 0.5
-  dropout: 0.1
-  embed_dim: 320
-  embed_dropout: 0.1
-  num_rnns: 1
-  rnn_units: 320
-  rnn_type: lstm
-  layer_norm: True
-  projection_units: 0
+  encoder_positional_encoding: sinusoid_concat
+  encoder_dmodel: 144
+  encoder_num_blocks: 16
+  encoder_head_size: 36
+  encoder_num_heads: 4
+  encoder_mha_type: relmha
+  encoder_kernel_size: 32
+  encoder_fc_factor: 0.5
+  encoder_dropout: 0.1
+  prediction_embed_dim: 320
+  prediction_embed_dropout: 0.1
+  prediction_num_rnns: 1
+  prediction_rnn_units: 320
+  prediction_rnn_type: lstm
+  prediction_rnn_implementation: 1
+  prediction_layer_norm: True
+  prediction_projection_units: 0
   joint_dim: 320
 
 learning_config:

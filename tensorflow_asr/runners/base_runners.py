@@ -386,26 +386,29 @@ class BaseTester(BaseRunner):
             with open(self.output_file_path, "w") as out:
                 out.write("PATH\tGROUNDTRUTH\tGREEDY\tBEAMSEARCH\tBEAMSEARCHLM\n")
 
-    def set_test_data_loader(self, test_dataset):
+    def set_test_data_loader(self, test_dataset, batch_size=1):
         """Set train data loader (MUST)."""
-        self.test_data_loader = test_dataset.create(batch_size=1)
+        self.test_data_loader = test_dataset.create(batch_size)
+        self.total_steps = test_dataset.total_steps
 
     # -------------------------------- RUNNING -------------------------------------
 
     def compile(self, trained_model: tf.keras.Model):
         """ Set loaded trained model """
+        if not hasattr(trained_model, "speech_featurizer"):
+            raise AttributeError("Please do 'add_featurizers' before testing")
         self.model = trained_model
 
-    def run(self, test_dataset):
+    def run(self, test_dataset, batch_size=1):
         self.set_output_file()
-        self.set_test_data_loader(test_dataset)
+        self.set_test_data_loader(test_dataset, batch_size=batch_size)
         self._test_epoch()
         self._finish()
 
     def _test_epoch(self):
         if self.processed_records > 0:
             self.test_data_loader = self.test_data_loader.skip(self.processed_records)
-        progbar = tqdm(initial=self.processed_records, total=None,
+        progbar = tqdm(initial=self.processed_records, total=self.total_steps,
                        unit="batch", position=0, desc="[Test]")
         test_iter = iter(self.test_data_loader)
         while True:
@@ -437,13 +440,13 @@ class BaseTester(BaseRunner):
         Returns:
             (file_paths, groundtruth, greedy, beamsearch, beamsearch_lm) each has shape [B]
         """
-        file_paths, features, _, labels, _, _ = batch
+        file_paths, signals, labels = batch
 
         labels = self.model.text_featurizer.iextract(labels)
-        greed_pred = self.model.recognize(features)
-        if self.model.text_featurizer.decoder_config["beam_width"] > 0:
-            beam_pred = self.model.recognize_beam(features=features, lm=False)
-            beam_lm_pred = self.model.recognize_beam(features=features, lm=True)
+        greed_pred = self.model.recognize(signals)
+        if self.model.text_featurizer.decoder_config.beam_width > 0:
+            beam_pred = self.model.recognize_beam(signals, lm=False)
+            beam_lm_pred = self.model.recognize_beam(signals, lm=True)
         else:
             beam_pred = beam_lm_pred = tf.constant([""], dtype=tf.string)
 
