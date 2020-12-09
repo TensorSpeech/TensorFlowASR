@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import math
 import tensorflow as tf
 import matplotlib.pyplot as plt
 from tensorflow_asr.optimizers.schedules import SANSchedule, TransformerSchedule

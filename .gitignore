@@ -9,4 +9,5 @@ Session.vim
 .idea
 .vscode
 __pycache__
+.pytest*
 venv
