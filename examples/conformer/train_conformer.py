@@ -113,9 +113,9 @@ with conformer_trainer.strategy.scope():
     optimizer_config = config.learning_config.optimizer_config
     optimizer = tf.keras.optimizers.Adam(
         TransformerSchedule(
-            d_model=config.model_config["dmodel"],
+            d_model=config.model_config["encoder_dmodel"],
             warmup_steps=optimizer_config["warmup_steps"],
-            max_lr=(0.05 / math.sqrt(config.model_config["dmodel"]))
+            max_lr=(0.05 / math.sqrt(config.model_config["encoder_dmodel"]))
         ),
         beta_1=optimizer_config["beta1"],
         beta_2=optimizer_config["beta2"],
