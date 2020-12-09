@@ -451,8 +451,11 @@ class Transducer(Model):
             features = self.speech_featurizer.tf_extract(signal)
             encoded = self.encoder_inference(features)
             hypothesis = self.perform_beam_search(encoded, lm)
-            prediction = tf.map_fn(lambda x: tf.strings.to_number(x, tf.int32),
-                                   tf.strings.split(hypothesis.prediction), fn_output_signature=tf.TensorSpec([], dtype=tf.int32))
+            prediction = tf.map_fn(
+                lambda x: tf.strings.to_number(x, tf.int32),
+                tf.strings.split(hypothesis.prediction),
+                fn_output_signature=tf.TensorSpec([], dtype=tf.int32)
+            )
             transcripts = self.text_featurizer.iextract(tf.expand_dims(prediction, axis=0))
             return tf.squeeze(transcripts)  # reshape from [1] to []
 

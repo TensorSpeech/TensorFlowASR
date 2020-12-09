@@ -257,7 +257,7 @@ class StreamingTransducer(Transducer):
         """
         def execute(signal: tf.Tensor):
             features = self.speech_featurizer.tf_extract(signal)
-            encoded, _ = self.encoder_inference(features, self.encoder.get_initial_states())
+            encoded, _ = self.encoder_inference(features, self.encoder.get_initial_state())
             hypothesis = self.perform_greedy(
                 encoded,
                 predicted=tf.constant(self.text_featurizer.blank, dtype=tf.int32),
@@ -310,10 +310,13 @@ class StreamingTransducer(Transducer):
         """
         def execute(signal: tf.Tensor):
             features = self.speech_featurizer.tf_extract(signal)
-            encoded, _ = self.encoder_inference(features, self.encoder.get_initial_states())
+            encoded, _ = self.encoder_inference(features, self.encoder.get_initial_state())
             hypothesis = self.perform_beam_search(encoded, lm)
-            prediction = tf.map_fn(lambda x: tf.strings.to_number(x, tf.int32),
-                                   tf.strings.split(hypothesis.prediction), fn_output_signature=tf.TensorSpec([], dtype=tf.int32))
+            prediction = tf.map_fn(
+                lambda x: tf.strings.to_number(x, tf.int32),
+                tf.strings.split(hypothesis.prediction),
+                fn_output_signature=tf.TensorSpec([], dtype=tf.int32)
+            )
             transcripts = self.text_featurizer.iextract(tf.expand_dims(prediction, axis=0))
             return tf.squeeze(transcripts)  # reshape from [1] to []
 
