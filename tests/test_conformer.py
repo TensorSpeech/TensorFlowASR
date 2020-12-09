@@ -19,8 +19,8 @@ os.environ["TF_CPP_MIN_LOG_LEVEL"] = "0"
 import tensorflow as tf
 
 from tensorflow_asr.models.conformer import Conformer
-from tensorflow_asr.models.transducer import Transducer
-from tensorflow_asr.models.layers.subsampling import Conv2dSubsampling
+# from tensorflow_asr.models.transducer import Transducer
+# from tensorflow_asr.models.layers.subsampling import Conv2dSubsampling
 from tensorflow_asr.featurizers.text_featurizers import CharFeaturizer
 from tensorflow_asr.featurizers.speech_featurizers import TFSpeechFeaturizer, read_raw_audio
 

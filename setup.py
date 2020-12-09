@@ -37,7 +37,7 @@ requirements = [
 
 setuptools.setup(
     name="TensorFlowASR",
-    version="0.4.0",
+    version="0.4.1",
     author="Huy Le Nguyen",
     author_email="nlhuy.cs.16@gmail.com",
     description="Almost State-of-the-art Automatic Speech Recognition using Tensorflow 2",

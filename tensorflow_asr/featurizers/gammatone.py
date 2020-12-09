@@ -142,9 +142,9 @@ def erb_space(
 
 def make_erb_filters(fs, centre_freqs, width=1.0):
     """
-    This function computes the filter coefficients for a bank of 
+    This function computes the filter coefficients for a bank of
     Gammatone filters. These filters were defined by Patterson and Holdworth for
-    simulating the cochlea. 
+    simulating the cochlea.
 
     The result is returned as a :class:`ERBCoeffArray`. Each row of the
     filter arrays contains the coefficients for four second order filters. The

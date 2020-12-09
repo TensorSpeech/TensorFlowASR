@@ -2,7 +2,6 @@ import argparse
 import tensorflow as tf
 
 from tensorflow_asr.featurizers.text_featurizers import SubwordFeaturizer
-from tensorflow_asr.featurizers.speech_featurizers import read_raw_audio
 
 parser = argparse.ArgumentParser(prog="test subword")
 

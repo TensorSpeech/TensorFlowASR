@@ -49,8 +49,8 @@ class FreqMaskingModel(Spectrogram):
 
 class FreqMaskingAugmenter(SpectrogramAugmenter):
     def __init__(self,
-                 mask_factor=27,
-                 name="FreqMaskingAugmenter",
+                 mask_factor: float = 27,
+                 name: str = "FreqMaskingAugmenter",
                  verbose=0):
         super(FreqMaskingAugmenter, self).__init__(
             action=Action.SUBSTITUTE, zone=(0.2, 0.8), name=name, device="cpu", verbose=verbose,
@@ -63,9 +63,9 @@ class FreqMaskingAugmenter(SpectrogramAugmenter):
 
 class FreqMasking(SpectrogramAugmenter):
     def __init__(self,
-                 num_masks=1,
-                 mask_factor=27,
-                 name="FreqMasking",
+                 num_masks: int = 1,
+                 mask_factor: float = 27,
+                 name: str = "FreqMasking",
                  verbose=0):
         super(FreqMasking, self).__init__(
             action=Action.SUBSTITUTE, zone=(0.2, 0.8), name=name, device="cpu", verbose=verbose,
@@ -79,7 +79,7 @@ class FreqMasking(SpectrogramAugmenter):
 
 
 class TimeMaskingModel(Spectrogram):
-    def __init__(self, mask_factor: int = 100, p_upperbound: float = 1.0):
+    def __init__(self, mask_factor: float = 100, p_upperbound: float = 1.0):
         """
         Args:
             time_mask_param: parameter W of time masking
@@ -110,9 +110,9 @@ class TimeMaskingModel(Spectrogram):
 
 class TimeMaskingAugmenter(SpectrogramAugmenter):
     def __init__(self,
-                 mask_factor=100,
-                 p_upperbound=1,
-                 name="TimeMaskingAugmenter",
+                 mask_factor: float = 100,
+                 p_upperbound: float = 1,
+                 name: str = "TimeMaskingAugmenter",
                  verbose=0):
         super(TimeMaskingAugmenter, self).__init__(
             action=Action.SUBSTITUTE, zone=(0.2, 0.8), name=name, device="cpu", verbose=verbose,
@@ -125,10 +125,10 @@ class TimeMaskingAugmenter(SpectrogramAugmenter):
 
 class TimeMasking(SpectrogramAugmenter):
     def __init__(self,
-                 num_masks=1,
-                 mask_factor=100,
-                 p_upperbound=1,
-                 name="TimeMasking",
+                 num_masks: int = 1,
+                 mask_factor: float = 100,
+                 p_upperbound: float = 1,
+                 name: str = "TimeMasking",
                  verbose=0):
         super(TimeMasking, self).__init__(
             action=Action.SUBSTITUTE, zone=(0.2, 0.8), name=name, device="cpu", verbose=verbose,

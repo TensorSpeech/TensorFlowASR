@@ -45,7 +45,8 @@ class CtcModel(Model):
 
         def extract_fn(signal): return self.speech_featurizer.tf_extract(signal)
 
-        features = tf.map_fn(extract_fn, signals, fn_output_signature=tf.TensorSpec(self.speech_featurizer.shape, dtype=tf.float32))
+        features = tf.map_fn(extract_fn, signals,
+                             fn_output_signature=tf.TensorSpec(self.speech_featurizer.shape, dtype=tf.float32))
         logits = self(features, training=False)
         probs = tf.nn.softmax(logits)
 
@@ -88,7 +89,8 @@ class CtcModel(Model):
 
         def extract_fn(signal): return self.speech_featurizer.tf_extract(signal)
 
-        features = tf.map_fn(extract_fn, signals, fn_output_signature=tf.TensorSpec(self.speech_featurizer.shape, dtype=tf.float32))
+        features = tf.map_fn(extract_fn, signals,
+                             fn_output_signature=tf.TensorSpec(self.speech_featurizer.shape, dtype=tf.float32))
         logits = self(features, training=False)
         probs = tf.nn.softmax(logits)
 
