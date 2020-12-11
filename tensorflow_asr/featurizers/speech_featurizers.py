@@ -26,13 +26,14 @@ from .gammatone import fft_weights
 
 def read_raw_audio(audio, sample_rate=16000):
     if isinstance(audio, str):
-        wave, _ = librosa.load(os.path.expanduser(audio), sr=sample_rate)
+        wave, _ = librosa.load(os.path.expanduser(audio), sr=sample_rate, mono=True)
     elif isinstance(audio, bytes):
         wave, sr = sf.read(io.BytesIO(audio))
+        if wave.ndim > 1: wave = np.mean(wave, axis=-1)
         wave = np.asfortranarray(wave)
-        if sr != sample_rate:
-            wave = librosa.resample(wave, sr, sample_rate)
+        if sr != sample_rate: wave = librosa.resample(wave, sr, sample_rate)
     elif isinstance(audio, np.ndarray):
+        if audio.ndim > 1: ValueError("input audio must be single channel")
         return audio
     else:
         raise ValueError("input audio must be either a path or bytes")
