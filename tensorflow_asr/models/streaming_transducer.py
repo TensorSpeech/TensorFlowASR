@@ -60,7 +60,7 @@ class StreamingTransducerBlock(tf.keras.Model):
             bias_regularizer=bias_regularizer
         )
 
-    def call(self, inputs, training=False):
+    def call(self, inputs, training=False, **kwargs):
         outputs = inputs
         if self.reduction is not None:
             outputs = self.reduction(outputs)
@@ -144,10 +144,10 @@ class StreamingTransducerEncoder(tf.keras.Model):
             )
         return tf.stack(states, axis=0)
 
-    def call(self, inputs, training=False):
+    def call(self, inputs, training=False, **kwargs):
         outputs = self.reshape(inputs)
         for block in self.blocks:
-            outputs = block(outputs, training=training)
+            outputs = block(outputs, training=training, **kwargs)
         return outputs
 
     def recognize(self, inputs, states):

@@ -35,7 +35,7 @@ class CtcModel(Model):
         self.speech_featurizer = speech_featurizer
         self.text_featurizer = text_featurizer
 
-    def call(self, inputs, training=False):
+    def call(self, inputs, training=False, **kwargs):
         raise NotImplementedError()
 
     # -------------------------------- GREEDY -------------------------------------

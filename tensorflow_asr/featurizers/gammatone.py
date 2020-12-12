@@ -63,7 +63,14 @@ def fft_weights(
     # Common ERB filter code factored out
     cf_array = erb_space(fmin, fmax, nfilts)[::-1]
 
-    _, A11, A12, A13, A14, _, _, _, B2, gain = make_erb_filters(fs, cf_array, width)
+    erb_filers = make_erb_filters(fs, cf_array, width)
+    A11 = erb_filers[1]
+    A12 = erb_filers[2]
+    A13 = erb_filers[3]
+    A14 = erb_filers[4]
+    B2 = erb_filers[8]
+    gain = erb_filers[9]
+    # _, A11, A12, A13, A14, _, _, _, B2, gain =
 
     A11, A12, A13, A14 = A11[..., None], A12[..., None], A13[..., None], A14[..., None]
 

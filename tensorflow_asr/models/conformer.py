@@ -115,14 +115,14 @@ class MHSAModule(tf.keras.layers.Layer):
         self.res_add = tf.keras.layers.Add(name=f"{name}_add")
         self.mha_type = mha_type
 
-    def call(self, inputs, training=False, **kwargs):
+    def call(self, inputs, training=False, mask=None, **kwargs):
         inputs, pos = inputs  # pos is positional encoding
         outputs = self.ln(inputs, training=training)
         if self.mha_type == "relmha":
-            outputs = self.mha([outputs, outputs, outputs, pos], training=training)
+            outputs = self.mha([outputs, outputs, outputs, pos], training=training, mask=mask)
         else:
             outputs = outputs + pos
-            outputs = self.mha([outputs, outputs, outputs], training=training)
+            outputs = self.mha([outputs, outputs, outputs], training=training, mask=mask)
         outputs = self.do(outputs, training=training)
         outputs = self.res_add([inputs, outputs])
         return outputs
@@ -255,12 +255,12 @@ class ConformerBlock(tf.keras.layers.Layer):
             beta_regularizer=kernel_regularizer
         )
 
-    def call(self, inputs, training=False, **kwargs):
+    def call(self, inputs, training=False, mask=None, **kwargs):
         inputs, pos = inputs  # pos is positional encoding
-        outputs = self.ffm1(inputs, training=training)
-        outputs = self.mhsam([outputs, pos], training=training)
-        outputs = self.convm(outputs, training=training)
-        outputs = self.ffm2(outputs, training=training)
+        outputs = self.ffm1(inputs, training=training, **kwargs)
+        outputs = self.mhsam([outputs, pos], training=training, mask=mask, **kwargs)
+        outputs = self.convm(outputs, training=training, **kwargs)
+        outputs = self.ffm2(outputs, training=training, **kwargs)
         outputs = self.ln(outputs, training=training)
         return outputs
 
@@ -340,14 +340,14 @@ class ConformerEncoder(tf.keras.Model):
             )
             self.conformer_blocks.append(conformer_block)
 
-    def call(self, inputs, training=False, **kwargs):
+    def call(self, inputs, training=False, mask=None, **kwargs):
         # input with shape [B, T, V1, V2]
         outputs = self.conv_subsampling(inputs, training=training)
         outputs = self.linear(outputs, training=training)
         pe = self.pe(outputs)
         outputs = self.do(outputs, training=training)
         for cblock in self.conformer_blocks:
-            outputs = cblock([outputs, pe], training=training)
+            outputs = cblock([outputs, pe], training=training, mask=mask, **kwargs)
         return outputs
 
     def get_config(self):
@@ -418,4 +418,5 @@ class Conformer(Transducer):
             bias_regularizer=bias_regularizer,
             name=name, **kwargs
         )
+        self.dmodel = encoder_dmodel
         self.time_reduction_factor = self.encoder.conv_subsampling.time_reduction_factor
