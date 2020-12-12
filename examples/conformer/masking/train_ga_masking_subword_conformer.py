@@ -20,7 +20,7 @@ from tensorflow_asr.utils import setup_environment, setup_strategy
 setup_environment()
 import tensorflow as tf
 
-DEFAULT_YAML = os.path.join(os.path.abspath(os.path.dirname(__file__)), "config.yml")
+DEFAULT_YAML = os.path.join(os.path.abspath(os.path.dirname(__file__)), "..", "config.yml")
 
 tf.keras.backend.clear_session()
 
@@ -53,6 +53,12 @@ parser.add_argument("--mxp", default=False, action="store_true",
 parser.add_argument("--cache", default=False, action="store_true",
                     help="Enable caching for dataset")
 
+parser.add_argument("--subwords", type=str, default=None,
+                    help="Path to file that stores generated subwords")
+
+parser.add_argument("--subwords_corpus", nargs="*", type=str, default=[],
+                    help="Transcript files for generating subwords")
+
 args = parser.parse_args()
 
 tf.config.optimizer.set_experimental_options({"auto_mixed_precision": args.mxp})
@@ -62,14 +68,24 @@ strategy = setup_strategy(args.devices)
 from tensorflow_asr.configs.config import Config
 from tensorflow_asr.datasets.asr_dataset import ASRTFRecordDataset, ASRSliceDataset
 from tensorflow_asr.featurizers.speech_featurizers import TFSpeechFeaturizer
-from tensorflow_asr.featurizers.text_featurizers import CharFeaturizer
-from masking.trainer import TrainerWithMaskingGA
+from tensorflow_asr.featurizers.text_featurizers import SubwordFeaturizer
+from trainer import TrainerWithMaskingGA
 from tensorflow_asr.models.conformer import Conformer
 from tensorflow_asr.optimizers.schedules import TransformerSchedule
 
 config = Config(args.config, learning=True)
 speech_featurizer = TFSpeechFeaturizer(config.speech_config)
-text_featurizer = CharFeaturizer(config.decoder_config)
+
+if args.subwords and os.path.exists(args.subwords):
+    print("Loading subwords ...")
+    text_featurizer = SubwordFeaturizer.load_from_file(config.decoder_config, args.subwords)
+else:
+    print("Generating subwords ...")
+    text_featurizer = SubwordFeaturizer.build_from_corpus(
+        config.decoder_config,
+        corpus_files=args.subwords_corpus
+    )
+    text_featurizer.save_to_file(args.subwords)
 
 if args.tfrecords:
     train_dataset = ASRTFRecordDataset(

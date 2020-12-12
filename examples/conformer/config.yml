@@ -85,7 +85,7 @@ learning_config:
     epsilon: 1e-9
 
   running_config:
-    batch_size: 4
+    batch_size: 2
     accumulation_steps: 4
     num_epochs: 20
     outdir: /mnt/d/Models/local/conformer

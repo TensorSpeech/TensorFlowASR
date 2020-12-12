@@ -20,7 +20,7 @@ from tensorflow_asr.utils import setup_environment, setup_strategy
 setup_environment()
 import tensorflow as tf
 
-DEFAULT_YAML = os.path.join(os.path.abspath(os.path.dirname(__file__)), "config.yml")
+DEFAULT_YAML = os.path.join(os.path.abspath(os.path.dirname(__file__)), "..", "config.yml")
 
 tf.keras.backend.clear_session()
 
@@ -41,6 +41,9 @@ parser.add_argument("--tbs", type=int, default=None,
 parser.add_argument("--ebs", type=int, default=None,
                     help="Evaluation batch size per replica")
 
+parser.add_argument("--acs", type=int, default=None,
+                    help="Train accumulation steps")
+
 parser.add_argument("--devices", type=int, nargs="*", default=[0],
                     help="Devices' ids to apply distributed training")
 
@@ -60,7 +63,7 @@ from tensorflow_asr.configs.config import Config
 from tensorflow_asr.datasets.asr_dataset import ASRTFRecordDataset, ASRSliceDataset
 from tensorflow_asr.featurizers.speech_featurizers import TFSpeechFeaturizer
 from tensorflow_asr.featurizers.text_featurizers import CharFeaturizer
-from masking.trainer import TrainerWithMasking
+from trainer import TrainerWithMaskingGA
 from tensorflow_asr.models.conformer import Conformer
 from tensorflow_asr.optimizers.schedules import TransformerSchedule
 
@@ -99,7 +102,7 @@ else:
         stage="eval", cache=args.cache, shuffle=True
     )
 
-conformer_trainer = TrainerWithMasking(
+conformer_trainer = TrainerWithMaskingGA(
     config=config.learning_config.running_config,
     text_featurizer=text_featurizer, strategy=strategy
 )
@@ -110,19 +113,19 @@ with conformer_trainer.strategy.scope():
     conformer._build(speech_featurizer.shape)
     conformer.summary(line_length=120)
 
-    optimizer_config = config.learning_config.optimizer_config
     optimizer = tf.keras.optimizers.Adam(
         TransformerSchedule(
             d_model=config.model_config["encoder_dmodel"],
-            warmup_steps=optimizer_config["warmup_steps"],
+            warmup_steps=config.learning_config.optimizer_config["warmup_steps"],
             max_lr=(0.05 / math.sqrt(config.model_config["encoder_dmodel"]))
         ),
-        beta_1=optimizer_config["beta1"],
-        beta_2=optimizer_config["beta2"],
-        epsilon=optimizer_config["epsilon"]
+        beta_1=config.learning_config.optimizer_config["beta1"],
+        beta_2=config.learning_config.optimizer_config["beta2"],
+        epsilon=config.learning_config.optimizer_config["epsilon"]
     )
 
 conformer_trainer.compile(model=conformer, optimizer=optimizer,
                           max_to_keep=args.max_ckpts)
 
-conformer_trainer.fit(train_dataset, eval_dataset, train_bs=args.tbs, eval_bs=args.ebs)
+conformer_trainer.fit(train_dataset, eval_dataset,
+                      train_bs=args.tbs, eval_bs=args.ebs, train_acs=args.acs)

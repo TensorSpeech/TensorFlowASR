@@ -1,6 +1,6 @@
 import tensorflow as tf
 
-from masking.masking import create_padding_mask
+from masking import create_padding_mask
 from tensorflow_asr.runners.transducer_runners import TransducerTrainer, TransducerTrainerGA
 from tensorflow_asr.losses.rnnt_losses import rnnt_loss
 
@@ -10,7 +10,7 @@ class TrainerWithMasking(TransducerTrainer):
     def _train_step(self, batch):
         _, features, input_length, labels, label_length, pred_inp = batch
 
-        mask = create_padding_mask(features, input_length)
+        mask = create_padding_mask(features, input_length, self.model.time_reduction_factor)
 
         with tf.GradientTape() as tape:
             logits = self.model([features, pred_inp], training=True, mask=mask)
@@ -34,7 +34,7 @@ class TrainerWithMaskingGA(TransducerTrainerGA):
     def _train_step(self, batch):
         _, features, input_length, labels, label_length, pred_inp = batch
 
-        mask = create_padding_mask(features, input_length)
+        mask = create_padding_mask(features, input_length, self.model.time_reduction_factor)
 
         with tf.GradientTape() as tape:
             logits = self.model([features, pred_inp], training=True, mask=mask)
