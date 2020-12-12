@@ -45,7 +45,7 @@ class JasperSubBlock(tf.keras.layers.Layer):
         self.do = tf.keras.layers.Dropout(dropout, name=f"{self.name}_dropout")
         self.reduction_factor = strides
 
-    def call(self, inputs, training=False):
+    def call(self, inputs, training=False, **kwargs):
         outputs = inputs
         outputs = self.conv1d(outputs, training=training)
         outputs = self.bn(outputs, training=training)
@@ -78,7 +78,7 @@ class JasperResidual(tf.keras.layers.Layer):
         )
         self.bn = tf.keras.layers.BatchNormalization(name=f"{self.name}_bn")
 
-    def call(self, inputs, training=False):
+    def call(self, inputs, training=False, **kwargs):
         outputs = self.pointwise_conv1d(inputs, training=training)
         outputs = self.bn(outputs, training=training)
         return outputs
@@ -119,12 +119,12 @@ class JasperSubBlockResidual(JasperSubBlock):
 
         self.add = tf.keras.layers.Add(name=f"{self.name}_add")
 
-    def call(self, inputs, training=False):
+    def call(self, inputs, training=False, **kwargs):
         outputs, residuals = inputs
         outputs = self.conv1d(outputs, training=training)
         outputs = self.bn(outputs, training=training)
         for i, res in enumerate(residuals):
-            res = self.residuals[i](res, training=training)
+            res = self.residuals[i](res, training=training, **kwargs)
             outputs = self.add([outputs, res], training=training)
         outputs = self.relu(outputs, training=training)
         outputs = self.do(outputs, training=training)
@@ -175,16 +175,16 @@ class JasperBlock(tf.keras.Model):
 
         self.reduction_factor = 1
 
-    def call(self, inputs, training=False):
+    def call(self, inputs, training=False, **kwargs):
         inputs, residuals = inputs
         outputs = inputs
         for subblock in self.subblocks:
-            outputs = subblock(outputs, training=training)
+            outputs = subblock(outputs, training=training, **kwargs)
         if self.dense:
             residuals.append(inputs)
-            outputs = self.subblock_residual([outputs, residuals], training=training)
+            outputs = self.subblock_residual([outputs, residuals], training=training, **kwargs)
         else:
-            outputs = self.subblock_residual([outputs, [inputs]], training=training)
+            outputs = self.subblock_residual([outputs, [inputs]], training=training, **kwargs)
         return outputs, residuals
 
     def get_config(self):
@@ -287,17 +287,17 @@ class Jasper(CtcModel):
         self.time_reduction_factor *= self.second_additional_block.reduction_factor
         self.time_reduction_factor *= self.third_additional_block.reduction_factor
 
-    def call(self, inputs, training=False):
+    def call(self, inputs, training=False, **kwargs):
         outputs = self.reshape(inputs)
-        outputs = self.first_additional_block(outputs, training=training)
+        outputs = self.first_additional_block(outputs, training=training, **kwargs)
 
         residuals = []
         for block in self.blocks:
-            outputs, residuals = block([outputs, residuals], training=training)
+            outputs, residuals = block([outputs, residuals], training=training, **kwargs)
 
-        outputs = self.second_additional_block(outputs, training=training)
-        outputs = self.third_additional_block(outputs, training=training)
-        outputs = self.last_block(outputs, training=training)
+        outputs = self.second_additional_block(outputs, training=training, **kwargs)
+        outputs = self.third_additional_block(outputs, training=training, **kwargs)
+        outputs = self.last_block(outputs, training=training, **kwargs)
         return outputs
 
     def summary(self, line_length=100, **kwargs):

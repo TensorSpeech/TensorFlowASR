@@ -42,7 +42,7 @@ class ConvBlock(tf.keras.layers.Layer):
         self.relu = tf.keras.layers.ReLU(name=f"{self.name}_relu")
         self.do = tf.keras.layers.Dropout(dropout, name=f"{self.name}_dropout")
 
-    def call(self, inputs, training=False):
+    def call(self, inputs, training=False, **kwargs):
         outputs = self.conv(inputs, training=training)
         outputs = self.bn(outputs, training=training)
         outputs = self.relu(outputs, training=training)
@@ -91,11 +91,11 @@ class ConvModule(tf.keras.Model):
         self.reduction_factor = 1
         for s in strides: self.reduction_factor *= s[0]
 
-    def call(self, inputs, training=False):
+    def call(self, inputs, training=False, **kwargs):
         outputs = inputs
         if self.preprocess is not None: outputs = self.preprocess(outputs)
         for block in self.blocks:
-            outputs = block(outputs, training=training)
+            outputs = block(outputs, training=training, **kwargs)
         if self.postprocess is not None: outputs = self.postprocess(outputs)
         return outputs
 
@@ -129,7 +129,7 @@ class RnnBlock(tf.keras.layers.Layer):
             self.rowconv = RowConv1D(filters=units, future_context=rowconv,
                                      name=f"{self.name}_rowconv")
 
-    def call(self, inputs, training=False):
+    def call(self, inputs, training=False, **kwargs):
         outputs = self.rnn(inputs, training=training)
         outputs = self.bn(outputs, training=training)
         if self.rowconv is not None:
@@ -167,10 +167,10 @@ class RnnModule(tf.keras.Model):
             ) for i in range(nlayers)
         ]
 
-    def call(self, inputs, training=False):
+    def call(self, inputs, training=False, **kwargs):
         outputs = inputs
         for block in self.blocks:
-            outputs = block(outputs, training=training)
+            outputs = block(outputs, training=training, **kwargs)
         return outputs
 
     def get_config(self):
@@ -192,7 +192,7 @@ class FcBlock(tf.keras.layers.Layer):
         self.relu = tf.keras.layers.ReLU(name=f"{self.name}_relu")
         self.do = tf.keras.layers.Dropout(dropout, name=f"{self.name}_dropout")
 
-    def call(self, inputs, training=False):
+    def call(self, inputs, training=False, **kwargs):
         outputs = self.fc(inputs, training=training)
         outputs = self.bn(outputs, training=training)
         outputs = self.relu(outputs, training=training)
@@ -224,10 +224,10 @@ class FcModule(tf.keras.Model):
             ) for i in range(nlayers)
         ]
 
-    def call(self, inputs, training=False):
+    def call(self, inputs, training=False, **kwargs):
         outputs = inputs
         for block in self.blocks:
-            outputs = block(outputs, training=training)
+            outputs = block(outputs, training=training, **kwargs)
         return outputs
 
     def get_config(self):
@@ -290,11 +290,11 @@ class DeepSpeech2(CtcModel):
 
         self.time_reduction_factor = self.conv_module.reduction_factor
 
-    def call(self, inputs, training=False):
-        outputs = self.conv_module(inputs, training=training)
-        outputs = self.rnn_module(outputs, training=training)
-        outputs = self.fc_module(outputs, training=training)
-        outputs = self.fc(outputs, training=training)
+    def call(self, inputs, training=False, **kwargs):
+        outputs = self.conv_module(inputs, training=training, **kwargs)
+        outputs = self.rnn_module(outputs, training=training, **kwargs)
+        outputs = self.fc_module(outputs, training=training, **kwargs)
+        outputs = self.fc(outputs, training=training, **kwargs)
         return outputs
 
     def summary(self, line_length=100, **kwargs):

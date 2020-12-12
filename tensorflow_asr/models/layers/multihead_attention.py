@@ -115,15 +115,16 @@ class MultiHeadAttention(tf.keras.layers.Layer):
         return query, key, value
 
     def call_attention(self, query, key, value, logits, training=False, mask=None):
+        # mask = attention mask with shape [B, Tquery, Tkey] with 1 is for positions we want to attend, 0 for masked
         if mask is not None:
             if len(mask.shape) < 2:
                 raise ValueError("'mask' must have at least 2 dimensions")
-            if query.shape[-2] != mask.shape[-2]:
+            if query.shape[-3] != mask.shape[-2]:
                 raise ValueError(
                     "mask's second to last dimension must be equal to "
                     "the number of elements in 'query'"
                 )
-            if key.shape[-2] != mask.shape[-1]:
+            if key.shape[-3] != mask.shape[-1]:
                 raise ValueError(
                     "mask's last dimension must be equal to the number of elements in 'key'"
                 )
@@ -154,7 +155,7 @@ class MultiHeadAttention(tf.keras.layers.Layer):
 
         return output, attn_coef
 
-    def call(self, inputs, training=False, mask=None):
+    def call(self, inputs, training=False, mask=None, **kwargs):
         query, key, value = inputs
 
         query, key, value = self.call_qkv(query, key, value, training=training)
@@ -253,7 +254,7 @@ class RelPositionMultiHeadAttention(MultiHeadAttention):
         x = tf.reshape(x[:, :, 1:, :], x_shape)
         return x
 
-    def call(self, inputs, training=False, mask=None):
+    def call(self, inputs, training=False, mask=None, **kwargs):
         query, key, value, pos = inputs
 
         query, key, value = self.call_qkv(query, key, value, training=training)

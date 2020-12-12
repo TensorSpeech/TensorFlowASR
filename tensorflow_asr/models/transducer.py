@@ -95,7 +95,7 @@ class TransducerPrediction(tf.keras.Model):
             )
         return tf.stack(states, axis=0)
 
-    def call(self, inputs, training=False):
+    def call(self, inputs, training=False, **kwargs):
         # inputs has shape [B, U]
         # use tf.gather_nd instead of tf.gather for tflite conversion
         outputs = self.embed(inputs, training=training)
@@ -170,7 +170,7 @@ class TransducerJoint(tf.keras.Model):
             bias_regularizer=bias_regularizer
         )
 
-    def call(self, inputs, training=False):
+    def call(self, inputs, training=False, **kwargs):
         # enc has shape [B, T, E]
         # pred has shape [B, U, P]
         enc_out, pred_out = inputs
@@ -256,7 +256,7 @@ class Transducer(Model):
         self.speech_featurizer = speech_featurizer
         self.text_featurizer = text_featurizer
 
-    def call(self, inputs, training=False):
+    def call(self, inputs, training=False, **kwargs):
         """
         Transducer Model call function
         Args:
@@ -269,9 +269,9 @@ class Transducer(Model):
             `logits` with shape [B, T, U, vocab]
         """
         features, predicted = inputs
-        enc = self.encoder(features, training=training)
-        pred = self.predict_net(predicted, training=training)
-        outputs = self.joint_net([enc, pred], training=training)
+        enc = self.encoder(features, training=training, **kwargs)
+        pred = self.predict_net(predicted, training=training, **kwargs)
+        outputs = self.joint_net([enc, pred], training=training, **kwargs)
         return outputs
 
     def encoder_inference(self, features):
