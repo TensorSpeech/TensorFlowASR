@@ -2,11 +2,11 @@
 <p>TensorFlowASR :zap:</p>
 <p align="center">
 <a href="https://github.com/TensorSpeech/TensorFlowASR/blob/main/LICENSE">
-  <img alt="GitHub" src="https://img.shields.io/github/license/TensorSpeech/TensorFlowASR?style=for-the-badge&logo=apache">
+  <img alt="GitHub" src="https://img.shields.io/github/license/TensorSpeech/TensorFlowASR?logo=apache">
 </a>
-<img alt="python" src="https://img.shields.io/badge/python-%3E%3D3.6-blue?style=for-the-badge&logo=python">
-<img alt="tensorflow" src="https://img.shields.io/badge/tensorflow-%3E%3D2.3.0-orange?style=for-the-badge&logo=tensorflow">
-<img alt="ubuntu" src="https://img.shields.io/badge/ubuntu-%3E%3D18.04-blueviolet?style=for-the-badge&logo=ubuntu">
+<img alt="python" src="https://img.shields.io/badge/python-%3E%3D3.6-blue?logo=python">
+<img alt="tensorflow" src="https://img.shields.io/badge/tensorflow-%3E%3D2.3.0-orange?logo=tensorflow">
+<img alt="PyPI" src="https://img.shields.io/pypi/v/TensorFlowASR?color=%2300B4EF&label=release&logo=pypi&logoColor=%2300B4EF">
 </p>
 </h1>
 <h2 align="center">
@@ -31,6 +31,7 @@ TensorFlowASR implements some automatic speech recognition architectures such as
 - Distributed training using `tf.distribute.MirroredStrategy`
 
 ## Table of Contents
+
 <!-- TOC -->
 
 - [What's New?](#whats-new)
@@ -88,7 +89,7 @@ For anaconda3:
 ```bash
 conda create -y -n tfasr tensorflow-gpu python=3.7 # tensorflow if using CPU
 conda activate tfasr
-pip install -U tensorflow-gpu # upgrade to latest version of tensorflow 
+pip install -U tensorflow-gpu # upgrade to latest version of tensorflow
 git clone https://github.com/TensorSpeech/TensorFlowASR.git
 cd TensorFlowASR
 python setup.py install
