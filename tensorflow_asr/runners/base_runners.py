@@ -444,11 +444,11 @@ class BaseTester(BaseRunner):
 
         labels = self.model.text_featurizer.iextract(labels)
         greed_pred = self.model.recognize(signals)
+        beam_pred = beam_lm_pred = tf.constant([""], dtype=tf.string)
         if self.model.text_featurizer.decoder_config.beam_width > 0:
             beam_pred = self.model.recognize_beam(signals, lm=False)
+        if self.model.text_featurizer.decoder_config.lm_config:
             beam_lm_pred = self.model.recognize_beam(signals, lm=True)
-        else:
-            beam_pred = beam_lm_pred = tf.constant([""], dtype=tf.string)
 
         return file_paths, labels, greed_pred, beam_pred, beam_lm_pred
 

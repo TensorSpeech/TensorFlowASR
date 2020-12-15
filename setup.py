@@ -19,6 +19,7 @@ with open("README.md", "r") as fh:
 
 requirements = [
     "tensorflow-datasets>=3.2.1,<4.0.0",
+    "tensorflow-metadata>=0.26.0",
     "tensorflow-addons>=0.10.0",
     "setuptools>=47.1.1",
     "librosa>=0.7.2",
@@ -32,12 +33,11 @@ requirements = [
     "tqdm>=4.51.0",
     "colorama>=0.4.3",
     "nlpaug>=1.0.1",
-    "absl-py>=0.9,<0.11"
 ]
 
 setuptools.setup(
     name="TensorFlowASR",
-    version="0.4.3",
+    version="0.4.4",
     author="Huy Le Nguyen",
     author_email="nlhuy.cs.16@gmail.com",
     description="Almost State-of-the-art Automatic Speech Recognition using Tensorflow 2",
