@@ -98,10 +98,12 @@ class TransducerPrediction(tf.keras.Model):
     def call(self, inputs, training=False, **kwargs):
         # inputs has shape [B, U]
         # use tf.gather_nd instead of tf.gather for tflite conversion
-        outputs = self.embed(inputs, training=training)
+        outputs, label_length = inputs
+        outputs = self.embed(outputs, training=training)
         outputs = self.do(outputs, training=training)
         for rnn in self.rnns:
-            outputs = rnn["rnn"](outputs, training=training)
+            mask = tf.sequence_mask(label_length)
+            outputs = rnn["rnn"](outputs, training=training, mask=mask)
             outputs = outputs[0]
             if rnn["ln"] is not None:
                 outputs = rnn["ln"](outputs, training=training)
@@ -268,9 +270,9 @@ class Transducer(Model):
         Returns:
             `logits` with shape [B, T, U, vocab]
         """
-        features, predicted = inputs
+        features, _, predicted, label_length = inputs
         enc = self.encoder(features, training=training, **kwargs)
-        pred = self.predict_net(predicted, training=training, **kwargs)
+        pred = self.predict_net([predicted, label_length], training=training, **kwargs)
         outputs = self.joint_net([enc, pred], training=training, **kwargs)
         return outputs
 
