@@ -1,7 +1,22 @@
+# Copyright 2020 Huy Le Nguyen (@usimarit)
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+""" Ref: https://github.com/iankur/ContextNet """
+
 from typing import List
 import tensorflow as tf
 from .transducer import Transducer
-from ..utils.utils import merge_two_last_dims
+from ..utils.utils import merge_two_last_dims, get_reduced_length
 
 L2 = tf.keras.regularizers.l2(1e-6)
 
@@ -18,26 +33,6 @@ class Reshape(tf.keras.layers.Layer):
     def call(self, inputs): return merge_two_last_dims(inputs)
 
 
-class ResConvModule(tf.keras.layers.Layer):
-    def __init__(self,
-                 filters: int = 256,
-                 kernel_regularizer = None,
-                 bias_regularizer = None,
-                 **kwargs):
-        super(ResConvModule, self).__init__(**kwargs)
-        self.conv = tf.keras.layers.Conv1D(
-            filters=filters, kernel_size=1, strides=1, padding="same",
-            kernel_regularizer=kernel_regularizer,
-            bias_regularizer=bias_regularizer, name=f"{self.name}_conv"
-        )
-        self.bn = tf.keras.layers.BatchNormalization(name=f"{self.name}_bn")
-
-    def call(self, inputs, training=False, **kwargs):
-        outputs = self.conv(inputs, training=training)
-        outputs = self.bn(outputs, training=training)
-        return outputs
-
-
 class ConvModule(tf.keras.layers.Layer):
     def __init__(self,
                  kernel_size: int = 3,
@@ -48,6 +43,7 @@ class ConvModule(tf.keras.layers.Layer):
                  bias_regularizer = None,
                  **kwargs):
         super(ConvModule, self).__init__(**kwargs)
+        self.strides = strides
         self.conv = tf.keras.layers.SeparableConv1D(
             filters=filters, kernel_size=kernel_size, strides=strides, padding="same",
             depthwise_regularizer=kernel_regularizer, pointwise_regularizer=kernel_regularizer,
@@ -87,7 +83,7 @@ class SEModule(tf.keras.layers.Layer):
         features, input_length = inputs
         outputs = self.conv(features, training=training)
 
-        se = tf.reduce_sum(outputs, axis=1) / tf.expand_dims(tf.cast(input_length, dtype=outputs.dtype), axis=1)
+        se = tf.divide(tf.reduce_sum(outputs, axis=1), tf.expand_dims(tf.cast(input_length, dtype=outputs.dtype), axis=1))
         se = self.fc1(se, training=training)
         se = self.activation(se)
         se = self.fc2(se, training=training)
@@ -107,6 +103,7 @@ class ConvBlock(tf.keras.layers.Layer):
                  strides: int = 1,
                  residual: bool = True,
                  activation: str = 'silu',
+                 alpha: float = 1.0,
                  kernel_regularizer = None,
                  bias_regularizer = None,
                  **kwargs):
@@ -114,6 +111,7 @@ class ConvBlock(tf.keras.layers.Layer):
 
         self.dmodel = filters
         self.time_reduction_factor = strides
+        filters = int(filters * alpha)
 
         self.convs = []
         for i in range(nlayers - 1):
@@ -141,9 +139,11 @@ class ConvBlock(tf.keras.layers.Layer):
 
         self.residual = None
         if residual:
-            self.residual = ResConvModule(
-                filters=filters, kernel_regularizer=kernel_regularizer,
-                bias_regularizer=bias_regularizer, name=f"{self.name}_residual"
+            self.residual = ConvModule(
+                kernel_size=kernel_size, strides=strides,
+                filters=filters, activation="linear",
+                kernel_regularizer=kernel_regularizer, bias_regularizer=bias_regularizer,
+                name=f"{self.name}_residual"
             )
 
         self.activation = get_activation(activation)
@@ -154,7 +154,7 @@ class ConvBlock(tf.keras.layers.Layer):
         for conv in self.convs:
             outputs = conv(outputs, training=training)
         outputs = self.last_conv(outputs, training=training)
-        input_length = tf.math.ceil(input_length / self.last_conv.strides[0])
+        input_length = get_reduced_length(input_length, self.last_conv.strides)
         outputs = self.se([outputs, input_length], training=training)
         if self.residual is not None:
             res = self.residual(features, training=training)
@@ -166,6 +166,7 @@ class ConvBlock(tf.keras.layers.Layer):
 class ContextNetEncoder(tf.keras.Model):
     def __init__(self,
                  blocks: List[dict] = [],
+                 alpha: float = 1.0,
                  kernel_regularizer = None,
                  bias_regularizer = None,
                  **kwargs):
@@ -174,10 +175,13 @@ class ContextNetEncoder(tf.keras.Model):
         self.reshape = Reshape(name=f"{self.name}_reshape")
 
         self.blocks = []
-        for config, i in enumerate(blocks):
+        for i, config in enumerate(blocks):
             self.blocks.append(
-                ConvBlock(**config, kernel_regularizer=kernel_regularizer,
-                          bias_regularizer=bias_regularizer, name=f"{self.name}_block_{i}")
+                ConvBlock(
+                    **config, alpha=alpha,
+                    kernel_regularizer=kernel_regularizer, bias_regularizer=bias_regularizer,
+                    name=f"{self.name}_block_{i}"
+                )
             )
 
     def call(self, inputs, training=False, **kwargs):
@@ -192,6 +196,7 @@ class ContextNet(Transducer):
     def __init__(self,
                  vocabulary_size: int,
                  encoder_blocks: List[dict],
+                 encoder_alpha: float,
                  prediction_embed_dim: int = 512,
                  prediction_embed_dropout: int = 0,
                  prediction_num_rnns: int = 1,
@@ -208,6 +213,7 @@ class ContextNet(Transducer):
         super(ContextNet, self).__init__(
             encoder=ContextNetEncoder(
                 blocks=encoder_blocks,
+                alpha=encoder_alpha,
                 kernel_regularizer=kernel_regularizer,
                 bias_regularizer=bias_regularizer,
                 name=f"{name}_encoder"
@@ -229,36 +235,16 @@ class ContextNet(Transducer):
         self.dmodel = self.encoder.blocks[-1].dmodel
         self.time_reduction_factor = 1
         for block in self.encoder.blocks:
-            self.time_reduction_factor += block.time_reduction_factor
+            self.time_reduction_factor *= block.time_reduction_factor
 
     def call(self, inputs, training=False, **kwargs):
-        """
-        Transducer Model call function
-        Args:
-            features: audio features in shape [B, T, F, C]
-            input_length: shape [B]
-            predicted: predicted sequence of character ids, in shape [B, U]
-            training: python boolean
-            **kwargs: sth else
-
-        Returns:
-            `logits` with shape [B, T, U, vocab]
-        """
-        features, input_length, predicted, label_length = inputs
+        features, input_length, prediction, prediction_length = inputs
         enc = self.encoder([features, input_length], training=training, **kwargs)
-        pred = self.predict_net([predicted, label_length], training=training, **kwargs)
+        pred = self.predict_net([prediction, prediction_length], training=training, **kwargs)
         outputs = self.joint_net([enc, pred], training=training, **kwargs)
         return outputs
 
     def encoder_inference(self, features):
-        """Infer function for encoder (or encoders)
-
-        Args:
-            features (tf.Tensor): features with shape [T, F, C]
-
-        Returns:
-            tf.Tensor: output of encoders with shape [T, E]
-        """
         with tf.name_scope(f"{self.name}_encoder"):
             input_length = tf.expand_dims(tf.shape(features)[0], axis=0)
             outputs = tf.expand_dims(features, axis=0)

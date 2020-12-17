@@ -24,7 +24,7 @@ DEFAULT_YAML = os.path.join(os.path.abspath(os.path.dirname(__file__)), "config.
 
 tf.keras.backend.clear_session()
 
-parser = argparse.ArgumentParser(prog="Conformer Training")
+parser = argparse.ArgumentParser(prog="ContextNet Training")
 
 parser.add_argument("--config", type=str, default=DEFAULT_YAML,
                     help="The file path of model configuration file")
@@ -40,6 +40,9 @@ parser.add_argument("--tbs", type=int, default=None,
 
 parser.add_argument("--ebs", type=int, default=None,
                     help="Evaluation batch size per replica")
+
+parser.add_argument("--acs", type=int, default=None,
+                    help="Train accumulation steps")
 
 parser.add_argument("--devices", type=int, nargs="*", default=[0],
                     help="Devices' ids to apply distributed training")
@@ -60,8 +63,8 @@ from tensorflow_asr.configs.config import Config
 from tensorflow_asr.datasets.asr_dataset import ASRTFRecordDataset, ASRSliceDataset
 from tensorflow_asr.featurizers.speech_featurizers import TFSpeechFeaturizer
 from tensorflow_asr.featurizers.text_featurizers import CharFeaturizer
-from tensorflow_asr.runners.transducer_runners import TransducerTrainer
-from tensorflow_asr.models.conformer import Conformer
+from tensorflow_asr.runners.transducer_runners import TransducerTrainerGA
+from tensorflow_asr.models.contextnet import ContextNet
 from tensorflow_asr.optimizers.schedules import TransformerSchedule
 
 config = Config(args.config, learning=True)
@@ -99,30 +102,30 @@ else:
         stage="eval", cache=args.cache, shuffle=True
     )
 
-conformer_trainer = TransducerTrainer(
+contextnet_trainer = TransducerTrainerGA(
     config=config.learning_config.running_config,
     text_featurizer=text_featurizer, strategy=strategy
 )
 
-with conformer_trainer.strategy.scope():
+with contextnet_trainer.strategy.scope():
     # build model
-    conformer = Conformer(**config.model_config, vocabulary_size=text_featurizer.num_classes)
-    conformer._build(speech_featurizer.shape)
-    conformer.summary(line_length=120)
+    contextnet = ContextNet(**config.model_config, vocabulary_size=text_featurizer.num_classes)
+    contextnet._build(speech_featurizer.shape)
+    contextnet.summary(line_length=120)
 
-    optimizer_config = config.learning_config.optimizer_config
     optimizer = tf.keras.optimizers.Adam(
         TransformerSchedule(
-            d_model=conformer.dmodel,
-            warmup_steps=optimizer_config["warmup_steps"],
-            max_lr=(0.05 / math.sqrt(conformer.dmodel))
+            d_model=contextnet.dmodel,
+            warmup_steps=config.learning_config.optimizer_config["warmup_steps"],
+            max_lr=(0.05 / math.sqrt(contextnet.dmodel))
         ),
-        beta_1=optimizer_config["beta1"],
-        beta_2=optimizer_config["beta2"],
-        epsilon=optimizer_config["epsilon"]
+        beta_1=config.learning_config.optimizer_config["beta1"],
+        beta_2=config.learning_config.optimizer_config["beta2"],
+        epsilon=config.learning_config.optimizer_config["epsilon"]
     )
 
-conformer_trainer.compile(model=conformer, optimizer=optimizer,
-                          max_to_keep=args.max_ckpts)
+contextnet_trainer.compile(model=contextnet, optimizer=optimizer,
+                           max_to_keep=args.max_ckpts)
 
-conformer_trainer.fit(train_dataset, eval_dataset, train_bs=args.tbs, eval_bs=args.ebs)
+contextnet_trainer.fit(train_dataset, eval_dataset,
+                       train_bs=args.tbs, eval_bs=args.ebs, train_acs=args.acs)

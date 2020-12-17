@@ -91,11 +91,12 @@ class ASRDataset(BaseDataset):
 
             label = self.text_featurizer.extract(transcript.decode("utf-8"))
             label_length = tf.cast(tf.shape(label)[0], tf.int32)
-            pred_inp = self.text_featurizer.prepand_blank(label)
+            prediction = self.text_featurizer.prepand_blank(label)
+            prediction_length = tf.cast(tf.shape(prediction)[0], tf.int32)
             features = tf.convert_to_tensor(features, tf.float32)
             input_length = tf.cast(tf.shape(features)[0], tf.int32)
 
-            return features, input_length, label, label_length, pred_inp
+            return features, input_length, label, label_length, prediction, prediction_length
 
     def process(self, dataset, batch_size):
         dataset = dataset.map(self.parse, num_parallel_calls=AUTOTUNE)
@@ -110,15 +111,14 @@ class ASRDataset(BaseDataset):
         dataset = dataset.padded_batch(
             batch_size=batch_size,
             padded_shapes=(
-                tf.TensorShape([]),
                 tf.TensorShape(self.speech_featurizer.shape),
                 tf.TensorShape([]),
                 tf.TensorShape([None]),
                 tf.TensorShape([]),
-                tf.TensorShape([None])
+                tf.TensorShape([None]),
+                tf.TensorShape([]),
             ),
-            padding_values=("", 0., 0, self.text_featurizer.blank,
-                            0, self.text_featurizer.blank),
+            padding_values=(0., 0, self.text_featurizer.blank, 0, self.text_featurizer.blank, 0),
             drop_remainder=True
         )
 
@@ -194,26 +194,23 @@ class ASRTFRecordDataset(ASRDataset):
         }
         example = tf.io.parse_single_example(record, feature_description)
 
-        features, input_length, label, label_length, pred_inp = tf.numpy_function(
+        return tf.numpy_function(
             self.preprocess,
             inp=[example["audio"], example["transcript"]],
-            Tout=(tf.float32, tf.int32, tf.int32, tf.int32, tf.int32)
+            Tout=[tf.float32, tf.int32, tf.int32, tf.int32, tf.int32, tf.int32]
         )
-        return example["path"], features, input_length, label, label_length, pred_inp
 
     def create(self, batch_size):
         # Create TFRecords dataset
         have_data = self.create_tfrecords()
-        if not have_data:
-            return None
+        if not have_data: return None
 
         pattern = os.path.join(self.tfrecords_dir, f"{self.stage}*.tfrecord")
         files_ds = tf.data.Dataset.list_files(pattern)
         ignore_order = tf.data.Options()
         ignore_order.experimental_deterministic = False
         files_ds = files_ds.with_options(ignore_order)
-        dataset = tf.data.TFRecordDataset(
-            files_ds, compression_type='ZLIB', num_parallel_reads=AUTOTUNE)
+        dataset = tf.data.TFRecordDataset(files_ds, compression_type='ZLIB', num_parallel_reads=AUTOTUNE)
 
         return self.process(dataset, batch_size)
 
@@ -222,25 +219,21 @@ class ASRSliceDataset(ASRDataset):
     """ Dataset for ASR using Slice """
 
     def preprocess(self, path, transcript):
-        data = super(ASRSliceDataset, self).preprocess(path.decode("utf-8"), transcript)
-        return (path, *data)
+        return super(ASRSliceDataset, self).preprocess(path.decode("utf-8"), transcript)
 
     @tf.function
     def parse(self, record):
         return tf.numpy_function(
             self.preprocess,
             inp=[record[0], record[1]],
-            Tout=[tf.string, tf.float32, tf.int32, tf.int32, tf.int32, tf.int32]
+            Tout=[tf.float32, tf.int32, tf.int32, tf.int32, tf.int32, tf.int32]
         )
 
     def create(self, batch_size):
         entries = self.read_entries()
-        if len(entries) == 0:
-            return None
+        if len(entries) == 0: return None
         entries = np.delete(entries, 1, 1)  # Remove unused duration
-
         dataset = tf.data.Dataset.from_tensor_slices(entries)
-
         return self.process(dataset, batch_size)
 
 

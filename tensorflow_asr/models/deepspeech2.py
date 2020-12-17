@@ -210,6 +210,7 @@ class FcBlock(tf.keras.layers.Layer):
 
 class FcModule(tf.keras.Model):
     def __init__(self,
+                 vocabulary_size: int,
                  nlayers: int = 0,
                  units: int = 1024,
                  dropout: float = 0.1,
@@ -224,16 +225,22 @@ class FcModule(tf.keras.Model):
             ) for i in range(nlayers)
         ]
 
+        # Fully connected layer
+        self.fc = tf.keras.layers.Dense(units=vocabulary_size,
+                                        use_bias=True, name=f"{self.name}_fc")
+
     def call(self, inputs, training=False, **kwargs):
         outputs = inputs
         for block in self.blocks:
             outputs = block(outputs, training=training, **kwargs)
+        outputs = self.fc(outputs, training=training)
         return outputs
 
     def get_config(self):
         conf = {}
         for block in self.blocks:
             conf.update(block.get_config())
+        conf.update(self.fc.get_config())
         return conf
 
 
@@ -281,12 +288,9 @@ class DeepSpeech2(CtcModel):
             nlayers=fc_nlayers,
             units=fc_units,
             dropout=fc_dropout,
+            vocabulary_size=vocabulary_size,
             name=f"{self.name}_fc_module"
         )
-
-        # Fully connected layer
-        self.fc = tf.keras.layers.Dense(units=vocabulary_size, activation="linear",
-                                        use_bias=True, name=f"{name}_fc")
 
         self.time_reduction_factor = self.conv_module.reduction_factor
 
@@ -294,7 +298,6 @@ class DeepSpeech2(CtcModel):
         outputs = self.conv_module(inputs, training=training, **kwargs)
         outputs = self.rnn_module(outputs, training=training, **kwargs)
         outputs = self.fc_module(outputs, training=training, **kwargs)
-        outputs = self.fc(outputs, training=training, **kwargs)
         return outputs
 
     def summary(self, line_length=100, **kwargs):

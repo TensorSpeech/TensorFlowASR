@@ -15,10 +15,8 @@
 
 def setup_environment():  # Set memory growth and only log ERRORs
     """ Setting tensorflow running environment """
-    import os
     import warnings
 
-    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "1"
     warnings.simplefilter("ignore")
 
     import tensorflow as tf

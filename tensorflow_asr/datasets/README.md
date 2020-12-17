@@ -45,8 +45,10 @@ class ASRSliceDataset(ASRDataset):
 **Outputs when iterating in train step**
 
 ```python
-(path, features, input_lengths, labels, label_lengths, pred_inp)
+(features, input_lengths, labels, label_lengths, prediction, prediction_length)
 ```
+
+Where `prediction` and `prediction_length` are the label prepanded by blank and its length for training *Transducer*
 
 **Outputs when iterating in test step**
 

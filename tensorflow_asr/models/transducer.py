@@ -98,11 +98,11 @@ class TransducerPrediction(tf.keras.Model):
     def call(self, inputs, training=False, **kwargs):
         # inputs has shape [B, U]
         # use tf.gather_nd instead of tf.gather for tflite conversion
-        outputs, label_length = inputs
+        outputs, prediction_length = inputs
         outputs = self.embed(outputs, training=training)
         outputs = self.do(outputs, training=training)
         for rnn in self.rnns:
-            mask = tf.sequence_mask(label_length)
+            mask = tf.sequence_mask(prediction_length)
             outputs = rnn["rnn"](outputs, training=training, mask=mask)
             outputs = outputs[0]
             if rnn["ln"] is not None:
@@ -236,8 +236,10 @@ class Transducer(Model):
 
     def _build(self, input_shape):
         inputs = tf.keras.Input(shape=input_shape, dtype=tf.float32)
+        input_length = tf.keras.Input(shape=[], dtype=tf.int32)
         pred = tf.keras.Input(shape=[None], dtype=tf.int32)
-        self([inputs, pred], training=False)
+        pred_length = tf.keras.Input(shape=[], dtype=tf.int32)
+        self([inputs, input_length, pred, pred_length], training=False)
 
     def summary(self, line_length=None, **kwargs):
         self.encoder.summary(line_length=line_length, **kwargs)
@@ -263,16 +265,18 @@ class Transducer(Model):
         Transducer Model call function
         Args:
             features: audio features in shape [B, T, F, C]
-            predicted: predicted sequence of character ids, in shape [B, U]
+            input_length: features time length in shape [B]
+            prediction: predicted sequence of ids, in shape [B, U]
+            prediction_length: predicted sequence of ids length in shape [B]
             training: python boolean
             **kwargs: sth else
 
         Returns:
             `logits` with shape [B, T, U, vocab]
         """
-        features, _, predicted, label_length = inputs
+        features, _, prediction, prediction_length = inputs
         enc = self.encoder(features, training=training, **kwargs)
-        pred = self.predict_net([predicted, label_length], training=training, **kwargs)
+        pred = self.predict_net([prediction, prediction_length], training=training, **kwargs)
         outputs = self.joint_net([enc, pred], training=training, **kwargs)
         return outputs
 
