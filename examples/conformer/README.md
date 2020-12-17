@@ -84,11 +84,11 @@ learning_config:
 
 ## Usage
 
-Training, see `python examples/conformer/train_conformer.py --help`
+Training, see `python examples/conformer/train_*.py --help`
 
-Testing, see `python examples/conformer/train_conformer.py --help`
+Testing, see `python examples/conformer/test_*.py --help`
 
-TFLite Conversion, see `python examples/conformer/tflite_conformer.py --help`
+TFLite Conversion, see `python examples/conformer/tflite_*.py --help`
 
 ## Conformer Subwords - Results on LibriSpeech
 

@@ -16,11 +16,12 @@
 </h2>
 
 <p align="center">
-TensorFlowASR implements some automatic speech recognition architectures such as DeepSpeech2, Conformer, etc. These models can be converted to TFLite to reduce memory and computation for deployment :smile:
+TensorFlowASR implements some automatic speech recognition architectures such as DeepSpeech2, Jasper, ContextNet, Conformer, etc. These models can be converted to TFLite to reduce memory and computation for deployment :smile:
 </p>
 
 ## What's New?
 
+- (12/17/2020) Supported ContextNet [http://arxiv.org/abs/2005.03191](http://arxiv.org/abs/2005.03191)
 - (12/12/2020) Add support for using masking
 - (11/14/2020) Supported Gradient Accumulation for Training in Larger Batch Size
 - (11/3/2020) Reduce differences between `librosa.stft` and `tf.signal.stft`
@@ -34,6 +35,8 @@ TensorFlowASR implements some automatic speech recognition architectures such as
 - [What's New?](#whats-new)
 - [Table of Contents](#table-of-contents)
 - [:yum: Supported Models](#yum-supported-models)
+  - [Baselines](#baselines)
+  - [Publications](#publications)
 - [Installation](#installation)
   - [Installing via PyPi](#installing-via-pypi)
   - [Installing from source](#installing-from-source)
@@ -47,21 +50,29 @@ TensorFlowASR implements some automatic speech recognition architectures such as
   - [Vietnamese](#vietnamese)
   - [German](#german)
 - [References & Credits](#references--credits)
+- [Contact](#contact)
 
 <!-- /TOC -->
 
 ## :yum: Supported Models
 
+### Baselines
+
 - **CTCModel** (End2end models using CTC Loss for training)
+- **Transducer Models** (End2end models using RNNT Loss for training)
+
+### Publications
+
 - **Deep Speech 2** (Reference: [https://arxiv.org/abs/1512.02595](https://arxiv.org/abs/1512.02595))
   See [examples/deepspeech2](./examples/deepspeech2)
 - **Jasper** (Reference: [https://arxiv.org/abs/1904.03288](https://arxiv.org/abs/1904.03288))
   See [examples/jasper](./examples/jasper)
-- **Transducer Models** (End2end models using RNNT Loss for training)
 - **Conformer Transducer** (Reference: [https://arxiv.org/abs/2005.08100](https://arxiv.org/abs/2005.08100))
   See [examples/conformer](./examples/conformer)
 - **Streaming Transducer** (Reference: [https://arxiv.org/abs/1811.06621](https://arxiv.org/abs/1811.06621))
   See [examples/streaming_transducer](./examples/streaming_transducer)
+- **ContextNet** (Reference: [http://arxiv.org/abs/2005.03191](http://arxiv.org/abs/2005.03191))
+  See [examples/contextnet](./examples/contextnet)
 
 ## Installation
 
@@ -103,6 +114,8 @@ python setup.py install
 - For _mixed precision training_, use flag `--mxp` when running python scripts from [examples](./examples)
 
 - For _enabling XLA_, run `TF_XLA_FLAGS=--tf_xla_auto_jit=2 python3 $path_to_py_script`)
+
+- For _hiding warnings_, run `export TF_CPP_MIN_LOG_LEVEL=2` before running any examples
 
 ## TFLite Convertion
 
@@ -199,3 +212,10 @@ For pretrained models, go to [drive](https://drive.google.com/drive/folders/1BD0
 2. [https://github.com/noahchalifour/warp-transducer](https://github.com/noahchalifour/warp-transducer)
 3. [Sequence Transduction with Recurrent Neural Network](https://arxiv.org/abs/1211.3711)
 4. [End-to-End Speech Processing Toolkit in PyTorch](https://github.com/espnet/espnet)
+5. [https://github.com/iankur/ContextNet](https://github.com/iankur/ContextNet)
+
+## Contact
+
+Huy Le Nguyen
+
+Email: nlhuy.cs.16@gmail.com

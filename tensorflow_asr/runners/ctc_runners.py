@@ -20,6 +20,7 @@ from ..featurizers.text_featurizers import TextFeaturizer
 from ..losses.ctc_losses import ctc_loss
 from .base_runners import BaseTrainer
 from ..optimizers.accumulation import GradientAccumulation
+from ..utils.utils import get_reduced_length
 
 
 class CTCTrainer(BaseTrainer):
@@ -48,14 +49,14 @@ class CTCTrainer(BaseTrainer):
 
     @tf.function(experimental_relax_shapes=True)
     def _train_step(self, batch):
-        _, features, input_length, labels, label_length, _ = batch
+        features, input_length, labels, label_length, _, _ = batch
 
         with tf.GradientTape() as tape:
             y_pred = self.model(features, training=True)
             tape.watch(y_pred)
             per_train_loss = ctc_loss(
                 y_true=labels, y_pred=y_pred,
-                input_length=(input_length // self.model.time_reduction_factor),
+                input_length=get_reduced_length(input_length, self.model.time_reduction_factor),
                 label_length=label_length,
                 blank=self.text_featurizer.blank
             )
@@ -69,13 +70,13 @@ class CTCTrainer(BaseTrainer):
 
     @tf.function(experimental_relax_shapes=True)
     def _eval_step(self, batch):
-        _, features, input_length, labels, label_length, _ = batch
+        features, input_length, labels, label_length, _, _ = batch
 
         logits = self.model(features, training=False)
 
         per_eval_loss = ctc_loss(
             y_true=labels, y_pred=logits,
-            input_length=(input_length // self.model.time_reduction_factor),
+            input_length=get_reduced_length(input_length, self.model.time_reduction_factor),
             label_length=label_length,
             blank=self.text_featurizer.blank
         )
@@ -110,14 +111,14 @@ class CTCTrainerGA(CTCTrainer):
 
     @tf.function(experimental_relax_shapes=True)
     def _train_step(self, batch):
-        _, features, input_length, labels, label_length, _ = batch
+        features, input_length, labels, label_length, _, _ = batch
 
         with tf.GradientTape() as tape:
             y_pred = self.model(features, training=True)
             tape.watch(y_pred)
             per_train_loss = ctc_loss(
                 y_true=labels, y_pred=y_pred,
-                input_length=(input_length // self.model.time_reduction_factor),
+                input_length=get_reduced_length(input_length, self.model.time_reduction_factor),
                 label_length=label_length,
                 blank=self.text_featurizer.blank
             )

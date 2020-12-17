@@ -148,3 +148,7 @@ def log10(x):
     numerator = tf.math.log(x)
     denominator = tf.math.log(tf.constant(10, dtype=numerator.dtype))
     return numerator / denominator
+
+
+def get_reduced_length(length, reduction_factor):
+    return tf.cast(tf.math.ceil(tf.divide(length, tf.cast(reduction_factor, dtype=length.dtype))), dtype=tf.int32)

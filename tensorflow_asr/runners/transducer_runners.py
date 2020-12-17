@@ -21,6 +21,7 @@ from .base_runners import BaseTrainer
 from ..losses.rnnt_losses import rnnt_loss
 from ..models.transducer import Transducer
 from ..featurizers.text_featurizers import TextFeaturizer
+from ..utils.utils import get_reduced_length
 
 
 class TransducerTrainer(BaseTrainer):
@@ -46,14 +47,14 @@ class TransducerTrainer(BaseTrainer):
 
     @tf.function(experimental_relax_shapes=True)
     def _train_step(self, batch):
-        _, features, input_length, labels, label_length, pred_inp = batch
+        features, input_length, labels, label_length, prediction, prediction_length = batch
 
         with tf.GradientTape() as tape:
-            logits = self.model([features, pred_inp], training=True)
+            logits = self.model([features, input_length, prediction, prediction_length], training=True)
             tape.watch(logits)
             per_train_loss = rnnt_loss(
                 logits=logits, labels=labels, label_length=label_length,
-                logit_length=(input_length // self.model.time_reduction_factor),
+                logit_length=get_reduced_length(input_length, self.model.time_reduction_factor),
                 blank=self.text_featurizer.blank
             )
             train_loss = tf.nn.compute_average_loss(per_train_loss,
@@ -66,12 +67,12 @@ class TransducerTrainer(BaseTrainer):
 
     @tf.function(experimental_relax_shapes=True)
     def _eval_step(self, batch):
-        _, features, input_length, labels, label_length, pred_inp = batch
+        features, input_length, labels, label_length, prediction, prediction_length = batch
 
-        logits = self.model([features, pred_inp], training=False)
+        logits = self.model([features, input_length, prediction, prediction_length], training=False)
         eval_loss = rnnt_loss(
             logits=logits, labels=labels, label_length=label_length,
-            logit_length=(input_length // self.model.time_reduction_factor),
+            logit_length=get_reduced_length(input_length, self.model.time_reduction_factor),
             blank=self.text_featurizer.blank
         )
 
@@ -105,14 +106,14 @@ class TransducerTrainerGA(TransducerTrainer):
 
     @tf.function(experimental_relax_shapes=True)
     def _train_step(self, batch):
-        _, features, input_length, labels, label_length, pred_inp = batch
+        features, input_length, labels, label_length, prediction, prediction_length = batch
 
         with tf.GradientTape() as tape:
-            logits = self.model([features, pred_inp], training=True)
+            logits = self.model([features, input_length, prediction, prediction_length], training=True)
             tape.watch(logits)
             per_train_loss = rnnt_loss(
                 logits=logits, labels=labels, label_length=label_length,
-                logit_length=(input_length // self.model.time_reduction_factor),
+                logit_length=get_reduced_length(input_length, self.model.time_reduction_factor),
                 blank=self.text_featurizer.blank
             )
             train_loss = tf.nn.compute_average_loss(
