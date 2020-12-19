@@ -13,6 +13,7 @@
 # limitations under the License.
 """ http://arxiv.org/abs/1811.06621 """
 
+from typing import Optional
 import tensorflow as tf
 
 from .layers.subsampling import TimeReduction
@@ -222,23 +223,24 @@ class StreamingTransducer(Transducer):
         )
         self.time_reduction_factor = self.encoder.time_reduction_factor
 
-    def summary(self, line_length=None, **kwargs):
-        for block in self.encoder.blocks:
-            block.summary(line_length=line_length, **kwargs)
-        super(StreamingTransducer, self).summary(line_length=line_length, **kwargs)
-
-    def encoder_inference(self, features, states):
+    def encoder_inference(self,
+                          features: tf.Tensor,
+                          states: tf.Tensor,
+                          input_length: Optional[tf.Tensor] = None,
+                          with_batch: bool = False):
         """Infer function for encoder (or encoders)
 
         Args:
             features (tf.Tensor): features with shape [T, F, C]
             states (tf.Tensor): previous states of encoders with shape [num_rnns, 1 or 2, 1, P]
+            with_batch (bool): indicates whether the features included batch dim or not
 
         Returns:
             tf.Tensor: output of encoders with shape [T, E]
             tf.Tensor: states of encoders with shape [num_rnns, 1 or 2, 1, P]
         """
         with tf.name_scope(f"{self.name}_encoder"):
+            if with_batch: return self.encoder.recognize(features, states)
             outputs = tf.expand_dims(features, axis=0)
             outputs, new_states = self.encoder.recognize(outputs, states)
             return tf.squeeze(outputs, axis=0), new_states
@@ -246,28 +248,26 @@ class StreamingTransducer(Transducer):
     # -------------------------------- GREEDY -------------------------------------
 
     @tf.function
-    def recognize(self, signals):
+    def recognize(self,
+                  features: tf.Tensor,
+                  input_length: tf.Tensor,
+                  parallel_iterations: int = 10,
+                  swap_memory: bool = True):
         """
         RNN Transducer Greedy decoding
         Args:
-            signals (tf.Tensor): a batch of padded signals
+            features (tf.Tensor): a batch of padded extracted features
 
         Returns:
             tf.Tensor: a batch of decoded transcripts
         """
-        def execute(signal: tf.Tensor):
-            features = self.speech_featurizer.tf_extract(signal)
-            encoded, _ = self.encoder_inference(features, self.encoder.get_initial_state())
-            hypothesis = self.perform_greedy(
-                encoded,
-                predicted=tf.constant(self.text_featurizer.blank, dtype=tf.int32),
-                states=self.predict_net.get_initial_state(),
-                swap_memory=True
-            )
-            transcripts = self.text_featurizer.iextract(tf.expand_dims(hypothesis.prediction, axis=0))
-            return tf.squeeze(transcripts)  # reshape from [1] to []
-
-        return tf.map_fn(execute, signals, fn_output_signature=tf.TensorSpec([], dtype=tf.string))
+        encoded, _ = self.encoder_inference(
+            features,
+            self.encoder.get_initial_state(),
+            input_length=input_length, with_batch=True
+        )
+        return self.__perform_greedy_batch(encoded, input_length,
+                                           parallel_iterations=parallel_iterations, swap_memory=swap_memory)
 
     def recognize_tflite(self, signal, predicted, encoder_states, prediction_states):
         """
@@ -286,7 +286,7 @@ class StreamingTransducer(Transducer):
         """
         features = self.speech_featurizer.tf_extract(signal)
         encoded, new_encoder_states = self.encoder_inference(features, encoder_states)
-        hypothesis = self.perform_greedy(encoded, predicted, prediction_states, swap_memory=False)
+        hypothesis = self.__perform_greedy(encoded, tf.shape(encoded)[0], predicted, prediction_states)
         transcript = self.text_featurizer.indices2upoints(hypothesis.prediction)
         return (
             transcript,
@@ -298,29 +298,28 @@ class StreamingTransducer(Transducer):
     # -------------------------------- BEAM SEARCH -------------------------------------
 
     @tf.function
-    def recognize_beam(self, signals, lm=False):
+    def recognize_beam(self,
+                       features: tf.Tensor,
+                       input_length: tf.Tensor,
+                       lm: bool = False,
+                       parallel_iterations: int = 10,
+                       swap_memory: bool = True):
         """
         RNN Transducer Beam Search
         Args:
-            signals (tf.Tensor): a batch of padded signals
+            features (tf.Tensor): a batch of padded extracted features
             lm (bool, optional): whether to use language model. Defaults to False.
 
         Returns:
             tf.Tensor: a batch of decoded transcripts
         """
-        def execute(signal: tf.Tensor):
-            features = self.speech_featurizer.tf_extract(signal)
-            encoded, _ = self.encoder_inference(features, self.encoder.get_initial_state())
-            hypothesis = self.perform_beam_search(encoded, lm)
-            prediction = tf.map_fn(
-                lambda x: tf.strings.to_number(x, tf.int32),
-                tf.strings.split(hypothesis.prediction),
-                fn_output_signature=tf.TensorSpec([], dtype=tf.int32)
-            )
-            transcripts = self.text_featurizer.iextract(tf.expand_dims(prediction, axis=0))
-            return tf.squeeze(transcripts)  # reshape from [1] to []
-
-        return tf.map_fn(execute, signals, fn_output_signature=tf.TensorSpec([], dtype=tf.string))
+        encoded, _ = self.encoder_inference(
+            features,
+            self.encoder.get_initial_state(),
+            input_length=input_length, with_batch=True
+        )
+        return self.__perform_beam_search_batch(encoded, input_length, lm,
+                                                parallel_iterations=parallel_iterations, swap_memory=swap_memory)
 
     # -------------------------------- TFLITE -------------------------------------
 

@@ -21,11 +21,11 @@ lr = SANSchedule(lamb=0.05, d_model=512, warmup_steps=4000)
 plt.plot(lr(tf.range(40000, dtype=tf.float32)))
 plt.ylabel("Learning Rate")
 plt.xlabel("Train Step")
-plt.show()
+# plt.show()
 
 lr = TransformerSchedule(d_model=144, warmup_steps=10000)
 
 plt.plot(lr(tf.range(2000000, dtype=tf.float32)))
 plt.ylabel("Learning Rate")
 plt.xlabel("Train Step")
-plt.show()
+# plt.show()

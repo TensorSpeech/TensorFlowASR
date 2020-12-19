@@ -13,7 +13,7 @@
 # limitations under the License.
 """ Ref: https://github.com/iankur/ContextNet """
 
-from typing import List
+from typing import List, Optional
 import tensorflow as tf
 from .transducer import Transducer
 from ..utils.utils import merge_two_last_dims, get_reduced_length
@@ -234,8 +234,7 @@ class ContextNet(Transducer):
         )
         self.dmodel = self.encoder.blocks[-1].dmodel
         self.time_reduction_factor = 1
-        for block in self.encoder.blocks:
-            self.time_reduction_factor *= block.time_reduction_factor
+        for block in self.encoder.blocks: self.time_reduction_factor *= block.time_reduction_factor
 
     def call(self, inputs, training=False, **kwargs):
         features, input_length, prediction, prediction_length = inputs
@@ -244,8 +243,12 @@ class ContextNet(Transducer):
         outputs = self.joint_net([enc, pred], training=training, **kwargs)
         return outputs
 
-    def encoder_inference(self, features):
+    def encoder_inference(self,
+                          features: tf.Tensor,
+                          input_length: Optional[tf.Tensor] = None,
+                          with_batch: bool = False):
         with tf.name_scope(f"{self.name}_encoder"):
+            if with_batch: return self.encoder([features, input_length], training=False)
             input_length = tf.expand_dims(tf.shape(features)[0], axis=0)
             outputs = tf.expand_dims(features, axis=0)
             outputs = self.encoder([outputs, input_length], training=False)

@@ -241,8 +241,15 @@ class ASRTFRecordTestDataset(ASRTFRecordDataset):
     def preprocess(self, path, transcript):
         with tf.device("/CPU:0"):
             signal = read_raw_audio(path.decode("utf-8"), self.speech_featurizer.sample_rate)
+
+            features = self.speech_featurizer.extract(signal)
+            features = tf.convert_to_tensor(features, tf.float32)
+            input_length = tf.cast(tf.shape(features)[0], tf.int32)
+
             label = self.text_featurizer.extract(transcript.decode("utf-8"))
-            return path, signal, tf.convert_to_tensor(label, dtype=tf.int32)
+            label = tf.convert_to_tensor(label, dtype=tf.int32)
+
+            return path, features, input_length, label
 
     @tf.function
     def parse(self, record):
@@ -256,7 +263,7 @@ class ASRTFRecordTestDataset(ASRTFRecordDataset):
         return tf.numpy_function(
             self.preprocess,
             inp=[example["audio"], example["transcript"]],
-            Tout=(tf.string, tf.float32, tf.int32)
+            Tout=(tf.string, tf.float32, tf.int32, tf.int32)
         )
 
     def process(self, dataset, batch_size):
@@ -273,10 +280,11 @@ class ASRTFRecordTestDataset(ASRTFRecordDataset):
             batch_size=batch_size,
             padded_shapes=(
                 tf.TensorShape([]),
-                tf.TensorShape([None]),
+                tf.TensorShape(self.speech_featurizer.shape),
+                tf.TensorShape([]),
                 tf.TensorShape([None]),
             ),
-            padding_values=("", 0.0, self.text_featurizer.blank),
+            padding_values=("", 0.0, 0, self.text_featurizer.blank),
             drop_remainder=True
         )
 
@@ -304,15 +312,22 @@ class ASRSliceTestDataset(ASRDataset):
     def preprocess(self, path, transcript):
         with tf.device("/CPU:0"):
             signal = read_raw_audio(path.decode("utf-8"), self.speech_featurizer.sample_rate)
+
+            features = self.speech_featurizer.extract(signal)
+            features = tf.convert_to_tensor(features, tf.float32)
+            input_length = tf.cast(tf.shape(features)[0], tf.int32)
+
             label = self.text_featurizer.extract(transcript.decode("utf-8"))
-            return path, signal, tf.convert_to_tensor(label, dtype=tf.int32)
+            label = tf.convert_to_tensor(label, dtype=tf.int32)
+
+            return path, features, input_length, label
 
     @tf.function
     def parse(self, record):
         return tf.numpy_function(
             self.preprocess,
             inp=[record[0], record[1]],
-            Tout=[tf.string, tf.float32, tf.int32]
+            Tout=[tf.string, tf.float32, tf.int32, tf.int32]
         )
 
     def process(self, dataset, batch_size):
@@ -329,10 +344,11 @@ class ASRSliceTestDataset(ASRDataset):
             batch_size=batch_size,
             padded_shapes=(
                 tf.TensorShape([]),
-                tf.TensorShape([None]),
+                tf.TensorShape(self.speech_featurizer.shape),
+                tf.TensorShape([]),
                 tf.TensorShape([None]),
             ),
-            padding_values=("", 0.0, self.text_featurizer.blank),
+            padding_values=("", 0.0, 0, self.text_featurizer.blank),
             drop_remainder=True
         )
 

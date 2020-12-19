@@ -59,7 +59,7 @@ def main(argv):
     plt.colorbar(pad=0.01, fraction=0.02, ax=ax, format="%.2f", ticks=v1)
     plt.tight_layout()
     # plt.savefig(argv[3])
-    plt.show()
+    # plt.show()
     # plt.figure(figsize=(15, 5))
     # for i in range(4):
     #     plt.subplot(2, 2, i + 1)

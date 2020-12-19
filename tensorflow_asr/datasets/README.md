@@ -53,5 +53,5 @@ Where `prediction` and `prediction_length` are the label prepanded by blank and 
 **Outputs when iterating in test step**
 
 ```python
-(path, signals, labels)
+(path, features, input_lengths, labels)
 ```
