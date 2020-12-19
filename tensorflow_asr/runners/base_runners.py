@@ -22,7 +22,7 @@ import numpy as np
 import tensorflow as tf
 
 from ..configs.config import RunningConfig
-from ..utils.utils import get_num_batches, bytes_to_string
+from ..utils.utils import get_num_batches, bytes_to_string, get_reduced_length
 from ..utils.metrics import ErrorRate, wer, cer
 
 
@@ -386,8 +386,9 @@ class BaseTester(BaseRunner):
             with open(self.output_file_path, "w") as out:
                 out.write("PATH\tGROUNDTRUTH\tGREEDY\tBEAMSEARCH\tBEAMSEARCHLM\n")
 
-    def set_test_data_loader(self, test_dataset, batch_size=1):
+    def set_test_data_loader(self, test_dataset, batch_size=None):
         """Set train data loader (MUST)."""
+        if not batch_size: batch_size = self.config.batch_size
         self.test_data_loader = test_dataset.create(batch_size)
         self.total_steps = test_dataset.total_steps
 
@@ -399,7 +400,7 @@ class BaseTester(BaseRunner):
             raise AttributeError("Please do 'add_featurizers' before testing")
         self.model = trained_model
 
-    def run(self, test_dataset, batch_size=1):
+    def run(self, test_dataset, batch_size=None):
         self.set_output_file()
         self.set_test_data_loader(test_dataset, batch_size=batch_size)
         self._test_epoch()
@@ -419,7 +420,7 @@ class BaseTester(BaseRunner):
             except tf.errors.OutOfRangeError:
                 break
 
-            decoded = [d.numpy() for d in decoded]
+            decoded = [None if d is None else d.numpy() for d in decoded]
             self._append_to_file(*decoded)
             progbar.update(1)
 
@@ -440,15 +441,16 @@ class BaseTester(BaseRunner):
         Returns:
             (file_paths, groundtruth, greedy, beamsearch, beamsearch_lm) each has shape [B]
         """
-        file_paths, signals, labels = batch
+        file_paths, features, input_length, labels = batch
 
         labels = self.model.text_featurizer.iextract(labels)
-        greed_pred = self.model.recognize(signals)
-        beam_pred = beam_lm_pred = tf.constant([""], dtype=tf.string)
+        input_length = get_reduced_length(input_length, self.model.time_reduction_factor)
+        greed_pred = self.model.recognize(features, input_length)
+        beam_pred = beam_lm_pred = None
         if self.model.text_featurizer.decoder_config.beam_width > 0:
-            beam_pred = self.model.recognize_beam(signals, lm=False)
+            beam_pred = self.model.recognize_beam(features, input_length, lm=False)
         if self.model.text_featurizer.decoder_config.lm_config:
-            beam_lm_pred = self.model.recognize_beam(signals, lm=True)
+            beam_lm_pred = self.model.recognize_beam(features, input_length, lm=True)
 
         return file_paths, labels, greed_pred, beam_pred, beam_lm_pred
 
@@ -492,8 +494,8 @@ class BaseTester(BaseRunner):
         file_path = bytes_to_string(file_path)
         groundtruth = bytes_to_string(groundtruth)
         greedy = bytes_to_string(greedy)
-        beamsearch = bytes_to_string(beamsearch)
-        beamsearch_lm = bytes_to_string(beamsearch_lm)
+        beamsearch = bytes_to_string(beamsearch) if beamsearch is not None else ["" for _ in file_path]
+        beamsearch_lm = bytes_to_string(beamsearch_lm) if beamsearch_lm is not None else ["" for _ in file_path]
         with open(self.output_file_path, "a", encoding="utf-8") as out:
             for i, path in enumerate(file_path):
                 line = f"{groundtruth[i]}\t{greedy[i]}\t{beamsearch[i]}\t{beamsearch_lm[i]}"

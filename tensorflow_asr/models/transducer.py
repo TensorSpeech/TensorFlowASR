@@ -14,11 +14,12 @@
 """ https://arxiv.org/pdf/1811.06621.pdf """
 
 import collections
+from typing import Optional
 import tensorflow as tf
 
 from . import Model
 from ..utils.utils import get_rnn, shape_list
-from ..featurizers.speech_featurizers import TFSpeechFeaturizer
+from ..featurizers.speech_featurizers import SpeechFeaturizer
 from ..featurizers.text_featurizers import TextFeaturizer
 from .layers.embedding import Embedding
 
@@ -126,8 +127,7 @@ class TransducerPrediction(tf.keras.Model):
         outputs = self.do(outputs, training=False)
         new_states = []
         for i, rnn in enumerate(self.rnns):
-            outputs = rnn["rnn"](outputs, training=False,
-                                 initial_state=tf.unstack(states[i], axis=0))
+            outputs = rnn["rnn"](outputs, training=False, initial_state=tf.unstack(states[i], axis=0))
             new_states.append(tf.stack(outputs[1:]))
             outputs = outputs[0]
             if rnn["ln"] is not None:
@@ -248,7 +248,7 @@ class Transducer(Model):
         super(Transducer, self).summary(line_length=line_length, **kwargs)
 
     def add_featurizers(self,
-                        speech_featurizer: TFSpeechFeaturizer,
+                        speech_featurizer: SpeechFeaturizer,
                         text_featurizer: TextFeaturizer):
         """
         Function to add featurizer to model to convert to end2end tflite
@@ -280,21 +280,27 @@ class Transducer(Model):
         outputs = self.joint_net([enc, pred], training=training, **kwargs)
         return outputs
 
-    def encoder_inference(self, features):
+    def encoder_inference(self,
+                          features: tf.Tensor,
+                          input_length: Optional[tf.Tensor] = None,
+                          with_batch: Optional[bool] = False):
         """Infer function for encoder (or encoders)
 
         Args:
             features (tf.Tensor): features with shape [T, F, C]
+            input_length (tf.Tensor): optional features length with shape []
+            with_batch (bool): indicates whether the features included batch dim or not
 
         Returns:
             tf.Tensor: output of encoders with shape [T, E]
         """
         with tf.name_scope(f"{self.name}_encoder"):
+            if with_batch: return self.encoder(features, training=False)
             outputs = tf.expand_dims(features, axis=0)
             outputs = self.encoder(outputs, training=False)
             return tf.squeeze(outputs, axis=0)
 
-    def decoder_inference(self, encoded, predicted, states):
+    def decoder_inference(self, encoded: tf.Tensor, predicted: tf.Tensor, states: tf.Tensor):
         """Infer function for decoder
 
         Args:
@@ -322,28 +328,23 @@ class Transducer(Model):
     # -------------------------------- GREEDY -------------------------------------
 
     @tf.function
-    def recognize(self, signals):
+    def recognize(self,
+                  features: tf.Tensor,
+                  input_length: tf.Tensor,
+                  parallel_iterations: int = 10,
+                  swap_memory: bool = True):
         """
         RNN Transducer Greedy decoding
         Args:
-            signals (tf.Tensor): a batch of padded signals
+            features (tf.Tensor): a batch of extracted features
+            input_length (tf.Tensor): a batch of extracted features length
 
         Returns:
             tf.Tensor: a batch of decoded transcripts
         """
-        def execute(signal: tf.Tensor):
-            features = self.speech_featurizer.tf_extract(signal)
-            encoded = self.encoder_inference(features)
-            hypothesis = self.perform_greedy(
-                encoded,
-                predicted=tf.constant(self.text_featurizer.blank, dtype=tf.int32),
-                states=self.predict_net.get_initial_state(),
-                swap_memory=True
-            )
-            transcripts = self.text_featurizer.iextract(tf.expand_dims(hypothesis.prediction, axis=0))
-            return tf.squeeze(transcripts)  # reshape from [1] to []
-
-        return tf.map_fn(execute, signals, fn_output_signature=tf.TensorSpec([], dtype=tf.string))
+        encoded = self.encoder_inference(features, input_length, with_batch=True)
+        return self.__perform_greedy_batch(encoded, input_length,
+                                           parallel_iterations=parallel_iterations, swap_memory=swap_memory)
 
     def recognize_tflite(self, signal, predicted, states):
         """
@@ -360,7 +361,7 @@ class Transducer(Model):
         """
         features = self.speech_featurizer.tf_extract(signal)
         encoded = self.encoder_inference(features)
-        hypothesis = self.perform_greedy(encoded, predicted, states, swap_memory=False)
+        hypothesis = self.__perform_greedy(encoded, tf.shape(encoded)[0], predicted, states)
         transcript = self.text_featurizer.indices2upoints(hypothesis.prediction)
         return (
             transcript,
@@ -368,10 +369,54 @@ class Transducer(Model):
             hypothesis.states
         )
 
-    def perform_greedy(self, encoded, predicted, states, swap_memory=False):
+    def __perform_greedy_batch(self,
+                               encoded: tf.Tensor,
+                               encoded_length: tf.Tensor,
+                               parallel_iterations: int = 10,
+                               swap_memory: bool = False):
+        total = tf.shape(encoded)[0]
+        batch = tf.constant(0, dtype=tf.int32)
+
+        decoded = tf.TensorArray(
+            dtype=tf.string,
+            size=total, dynamic_size=False,
+            clear_after_read=False, element_shape=tf.TensorShape([])
+        )
+
+        def condition(batch, total, encoded, encoded_length, decoded): return tf.less(batch, total)
+
+        def body(batch, total, encoded, encoded_length, decoded):
+            hypothesis = self.__perform_greedy(
+                encoded=encoded[batch],
+                encoded_length=encoded_length[batch],
+                predicted=tf.constant(self.text_featurizer.blank, dtype=tf.int32),
+                states=self.predict_net.get_initial_state(),
+                parallel_iterations=parallel_iterations,
+                swap_memory=swap_memory
+            )
+            transcripts = self.text_featurizer.iextract(tf.expand_dims(hypothesis.prediction, axis=0))
+            decoded = decoded.write(batch, tf.squeeze(transcripts))
+            return batch + 1, total, encoded, encoded_length, decoded
+
+        batch, total, _, _, decoded = tf.while_loop(
+            condition, body,
+            loop_vars=(batch, total, encoded, encoded_length, decoded),
+            parallel_iterations=parallel_iterations,
+            swap_memory=True,
+        )
+
+        return decoded.stack()
+
+    def __perform_greedy(self,
+                         encoded: tf.Tensor,
+                         encoded_length: tf.Tensor,
+                         predicted: tf.Tensor,
+                         states: tf.Tensor,
+                         parallel_iterations: int = 10,
+                         swap_memory: bool = False):
         with tf.name_scope(f"{self.name}_greedy"):
             time = tf.constant(0, dtype=tf.int32)
-            total = tf.shape(encoded)[0]
+            total = encoded_length
             # Initialize prediction with a blank
             # Prediction can not be longer than the encoded of audio plus blank
             prediction = tf.TensorArray(
@@ -425,6 +470,7 @@ class Transducer(Model):
                 condition,
                 body,
                 loop_vars=(time, total, encoded, hypothesis),
+                parallel_iterations=parallel_iterations,
                 swap_memory=swap_memory
             )
 
@@ -443,38 +489,71 @@ class Transducer(Model):
     # -------------------------------- BEAM SEARCH -------------------------------------
 
     @tf.function
-    def recognize_beam(self, signals, lm=False):
+    def recognize_beam(self,
+                       features: tf.Tensor,
+                       input_length: tf.Tensor,
+                       lm: bool = False,
+                       parallel_iterations: int = 10,
+                       swap_memory: bool = True):
         """
         RNN Transducer Beam Search
         Args:
-            signals (tf.Tensor): a batch of padded signals
+            features (tf.Tensor): a batch of padded extracted features
             lm (bool, optional): whether to use language model. Defaults to False.
 
         Returns:
             tf.Tensor: a batch of decoded transcripts
         """
-        def execute(signal: tf.Tensor):
-            features = self.speech_featurizer.tf_extract(signal)
-            encoded = self.encoder_inference(features)
-            hypothesis = self.perform_beam_search(encoded, lm)
-            prediction = tf.map_fn(
-                lambda x: tf.strings.to_number(x, tf.int32),
-                tf.strings.split(hypothesis.prediction),
-                fn_output_signature=tf.TensorSpec([], dtype=tf.int32)
-            )
-            transcripts = self.text_featurizer.iextract(tf.expand_dims(prediction, axis=0))
-            return tf.squeeze(transcripts)  # reshape from [1] to []
+        encoded = self.encoder_inference(features, input_length, with_batch=True)
+        return self.__perform_beam_search_batch(encoded, input_length, lm,
+                                                parallel_iterations=parallel_iterations, swap_memory=swap_memory)
 
-        return tf.map_fn(execute, signals, fn_output_signature=tf.TensorSpec([], dtype=tf.string))
+    def __perform_beam_search_batch(self,
+                                    encoded: tf.Tensor,
+                                    encoded_length: tf.Tensor,
+                                    lm: bool = False,
+                                    parallel_iterations: int = 10,
+                                    swap_memory: bool = False):
+        total = tf.shape(encoded)[0]
+        batch = tf.constant(0, dtype=tf.int32)
 
-    def perform_beam_search(self, encoded, lm=False):
+        decoded = tf.TensorArray(
+            dtype=tf.string,
+            size=total, dynamic_size=False,
+            clear_after_read=False, element_shape=tf.TensorShape([])
+        )
+
+        def condition(batch, total, encoded, encoded_length, decoded): return tf.less(batch, total)
+
+        def body(batch, total, encoded, encoded_length, decoded):
+            hypothesis = self.__perform_beam_search(encoded[batch], encoded_length[batch], lm,
+                                                    parallel_iterations=parallel_iterations, swap_memory=swap_memory)
+            transcripts = self.text_featurizer.iextract(tf.expand_dims(hypothesis.prediction, axis=0))
+            decoded = decoded.write(batch, tf.squeeze(transcripts))
+            return batch + 1, total, encoded, encoded_length, decoded
+
+        batch, total, _, _, decoded = tf.while_loop(
+            condition, body,
+            loop_vars=(batch, total, encoded, encoded_length, decoded),
+            parallel_iterations=parallel_iterations,
+            swap_memory=True,
+        )
+
+        return decoded.stack()
+
+    def __perform_beam_search(self,
+                              encoded: tf.Tensor,
+                              encoded_length: tf.Tensor,
+                              lm: bool = False,
+                              parallel_iterations: int = 10,
+                              swap_memory: bool = False):
         with tf.device("/CPU:0"), tf.name_scope(f"{self.name}_beam_search"):
             beam_width = tf.cond(
                 tf.less(self.text_featurizer.decoder_config.beam_width, self.text_featurizer.num_classes),
                 true_fn=lambda: self.text_featurizer.decoder_config.beam_width,
                 false_fn=lambda: self.text_featurizer.num_classes - 1
             )
-            total = tf.shape(encoded)[0]
+            total = encoded_length
 
             def initialize_beam(dynamic=False):
                 return BeamHypothesis(
@@ -567,15 +646,27 @@ class Transducer(Model):
                         A = BeamHypothesis(score=a_score, indices=a_indices, prediction=a_prediction, states=a_states)
                         return pred + 1, A, A_i, B
 
-                    _, A, A_i, B = tf.while_loop(predict_condition, predict_body, loop_vars=(0, A, A_i, B))
+                    _, A, A_i, B = tf.while_loop(
+                        predict_condition, predict_body,
+                        loop_vars=(0, A, A_i, B),
+                        parallel_iterations=parallel_iterations, swap_memory=swap_memory
+                    )
 
                     return beam + 1, beam_width, A, A_i, B
 
-                _, _, A, A_i, B = tf.while_loop(beam_condition, beam_body, loop_vars=(0, beam_width, A, A_i, B))
+                _, _, A, A_i, B = tf.while_loop(
+                    beam_condition, beam_body,
+                    loop_vars=(0, beam_width, A, A_i, B),
+                    parallel_iterations=parallel_iterations, swap_memory=swap_memory
+                )
 
                 return time + 1, total, B
 
-            _, _, B = tf.while_loop(condition, body, loop_vars=(0, total, B))
+            _, _, B = tf.while_loop(
+                condition, body,
+                loop_vars=(0, total, B),
+                parallel_iterations=parallel_iterations, swap_memory=swap_memory
+            )
 
             scores = B.score.stack()
             if self.text_featurizer.decoder_config.norm_score:
@@ -590,7 +681,7 @@ class Transducer(Model):
 
             return Hypothesis(
                 index=y_hat_index,
-                prediction=y_hat_prediction,
+                prediction=tf.strings.to_number(tf.strings.split(y_hat_prediction), out_type=tf.int32),
                 states=y_hat_states
             )
 
@@ -602,7 +693,6 @@ class Transducer(Model):
             input_signature=[
                 tf.TensorSpec([None], dtype=tf.float32),
                 tf.TensorSpec([], dtype=tf.int32),
-                tf.TensorSpec(self.predict_net.get_initial_state().get_shape(),
-                              dtype=tf.float32)
+                tf.TensorSpec(self.predict_net.get_initial_state().get_shape(), dtype=tf.float32)
             ]
         )

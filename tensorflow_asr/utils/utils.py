@@ -58,6 +58,7 @@ def nan_to_zero(input_tensor):
 
 
 def bytes_to_string(array: np.ndarray, encoding: str = "utf-8"):
+    if array is None: return None
     return [transcript.decode(encoding) for transcript in array]
 
 

@@ -27,3 +27,11 @@ class Model(tf.keras.Model):
     @abc.abstractmethod
     def call(self, inputs, training=False, **kwargs):
         raise NotImplementedError()
+
+    @abc.abstractmethod
+    def recognize(self, features, input_lengths, **kwargs):
+        pass
+
+    @abc.abstractmethod
+    def recognize_beam(self, features, input_lengths, **kwargs):
+        pass

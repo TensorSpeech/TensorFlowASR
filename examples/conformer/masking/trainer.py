@@ -3,6 +3,7 @@ import tensorflow as tf
 from masking import create_padding_mask
 from tensorflow_asr.runners.transducer_runners import TransducerTrainer, TransducerTrainerGA
 from tensorflow_asr.losses.rnnt_losses import rnnt_loss
+from tensorflow_asr.utils.utils import get_reduced_length
 
 
 class TrainerWithMasking(TransducerTrainer):
@@ -17,7 +18,7 @@ class TrainerWithMasking(TransducerTrainer):
             tape.watch(logits)
             per_train_loss = rnnt_loss(
                 logits=logits, labels=labels, label_length=label_length,
-                logit_length=tf.cast(tf.math.ceil(input_length / self.model.time_reduction_factor), dtype=tf.int32),
+                logit_length=get_reduced_length(input_length, self.model.time_reduction_factor),
                 blank=self.text_featurizer.blank
             )
             train_loss = tf.nn.compute_average_loss(per_train_loss,
@@ -41,7 +42,7 @@ class TrainerWithMaskingGA(TransducerTrainerGA):
             tape.watch(logits)
             per_train_loss = rnnt_loss(
                 logits=logits, labels=labels, label_length=label_length,
-                logit_length=tf.cast(tf.math.ceil(input_length / self.model.time_reduction_factor), dtype=tf.int32),
+                logit_length=get_reduced_length(input_length, self.model.time_reduction_factor),
                 blank=self.text_featurizer.blank
             )
             train_loss = tf.nn.compute_average_loss(

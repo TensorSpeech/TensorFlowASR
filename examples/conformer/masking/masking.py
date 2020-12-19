@@ -1,5 +1,5 @@
 import tensorflow as tf
-from tensorflow_asr.utils.utils import shape_list
+from tensorflow_asr.utils.utils import shape_list, get_reduced_length
 
 
 def create_padding_mask(features, input_length, time_reduction_factor):
@@ -14,10 +14,10 @@ def create_padding_mask(features, input_length, time_reduction_factor):
         [tf.Tensor]: with shape [B, Tquery, Tkey]
     """
     batch_size, padded_time, _, _ = shape_list(features)
-    reduced_padded_time = tf.math.ceil(padded_time / time_reduction_factor)
+    reduced_padded_time = get_reduced_length(padded_time, time_reduction_factor)
 
     def create_mask(length):
-        reduced_length = tf.math.ceil(length / time_reduction_factor)
+        reduced_length = get_reduced_length(length, time_reduction_factor)
         mask = tf.ones([reduced_length, reduced_length], dtype=tf.float32)
         return tf.pad(
             mask,

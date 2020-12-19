@@ -12,13 +12,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from typing import Optional
 import numpy as np
 import tensorflow as tf
 
 from . import Model
 from ..featurizers.speech_featurizers import TFSpeechFeaturizer
 from ..featurizers.text_featurizers import TextFeaturizer
-from ..utils.utils import shape_list
+from ..utils.utils import shape_list, get_reduced_length
 
 
 class CtcModel(Model):
@@ -41,20 +42,15 @@ class CtcModel(Model):
     # -------------------------------- GREEDY -------------------------------------
 
     @tf.function
-    def recognize(self, signals):
-
-        def extract_fn(signal): return self.speech_featurizer.tf_extract(signal)
-
-        features = tf.map_fn(extract_fn, signals,
-                             fn_output_signature=tf.TensorSpec(self.speech_featurizer.shape, dtype=tf.float32))
+    def recognize(self, features: tf.Tensor, input_length: Optional[tf.Tensor]):
         logits = self(features, training=False)
         probs = tf.nn.softmax(logits)
 
-        def map_fn(prob): return tf.numpy_function(self.perform_greedy, inp=[prob], Tout=tf.string)
+        def map_fn(prob): return tf.numpy_function(self.__perform_greedy, inp=[prob], Tout=tf.string)
 
         return tf.map_fn(map_fn, probs, fn_output_signature=tf.TensorSpec([], dtype=tf.string))
 
-    def perform_greedy(self, probs: np.ndarray):
+    def __perform_greedy(self, probs: np.ndarray):
         from ctc_decoders import ctc_greedy_decoder
         decoded = ctc_greedy_decoder(probs, vocabulary=self.text_featurizer.vocab_array)
         return tf.convert_to_tensor(decoded, dtype=tf.string)
@@ -71,7 +67,7 @@ class CtcModel(Model):
         features = self.speech_featurizer.tf_extract(signal)
         features = tf.expand_dims(features, axis=0)
         input_length = shape_list(features)[1]
-        input_length = input_length // self.base_model.time_reduction_factor
+        input_length = get_reduced_length(input_length, self.base_model.time_reduction_factor)
         input_length = tf.expand_dims(input_length, axis=0)
         logits = self(features, training=False)
         probs = tf.nn.softmax(logits)
@@ -85,25 +81,20 @@ class CtcModel(Model):
     # -------------------------------- BEAM SEARCH -------------------------------------
 
     @tf.function
-    def recognize_beam(self, signals, lm=False):
-
-        def extract_fn(signal): return self.speech_featurizer.tf_extract(signal)
-
-        features = tf.map_fn(extract_fn, signals,
-                             fn_output_signature=tf.TensorSpec(self.speech_featurizer.shape, dtype=tf.float32))
+    def recognize_beam(self, features: tf.Tensor, input_length: Optional[tf.Tensor], lm: bool = False):
         logits = self(features, training=False)
         probs = tf.nn.softmax(logits)
 
-        def map_fn(prob): return tf.numpy_function(self.perform_beam_search, inp=[prob, lm], Tout=tf.string)
+        def map_fn(prob): return tf.numpy_function(self.__perform_beam_search, inp=[prob, lm], Tout=tf.string)
 
         return tf.map_fn(map_fn, probs, dtype=tf.string)
 
-    def perform_beam_search(self, probs: np.ndarray, lm: bool = False):
+    def __perform_beam_search(self, probs: np.ndarray, lm: bool = False):
         from ctc_decoders import ctc_beam_search_decoder
         decoded = ctc_beam_search_decoder(
             probs_seq=probs,
             vocabulary=self.text_featurizer.vocab_array,
-            beam_size=self.text_featurizer.decoder_config["beam_width"],
+            beam_size=self.text_featurizer.decoder_config.beam_width,
             ext_scoring_func=self.text_featurizer.scorer if lm else None
         )
         decoded = decoded[0][-1]
@@ -122,13 +113,13 @@ class CtcModel(Model):
         features = self.speech_featurizer.tf_extract(signal)
         features = tf.expand_dims(features, axis=0)
         input_length = shape_list(features)[1]
-        input_length = input_length // self.base_model.time_reduction_factor
+        input_length = get_reduced_length(input_length, self.base_model.time_reduction_factor)
         input_length = tf.expand_dims(input_length, axis=0)
         logits = self(features, training=False)
         probs = tf.nn.softmax(logits)
         decoded = tf.keras.backend.ctc_decode(
             y_pred=probs, input_length=input_length, greedy=False,
-            beam_width=self.text_featurizer.decoder_config["beam_width"]
+            beam_width=self.text_featurizer.decoder_config.beam_width
         )
         decoded = tf.cast(decoded[0][0][0], dtype=tf.int32)
         transcript = self.text_featurizer.indices2upoints(decoded)
