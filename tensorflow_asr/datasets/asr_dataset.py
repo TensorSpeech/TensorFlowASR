@@ -164,15 +164,15 @@ class ASRTFRecordDataset(ASRDataset):
         if not os.path.exists(self.tfrecords_dir):
             os.makedirs(self.tfrecords_dir)
 
-        entries = self.read_entries()
-        if len(entries) <= 0:
-            return False
-
         if glob.glob(os.path.join(self.tfrecords_dir, f"{self.stage}*.tfrecord")):
             print(f"TFRecords're already existed: {self.stage}")
             return True
 
         print(f"Creating {self.stage}.tfrecord ...")
+
+        entries = self.read_entries()
+        if len(entries) <= 0:
+            return False
 
         def get_shard_path(shard_id):
             return os.path.join(self.tfrecords_dir, f"{self.stage}_{shard_id}.tfrecord")
