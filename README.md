@@ -16,7 +16,7 @@
 </h2>
 
 <p align="center">
-TensorFlowASR implements some automatic speech recognition architectures such as DeepSpeech2, Jasper, ContextNet, Conformer, etc. These models can be converted to TFLite to reduce memory and computation for deployment :smile:
+TensorFlowASR implements some automatic speech recognition architectures such as DeepSpeech2, Jasper, RNN Transducer, ContextNet, Conformer, etc. These models can be converted to TFLite to reduce memory and computation for deployment :smile:
 </p>
 
 ## What's New?
@@ -95,7 +95,7 @@ python3 setup.py install
 For anaconda3:
 
 ```bash
-conda create -y -n tfasr tensorflow-gpu python=3.7 # tensorflow if using CPU
+conda create -y -n tfasr tensorflow-gpu python=3.8 # tensorflow if using CPU
 conda activate tfasr
 pip install -U tensorflow-gpu # upgrade to latest version of tensorflow
 git clone https://github.com/TensorSpeech/TensorFlowASR.git

@@ -26,19 +26,21 @@ decoder_config:
 
 model_config:
   name: streaming_transducer
-  reduction_factor: 2
-  reduction_positions: [1]
-  encoder_dim: 320
-  encoder_units: 1024
-  encoder_layers: 7
+  encoder_reductions:
+    0: 3
+    1: 2
+  encoder_dmodel: 320
+  encoder_rnn_type: lstm
+  encoder_rnn_units: 1024
+  encoder_nlayers: 8
   encoder_layer_norm: True
-  encoder_type: lstm
-  embed_dim: 320
-  embed_dropout: 0.1
-  num_rnns: 1
-  rnn_units: 320
-  rnn_type: lstm
-  layer_norm: True
+  prediction_embed_dim: 320
+  prediction_embed_dropout: 0.0
+  prediction_num_rnns: 2
+  prediction_rnn_units: 1024
+  prediction_rnn_type: lstm
+  prediction_projection_units: 320
+  prediction_layer_norm: True
   joint_dim: 320
 
 learning_config:
@@ -69,8 +71,8 @@ learning_config:
 
 ## Usage
 
-Training, see `python examples/streamingTransducer/train_streaming_transducer.py --help`
+Training, see `python examples/streamingTransducer/train_*.py --help`
 
-Testing, see `python examples/streamingTransducer/train_streaming_transducer.py --help`
+Testing, see `python examples/streamingTransducer/test_*.py --help`
 
-TFLite Conversion, see `python examples/streamingTransducer/tflite_streaming_transducer.py --help`
+TFLite Conversion, see `python examples/streamingTransducer/tflite_*.py --help`

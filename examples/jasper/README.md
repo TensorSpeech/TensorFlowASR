@@ -35,6 +35,6 @@ model_config:
 
 ## Training and Testing
 
-See `python examples/jasper/train_jasper.py --help`
+See `python examples/jasper/train_*.py --help`
 
-See `python examples/jasper/test_jasper.py --help`
+See `python examples/jasper/test_*.py --help`

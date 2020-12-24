@@ -27,6 +27,6 @@ model_config:
 
 ## Training and Testing
 
-See `python examples/deepspeech2/train_ds2.py --help`
+See `python examples/deepspeech2/train_*.py --help`
 
-See `python examples/deepspeech2/test_ds2.py --help`
+See `python examples/deepspeech2/test_*.py --help`

@@ -63,8 +63,8 @@ def bytes_to_string(array: np.ndarray, encoding: str = "utf-8"):
 
 
 def get_num_batches(samples, batch_size, drop_remainders=True):
-    if drop_remainders:
-        return math.floor(float(samples) / float(batch_size))
+    if samples is None or batch_size is None: return None
+    if drop_remainders: return math.floor(float(samples) / float(batch_size))
     return math.ceil(float(samples) / float(batch_size))
 
 
