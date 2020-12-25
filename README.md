@@ -89,7 +89,7 @@ Run `pip3 install -U TensorFlowASR`
 ```bash
 git clone https://github.com/TensorSpeech/TensorFlowASR.git
 cd TensorFlowASR
-python3 setup.py install
+pip3 install .
 ```
 
 For anaconda3:
@@ -100,7 +100,7 @@ conda activate tfasr
 pip install -U tensorflow-gpu # upgrade to latest version of tensorflow
 git clone https://github.com/TensorSpeech/TensorFlowASR.git
 cd TensorFlowASR
-python setup.py install
+pip install .
 ```
 
 ## Setup training and testing
@@ -219,3 +219,4 @@ For pretrained models, go to [drive](https://drive.google.com/drive/folders/1BD0
 Huy Le Nguyen
 
 Email: nlhuy.cs.16@gmail.com
+
