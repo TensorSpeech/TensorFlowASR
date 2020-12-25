@@ -428,14 +428,12 @@ class TFSpeechFeaturizer(SpeechFeaturizer):
         elif self.feature_type == "log_gammatone_spectrogram":
             features = self.compute_log_gammatone_spectrogram(signal)
         else:
-            raise ValueError("feature_type must be either 'mfcc',"
-                             "'log_mel_spectrogram' or 'spectrogram'")
+            raise ValueError("feature_type must be either 'mfcc', 'log_mel_spectrogram' or 'spectrogram'")
 
         features = tf.expand_dims(features, axis=-1)
 
         if self.normalize_feature:
-            features = tf_normalize_audio_features(
-                features, per_feature=self.normalize_per_feature)
+            features = tf_normalize_audio_features(features, per_feature=self.normalize_per_feature)
 
         return features
 

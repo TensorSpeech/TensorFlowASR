@@ -19,18 +19,16 @@ with open("README.md", "r") as fh:
 
 requirements = [
     "tensorflow-datasets>=3.2.1,<4.0.0",
-    "tensorflow-metadata>=0.26.0",
     "tensorflow-addons>=0.10.0",
     "setuptools>=47.1.1",
-    "librosa>=0.7.2",
+    "librosa>=0.8.0",
     "soundfile>=0.10.3",
     "PyYAML>=5.3.1",
     "matplotlib>=3.2.1",
-    "sox>=1.3.7",
-    "numba==0.49.1",
-    "tqdm>=4.51.0",
-    "colorama>=0.4.3",
-    "nlpaug>=1.0.1",
+    "sox>=1.4.1",
+    "tqdm>=4.54.1",
+    "colorama>=0.4.4",
+    "nlpaug>=1.1.1",
 ]
 
 setuptools.setup(

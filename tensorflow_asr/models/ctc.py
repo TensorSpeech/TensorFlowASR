@@ -46,11 +46,11 @@ class CtcModel(Model):
         logits = self(features, training=False)
         probs = tf.nn.softmax(logits)
 
-        def map_fn(prob): return tf.numpy_function(self.__perform_greedy, inp=[prob], Tout=tf.string)
+        def map_fn(prob): return tf.numpy_function(self._perform_greedy, inp=[prob], Tout=tf.string)
 
         return tf.map_fn(map_fn, probs, fn_output_signature=tf.TensorSpec([], dtype=tf.string))
 
-    def __perform_greedy(self, probs: np.ndarray):
+    def _perform_greedy(self, probs: np.ndarray):
         from ctc_decoders import ctc_greedy_decoder
         decoded = ctc_greedy_decoder(probs, vocabulary=self.text_featurizer.vocab_array)
         return tf.convert_to_tensor(decoded, dtype=tf.string)
@@ -85,11 +85,11 @@ class CtcModel(Model):
         logits = self(features, training=False)
         probs = tf.nn.softmax(logits)
 
-        def map_fn(prob): return tf.numpy_function(self.__perform_beam_search, inp=[prob, lm], Tout=tf.string)
+        def map_fn(prob): return tf.numpy_function(self._perform_beam_search, inp=[prob, lm], Tout=tf.string)
 
         return tf.map_fn(map_fn, probs, dtype=tf.string)
 
-    def __perform_beam_search(self, probs: np.ndarray, lm: bool = False):
+    def _perform_beam_search(self, probs: np.ndarray, lm: bool = False):
         from ctc_decoders import ctc_beam_search_decoder
         decoded = ctc_beam_search_decoder(
             probs_seq=probs,

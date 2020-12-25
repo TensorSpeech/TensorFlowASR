@@ -343,8 +343,8 @@ class Transducer(Model):
             tf.Tensor: a batch of decoded transcripts
         """
         encoded = self.encoder_inference(features, input_length, with_batch=True)
-        return self.__perform_greedy_batch(encoded, input_length,
-                                           parallel_iterations=parallel_iterations, swap_memory=swap_memory)
+        return self._perform_greedy_batch(encoded, input_length,
+                                          parallel_iterations=parallel_iterations, swap_memory=swap_memory)
 
     def recognize_tflite(self, signal, predicted, states):
         """
@@ -361,7 +361,7 @@ class Transducer(Model):
         """
         features = self.speech_featurizer.tf_extract(signal)
         encoded = self.encoder_inference(features)
-        hypothesis = self.__perform_greedy(encoded, tf.shape(encoded)[0], predicted, states)
+        hypothesis = self._perform_greedy(encoded, tf.shape(encoded)[0], predicted, states)
         transcript = self.text_featurizer.indices2upoints(hypothesis.prediction)
         return (
             transcript,
@@ -369,11 +369,11 @@ class Transducer(Model):
             hypothesis.states
         )
 
-    def __perform_greedy_batch(self,
-                               encoded: tf.Tensor,
-                               encoded_length: tf.Tensor,
-                               parallel_iterations: int = 10,
-                               swap_memory: bool = False):
+    def _perform_greedy_batch(self,
+                              encoded: tf.Tensor,
+                              encoded_length: tf.Tensor,
+                              parallel_iterations: int = 10,
+                              swap_memory: bool = False):
         total = tf.shape(encoded)[0]
         batch = tf.constant(0, dtype=tf.int32)
 
@@ -386,7 +386,7 @@ class Transducer(Model):
         def condition(batch, total, encoded, encoded_length, decoded): return tf.less(batch, total)
 
         def body(batch, total, encoded, encoded_length, decoded):
-            hypothesis = self.__perform_greedy(
+            hypothesis = self._perform_greedy(
                 encoded=encoded[batch],
                 encoded_length=encoded_length[batch],
                 predicted=tf.constant(self.text_featurizer.blank, dtype=tf.int32),
@@ -407,13 +407,13 @@ class Transducer(Model):
 
         return decoded.stack()
 
-    def __perform_greedy(self,
-                         encoded: tf.Tensor,
-                         encoded_length: tf.Tensor,
-                         predicted: tf.Tensor,
-                         states: tf.Tensor,
-                         parallel_iterations: int = 10,
-                         swap_memory: bool = False):
+    def _perform_greedy(self,
+                        encoded: tf.Tensor,
+                        encoded_length: tf.Tensor,
+                        predicted: tf.Tensor,
+                        states: tf.Tensor,
+                        parallel_iterations: int = 10,
+                        swap_memory: bool = False):
         with tf.name_scope(f"{self.name}_greedy"):
             time = tf.constant(0, dtype=tf.int32)
             total = encoded_length
@@ -483,15 +483,15 @@ class Transducer(Model):
             tf.Tensor: a batch of decoded transcripts
         """
         encoded = self.encoder_inference(features, input_length, with_batch=True)
-        return self.__perform_beam_search_batch(encoded, input_length, lm,
-                                                parallel_iterations=parallel_iterations, swap_memory=swap_memory)
+        return self._perform_beam_search_batch(encoded, input_length, lm,
+                                               parallel_iterations=parallel_iterations, swap_memory=swap_memory)
 
-    def __perform_beam_search_batch(self,
-                                    encoded: tf.Tensor,
-                                    encoded_length: tf.Tensor,
-                                    lm: bool = False,
-                                    parallel_iterations: int = 10,
-                                    swap_memory: bool = False):
+    def _perform_beam_search_batch(self,
+                                   encoded: tf.Tensor,
+                                   encoded_length: tf.Tensor,
+                                   lm: bool = False,
+                                   parallel_iterations: int = 10,
+                                   swap_memory: bool = False):
         total = tf.shape(encoded)[0]
         batch = tf.constant(0, dtype=tf.int32)
 
@@ -504,8 +504,8 @@ class Transducer(Model):
         def condition(batch, total, encoded, encoded_length, decoded): return tf.less(batch, total)
 
         def body(batch, total, encoded, encoded_length, decoded):
-            hypothesis = self.__perform_beam_search(encoded[batch], encoded_length[batch], lm,
-                                                    parallel_iterations=parallel_iterations, swap_memory=swap_memory)
+            hypothesis = self._perform_beam_search(encoded[batch], encoded_length[batch], lm,
+                                                   parallel_iterations=parallel_iterations, swap_memory=swap_memory)
             transcripts = self.text_featurizer.iextract(tf.expand_dims(hypothesis.prediction, axis=0))
             decoded = decoded.write(batch, tf.squeeze(transcripts))
             return batch + 1, total, encoded, encoded_length, decoded
@@ -519,12 +519,12 @@ class Transducer(Model):
 
         return decoded.stack()
 
-    def __perform_beam_search(self,
-                              encoded: tf.Tensor,
-                              encoded_length: tf.Tensor,
-                              lm: bool = False,
-                              parallel_iterations: int = 10,
-                              swap_memory: bool = False):
+    def _perform_beam_search(self,
+                             encoded: tf.Tensor,
+                             encoded_length: tf.Tensor,
+                             lm: bool = False,
+                             parallel_iterations: int = 10,
+                             swap_memory: bool = False):
         with tf.device("/CPU:0"), tf.name_scope(f"{self.name}_beam_search"):
             beam_width = tf.cond(
                 tf.less(self.text_featurizer.decoder_config.beam_width, self.text_featurizer.num_classes),

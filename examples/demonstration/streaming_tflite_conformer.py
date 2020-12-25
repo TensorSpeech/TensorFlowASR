@@ -93,7 +93,7 @@ def recognizer(Q):
 
     def recognize(signal, lastid, states):
         if signal.shape[0] < args.blocksize:
-            signal = np.pad(signal, [[0, args.blocksize - signal.shape[0]]])
+            signal = tf.pad(signal, [[0, args.blocksize - signal.shape[0]]])
         tflitemodel.set_tensor(input_details[0]["index"], signal)
         tflitemodel.set_tensor(input_details[1]["index"], lastid)
         tflitemodel.set_tensor(input_details[2]["index"], states)
@@ -104,8 +104,8 @@ def recognizer(Q):
         text = "".join([chr(u) for u in upoints])
         return text, lastid, states
 
-    lastid = args.blank * np.ones(shape=[], dtype=np.int32)
-    states = np.zeros(shape=[args.num_rnns, args.nstates, 1, args.statesize], dtype=np.float32)
+    lastid = args.blank * tf.ones(shape=[], dtype=tf.int32)
+    states = tf.zeros(shape=[args.num_rnns, args.nstates, 1, args.statesize], dtype=tf.float32)
     transcript = ""
 
     while True:
@@ -122,51 +122,56 @@ tflite_process = Process(target=recognizer, args=[Q])
 tflite_process.start()
 
 
-def callback(outdata, frames, time, status):
-    assert frames == args.blocksize
-    if status.output_underflow:
-        print('Output underflow: increase blocksize?', file=sys.stderr)
-        raise sd.CallbackAbort
-    assert not status
+def send(q, Q, E):
+    def callback(outdata, frames, time, status):
+        assert frames == args.blocksize
+        if status.output_underflow:
+            print('Output underflow: increase blocksize?', file=sys.stderr)
+            raise sd.CallbackAbort
+        assert not status
+        try:
+            data = q.get_nowait()
+            Q.put(np.frombuffer(data, dtype=np.float32))
+        except queue.Empty as e:
+            print('Buffer is empty: increase buffersize?', file=sys.stderr)
+            raise sd.CallbackAbort from e
+        if len(data) < len(outdata):
+            outdata[:len(data)] = data
+            outdata[len(data):] = b'\x00' * (len(outdata) - len(data))
+            raise sd.CallbackStop
+        else:
+            outdata[:] = data
+
     try:
-        data = q.get_nowait()
-        Q.put(np.frombuffer(data, dtype=np.float32))
-    except queue.Empty as e:
-        print('Buffer is empty: increase buffersize?', file=sys.stderr)
-        raise sd.CallbackAbort from e
-    if len(data) < len(outdata):
-        outdata[:len(data)] = data
-        outdata[len(data):] = b'\x00' * (len(outdata) - len(data))
-        raise sd.CallbackStop
-    else:
-        outdata[:] = data
-
-
-try:
-    with sf.SoundFile(args.filename) as f:
-        for _ in range(args.buffersize):
-            data = f.buffer_read(args.blocksize, dtype='float32')
-            if not data:
-                break
-            q.put_nowait(data)  # Pre-fill queue
-        stream = sd.RawOutputStream(
-            samplerate=f.samplerate, blocksize=args.blocksize,
-            device=args.device, channels=f.channels, dtype='float32',
-            callback=callback, finished_callback=E.set)
-        with stream:
-            timeout = args.blocksize * args.buffersize / f.samplerate
-            while data:
+        with sf.SoundFile(args.filename) as f:
+            for _ in range(args.buffersize):
                 data = f.buffer_read(args.blocksize, dtype='float32')
-                q.put(data, timeout=timeout)
-            E.wait()
+                if not data:
+                    break
+                q.put_nowait(data)  # Pre-fill queue
+            stream = sd.RawOutputStream(
+                samplerate=f.samplerate, blocksize=args.blocksize,
+                device=args.device, channels=f.channels, dtype='float32',
+                callback=callback, finished_callback=E.set)
+            with stream:
+                timeout = args.blocksize * args.buffersize / f.samplerate
+                while data:
+                    data = f.buffer_read(args.blocksize, dtype='float32')
+                    q.put(data, timeout=timeout)
+                E.wait()
 
-except KeyboardInterrupt:
-    parser.exit('\nInterrupted by user')
-except queue.Full:
-    # A timeout occurred, i.e. there was an error in the callback
-    parser.exit(1)
-except Exception as e:
-    parser.exit(type(e).__name__ + ': ' + str(e))
+    except KeyboardInterrupt:
+        parser.exit('\nInterrupted by user')
+    except queue.Full:
+        # A timeout occurred, i.e. there was an error in the callback
+        parser.exit(1)
+    except Exception as e:
+        parser.exit(type(e).__name__ + ': ' + str(e))
 
-tflite_process.join()
-tflite_process.close()
+
+send_process = Process(target=send, args=[q, Q, E])
+send_process.start()
+send_process.join()
+send_process.close()
+
+tflite_process.terminate()

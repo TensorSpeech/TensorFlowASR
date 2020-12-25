@@ -266,8 +266,8 @@ class StreamingTransducer(Transducer):
             self.encoder.get_initial_state(),
             input_length=input_length, with_batch=True
         )
-        return self.__perform_greedy_batch(encoded, input_length,
-                                           parallel_iterations=parallel_iterations, swap_memory=swap_memory)
+        return self._perform_greedy_batch(encoded, input_length,
+                                          parallel_iterations=parallel_iterations, swap_memory=swap_memory)
 
     def recognize_tflite(self, signal, predicted, encoder_states, prediction_states):
         """
@@ -286,7 +286,7 @@ class StreamingTransducer(Transducer):
         """
         features = self.speech_featurizer.tf_extract(signal)
         encoded, new_encoder_states = self.encoder_inference(features, encoder_states)
-        hypothesis = self.__perform_greedy(encoded, tf.shape(encoded)[0], predicted, prediction_states)
+        hypothesis = self._perform_greedy(encoded, tf.shape(encoded)[0], predicted, prediction_states)
         transcript = self.text_featurizer.indices2upoints(hypothesis.prediction)
         return (
             transcript,
@@ -318,8 +318,8 @@ class StreamingTransducer(Transducer):
             self.encoder.get_initial_state(),
             input_length=input_length, with_batch=True
         )
-        return self.__perform_beam_search_batch(encoded, input_length, lm,
-                                                parallel_iterations=parallel_iterations, swap_memory=swap_memory)
+        return self._perform_beam_search_batch(encoded, input_length, lm,
+                                               parallel_iterations=parallel_iterations, swap_memory=swap_memory)
 
     # -------------------------------- TFLITE -------------------------------------
 
