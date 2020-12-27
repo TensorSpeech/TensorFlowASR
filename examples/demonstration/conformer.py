@@ -30,6 +30,8 @@ parser.add_argument("--saved", type=str, default=None, help="Path to conformer s
 
 parser.add_argument("--beam_width", type=int, default=0, help="Beam width")
 
+parser.add_argument("--timestamp", default=False, action="store_true", help="Return with timestamp")
+
 parser.add_argument("--device", type=int, default=0, help="Device's id to run test on")
 
 parser.add_argument("--cpu", default=False, action="store_true", help="Whether to only use cpu")
@@ -66,9 +68,16 @@ signal = read_raw_audio(args.filename)
 features = speech_featurizer.tf_extract(signal)
 input_length = get_reduced_length(tf.shape(features)[0], conformer.time_reduction_factor)
 
-if (args.beam_width):
+if args.beam_width:
     transcript = conformer.recognize_beam(features[None, ...], input_length[None, ...])
+    print("Transcript:", transcript[0].numpy().decode("UTF-8"))
+elif args.timestamp:
+    transcript, stime, etime, _, _ = conformer.recognize_tflite_with_timestamp(
+        signal, tf.constant(text_featurizer.blank, dtype=tf.int32), conformer.predict_net.get_initial_state())
+    print("Transcript:", transcript)
+    print("Start time:", stime)
+    print("End time:", etime)
 else:
-    transcript = conformer.recognize(features[None, ...], input_length[None, ...])
-
-tf.print("Transcript:", transcript[0])
+    transcript, _, _ = conformer.recognize_tflite(
+        signal, tf.constant(text_featurizer.blank, dtype=tf.int32), conformer.predict_net.get_initial_state())
+    print("Transcript:", tf.strings.unicode_encode(transcript, "UTF-8").numpy().decode("UTF-8"))

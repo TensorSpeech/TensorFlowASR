@@ -119,10 +119,7 @@ class CharFeaturizer(TextFeaturizer):
         self.tokens.insert(self.blank, "")  # add blank token to tokens
         self.num_classes = len(self.tokens)
         self.tokens = tf.convert_to_tensor(self.tokens, dtype=tf.string)
-        self.upoints = tf.squeeze(
-            tf.strings.unicode_decode(
-                self.tokens, "UTF-8").to_tensor(shape=[None, 1])
-        )
+        self.upoints = tf.strings.unicode_decode(self.tokens, "UTF-8").to_tensor(shape=[None, 1])
 
     def extract(self, text: str) -> tf.Tensor:
         """
@@ -170,7 +167,7 @@ class CharFeaturizer(TextFeaturizer):
         with tf.name_scope("indices2upoints"):
             indices = self.normalize_indices(indices)
             upoints = tf.gather_nd(self.upoints, tf.expand_dims(indices, axis=-1))
-            return upoints
+            return tf.gather_nd(upoints, tf.where(tf.not_equal(upoints, 0)))
 
 
 class SubwordFeaturizer(TextFeaturizer):
@@ -265,18 +262,25 @@ class SubwordFeaturizer(TextFeaturizer):
         Returns:
             transcripts: tf.Tensor of dtype tf.string with dim [B]
         """
-        indices = self.normalize_indices(indices)
         with tf.device("/CPU:0"):  # string data is not supported on GPU
-            def decode(x):
-                if x[0] == self.blank: x = x[1:]
-                return self.subwords.decode(x)
-
-            text = tf.map_fn(
-                lambda x: tf.numpy_function(decode, inp=[x], Tout=tf.string),
-                indices,
-                fn_output_signature=tf.TensorSpec([], dtype=tf.string)
+            total = tf.shape(indices)[0]
+            batch = tf.constant(0, dtype=tf.int32)
+            transcripts = tf.TensorArray(
+                dtype=tf.string, size=total, dynamic_size=False, infer_shape=False,
+                clear_after_read=False, element_shape=tf.TensorShape([])
             )
-        return text
+
+            def cond(batch, total, transcripts): return tf.less(batch, total)
+
+            def body(batch, total, transcripts):
+                upoints = self.indices2upoints(indices[batch])
+                _transcript = tf.strings.unicode_encode(upoints, "UTF-8")
+                transcripts = transcripts.write(batch, _transcript)
+                return batch + 1, total, transcripts
+
+            _, _, transcripts = tf.while_loop(cond, body, loop_vars=[batch, total, transcripts])
+
+            return transcripts.stack()
 
     @tf.function(
         input_signature=[
@@ -295,6 +299,4 @@ class SubwordFeaturizer(TextFeaturizer):
         with tf.name_scope("indices2upoints"):
             indices = self.normalize_indices(indices)
             upoints = tf.gather_nd(self.upoints, tf.expand_dims(indices, axis=-1))
-            # upoints now has shape [None, max_subword_length]
-            shape = tf.shape(upoints)
-            return tf.reshape(upoints, [shape[0] * shape[1]])  # flatten
+            return tf.gather_nd(upoints, tf.where(tf.not_equal(upoints, 0)))

@@ -377,7 +377,7 @@ class TFSpeechFeaturizer(SpeechFeaturizer):
     def stft(self, signal):
         return tf.square(
             tf.abs(tf.signal.stft(signal, frame_length=self.frame_length,
-                                  frame_step=self.frame_step, fft_length=self.nfft)))
+                                  frame_step=self.frame_step, fft_length=self.nfft, pad_end=True)))
 
     def power_to_db(self, S, ref=1.0, amin=1e-10, top_db=80.0):
         if amin <= 0:

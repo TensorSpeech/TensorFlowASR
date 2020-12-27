@@ -133,7 +133,7 @@ def merge_repeated(yseqs, blank=0):
     _, result, _, _ = tf.while_loop(
         _cond,
         _body,
-        loop_vars=(i, result, yseqs, U),
+        loop_vars=[i, result, yseqs, U],
         shape_invariants=(
             tf.TensorShape([]),
             tf.TensorShape([None]),

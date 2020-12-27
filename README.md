@@ -21,6 +21,7 @@ TensorFlowASR implements some automatic speech recognition architectures such as
 
 ## What's New?
 
+- (12/27/2020) Supported _naive_ token level timestamp, see [demo](./examples/demonstration/conformer.py) with flag `--timestamp`
 - (12/17/2020) Supported ContextNet [http://arxiv.org/abs/2005.03191](http://arxiv.org/abs/2005.03191)
 - (12/12/2020) Add support for using masking
 - (11/14/2020) Supported Gradient Accumulation for Training in Larger Batch Size
@@ -219,4 +220,3 @@ For pretrained models, go to [drive](https://drive.google.com/drive/folders/1BD0
 Huy Le Nguyen
 
 Email: nlhuy.cs.16@gmail.com
-
