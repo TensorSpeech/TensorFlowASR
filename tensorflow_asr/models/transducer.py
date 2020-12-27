@@ -53,7 +53,7 @@ class TransducerPrediction(tf.keras.Model):
         for i in range(num_rnns):
             rnn = RNN(
                 units=rnn_units, return_sequences=True,
-                name=f"{name}_lstm_{i}", return_state=True,
+                name=f"{name}_{rnn_type}_{i}", return_state=True,
                 implementation=rnn_implementation,
                 kernel_regularizer=kernel_regularizer,
                 bias_regularizer=bias_regularizer

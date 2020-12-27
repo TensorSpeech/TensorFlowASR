@@ -45,7 +45,7 @@ class StreamingTransducerBlock(tf.keras.Model):
         RNN = get_rnn(rnn_type)
         self.rnn = RNN(
             units=rnn_units, return_sequences=True,
-            name=f"{self.name}_rnn", return_state=True,
+            name=f"{self.name}_{rnn_type}", return_state=True,
             kernel_regularizer=kernel_regularizer,
             bias_regularizer=bias_regularizer
         )
