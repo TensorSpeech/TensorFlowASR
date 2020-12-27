@@ -25,6 +25,7 @@ from ..utils.utils import shape_list, get_reduced_length
 class CtcModel(Model):
     def __init__(self, **kwargs):
         super(CtcModel, self).__init__(**kwargs)
+        self.time_reduction_factor = 1
 
     def _build(self, input_shape):
         features = tf.keras.Input(input_shape, dtype=tf.float32)
@@ -67,7 +68,7 @@ class CtcModel(Model):
         features = self.speech_featurizer.tf_extract(signal)
         features = tf.expand_dims(features, axis=0)
         input_length = shape_list(features)[1]
-        input_length = get_reduced_length(input_length, self.base_model.time_reduction_factor)
+        input_length = get_reduced_length(input_length, self.time_reduction_factor)
         input_length = tf.expand_dims(input_length, axis=0)
         logits = self(features, training=False)
         probs = tf.nn.softmax(logits)
@@ -113,7 +114,7 @@ class CtcModel(Model):
         features = self.speech_featurizer.tf_extract(signal)
         features = tf.expand_dims(features, axis=0)
         input_length = shape_list(features)[1]
-        input_length = get_reduced_length(input_length, self.base_model.time_reduction_factor)
+        input_length = get_reduced_length(input_length, self.time_reduction_factor)
         input_length = tf.expand_dims(input_length, axis=0)
         logits = self(features, training=False)
         probs = tf.nn.softmax(logits)

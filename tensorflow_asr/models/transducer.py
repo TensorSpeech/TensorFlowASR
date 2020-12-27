@@ -146,11 +146,19 @@ class TransducerJoint(tf.keras.Model):
     def __init__(self,
                  vocabulary_size: int,
                  joint_dim: int = 1024,
+                 activation: str = "tanh",
                  kernel_regularizer=None,
                  bias_regularizer=None,
                  name="tranducer_joint",
                  **kwargs):
         super(TransducerJoint, self).__init__(name=name, **kwargs)
+
+        activation = activation.lower()
+        if activation == "linear": self.activation = tf.keras.activation.linear
+        elif activation == "relu": self.activation = tf.nn.relu
+        elif activation == "tanh": self.activation = tf.nn.tanh
+        else: raise ValueError("activation must be either 'linear', 'relu' or 'tanh'")
+
         self.ffn_enc = tf.keras.layers.Dense(
             joint_dim, name=f"{name}_enc",
             kernel_regularizer=kernel_regularizer,
@@ -174,7 +182,7 @@ class TransducerJoint(tf.keras.Model):
         pred_out = self.ffn_pred(pred_out, training=training)  # [B, U, P] => [B, U, V]
         enc_out = tf.expand_dims(enc_out, axis=2)
         pred_out = tf.expand_dims(pred_out, axis=1)
-        outputs = tf.nn.tanh(enc_out + pred_out)  # => [B, T, U, V]
+        outputs = self.activation(enc_out + pred_out)  # => [B, T, U, V]
         outputs = self.ffn_out(outputs, training=training)
         return outputs
 
@@ -200,6 +208,7 @@ class Transducer(Model):
                  layer_norm: bool = True,
                  projection_units: int = 0,
                  joint_dim: int = 1024,
+                 joint_activation: str = "tanh",
                  kernel_regularizer=None,
                  bias_regularizer=None,
                  name="transducer",
@@ -223,6 +232,7 @@ class Transducer(Model):
         self.joint_net = TransducerJoint(
             vocabulary_size=vocabulary_size,
             joint_dim=joint_dim,
+            activation=joint_activation,
             kernel_regularizer=kernel_regularizer,
             bias_regularizer=bias_regularizer,
             name=f"{name}_joint"
