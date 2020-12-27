@@ -11,20 +11,13 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
-# from __future__ import absolute_import, print_function
-#
-# import os.path as o
 import sys
 from tensorflow_asr.utils import setup_environment
 setup_environment()
 import librosa
 import numpy as np
-# sys.path.append(o.abspath(o.join(o.dirname(sys.modules[__name__].__file__), "..")))
-#
 import matplotlib.pyplot as plt
-from tensorflow_asr.featurizers.speech_featurizers import read_raw_audio, \
-    TFSpeechFeaturizer, NumpySpeechFeaturizer
+from tensorflow_asr.featurizers.speech_featurizers import read_raw_audio, TFSpeechFeaturizer, NumpySpeechFeaturizer
 
 
 def main(argv):

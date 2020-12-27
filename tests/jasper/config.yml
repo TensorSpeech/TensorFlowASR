@@ -25,42 +25,38 @@ speech_config:
 
 decoder_config:
   vocabulary: null
-  target_vocab_size: 1024
-  max_subword_length: 4
-  blank_at_zero: True
-  beam_width: 5
-  norm_score: True
+  blank_at_zero: False
+  beam_width: 500
+  lm_config:
+    model_path: null
+    alpha: 2.0
+    beta: 1.0
 
 model_config:
-  name: streaming_transducer
-  encoder_reductions:
-    0: 3
-    1: 2
-  encoder_dmodel: 320
-  encoder_rnn_type: lstm
-  encoder_rnn_units: 1024
-  encoder_nlayers: 8
-  encoder_layer_norm: True
-  prediction_embed_dim: 320
-  prediction_embed_dropout: 0.0
-  prediction_num_rnns: 2
-  prediction_rnn_units: 1024
-  prediction_rnn_type: lstm
-  prediction_projection_units: 320
-  prediction_layer_norm: True
-  joint_dim: 320
-  joint_activation: tanh
+  name: jasper
+  dense: True
+  first_additional_block_channels: 256
+  first_additional_block_kernels: 11
+  first_additional_block_strides: 2
+  first_additional_block_dilation: 1
+  first_additional_block_dropout: 0.2
+  nsubblocks: 3
+  block_channels: [256, 384, 512, 640, 768]
+  block_kernels: [11, 13, 17, 21, 25]
+  block_dropout: [0.2, 0.2, 0.2, 0.3, 0.3]
+  second_additional_block_channels: 896
+  second_additional_block_kernels: 1
+  second_additional_block_strides: 1
+  second_additional_block_dilation: 2
+  second_additional_block_dropout: 0.4
+  third_additional_block_channels: 1024
+  third_additional_block_kernels: 1
+  third_additional_block_strides: 1
+  third_additional_block_dilation: 1
+  third_additional_block_dropout: 0.4
 
 learning_config:
-  augmentations:
-    after:
-      time_masking:
-        num_masks: 10
-        mask_factor: 100
-        p_upperbound: 0.05
-      freq_masking:
-        num_masks: 1
-        mask_factor: 27
+  augmentations: null
 
   dataset_config:
     train_paths:
@@ -78,10 +74,10 @@ learning_config:
       learning_rate: 0.0001
 
   running_config:
-    batch_size: 2
-    accumulation_steps: 1
+    batch_size: 4
     num_epochs: 20
-    outdir: /mnt/Miscellanea/Models/local/streaming_transducer
-    log_interval_steps: 300
-    eval_interval_steps: 500
-    save_interval_steps: 1000
+    accumulation_steps: 8
+    outdir: /mnt/Miscellanea/Models/local/jasper
+    log_interval_steps: 400
+    save_interval_steps: 400
+    eval_interval_steps: 800
