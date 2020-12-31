@@ -28,6 +28,9 @@ class DecoderConfig:
         self.norm_score = config.get("norm_score", True)
         self.lm_config = config.get("lm_config", {})
         self.additional_properties = config.get("additional_properties", {})
+        self.output_path_prefix = preprocess_paths(config.get("output_path_prefix", None))
+        self.model_type = config.get("model_type", None)
+        self.corpus_files = config.get("corpus_files", None)
 
 
 class DatasetConfig:
