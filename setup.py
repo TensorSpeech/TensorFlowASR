@@ -33,6 +33,7 @@ requirements = [
     "tqdm>=4.51.0",
     "colorama>=0.4.3",
     "nlpaug>=1.0.1",
+    "sentencepiece>=0.1.94"
 ]
 
 setuptools.setup(
