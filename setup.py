@@ -29,7 +29,7 @@ requirements = [
     "tqdm>=4.54.1",
     "colorama>=0.4.4",
     "nlpaug>=1.1.1",
-    "nltk>=3.5"
+    "nltk>=3.5",
     "sentencepiece>=0.1.94"
 ]
 
