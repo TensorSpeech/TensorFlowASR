@@ -78,7 +78,6 @@ def make_alphabet_file(filepath, chars_list, lang):
         for char in sorted(list(chars_list)):
             outfile.write(f"{char}\n")
 
-        outfile.write("\n") # blank character
         outfile.write("# end of file")
 
 
