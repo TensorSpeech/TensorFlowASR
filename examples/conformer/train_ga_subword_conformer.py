@@ -44,6 +44,9 @@ parser.add_argument("--ebs", type=int, default=None,
 parser.add_argument("--acs", type=int, default=None,
                     help="Train accumulation steps")
 
+parser.add_argument("--sentence_piece", default=False, action="store_true",
+                    help="Whether to use `SentencePiece` model")
+
 parser.add_argument("--devices", type=int, nargs="*", default=[0],
                     help="Devices' ids to apply distributed training")
 
@@ -68,7 +71,7 @@ strategy = setup_strategy(args.devices)
 from tensorflow_asr.configs.config import Config
 from tensorflow_asr.datasets.asr_dataset import ASRTFRecordDataset, ASRSliceDataset
 from tensorflow_asr.featurizers.speech_featurizers import TFSpeechFeaturizer
-from tensorflow_asr.featurizers.text_featurizers import SubwordFeaturizer
+from tensorflow_asr.featurizers.text_featurizers import SubwordFeaturizer, SentencePieceFeaturizer
 from tensorflow_asr.runners.transducer_runners import TransducerTrainerGA
 from tensorflow_asr.models.conformer import Conformer
 from tensorflow_asr.optimizers.schedules import TransformerSchedule
@@ -76,7 +79,10 @@ from tensorflow_asr.optimizers.schedules import TransformerSchedule
 config = Config(args.config, learning=True)
 speech_featurizer = TFSpeechFeaturizer(config.speech_config)
 
-if args.subwords and os.path.exists(args.subwords):
+if args.sentence_piece:
+    print("Loading SentencePiece model ...")
+    text_featurizer = SentencePieceFeaturizer.load_from_file(config.decoder_config, args.subwords)
+elif args.subwords and os.path.exists(args.subwords):
     print("Loading subwords ...")
     text_featurizer = SubwordFeaturizer.load_from_file(config.decoder_config, args.subwords)
 else:
