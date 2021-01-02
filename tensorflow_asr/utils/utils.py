@@ -153,3 +153,7 @@ def log10(x):
 
 def get_reduced_length(length, reduction_factor):
     return tf.cast(tf.math.ceil(tf.divide(length, tf.cast(reduction_factor, dtype=length.dtype))), dtype=tf.int32)
+
+
+def count_non_blank(tensor: tf.Tensor, blank: int or tf.Tensor = 0, axis=None):
+    return tf.reduce_sum(tf.where(tf.not_equal(tensor, blank), x=tf.ones_like(tensor), y=tf.zeros_like(tensor)), axis=axis)

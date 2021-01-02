@@ -18,7 +18,7 @@ from typing import Optional
 import tensorflow as tf
 
 from . import Model
-from ..utils.utils import get_rnn, shape_list
+from ..utils.utils import get_rnn, shape_list, count_non_blank
 from ..featurizers.speech_featurizers import SpeechFeaturizer
 from ..featurizers.text_featurizers import TextFeaturizer
 from .layers.embedding import Embedding
@@ -551,7 +551,7 @@ class Transducer(Model):
                              lm: bool = False,
                              parallel_iterations: int = 10,
                              swap_memory: bool = False):
-        with tf.device("/CPU:0"), tf.name_scope(f"{self.name}_beam_search"):
+        with tf.name_scope(f"{self.name}_beam_search"):
             beam_width = tf.cond(
                 tf.less(self.text_featurizer.decoder_config.beam_width, self.text_featurizer.num_classes),
                 true_fn=lambda: self.text_featurizer.decoder_config.beam_width,
@@ -562,22 +562,20 @@ class Transducer(Model):
             def initialize_beam(dynamic=False):
                 return BeamHypothesis(
                     score=tf.TensorArray(
-                        dtype=tf.float32, size=beam_width if not dynamic else 0,
-                        dynamic_size=dynamic, element_shape=tf.TensorShape([]), clear_after_read=False
-                    ),
-                    indices=tf.TensorArray(
-                        dtype=tf.int32, size=beam_width if not dynamic else 0,
-                        dynamic_size=dynamic, element_shape=tf.TensorShape([]), clear_after_read=False
-                    ),
-                    prediction=tf.TensorArray(
-                        dtype=tf.string, size=beam_width if not dynamic else 0, dynamic_size=dynamic,
+                        dtype=tf.float32, size=beam_width if not dynamic else 0, dynamic_size=dynamic,
                         element_shape=tf.TensorShape([]), clear_after_read=False
                     ),
+                    indices=tf.TensorArray(
+                        dtype=tf.int32, size=beam_width if not dynamic else 0, dynamic_size=dynamic,
+                        element_shape=tf.TensorShape([]), clear_after_read=False
+                    ),
+                    prediction=tf.TensorArray(
+                        dtype=tf.int32, size=beam_width if not dynamic else 0, dynamic_size=dynamic,
+                        element_shape=None, clear_after_read=False
+                    ),
                     states=tf.TensorArray(
-                        dtype=tf.float32, size=beam_width if not dynamic else 0,
-                        dynamic_size=dynamic,
-                        element_shape=tf.TensorShape(shape_list(self.predict_net.get_initial_state())),
-                        clear_after_read=False
+                        dtype=tf.float32, size=beam_width if not dynamic else 0, dynamic_size=dynamic,
+                        element_shape=tf.TensorShape(shape_list(self.predict_net.get_initial_state())), clear_after_read=False
                     ),
                 )
 
@@ -585,7 +583,7 @@ class Transducer(Model):
             B = BeamHypothesis(
                 score=B.score.write(0, 0.0),
                 indices=B.indices.write(0, self.text_featurizer.blank),
-                prediction=B.prediction.write(0, ''),
+                prediction=B.prediction.write(0, tf.ones([total], dtype=tf.int32) * self.text_featurizer.blank),
                 states=B.states.write(0, self.predict_net.get_initial_state())
             )
 
@@ -607,11 +605,24 @@ class Transducer(Model):
                 def beam_condition(beam, beam_width, A, A_i, B): return tf.less(beam, beam_width)
 
                 def beam_body(beam, beam_width, A, A_i, B):
-                    y_hat_score, y_hat_score_index = tf.math.top_k(A.score.stack(), k=1)
+                    # get y_hat
+                    y_hat_score, y_hat_score_index = tf.math.top_k(A.score.stack(), k=1, sorted=True)
                     y_hat_score = y_hat_score[0]
                     y_hat_index = tf.gather_nd(A.indices.stack(), y_hat_score_index)
                     y_hat_prediction = tf.gather_nd(A.prediction.stack(), y_hat_score_index)
                     y_hat_states = tf.gather_nd(A.states.stack(), y_hat_score_index)
+
+                    # remove y_hat from A
+                    remain_indices = tf.range(0, tf.shape(A.score.stack())[0], dtype=tf.int32)
+                    remain_indices = tf.gather_nd(remain_indices, tf.where(tf.not_equal(remain_indices, y_hat_score_index[0])))
+                    remain_indices = tf.expand_dims(remain_indices, axis=-1)
+                    A = BeamHypothesis(
+                        score=A.score.unstack(tf.gather_nd(A.score.stack(), remain_indices)),
+                        indices=A.indices.unstack(tf.gather_nd(A.indices.stack(), remain_indices)),
+                        prediction=A.prediction.unstack(tf.gather_nd(A.prediction.stack(), remain_indices)),
+                        states=A.states.unstack(tf.gather_nd(A.states.stack(), remain_indices)),
+                    )
+                    A_i = tf.cond(tf.equal(A_i, 0), true_fn=lambda: A_i, false_fn=lambda: A_i - 1)
 
                     ytu, new_states = self.decoder_inference(encoded=encoded_t, predicted=y_hat_index, states=y_hat_states)
 
@@ -619,35 +630,49 @@ class Transducer(Model):
 
                     def predict_body(pred, A, A_i, B):
                         new_score = y_hat_score + tf.gather_nd(ytu, tf.expand_dims(pred, axis=-1))
+
+                        def true_fn():
+                            return (
+                                B.score.write(beam, new_score),
+                                B.indices.write(beam, y_hat_index),
+                                B.prediction.write(beam, y_hat_prediction),
+                                B.states.write(beam, y_hat_states),
+                                A.score,
+                                A.indices,
+                                A.prediction,
+                                A.states,
+                                A_i,
+                            )
+
+                        def false_fn():
+                            scatter_index = count_non_blank(y_hat_prediction, blank=self.text_featurizer.blank)
+                            updated_prediction = tf.tensor_scatter_nd_update(
+                                y_hat_prediction,
+                                indices=tf.reshape(scatter_index, [1, 1]),
+                                updates=tf.expand_dims(pred, axis=-1)
+                            )
+                            return (
+                                B.score,
+                                B.indices,
+                                B.prediction,
+                                B.states,
+                                A.score.write(A_i, new_score),
+                                A.indices.write(A_i, pred),
+                                A.prediction.write(A_i, updated_prediction),
+                                A.states.write(A_i, new_states),
+                                A_i + 1
+                            )
+
                         b_score, b_indices, b_prediction, b_states, \
                             a_score, a_indices, a_prediction, a_states, A_i = tf.cond(
                                 tf.equal(pred, self.text_featurizer.blank),
-                                true_fn=lambda: (
-                                    B.score.write(beam, new_score),
-                                    B.indices.write(beam, y_hat_index),
-                                    B.prediction.write(beam, y_hat_prediction),
-                                    B.states.write(beam, y_hat_states),
-                                    A.score,
-                                    A.indices,
-                                    A.prediction,
-                                    A.states,
-                                    A_i,
-                                ),
-                                false_fn=lambda: (
-                                    B.score,
-                                    B.indices,
-                                    B.prediction,
-                                    B.states,
-                                    A.score.write(A_i, new_score),
-                                    A.indices.write(A_i, pred),
-                                    A.prediction.write(A_i, tf.strings.reduce_join(
-                                        [y_hat_prediction, tf.strings.format("{}", pred)], separator=" ")),
-                                    A.states.write(A_i, new_states),
-                                    A_i + 1
-                                )
+                                true_fn=true_fn,
+                                false_fn=false_fn
                             )
+
                         B = BeamHypothesis(score=b_score, indices=b_indices, prediction=b_prediction, states=b_states)
                         A = BeamHypothesis(score=a_score, indices=a_indices, prediction=a_prediction, states=a_states)
+
                         return pred + 1, A, A_i, B
 
                     _, A, A_i, B = tf.while_loop(
@@ -674,7 +699,7 @@ class Transducer(Model):
 
             scores = B.score.stack()
             if self.text_featurizer.decoder_config.norm_score:
-                prediction_lengths = tf.strings.length(B.prediction.stack(), unit="UTF8_CHAR")
+                prediction_lengths = count_non_blank(B.prediction.stack(), blank=self.text_featurizer.blank, axis=1)
                 scores /= tf.cast(prediction_lengths, dtype=scores.dtype)
 
             y_hat_score, y_hat_score_index = tf.math.top_k(scores, k=1)
@@ -683,11 +708,7 @@ class Transducer(Model):
             y_hat_prediction = tf.gather_nd(B.prediction.stack(), y_hat_score_index)
             y_hat_states = tf.gather_nd(B.states.stack(), y_hat_score_index)
 
-            return Hypothesis(
-                index=y_hat_index,
-                prediction=tf.strings.to_number(tf.strings.split(y_hat_prediction), out_type=tf.int32),
-                states=y_hat_states
-            )
+            return Hypothesis(index=y_hat_index, prediction=y_hat_prediction, states=y_hat_states)
 
     # -------------------------------- TFLITE -------------------------------------
 
