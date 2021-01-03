@@ -125,7 +125,7 @@ class BaseTrainer(BaseRunner):
 
         self.train_data = train_dataset.create(self.global_batch_size)
         self.train_data_loader = self.strategy.experimental_distribute_dataset(self.train_data)
-        if hasattr(self, "accumulation"):
+        if hasattr(self, "accumulation") and train_dataset.total_steps is not None:
             self.train_steps_per_epoch = train_dataset.total_steps // self.config.accumulation_steps
         else:
             self.train_steps_per_epoch = train_dataset.total_steps
