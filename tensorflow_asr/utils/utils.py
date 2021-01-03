@@ -50,7 +50,10 @@ def check_key_in_dict(dictionary, keys):
 def preprocess_paths(paths: Union[List, str]):
     if isinstance(paths, list):
         return [path if path.startswith('gs://') else os.path.abspath(os.path.expanduser(path)) for path in paths]
-    return paths if paths.startswith('gs://') else os.path.abspath(os.path.expanduser(paths))
+    elif isinstance(paths, str):
+        return paths if paths.startswith('gs://') else os.path.abspath(os.path.expanduser(paths))
+    else:
+        return None
 
 
 def nan_to_zero(input_tensor):
