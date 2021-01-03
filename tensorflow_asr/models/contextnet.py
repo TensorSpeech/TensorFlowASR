@@ -23,7 +23,7 @@ L2 = tf.keras.regularizers.l2(1e-6)
 
 def get_activation(activation: str = "silu"):
     activation = activation.lower()
-    if activation in ["silu", "swish"]: return tf.nn.silu
+    if activation in ["silu", "swish"]: return tf.nn.swish
     elif activation == "relu": return tf.nn.relu
     elif activation == "linear": return tf.keras.activations.linear
     else: raise ValueError("activation must be either 'silu', 'swish', 'relu' or 'linear'")
