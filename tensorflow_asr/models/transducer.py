@@ -402,18 +402,17 @@ class Transducer(Model):
                               encoded_length: tf.Tensor,
                               parallel_iterations: int = 10,
                               swap_memory: bool = False):
-        total = tf.shape(encoded)[0]
+        total_batch, total_time, _ = shape_list(encoded)
         batch = tf.constant(0, dtype=tf.int32)
 
         decoded = tf.TensorArray(
-            dtype=tf.string,
-            size=total, dynamic_size=False,
-            clear_after_read=False, element_shape=tf.TensorShape([])
+            dtype=tf.int32, size=total_batch, dynamic_size=False,
+            clear_after_read=False, element_shape=None
         )
 
-        def condition(batch, total, encoded, encoded_length, decoded): return tf.less(batch, total)
+        def condition(batch, _): return tf.less(batch, total_batch)
 
-        def body(batch, total, encoded, encoded_length, decoded):
+        def body(batch, decoded):
             hypothesis = self._perform_greedy(
                 encoded=encoded[batch],
                 encoded_length=encoded_length[batch],
@@ -422,18 +421,22 @@ class Transducer(Model):
                 parallel_iterations=parallel_iterations,
                 swap_memory=swap_memory
             )
-            transcripts = self.text_featurizer.iextract(tf.expand_dims(hypothesis.prediction, axis=0))
-            decoded = decoded.write(batch, tf.squeeze(transcripts))
-            return batch + 1, total, encoded, encoded_length, decoded
+            prediction = tf.pad(
+                hypothesis.prediction,
+                paddings=[[0, total_time - encoded_length[batch]]],
+                mode="CONSTANT", constant_values=self.text_featurizer.blank
+            )
+            decoded = decoded.write(batch, prediction)
+            return batch + 1, decoded
 
-        batch, total, _, _, decoded = tf.while_loop(
+        batch, decoded = tf.while_loop(
             condition, body,
-            loop_vars=[batch, total, encoded, encoded_length, decoded],
+            loop_vars=[batch, decoded],
             parallel_iterations=parallel_iterations,
             swap_memory=True,
         )
 
-        return decoded.stack()
+        return self.text_featurizer.iextract(decoded.stack())
 
     def _perform_greedy(self,
                         encoded: tf.Tensor,
@@ -518,32 +521,37 @@ class Transducer(Model):
                                    lm: bool = False,
                                    parallel_iterations: int = 10,
                                    swap_memory: bool = False):
-        total = tf.shape(encoded)[0]
+        total_batch, total_time, _ = shape_list(encoded)
         batch = tf.constant(0, dtype=tf.int32)
 
         decoded = tf.TensorArray(
-            dtype=tf.string,
-            size=total, dynamic_size=False,
-            clear_after_read=False, element_shape=tf.TensorShape([])
+            dtype=tf.int32, size=total_batch, dynamic_size=False,
+            clear_after_read=False, element_shape=None
         )
 
-        def condition(batch, total, encoded, encoded_length, decoded): return tf.less(batch, total)
+        def condition(batch, _): return tf.less(batch, total_batch)
 
-        def body(batch, total, encoded, encoded_length, decoded):
-            hypothesis = self._perform_beam_search(encoded[batch], encoded_length[batch], lm,
-                                                   parallel_iterations=parallel_iterations, swap_memory=swap_memory)
-            transcripts = self.text_featurizer.iextract(tf.expand_dims(hypothesis.prediction, axis=0))
-            decoded = decoded.write(batch, tf.squeeze(transcripts))
-            return batch + 1, total, encoded, encoded_length, decoded
+        def body(batch, decoded):
+            hypothesis = self._perform_beam_search(
+                encoded[batch], encoded_length[batch], lm,
+                parallel_iterations=parallel_iterations, swap_memory=swap_memory
+            )
+            prediction = tf.pad(
+                hypothesis.prediction,
+                paddings=[[0, total_time - encoded_length[batch]]],
+                mode="CONSTANT", constant_values=self.text_featurizer.blank
+            )
+            decoded = decoded.write(batch, prediction)
+            return batch + 1, decoded
 
-        batch, total, _, _, decoded = tf.while_loop(
+        batch, decoded = tf.while_loop(
             condition, body,
-            loop_vars=[batch, total, encoded, encoded_length, decoded],
+            loop_vars=[batch, decoded],
             parallel_iterations=parallel_iterations,
             swap_memory=True,
         )
 
-        return decoded.stack()
+        return self.text_featurizer.iextract(decoded.stack())
 
     def _perform_beam_search(self,
                              encoded: tf.Tensor,

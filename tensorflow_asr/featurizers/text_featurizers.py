@@ -270,12 +270,11 @@ class SubwordFeaturizer(TextFeaturizer):
                 clear_after_read=False, element_shape=tf.TensorShape([])
             )
 
-            def cond(batch, total, transcripts): return tf.less(batch, total)
+            def cond(batch, total, _): return tf.less(batch, total)
 
             def body(batch, total, transcripts):
                 upoints = self.indices2upoints(indices[batch])
-                _transcript = tf.strings.unicode_encode(upoints, "UTF-8")
-                transcripts = transcripts.write(batch, _transcript)
+                transcripts = transcripts.write(batch, tf.strings.unicode_encode(upoints, "UTF-8"))
                 return batch + 1, total, transcripts
 
             _, _, transcripts = tf.while_loop(cond, body, loop_vars=[batch, total, transcripts])
