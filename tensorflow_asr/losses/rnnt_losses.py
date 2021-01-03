@@ -225,7 +225,7 @@ def rnnt_loss_tf(logits, labels, label_length, logit_length, name=None):
         label_length = tf.convert_to_tensor(label_length, name="label_length")
         logit_length = tf.convert_to_tensor(logit_length, name="logit_length")
 
-        args = [logits, labels, label_length, logit_length]
+        # args = [logits, labels, label_length, logit_length]
 
         @tf.custom_gradient
         def compute_rnnt_loss_and_grad(logits_t, labels_t, label_length_t, logit_length_t):
@@ -234,8 +234,8 @@ def rnnt_loss_tf(logits, labels, label_length, logit_length, name=None):
             labels_t.set_shape(labels.shape)
             label_length_t.set_shape(label_length.shape)
             logit_length_t.set_shape(logit_length.shape)
-            kwargs = dict(logits=logits_t, labels=labels_t, label_length=label_length_t, logit_length=logit_length_t)
-            result = compute_rnnt_loss_and_grad_helper(**kwargs)
+            # kwargs = dict(logits=logits_t, labels=labels_t, label_length=label_length_t, logit_length=logit_length_t)
+            result = compute_rnnt_loss_and_grad_helper(logits_t, labels_t, label_length_t, logit_length_t)
 
             def grad(grad_loss):
                 grads = [tf.reshape(grad_loss, [-1, 1, 1, 1]) * result[1]]
@@ -244,4 +244,5 @@ def rnnt_loss_tf(logits, labels, label_length, logit_length, name=None):
 
             return result[0], grad
 
-        return compute_rnnt_loss_and_grad(*args)
+
+        return compute_rnnt_loss_and_grad(logits, labels, label_length, logit_length)
