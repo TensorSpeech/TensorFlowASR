@@ -56,7 +56,7 @@ class TransducerPrediction(tf.keras.Model):
                 name=f"{name}_{rnn_type}_{i}", return_state=True,
                 implementation=rnn_implementation,
                 kernel_regularizer=kernel_regularizer,
-                bias_regularizer=bias_regularizer
+                bias_regularizer=bias_regularizer, unroll=True
             )
             if layer_norm:
                 ln = tf.keras.layers.LayerNormalization(name=f"{name}_ln_{i}")
