@@ -157,14 +157,14 @@ class ASRTFRecordDataset(ASRDataset):
             data_paths, augmentations, cache, shuffle
         )
         self.tfrecords_dir = tfrecords_dir
-        if not os.path.exists(self.tfrecords_dir):
-            os.makedirs(self.tfrecords_dir)
+        if not tf.io.gfile.exists(self.tfrecords_dir):
+            tf.io.gfile.makedirs(self.tfrecords_dir)
 
     def create_tfrecords(self):
-        if not os.path.exists(self.tfrecords_dir):
-            os.makedirs(self.tfrecords_dir)
+        if not tf.io.gfile.exists(self.tfrecords_dir):
+            tf.io.gfile.makedirs(self.tfrecords_dir)
 
-        if glob.glob(os.path.join(self.tfrecords_dir, f"{self.stage}*.tfrecord")):
+        if tf.io.gfile.glob(os.path.join(self.tfrecords_dir, f"{self.stage}*.tfrecord")):
             print(f"TFRecords're already existed: {self.stage}")
             return True
 
