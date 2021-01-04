@@ -52,7 +52,7 @@ def test_featurizer():
                                  os.pardir,
                                  os.pardir,
                                  "vocabularies",
-                                 "conformer.subwords")
+                                 "librispeech_train_4_1030.subwords")                                 
     text_featurizer_subwords = SubwordFeaturizer.load_from_file(config, subwords_path)
     speech_featurizer = TFSpeechFeaturizer(config_speech)    
     data_path = os.path.join(os.path.abspath(os.path.dirname(__file__)), "transcripts_librispeech_train_clean_100.tsv")
