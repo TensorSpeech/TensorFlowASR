@@ -184,7 +184,7 @@ def compute_rnnt_loss_and_grad_helper(logits, labels, label_length, logit_length
                                                                                                       :]) * grad_blank_mask) * grad_blank_mask
     grads_blank = tf.concat([grads_blank, tf.zeros(shape=(batch_size, 1, target_max_len))], axis=1)
     last_grads_blank = -1 * tf.scatter_nd(
-        tf.concat([tf.reshape(tf.range(batch_size, dtype=tf.int64), shape=[batch_size, 1]), tf.cast(indices, dtype=tf.int64), axis=1),
+        tf.concat([tf.reshape(tf.range(batch_size, dtype=tf.int64), shape=[batch_size, 1]), tf.cast(indices, dtype=tf.int64)], axis=1),
         tf.ones(batch_size, dtype=tf.float32), [batch_size, input_max_len, target_max_len])
     grads_blank = grads_blank + last_grads_blank
 
