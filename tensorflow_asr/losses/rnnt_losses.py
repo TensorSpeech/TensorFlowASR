@@ -195,7 +195,7 @@ def compute_rnnt_loss_and_grad_helper(logits, labels, label_length, logit_length
     # Compute gradients of loss w.r.t. activations.
     a = tf.tile(tf.reshape(tf.range(target_max_len - 1, dtype=tf.int64), shape=(1, 1, target_max_len - 1, 1)),
                 multiples=[batch_size, 1, 1, 1])
-    b = tf.reshape(labels - 1, shape=(batch_size, 1, target_max_len - 1, 1))
+    b = tf.cast(tf.reshape(labels - 1, shape=(batch_size, 1, target_max_len - 1, 1)), dtype=tf.int64)
     c = tf.concat([a, b], axis=3)
     d = tf.tile(c, multiples=(1, input_max_len, 1, 1))
     e = tf.tile(tf.reshape(tf.range(input_max_len, dtype=tf.int64), shape=(1, input_max_len, 1, 1)),
