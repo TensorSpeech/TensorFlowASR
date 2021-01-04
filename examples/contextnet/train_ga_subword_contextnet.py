@@ -15,7 +15,7 @@
 import os
 import math
 import argparse
-from tensorflow_asr.utils import setup_environment, setup_strategy
+from tensorflow_asr.utils import setup_environment, setup_strategy, setup_tpu
 
 setup_environment()
 import tensorflow as tf
@@ -59,11 +59,17 @@ parser.add_argument("--subwords", type=str, default=None,
 parser.add_argument("--subwords_corpus", nargs="*", type=str, default=[],
                     help="Transcript files for generating subwords")
 
+parser.add_argument("--tpu", default=False, action="store_true",
+                    help="Enable TPU training")
+
+parser.add_argument("--tpu_address", type=str, default=None,
+                    help="TPU address to be passed to resolver. Leave None on Colab")
+
 args = parser.parse_args()
 
 tf.config.optimizer.set_experimental_options({"auto_mixed_precision": args.mxp})
 
-strategy = setup_strategy(args.devices)
+strategy = setup_tpu(args.tpu_address) if args.tpu else setup_strategy(args.devices)
 
 from tensorflow_asr.configs.config import Config
 from tensorflow_asr.datasets.asr_dataset import ASRTFRecordDataset, ASRSliceDataset
