@@ -142,10 +142,10 @@ def backward_dp(bp_diags, tp_diags, batch_size, input_max_len, target_max_len, l
 
 
 def compute_rnnt_loss_and_grad_helper(logits, labels, label_length, logit_length):
-    batch_size = logits.shape[0]
-    input_max_len = logits.shape[1]
-    target_max_len = logits.shape[2]
-    vocab_size = logits.shape[3]
+    batch_size = tf.shape(logits)[0]
+    input_max_len = tf.shape(logits)[1]
+    target_max_len = tf.shape(logits)[2]
+    vocab_size = tf.shape(logits)[3]
 
     one_hot_labels = tf.one_hot(tf.tile(tf.expand_dims(labels, axis=1),
                                         multiples=[1, input_max_len, 1]), depth=vocab_size)
