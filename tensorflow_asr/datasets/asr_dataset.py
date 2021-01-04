@@ -238,9 +238,9 @@ class ASRSliceDataset(ASRDataset):
 
 
 class ASRTFRecordTestDataset(ASRTFRecordDataset):
-    def preprocess(self, path, transcript):
+    def preprocess(self, path, audio, transcript):
         with tf.device("/CPU:0"):
-            signal = read_raw_audio(path.decode("utf-8"), self.speech_featurizer.sample_rate)
+            signal = read_raw_audio(audio, self.speech_featurizer.sample_rate)
 
             features = self.speech_featurizer.extract(signal)
             features = tf.convert_to_tensor(features, tf.float32)
@@ -262,8 +262,8 @@ class ASRTFRecordTestDataset(ASRTFRecordDataset):
 
         return tf.numpy_function(
             self.preprocess,
-            inp=[example["audio"], example["transcript"]],
-            Tout=(tf.string, tf.float32, tf.int32, tf.int32)
+            inp=[example["path"], example["audio"], example["transcript"]],
+            Tout=[tf.string, tf.float32, tf.int32, tf.int32]
         )
 
     def process(self, dataset, batch_size):

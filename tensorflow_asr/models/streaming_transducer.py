@@ -297,6 +297,36 @@ class StreamingTransducer(Transducer):
             hypothesis.states
         )
 
+    def recognize_tflite_with_timestamp(self, signal, predicted, encoder_states, prediction_states):
+        features = self.speech_featurizer.tf_extract(signal)
+        encoded, new_encoder_states = self.encoder_inference(features, encoder_states)
+        hypothesis = self._perform_greedy(encoded, tf.shape(encoded)[0], predicted, prediction_states)
+        indices = self.text_featurizer.normalize_indices(hypothesis.prediction)
+        upoints = tf.gather_nd(self.text_featurizer.upoints, tf.expand_dims(indices, axis=-1))  # [None, max_subword_length]
+
+        num_samples = tf.cast(tf.shape(signal)[0], dtype=tf.float32)
+        total_time_reduction_factor = self.time_reduction_factor * self.speech_featurizer.frame_step
+
+        stime = tf.range(0, num_samples, delta=total_time_reduction_factor, dtype=tf.float32)
+        stime /= tf.cast(self.speech_featurizer.sample_rate, dtype=tf.float32)
+
+        etime = tf.range(total_time_reduction_factor, num_samples, delta=total_time_reduction_factor, dtype=tf.float32)
+        etime /= tf.cast(self.speech_featurizer.sample_rate, dtype=tf.float32)
+
+        non_blank = tf.where(tf.not_equal(upoints, 0))
+        non_blank_transcript = tf.gather_nd(upoints, non_blank)
+        non_blank_stime = tf.gather_nd(tf.repeat(tf.expand_dims(stime, axis=-1), tf.shape(upoints)[-1], axis=-1), non_blank)
+        non_blank_etime = tf.gather_nd(tf.repeat(tf.expand_dims(etime, axis=-1), tf.shape(upoints)[-1], axis=-1), non_blank)
+
+        return (
+            non_blank_transcript,
+            non_blank_stime,
+            non_blank_etime,
+            hypothesis.prediction,
+            new_encoder_states,
+            hypothesis.states
+        )
+
     # -------------------------------- BEAM SEARCH -------------------------------------
 
     @tf.function
@@ -325,15 +355,14 @@ class StreamingTransducer(Transducer):
 
     # -------------------------------- TFLITE -------------------------------------
 
-    def make_tflite_function(self, greedy: bool = True):
+    def make_tflite_function(self, timestamp: bool = True):
+        tflite_func = self.recognize_tflite_with_timestamp if timestamp else self.recognize_tflite
         return tf.function(
-            self.recognize_tflite,
+            tflite_func,
             input_signature=[
                 tf.TensorSpec([None], dtype=tf.float32),
                 tf.TensorSpec([], dtype=tf.int32),
-                tf.TensorSpec(self.encoder.get_initial_state().get_shape(),
-                              dtype=tf.float32),
-                tf.TensorSpec(self.predict_net.get_initial_state().get_shape(),
-                              dtype=tf.float32)
+                tf.TensorSpec(self.encoder.get_initial_state().get_shape(), dtype=tf.float32),
+                tf.TensorSpec(self.predict_net.get_initial_state().get_shape(), dtype=tf.float32)
             ]
         )
