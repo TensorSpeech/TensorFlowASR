@@ -1,4 +1,4 @@
-# Copyright 2020 Huy Le Nguyen (@usimarit)
+# Copyright 2020 Huy Le Nguyen (@usimarit) and M. Yusuf Sarıgöz (@monatis)
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -19,15 +19,18 @@ try:
     use_warprnnt = True
 except ImportError:
     print("Cannot import RNNT loss in warprnnt. Falls back to RNNT in TensorFlow")
+    print("Note: The RNNT in Tensorflow is not supported for CPU yet")
     from tensorflow.python.ops.gen_array_ops import matrix_diag_part_v2
     use_warprnnt = False
 
 
 def rnnt_loss(logits, labels, label_length, logit_length, blank=0, name=None):
     if use_warprnnt:
-        return rnnt_loss_warprnnt(logits=logits, labels=labels, label_length=label_length, logit_length=logit_length, blank=blank)
+        return rnnt_loss_warprnnt(logits=logits, labels=labels,
+                                  label_length=label_length, logit_length=logit_length, blank=blank)
     else:
         return rnnt_loss_tf(logits=logits, labels=labels, label_length=label_length, logit_length=logit_length, name=name)
+
 
 @tf.function
 def rnnt_loss_warprnnt(logits, labels, label_length, logit_length, blank=0):
@@ -120,7 +123,8 @@ def backward_dp(bp_diags, tp_diags, batch_size, input_max_len, target_max_len, l
         beta_t = tf.concat([x[:, :-1] + truth_probs, LOG_0 * tf.ones(shape=[batch_size, 1])], axis=1)
 
         beta_next = reduce_logsumexp(tf.stack([beta_b, beta_t], axis=0), axis=0)
-        masked_beta_next = nan_to_zero(beta_next * tf.expand_dims(mask_s, axis=1)) + nan_to_zero(x * tf.expand_dims((1.0 - mask_s), axis=1))
+        masked_beta_next = nan_to_zero(beta_next * tf.expand_dims(mask_s, axis=1)) + \
+            nan_to_zero(x * tf.expand_dims((1.0 - mask_s), axis=1))
         return masked_beta_next
 
     # Initial beta for batches.
@@ -178,24 +182,37 @@ def compute_rnnt_loss_and_grad_helper(logits, labels, label_length, logit_length
     final_state_probs = beta[:, 0, 0]
 
     # Compute gradients of loss w.r.t. blank log-probabilities.
-    grads_blank = -tf.exp((alpha[:, :-1, :] + beta[:, 1:, :] - tf.reshape(final_state_probs,
-                                                                          shape=[batch_size, 1, 1]) + blank_probs[:,
-                                                                                                      :-1,
-                                                                                                      :]) * grad_blank_mask) * grad_blank_mask
+    grads_blank = -tf.exp(
+        (
+            alpha[:, :-1, :] + beta[:, 1:, :]
+            - tf.reshape(final_state_probs, shape=[batch_size, 1, 1])
+            + blank_probs[:, :-1, :]
+        ) * grad_blank_mask
+    ) * grad_blank_mask
     grads_blank = tf.concat([grads_blank, tf.zeros(shape=(batch_size, 1, target_max_len))], axis=1)
     last_grads_blank = -1 * tf.scatter_nd(
-        tf.concat([tf.reshape(tf.range(batch_size, dtype=tf.int64), shape=[batch_size, 1]), tf.cast(indices, dtype=tf.int64)], axis=1),
-        tf.ones(batch_size, dtype=tf.float32), [batch_size, input_max_len, target_max_len])
+        tf.concat([tf.reshape(tf.range(batch_size, dtype=tf.int64), shape=[batch_size, 1]),
+                   tf.cast(indices, dtype=tf.int64)], axis=1),
+        tf.ones(batch_size, dtype=tf.float32),
+        [batch_size, input_max_len, target_max_len]
+    )
     grads_blank = grads_blank + last_grads_blank
 
     # Compute gradients of loss w.r.t. truth log-probabilities.
-    grads_truth = -tf.exp((alpha[:, :, :-1] + beta[:, :, 1:] - tf.reshape(final_state_probs, shape=[batch_size, 1,
-                                                                                                    1]) + truth_probs) * grad_truth_mask) * grad_truth_mask
+    grads_truth = -tf.exp(
+        (
+            alpha[:, :, :-1] + beta[:, :, 1:]
+            - tf.reshape(final_state_probs, shape=[batch_size, 1, 1])
+            + truth_probs
+        )
+        * grad_truth_mask
+    ) * grad_truth_mask
 
     # Compute gradients of loss w.r.t. activations.
     a = tf.tile(tf.reshape(tf.range(target_max_len - 1, dtype=tf.int64), shape=(1, 1, target_max_len - 1, 1)),
                 multiples=[batch_size, 1, 1, 1])
     b = tf.cast(tf.reshape(labels - 1, shape=(batch_size, 1, target_max_len - 1, 1)), dtype=tf.int64)
+    # b = tf.where(tf.equal(b, -1), tf.zeros_like(b), b)  # for cpu testing (index -1 on cpu will raise errors)
     c = tf.concat([a, b], axis=3)
     d = tf.tile(c, multiples=(1, input_max_len, 1, 1))
     e = tf.tile(tf.reshape(tf.range(input_max_len, dtype=tf.int64), shape=(1, input_max_len, 1, 1)),
@@ -243,6 +260,5 @@ def rnnt_loss_tf(logits, labels, label_length, logit_length, name=None):
                 return grads
 
             return result[0], grad
-
 
         return compute_rnnt_loss_and_grad(*args)

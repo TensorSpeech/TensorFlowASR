@@ -20,14 +20,15 @@ modes = ["train", "eval", "test"]
 
 parser = argparse.ArgumentParser(prog="TFRecords Creation")
 
-parser.add_argument("--mode", "-m", type=str,
-                    default=None, help=f"Mode in {modes}")
+parser.add_argument("--mode", "-m", type=str, default=None, help=f"Mode in {modes}")
 
-parser.add_argument("--tfrecords_dir", type=str, default=None,
-                    help="Directory to tfrecords")
+parser.add_argument("--tfrecords_dir", type=str, default=None, help="Directory to tfrecords")
 
-parser.add_argument("transcripts", nargs="+", type=str,
-                    default=None, help="Paths to transcript files")
+parser.add_argument("--tfrecords_shards", type=int, default=16, help="Number of tfrecords shards")
+
+parser.add_argument("--shuffle", default=False, action="store_true", help="Shuffle data or not")
+
+parser.add_argument("transcripts", nargs="+", type=str, default=None, help="Paths to transcript files")
 
 args = parser.parse_args()
 
@@ -36,9 +37,8 @@ assert args.mode in modes, f"Mode must in {modes}"
 transcripts = preprocess_paths(args.transcripts)
 tfrecords_dir = preprocess_paths(args.tfrecords_dir)
 
-if args.mode == "train":
-    ASRTFRecordDataset(transcripts, tfrecords_dir, None, None,
-                       args.mode, shuffle=True).create_tfrecords()
-else:
-    ASRTFRecordDataset(transcripts, tfrecords_dir, None, None,
-                       args.mode, shuffle=False).create_tfrecords()
+ASRTFRecordDataset(
+    data_paths=transcripts, tfrecords_dir=tfrecords_dir,
+    speech_featurizer=None, text_featurizer=None,
+    stage=args.mode, shuffle=args.shuffle, tfrecords_shards=args.tfrecords_shards
+).create_tfrecords()
