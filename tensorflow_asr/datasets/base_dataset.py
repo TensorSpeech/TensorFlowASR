@@ -15,6 +15,8 @@ import abc
 
 from ..augmentations.augments import Augmentation
 
+BUFFER_SIZE = 100
+
 
 class BaseDataset(metaclass=abc.ABCMeta):
     """ Based dataset for all models """
@@ -24,11 +26,15 @@ class BaseDataset(metaclass=abc.ABCMeta):
                  augmentations: Augmentation = Augmentation(None),
                  cache: bool = False,
                  shuffle: bool = False,
+                 buffer_size: int = BUFFER_SIZE,
                  stage: str = "train"):
         self.data_paths = data_paths
         self.augmentations = augmentations  # apply augmentation
         self.cache = cache  # whether to cache WHOLE transformed dataset to memory
         self.shuffle = shuffle  # whether to shuffle tf.data.Dataset
+        if buffer_size <= 0 and shuffle:
+            raise ValueError("buffer_size must be positive when shuffle is on")
+        self.buffer_size = buffer_size  # shuffle buffer size
         self.stage = stage  # for defining tfrecords files
         self.total_steps = None  # for better training visualization
 
