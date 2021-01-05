@@ -17,6 +17,7 @@ import os
 
 import numpy as np
 import tensorflow as tf
+import tqdm
 
 from ..augmentations.augments import Augmentation
 from .base_dataset import BaseDataset, BUFFER_SIZE
@@ -86,6 +87,8 @@ class ASRDataset(BaseDataset):
         if self.shuffle:
             np.random.shuffle(lines)  # Mix transcripts.tsv
         self.total_steps = len(lines)
+        if self.enable_tpu:
+            self._compute_max_lens(lines)
         return lines
 
     def preprocess(self, audio, transcript):
@@ -104,11 +107,6 @@ class ASRDataset(BaseDataset):
             prediction_length = tf.cast(tf.shape(prediction)[0], tf.int32)
             features = tf.convert_to_tensor(features, tf.float32)
             input_length = tf.cast(tf.shape(features)[0], tf.int32)
-
-            if enable_tpu:
-                self.max_input_length = input_length if input_length > self.max_input_length else self.max_input_length
-                self.max_label_length = label_length if label_length > self.max_label_length else self.max_label_length
-                self.max_prediction_length = prediction_length if prediction_length > self.max_prediction_length else self.max_prediction_length
 
             return features, input_length, label, label_length, prediction, prediction_length
 
@@ -152,6 +150,13 @@ class ASRDataset(BaseDataset):
     @abc.abstractmethod
     def create(self, batch_size):
         raise NotImplementedError()
+
+    def _compute_max_lens(self, lines):
+        for line in tqdm.tqdm(lines, desc=f"Computing max lengths for entries in {self.stage} dataset"):
+            _, input_length, _, label_length, _, prediction_length = self.preprocess(line[0], line[2])
+            self.max_input_length = input_length if input_length > self.max_input_length else self.max_input_length
+            self.max_label_length = label_length if label_length > self.max_label_length else self.max_label_length
+            self.max_prediction_length = prediction_length if prediction_length > self.max_prediction_length else self.max_prediction_length
 
 
 class ASRTFRecordDataset(ASRDataset):
