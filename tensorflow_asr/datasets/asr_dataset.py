@@ -58,10 +58,16 @@ class ASRDataset(BaseDataset):
                  data_paths: list,
                  augmentations: Augmentation = Augmentation(None),
                  cache: bool = False,
-                 shuffle: bool = False):
+                 shuffle: bool = False,
+                 enable_tpu: bool = False):
         super(ASRDataset, self).__init__(data_paths, augmentations, cache, shuffle, stage)
+        self.enable_tpu = enable_tpu
         self.speech_featurizer = speech_featurizer
         self.text_featurizer = text_featurizer
+        if self.enable_tpu:
+            self.max_input_length = 0
+            self.max_label_length = 0
+            self.max_prediction_length = 0
 
     def read_entries(self):
         lines = []
@@ -95,6 +101,11 @@ class ASRDataset(BaseDataset):
             prediction_length = tf.cast(tf.shape(prediction)[0], tf.int32)
             features = tf.convert_to_tensor(features, tf.float32)
             input_length = tf.cast(tf.shape(features)[0], tf.int32)
+
+            if enable_tpu:
+                self.max_input_length = input_length if input_length > self.max_input_length else self.max_input_length
+                self.max_label_length = label_length if label_length > self.max_label_length else self.max_label_length
+                self.max_prediction_length = prediction_length if prediction_length > self.max_prediction_length else self.max_prediction_length
 
             return features, input_length, label, label_length, prediction, prediction_length
 
@@ -151,10 +162,11 @@ class ASRTFRecordDataset(ASRDataset):
                  stage: str,
                  augmentations: Augmentation = Augmentation(None),
                  cache: bool = False,
-                 shuffle: bool = False):
+                 shuffle: bool = False,
+                 enable_tpu: bool = False):
         super(ASRTFRecordDataset, self).__init__(
             stage, speech_featurizer, text_featurizer,
-            data_paths, augmentations, cache, shuffle
+            data_paths, augmentations, cache, shuffle, enable_tpu
         )
         self.tfrecords_dir = tfrecords_dir
         if not tf.io.gfile.exists(self.tfrecords_dir):
