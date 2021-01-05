@@ -337,6 +337,7 @@ class SentencePieceFeaturizer(TextFeaturizer):
         The input sentence must be pretokenized when using word type."""
         decoder_cfg = DecoderConfig(decoder_config)
         # Train SentencePiece Model
+
         def corpus_iterator():
             for file in decoder_cfg.corpus_files:
                 with open(file, "r", encoding="utf-8") as f:
@@ -349,7 +350,7 @@ class SentencePieceFeaturizer(TextFeaturizer):
         sp.SentencePieceTrainer.Train(
             sentence_iterator=corpus_iterator(),
             model_prefix=decoder_cfg.output_path_prefix,
-            model_type=decoder_cfg.model_type,         
+            model_type=decoder_cfg.model_type,
             vocab_size=decoder_cfg.target_vocab_size,
             num_threads=cpu_count(),
             unk_id=cls.UNK_TOKEN_ID,
@@ -357,7 +358,7 @@ class SentencePieceFeaturizer(TextFeaturizer):
             eos_id=cls.EOS_TOKEN_ID,
             pad_id=cls.PAD_TOKEN_ID,
             unk_surface='__UNKNOWN__'  # change default unk surface U+2047("⁇") by "__UNKNOWN__"
-            )
+        )
         # Export fairseq dictionary
         processor = sp.SentencePieceProcessor()
         processor.Load(decoder_cfg.output_path_prefix + ".model")
@@ -399,7 +400,7 @@ class SentencePieceFeaturizer(TextFeaturizer):
 
         Returns:
             sequence of ints in tf.Tensor
-        """        
+        """
         text = self.preprocess_text(text)
         text = text.strip()  # remove trailing space
         indices = self.model.encode_as_ids(text)
@@ -449,4 +450,3 @@ class SentencePieceFeaturizer(TextFeaturizer):
             indices = self.normalize_indices(indices)
             upoints = tf.gather_nd(self.upoints, tf.expand_dims(indices, axis=-1))
             return tf.gather_nd(upoints, tf.where(tf.not_equal(upoints, 0)))
-

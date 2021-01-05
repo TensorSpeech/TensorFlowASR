@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import abc
-import glob
 import multiprocessing
 import os
 
@@ -20,7 +19,7 @@ import numpy as np
 import tensorflow as tf
 
 from ..augmentations.augments import Augmentation
-from .base_dataset import BaseDataset
+from .base_dataset import BaseDataset, BUFFER_SIZE
 from ..featurizers.speech_featurizers import read_raw_audio, SpeechFeaturizer
 from ..featurizers.text_featurizers import TextFeaturizer
 from ..utils.utils import bytestring_feature, print_one_line, get_num_batches
@@ -59,8 +58,12 @@ class ASRDataset(BaseDataset):
                  augmentations: Augmentation = Augmentation(None),
                  cache: bool = False,
                  shuffle: bool = False,
+                 buffer_size: int = BUFFER_SIZE
                  enable_tpu: bool = False):
-        super(ASRDataset, self).__init__(data_paths, augmentations, cache, shuffle, stage)
+        super(ASRDataset, self).__init__(
+            data_paths=data_paths, augmentations=augmentations,
+            cache=cache, shuffle=shuffle, stage=stage, buffer_size=buffer_size
+        )
         self.enable_tpu = enable_tpu
         self.speech_featurizer = speech_featurizer
         self.text_featurizer = text_featurizer
@@ -116,7 +119,7 @@ class ASRDataset(BaseDataset):
             dataset = dataset.cache()
 
         if self.shuffle:
-            dataset = dataset.shuffle(TFRECORD_SHARDS, reshuffle_each_iteration=True)
+            dataset = dataset.shuffle(self.buffer_size, reshuffle_each_iteration=True)
 
         # PADDED BATCH the dataset
         dataset = dataset.padded_batch(
@@ -161,14 +164,18 @@ class ASRTFRecordDataset(ASRDataset):
                  text_featurizer: TextFeaturizer,
                  stage: str,
                  augmentations: Augmentation = Augmentation(None),
+                 tfrecords_shards: int = TFRECORD_SHARDS,
                  cache: bool = False,
                  shuffle: bool = False,
+                 buffer_size: int = BUFFER_SIZE,
                  enable_tpu: bool = False):
         super(ASRTFRecordDataset, self).__init__(
-            stage, speech_featurizer, text_featurizer,
-            data_paths, augmentations, cache, shuffle, enable_tpu
+            stage=stage, speech_featurizer=speech_featurizer, text_featurizer=text_featurizer,
+            data_paths=data_paths, augmentations=augmentations, cache=cache, shuffle=shuffle, buffer_size=buffer_size, enable_tpu=enable_tpu
         )
         self.tfrecords_dir = tfrecords_dir
+        if tfrecords_shards <= 0: raise ValueError("tfrecords_shards must be positive")
+        self.tfrecords_shards = tfrecords_shards
         if not tf.io.gfile.exists(self.tfrecords_dir):
             tf.io.gfile.makedirs(self.tfrecords_dir)
 
@@ -189,10 +196,10 @@ class ASRTFRecordDataset(ASRDataset):
         def get_shard_path(shard_id):
             return os.path.join(self.tfrecords_dir, f"{self.stage}_{shard_id}.tfrecord")
 
-        shards = [get_shard_path(idx) for idx in range(1, TFRECORD_SHARDS + 1)]
+        shards = [get_shard_path(idx) for idx in range(1, self.tfrecords_shards + 1)]
 
-        splitted_entries = np.array_split(entries, TFRECORD_SHARDS)
-        with multiprocessing.Pool(TFRECORD_SHARDS) as pool:
+        splitted_entries = np.array_split(entries, self.tfrecords_shards)
+        with multiprocessing.Pool(self.tfrecords_shards) as pool:
             pool.map(write_tfrecord_file, zip(shards, splitted_entries))
 
         return True
@@ -285,7 +292,7 @@ class ASRTFRecordTestDataset(ASRTFRecordDataset):
             dataset = dataset.cache()
 
         if self.shuffle:
-            dataset = dataset.shuffle(TFRECORD_SHARDS, reshuffle_each_iteration=True)
+            dataset = dataset.shuffle(self.buffer_size, reshuffle_each_iteration=True)
 
         # PADDED BATCH the dataset
         dataset = dataset.padded_batch(
@@ -349,7 +356,7 @@ class ASRSliceTestDataset(ASRDataset):
             dataset = dataset.cache()
 
         if self.shuffle:
-            dataset = dataset.shuffle(TFRECORD_SHARDS, reshuffle_each_iteration=True)
+            dataset = dataset.shuffle(self.buffer_size, reshuffle_each_iteration=True)
 
         # PADDED BATCH the dataset
         dataset = dataset.padded_batch(
