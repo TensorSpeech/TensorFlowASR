@@ -123,8 +123,8 @@ def backward_dp(bp_diags, tp_diags, batch_size, input_max_len, target_max_len, l
         beta_t = tf.concat([x[:, :-1] + truth_probs, LOG_0 * tf.ones(shape=[batch_size, 1])], axis=1)
 
         beta_next = reduce_logsumexp(tf.stack([beta_b, beta_t], axis=0), axis=0)
-        masked_beta_next = nan_to_zero(beta_next * tf.expand_dims(mask_s, axis=1)) + \
-            nan_to_zero(x * tf.expand_dims((1.0 - mask_s), axis=1))
+        masked_beta_next = (nan_to_zero(beta_next * tf.expand_dims(mask_s, axis=1))
+                            + nan_to_zero(x * tf.expand_dims((1.0 - mask_s), axis=1)))
         return masked_beta_next
 
     # Initial beta for batches.
@@ -159,14 +159,10 @@ def compute_rnnt_loss_and_grad_helper(logits, labels, label_length, logit_length
     bp_diags = extract_diagonals(blank_probs)
     tp_diags = extract_diagonals(truth_probs)
 
-    label_mask = tf.expand_dims(tf.sequence_mask(
-        label_length + 1, maxlen=target_max_len, dtype=tf.float32), axis=1)
-    small_label_mask = tf.expand_dims(tf.sequence_mask(
-        label_length, maxlen=target_max_len, dtype=tf.float32), axis=1)
-    input_mask = tf.expand_dims(tf.sequence_mask(
-        logit_length, maxlen=input_max_len, dtype=tf.float32), axis=2)
-    small_input_mask = tf.expand_dims(tf.sequence_mask(
-        logit_length - 1, maxlen=input_max_len, dtype=tf.float32), axis=2)
+    label_mask = tf.expand_dims(tf.sequence_mask(label_length + 1, maxlen=target_max_len, dtype=tf.float32), axis=1)
+    small_label_mask = tf.expand_dims(tf.sequence_mask(label_length, maxlen=target_max_len, dtype=tf.float32), axis=1)
+    input_mask = tf.expand_dims(tf.sequence_mask(logit_length, maxlen=input_max_len, dtype=tf.float32), axis=2)
+    small_input_mask = tf.expand_dims(tf.sequence_mask(logit_length - 1, maxlen=input_max_len, dtype=tf.float32), axis=2)
     mask = label_mask * input_mask
     grad_blank_mask = (label_mask * small_input_mask)[:, :-1, :]
     grad_truth_mask = (small_label_mask * input_mask)[:, :, :-1]
@@ -176,8 +172,8 @@ def compute_rnnt_loss_and_grad_helper(logits, labels, label_length, logit_length
     indices = tf.stack([logit_length - 1, label_length], axis=1)
     blank_sl = tf.gather_nd(blank_probs, indices, batch_dims=1)
 
-    beta = backward_dp(bp_diags, tp_diags, batch_size, input_max_len, target_max_len, label_length, logit_length,
-                       blank_sl) * mask
+    beta = backward_dp(bp_diags, tp_diags, batch_size, input_max_len,
+                       target_max_len, label_length, logit_length, blank_sl) * mask
     beta = tf.where(tf.math.is_nan(beta), tf.zeros_like(beta), beta)
     final_state_probs = beta[:, 0, 0]
 
@@ -225,8 +221,8 @@ def compute_rnnt_loss_and_grad_helper(logits, labels, label_length, logit_length
     probs = tf.exp(log_probs)
     grads_truth_scatter = tf.scatter_nd(scatter_idx, grads_truth,
                                         [batch_size, input_max_len, target_max_len, vocab_size - 1])
-    grads = tf.concat(
-        [tf.reshape(grads_blank, shape=(batch_size, input_max_len, target_max_len, -1)), grads_truth_scatter], axis=3)
+    grads = tf.concat([tf.reshape(grads_blank, shape=(batch_size, input_max_len, target_max_len, -1)),
+                       grads_truth_scatter], axis=3)
     grads_logits = grads - probs * (tf.reduce_sum(grads, axis=3, keepdims=True))
 
     loss = -final_state_probs
