@@ -54,8 +54,6 @@ args = parser.parse_args()
 
 tf.config.optimizer.set_experimental_options({"auto_mixed_precision": args.mxp})
 
-strategy = setup_tpu(args.tpu_address)
-
 from tensorflow_asr.configs.config import Config
 from tensorflow_asr.datasets.asr_dataset import ASRTFRecordDataset
 from tensorflow_asr.featurizers.speech_featurizers import TFSpeechFeaturizer
@@ -114,6 +112,8 @@ train_dataset.max_input_length, train_dataset.max_label_length, train_dataset.ma
 eval_dataset.max_input_length, eval_dataset.max_label_length, eval_dataset.max_prediction_length = max_input_length, max_label_length, max_prediction_length
 input_shape = speech_featurizer.shape
 input_shape[0] = max_input_length
+
+strategy = setup_tpu(args.tpu_address)
 
 conformer_trainer = TransducerTrainer(
     config=config.learning_config.running_config,
