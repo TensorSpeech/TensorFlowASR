@@ -97,7 +97,7 @@ class TransducerPrediction(tf.keras.Model):
         outputs = self.embed(outputs, training=training)
         outputs = self.do(outputs, training=training)
         for rnn in self.rnns:
-            mask = tf.sequence_mask(prediction_length)
+            mask = tf.sequence_mask(prediction_length, maxlen=self.prediction_max_length)
             outputs = rnn["rnn"](outputs, training=training, mask=mask)
             outputs = outputs[0]
             if rnn["ln"] is not None:
@@ -240,6 +240,7 @@ class Transducer(Model):
         self.time_reduction_factor = 1
 
     def _build(self, input_shape, prediction_max_length=None, batch_size=None):
+        self.predict_net.prediction_max_length = prediction_max_length
         inputs = tf.keras.Input(shape=input_shape, dtype=tf.float32, batch_size=batch_size)
         input_length = tf.keras.Input(shape=[], dtype=tf.int32, batch_size=batch_size)
         pred = tf.keras.Input(shape=[prediction_max_length], dtype=tf.int32, batch_size=batch_size)
