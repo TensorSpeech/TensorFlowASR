@@ -59,7 +59,7 @@ class ASRDataset(BaseDataset):
                  augmentations: Augmentation = Augmentation(None),
                  cache: bool = False,
                  shuffle: bool = False,
-                 buffer_size: int = BUFFER_SIZE
+                 buffer_size: int = BUFFER_SIZE,
                  enable_tpu: bool = False):
         super(ASRDataset, self).__init__(
             data_paths=data_paths, augmentations=augmentations,
@@ -119,20 +119,38 @@ class ASRDataset(BaseDataset):
         if self.shuffle:
             dataset = dataset.shuffle(self.buffer_size, reshuffle_each_iteration=True)
 
-        # PADDED BATCH the dataset
-        dataset = dataset.padded_batch(
-            batch_size=batch_size,
-            padded_shapes=(
-                tf.TensorShape(self.speech_featurizer.shape),
-                tf.TensorShape([]),
-                tf.TensorShape([None]),
-                tf.TensorShape([]),
-                tf.TensorShape([None]),
-                tf.TensorShape([]),
-            ),
-            padding_values=(0., 0, self.text_featurizer.blank, 0, self.text_featurizer.blank, 0),
-            drop_remainder=True
-        )
+        if self.enable_tpu:
+            assert self.max_input_length > 0 and self.max_label_length > 0 and self.max_prediction_length > 0, "All max lengths should be computed beforehand to enable TPU support"
+            input_shape_for_tpu = self.speech_featurizer.shape
+            input_shape_for_tpu[0] = self.max_input_length # Features for all samples should be padded to this length statically for TPU training
+            dataset = dataset.padded_batch(
+                batch_size=batch_size,
+                padded_shapes=(
+                    tf.TensorShape(input_shape_for_tpu),
+                    tf.TensorShape([]),
+                    tf.TensorShape([self.max_label_length]),
+                    tf.TensorShape([]),
+                    tf.TensorShape([self.max_prediction_length]),
+                    tf.TensorShape([]),
+                ),
+                padding_values=(0., 0, self.text_featurizer.blank, 0, self.text_featurizer.blank, 0),
+                drop_remainder=True
+            )
+        else:
+            # PADDED BATCH the dataset as usual
+            dataset = dataset.padded_batch(
+                batch_size=batch_size,
+                padded_shapes=(
+                    tf.TensorShape(self.speech_featurizer.shape),
+                    tf.TensorShape([]),
+                    tf.TensorShape([None]),
+                    tf.TensorShape([]),
+                    tf.TensorShape([None]),
+                    tf.TensorShape([]),
+                ),
+                padding_values=(0., 0, self.text_featurizer.blank, 0, self.text_featurizer.blank, 0),
+                drop_remainder=True
+            )
 
         # PREFETCH to improve speed of input length
         dataset = dataset.prefetch(AUTOTUNE)
