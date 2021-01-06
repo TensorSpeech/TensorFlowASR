@@ -23,7 +23,7 @@ from ..augmentations.augments import Augmentation
 from .base_dataset import BaseDataset, BUFFER_SIZE
 from ..featurizers.speech_featurizers import read_raw_audio, SpeechFeaturizer
 from ..featurizers.text_featurizers import TextFeaturizer
-from ..utils.utils import bytestring_feature, print_one_line, get_num_batches
+from ..utils.utils import bytestring_feature, preprocess_paths, print_one_line, get_num_batches
 
 AUTOTUNE = tf.data.experimental.AUTOTUNE
 TFRECORD_SHARDS = 16
@@ -87,8 +87,6 @@ class ASRDataset(BaseDataset):
         if self.shuffle:
             np.random.shuffle(lines)  # Mix transcripts.tsv
         self.total_steps = len(lines)
-        if self.enable_tpu:
-            self._compute_max_lens(lines)
         return lines
 
     def preprocess(self, audio, transcript):
@@ -169,12 +167,30 @@ class ASRDataset(BaseDataset):
     def create(self, batch_size):
         raise NotImplementedError()
 
-    def _compute_max_lens(self, lines):
+    def compute_max_lengths(self, max_lengths_path: str = None):
+        assert max_lengths_path is not None, "max_lengths_path cannot be None"
+        max_lengths_path = os.path.join(preprocess_paths(max_lengths_path), f"{self.stage}.max_lengths.txt")
+        if tf.io.gfile.exists(max_lengths_path):
+            print(f"Loading max lengths from {max_lengths_path} ...")
+            with tf.io.gfile.GFile(max_lengths_path, 'r') as f:
+                self.max_input_length, self.max_label_length, self.max_prediction_length = [int(l) for l in f.read().split()]
+                return
+
+        lines = self.read_entries()
         for line in tqdm.tqdm(lines, desc=f"Computing max lengths for entries in {self.stage} dataset"):
             _, input_length, _, label_length, _, prediction_length = self.preprocess(line[0], line[2])
             self.max_input_length = input_length if input_length > self.max_input_length else self.max_input_length
             self.max_label_length = label_length if label_length > self.max_label_length else self.max_label_length
             self.max_prediction_length = prediction_length if prediction_length > self.max_prediction_length else self.max_prediction_length
+
+        self.max_input_length = int(self.max_input_length.numpy())
+        self.max_label_length = int(self.max_label_length.numpy())
+        self.max_prediction_length = int(self.max_prediction_length.numpy())
+
+        with tf.io.gfile.GFile(max_lengths_path, 'w') as f:
+            f.write(f"{self.max_input_length} {self.max_label_length} {self.max_prediction_length}")
+
+        print(f"Max lengths written to {max_lengths_path}")
 
 
 class ASRTFRecordDataset(ASRDataset):
