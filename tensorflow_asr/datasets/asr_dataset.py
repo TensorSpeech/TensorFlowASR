@@ -178,7 +178,7 @@ class ASRDataset(BaseDataset):
 
         lines = self.read_entries()
         for line in tqdm.tqdm(lines, desc=f"Computing max lengths for entries in {self.stage} dataset"):
-            _, input_length, _, label_length, _, prediction_length = self.preprocess(line[0], line[2])
+            _, input_length, _, label_length, _, prediction_length = self.preprocess(str(line[0]), str(line[2]).encode("utf-8"))
             self.max_input_length = input_length if input_length > self.max_input_length else self.max_input_length
             self.max_label_length = label_length if label_length > self.max_label_length else self.max_label_length
             self.max_prediction_length = prediction_length if prediction_length > self.max_prediction_length else self.max_prediction_length
