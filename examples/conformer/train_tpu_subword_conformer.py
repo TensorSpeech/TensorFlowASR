@@ -38,6 +38,8 @@ parser.add_argument("--bs", type=int, default=2, help="Common training and evalu
 
 parser.add_argument("--tpu_address", type=str, default=None, help="TPU address. Leave None on Colab")
 
+parser.add_argument("--max_lengths_path", type=str, default="~", help="Path to file containing max lengths. Will be computed if not exists")
+
 parser.add_argument("--mxp", default=False, action="store_true", help="Enable mixed precision")
 
 parser.add_argument("--cache", default=False, action="store_true", help="Enable caching for dataset")
@@ -89,6 +91,8 @@ train_dataset = ASRTFRecordDataset(
     stage="train", cache=args.cache,
     shuffle=True, buffer_size=args.bfs, enable_tpu=True,
 )
+train_dataset.compute_max_lengths(args.max_lengths_path)
+
 eval_dataset = ASRTFRecordDataset(
     data_paths=config.learning_config.dataset_config.eval_paths,
     tfrecords_dir=config.learning_config.dataset_config.tfrecords_dir,
@@ -98,20 +102,28 @@ eval_dataset = ASRTFRecordDataset(
     stage="eval", cache=args.cache,
     shuffle=True, buffer_size=args.bfs, enable_tpu=True,
 )
+eval_dataset.compute_max_lengths(args.max_lengths_path)
+
+# Get maximum(max_input_length, max_label_length, max_prediction_length) from attributes of train and eval datasets
+# and set back the greater values to both datasets.
+# Finally, build the model with these static shapes.
+max_input_length = max(train_dataset.max_input_length, eval_dataset.max_input_length)
+max_label_length = max(train_dataset.max_label_length, eval_dataset.max_label_length)
+max_prediction_length = max(train_dataset.max_prediction_length, eval_dataset.max_prediction_length)
+train_dataset.max_input_length, train_dataset.max_label_length, train_dataset.max_prediction_length = max_input_length, max_label_length, max_prediction_length
+eval_dataset.max_input_length, eval_dataset.max_label_length, eval_dataset.max_prediction_length = max_input_length, max_label_length, max_prediction_length
+input_shape = speech_featurizer.shape
+input_shape[0] = max_input_length
 
 conformer_trainer = TransducerTrainer(
     config=config.learning_config.running_config,
     text_featurizer=text_featurizer, strategy=strategy
 )
 
-# TODO (monatis): Get maximum(max_input_length, max_label_length, max_prediction_length) from attributes of train and eval datasets
-# and set back the greater values to both datasets.
-# Finally, build the model with these static shapes.
-
 with conformer_trainer.strategy.scope():
     # build model
     conformer = Conformer(**config.model_config, vocabulary_size=text_featurizer.num_classes)
-    conformer._build(speech_featurizer.shape)
+    conformer._build(input_shape, prediction_max_length=max_prediction_length, batch_size=args.bs)
     conformer.summary(line_length=120)
 
     optimizer = tf.keras.optimizers.Adam(
@@ -129,3 +141,4 @@ conformer_trainer.compile(model=conformer, optimizer=optimizer,
                           max_to_keep=args.max_ckpts)
 
 conformer_trainer.fit(train_dataset, eval_dataset, train_bs=args.bs, eval_bs=args.bs)
+
