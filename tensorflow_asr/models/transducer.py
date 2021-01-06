@@ -591,7 +591,7 @@ class Transducer(Model):
             B = BeamHypothesis(
                 score=B.score.write(0, 0.0),
                 indices=B.indices.write(0, self.text_featurizer.blank),
-                prediction=B.prediction.write(0, tf.ones([total], dtype=tf.int32) * self.text_featurizer.blank),
+                prediction=B.prediction.write(0, tf.ones([total * 2], dtype=tf.int32) * self.text_featurizer.blank),
                 states=B.states.write(0, self.predict_net.get_initial_state())
             )
 
@@ -673,10 +673,7 @@ class Transducer(Model):
 
                         b_score, b_indices, b_prediction, b_states, \
                             a_score, a_indices, a_prediction, a_states, A_i = tf.cond(
-                                tf.equal(pred, self.text_featurizer.blank),
-                                true_fn=true_fn,
-                                false_fn=false_fn
-                            )
+                                tf.equal(pred, self.text_featurizer.blank), true_fn=true_fn, false_fn=false_fn)
 
                         B = BeamHypothesis(score=b_score, indices=b_indices, prediction=b_prediction, states=b_states)
                         A = BeamHypothesis(score=a_score, indices=a_indices, prediction=a_prediction, states=a_states)
