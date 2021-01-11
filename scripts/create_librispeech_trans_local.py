@@ -21,38 +21,47 @@ import unicodedata
 
 from tensorflow_asr.utils.utils import preprocess_paths
 
-parser = argparse.ArgumentParser(prog="Setup LibriSpeech Transcripts")
+# parser = argparse.ArgumentParser(prog="Setup LibriSpeech Transcripts")
+#
+# parser.add_argument("--dir", "-d", type=str,
+#                     default=None, help="Directory of dataset")
+#
+# parser.add_argument("output", type=str,
+#                     default=None, help="The output .tsv transcript file path")
+#
+# args = parser.parse_args()
+#
+# assert args.dir and args.output
+#
+# args.dir = preprocess_paths(args.dir)
+# args.output = preprocess_paths(args.output)
 
-parser.add_argument("--dir", "-d", type=str,
-                    default=None, help="Directory of dataset")
 
-parser.add_argument("output", type=str,
-                    default=None, help="The output .tsv transcript file path")
+def gen_tsv():
+    inputs=[['/media/hub/disk_320/p_data/librispeech_all/train-clean-100'],['/media/hub/disk_320/p_data/librispeech_all/dev-clean','/media/hub/disk_320/p_data/librispeech_all/dev-other'],['/media/hub/disk_320/p_data/librispeech_all/test-clean']]
+    outputs=['/home/hub/mid_dir/train.tsv','/home/hub/mid_dir/evl.tsv','/home/hub/mid_dir/test.tsv']
+    for i in range(len(inputs)):
+        input=inputs[i]
+        transcripts = []
+        output = outputs[i]
+        for input_item in input:
+            text_files = glob.glob(os.path.join(input_item, "**", "*.txt"), recursive=True)
+            for text_file in tqdm(text_files, desc="[Loading]"):
+                current_dir = os.path.dirname(text_file)
+                with open(text_file, "r", encoding="utf-8") as txt:
+                    lines = txt.read().splitlines()
+                for line in lines:
+                    line = line.split(" ", maxsplit=1)
+                    audio_file = os.path.join(current_dir, line[0] + ".flac")
+                    y, sr = librosa.load(audio_file, sr=None)
+                    duration = librosa.get_duration(y, sr)
+                    text = unicodedata.normalize("NFC", line[1].lower())
+                    transcripts.append(f"{audio_file}\t{duration:.2f}\t{text}\n")
 
-args = parser.parse_args()
+        with open(output, "w", encoding="utf-8") as out:
+            out.write("PATH\tDURATION\tTRANSCRIPT\n")
+            for line in tqdm(transcripts, desc="[Writing]"):
+                out.write(line)
 
-assert args.dir and args.output
+gen_tsv()
 
-args.dir = preprocess_paths(args.dir)
-args.output = preprocess_paths(args.output)
-
-transcripts = []
-
-text_files = glob.glob(os.path.join(args.dir, "**", "*.txt"), recursive=True)
-
-for text_file in tqdm(text_files, desc="[Loading]"):
-    current_dir = os.path.dirname(text_file)
-    with open(text_file, "r", encoding="utf-8") as txt:
-        lines = txt.read().splitlines()
-    for line in lines:
-        line = line.split(" ", maxsplit=1)
-        audio_file = os.path.join(current_dir, line[0] + ".flac")
-        y, sr = librosa.load(audio_file, sr=None)
-        duration = librosa.get_duration(y, sr)
-        text = unicodedata.normalize("NFC", line[1].lower())
-        transcripts.append(f"{audio_file}\t{duration:.2f}\t{text}\n")
-
-with open(args.output, "w", encoding="utf-8") as out:
-    out.write("PATH\tDURATION\tTRANSCRIPT\n")
-    for line in tqdm(transcripts, desc="[Writing]"):
-        out.write(line)
