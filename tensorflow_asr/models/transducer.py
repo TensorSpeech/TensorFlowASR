@@ -368,11 +368,7 @@ class Transducer(Model):
         encoded = self.encoder_inference(features)
         hypothesis = self._perform_greedy(encoded, tf.shape(encoded)[0], predicted, states)
         transcript = self.text_featurizer.indices2upoints(hypothesis.prediction)
-        return (
-            transcript,
-            hypothesis.prediction[-1],
-            hypothesis.states
-        )
+        return transcript, hypothesis.index, hypothesis.states
 
     def recognize_tflite_with_timestamp(self, signal, predicted, states):
         features = self.speech_featurizer.tf_extract(signal)
@@ -395,7 +391,7 @@ class Transducer(Model):
         non_blank_stime = tf.gather_nd(tf.repeat(tf.expand_dims(stime, axis=-1), tf.shape(upoints)[-1], axis=-1), non_blank)
         non_blank_etime = tf.gather_nd(tf.repeat(tf.expand_dims(etime, axis=-1), tf.shape(upoints)[-1], axis=-1), non_blank)
 
-        return non_blank_transcript, non_blank_stime, non_blank_etime, hypothesis.prediction, hypothesis.states
+        return non_blank_transcript, non_blank_stime, non_blank_etime, hypothesis.index, hypothesis.states
 
     def _perform_greedy_batch(self,
                               encoded: tf.Tensor,
@@ -449,11 +445,12 @@ class Transducer(Model):
             time = tf.constant(0, dtype=tf.int32)
             total = encoded_length
 
-            hypothesis = Hypothesis(
-                index=tf.constant(self.text_featurizer.blank, dtype=tf.int32),
-                prediction=tf.ones([total], dtype=tf.int32) * self.text_featurizer.blank,
-                states=states
+            prediction = tf.TensorArray(
+                dtype=tf.int32, size=total, dynamic_size=False,
+                clear_after_read=False, element_shape=tf.TensorShape([])
             )
+
+            hypothesis = Hypothesis(index=predicted, prediction=prediction, states=states)
 
             def condition(time, total, encoded, hypothesis): return tf.less(time, total)
 
@@ -472,26 +469,20 @@ class Transducer(Model):
                     false_fn=lambda: (predict, predict, states)  # update if the new prediction is a non-blank
                 )
 
-                hypothesis = Hypothesis(
-                    index=index,
-                    prediction=tf.tensor_scatter_nd_update(
-                        hypothesis.prediction,
-                        indices=tf.reshape(time, [1, 1]),
-                        updates=tf.expand_dims(predict, axis=-1)
-                    ),
-                    states=states
-                )
+                prediction = hypothesis.prediction.write(time, predict)
 
-                return time + 1, total, encoded, hypothesis
+                new_hypothesis = Hypothesis(index=index, prediction=prediction, states=states)
 
-            time, total, encoded, hypothesis = tf.while_loop(
+                return time + 1, total, encoded, new_hypothesis
+
+            _, _, _, hypothesis = tf.while_loop(
                 condition, body,
                 loop_vars=[time, total, encoded, hypothesis],
                 parallel_iterations=parallel_iterations,
                 swap_memory=swap_memory
             )
 
-            return hypothesis
+            return Hypothesis(index=hypothesis.index, prediction=hypothesis.prediction.stack(), states=hypothesis.states)
 
     # -------------------------------- BEAM SEARCH -------------------------------------
 
