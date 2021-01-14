@@ -37,6 +37,8 @@ parser.add_argument("--tfrecords", default=False, action="store_true",
 parser.add_argument("--mxp", default=False, action="store_true",
                     help="Enable mixed precision")
 
+parser.add_argument("--sentence_piece", default=False, action="store_true", help="Whether to use `SentencePiece` model")
+
 parser.add_argument("--device", type=int, default=0,
                     help="Device's id to run test on")
 
@@ -58,14 +60,17 @@ setup_devices([args.device], cpu=args.cpu)
 from tensorflow_asr.configs.config import Config
 from tensorflow_asr.datasets.asr_dataset import ASRTFRecordTestDataset, ASRSliceTestDataset
 from tensorflow_asr.featurizers.speech_featurizers import TFSpeechFeaturizer
-from tensorflow_asr.featurizers.text_featurizers import SubwordFeaturizer
+from tensorflow_asr.featurizers.text_featurizers import SubwordFeaturizer, SentencePieceFeaturizer
 from tensorflow_asr.runners.base_runners import BaseTester
 from tensorflow_asr.models.conformer import Conformer
 
 config = Config(args.config, learning=True)
 speech_featurizer = TFSpeechFeaturizer(config.speech_config)
 
-if args.subwords and os.path.exists(args.subwords):
+if args.sentence_piece:
+    print("Loading SentencePiece model ...")
+    text_featurizer = SentencePieceFeaturizer.load_from_file(config.decoder_config, args.subwords)
+elif args.subwords and os.path.exists(args.subwords):
     print("Loading subwords ...")
     text_featurizer = SubwordFeaturizer.load_from_file(config.decoder_config, args.subwords)
 else:
