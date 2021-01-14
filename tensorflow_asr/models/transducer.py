@@ -538,7 +538,7 @@ class Transducer(Model):
             )
             prediction = tf.pad(
                 hypothesis.prediction,
-                paddings=[[0, total_time - encoded_length[batch]]],
+                paddings=[[0, 2 * (total_time - encoded_length[batch])]],
                 mode="CONSTANT", constant_values=self.text_featurizer.blank
             )
             decoded = decoded.write(batch, prediction)
