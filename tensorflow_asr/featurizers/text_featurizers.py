@@ -168,7 +168,7 @@ class CharFeaturizer(TextFeaturizer):
         with tf.name_scope("indices2upoints"):
             indices = self.normalize_indices(indices)
             upoints = tf.gather_nd(self.upoints, tf.expand_dims(indices, axis=-1))
-            return tf.reshape(upoints, shape=[-1])
+            return tf.gather_nd(upoints, tf.where(tf.not_equal(upoints, 0)))
 
 
 class SubwordFeaturizer(TextFeaturizer):
@@ -275,7 +275,6 @@ class SubwordFeaturizer(TextFeaturizer):
 
             def body(batch, total, transcripts):
                 upoints = self.indices2upoints(indices[batch])
-                upoints = tf.gather_nd(tf.reshape(upoints, shape=[1, -1]), tf.where(tf.not_equal(upoints, 0)))
                 transcripts = transcripts.write(batch, tf.strings.unicode_encode(upoints, "UTF-8"))
                 return batch + 1, total, transcripts
 
@@ -300,7 +299,7 @@ class SubwordFeaturizer(TextFeaturizer):
         with tf.name_scope("indices2upoints"):
             indices = self.normalize_indices(indices)
             upoints = tf.gather_nd(self.upoints, tf.expand_dims(indices, axis=-1))
-            return tf.reshape(upoints, shape=[-1])
+            return tf.gather_nd(upoints, tf.where(tf.not_equal(upoints, 0)))
 
 
 class SentencePieceFeaturizer(TextFeaturizer):
@@ -450,4 +449,4 @@ class SentencePieceFeaturizer(TextFeaturizer):
         with tf.name_scope("indices2upoints"):
             indices = self.normalize_indices(indices)
             upoints = tf.gather_nd(self.upoints, tf.expand_dims(indices, axis=-1))
-            return tf.reshape(upoints, shape=[-1])
+            return tf.gather_nd(upoints, tf.where(tf.not_equal(upoints, 0)))

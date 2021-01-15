@@ -13,7 +13,7 @@
 # limitations under the License.
 """ Ref: https://github.com/iankur/ContextNet """
 
-from typing import List, Optional
+from typing import List
 import tensorflow as tf
 from .transducer import Transducer
 from ..utils.utils import merge_two_last_dims, get_reduced_length
@@ -245,13 +245,94 @@ class ContextNet(Transducer):
         outputs = self.joint_net([enc, pred], training=training, **kwargs)
         return outputs
 
-    def encoder_inference(self,
-                          features: tf.Tensor,
-                          input_length: Optional[tf.Tensor] = None,
-                          with_batch: bool = False):
+    def encoder_inference(self, features: tf.Tensor, input_length: tf.Tensor):
         with tf.name_scope(f"{self.name}_encoder"):
-            if with_batch: return self.encoder([features, input_length], training=False)
             input_length = tf.expand_dims(tf.shape(features)[0], axis=0)
             outputs = tf.expand_dims(features, axis=0)
             outputs = self.encoder([outputs, input_length], training=False)
             return tf.squeeze(outputs, axis=0)
+
+    # -------------------------------- GREEDY -------------------------------------
+
+    @tf.function
+    def recognize(self,
+                  features: tf.Tensor,
+                  input_length: tf.Tensor,
+                  parallel_iterations: int = 10,
+                  swap_memory: bool = True):
+        """
+        RNN Transducer Greedy decoding
+        Args:
+            features (tf.Tensor): a batch of padded extracted features
+
+        Returns:
+            tf.Tensor: a batch of decoded transcripts
+        """
+        encoded = self.encoder([features, input_length], training=False)
+        return self._perform_greedy_batch(encoded, input_length,
+                                          parallel_iterations=parallel_iterations, swap_memory=swap_memory)
+
+    def recognize_tflite(self, signal, predicted, prediction_states):
+        """
+        Function to convert to tflite using greedy decoding (default streaming mode)
+        Args:
+            signal: tf.Tensor with shape [None] indicating a single audio signal
+            predicted: last predicted character with shape []
+            prediction_states: lastest prediction states with shape [num_rnns, 1 or 2, 1, P]
+
+        Return:
+            transcript: tf.Tensor of Unicode Code Points with shape [None] and dtype tf.int32
+            predicted: last predicted character with shape []
+            encoder_states: lastest encoder states with shape [num_rnns, 1 or 2, 1, P]
+            prediction_states: lastest prediction states with shape [num_rnns, 1 or 2, 1, P]
+        """
+        features = self.speech_featurizer.tf_extract(signal)
+        encoded = self.encoder_inference(features, tf.shape(features)[0])
+        hypothesis = self._perform_greedy(encoded, tf.shape(encoded)[0], predicted, prediction_states)
+        transcript = self.text_featurizer.indices2upoints(hypothesis.prediction)
+        return transcript, hypothesis.index, hypothesis.states
+
+    def recognize_tflite_with_timestamp(self, signal, predicted, states):
+        features = self.speech_featurizer.tf_extract(signal)
+        encoded = self.encoder_inference(features, tf.shape(features)[0])
+        hypothesis = self._perform_greedy(encoded, tf.shape(encoded)[0], predicted, states)
+        indices = self.text_featurizer.normalize_indices(hypothesis.prediction)
+        upoints = tf.gather_nd(self.text_featurizer.upoints, tf.expand_dims(indices, axis=-1))  # [None, max_subword_length]
+
+        num_samples = tf.cast(tf.shape(signal)[0], dtype=tf.float32)
+        total_time_reduction_factor = self.time_reduction_factor * self.speech_featurizer.frame_step
+
+        stime = tf.range(0, num_samples, delta=total_time_reduction_factor, dtype=tf.float32)
+        stime /= tf.cast(self.speech_featurizer.sample_rate, dtype=tf.float32)
+
+        etime = tf.range(total_time_reduction_factor, num_samples, delta=total_time_reduction_factor, dtype=tf.float32)
+        etime /= tf.cast(self.speech_featurizer.sample_rate, dtype=tf.float32)
+
+        non_blank = tf.where(tf.not_equal(upoints, 0))
+        non_blank_transcript = tf.gather_nd(upoints, non_blank)
+        non_blank_stime = tf.gather_nd(tf.repeat(tf.expand_dims(stime, axis=-1), tf.shape(upoints)[-1], axis=-1), non_blank)
+        non_blank_etime = tf.gather_nd(tf.repeat(tf.expand_dims(etime, axis=-1), tf.shape(upoints)[-1], axis=-1), non_blank)
+
+        return non_blank_transcript, non_blank_stime, non_blank_etime, hypothesis.index, hypothesis.states
+
+    # -------------------------------- BEAM SEARCH -------------------------------------
+
+    @tf.function
+    def recognize_beam(self,
+                       features: tf.Tensor,
+                       input_length: tf.Tensor,
+                       lm: bool = False,
+                       parallel_iterations: int = 10,
+                       swap_memory: bool = True):
+        """
+        RNN Transducer Beam Search
+        Args:
+            features (tf.Tensor): a batch of padded extracted features
+            lm (bool, optional): whether to use language model. Defaults to False.
+
+        Returns:
+            tf.Tensor: a batch of decoded transcripts
+        """
+        encoded = self.encoder([features, input_length], training=False)
+        return self._perform_beam_search_batch(encoded, input_length, lm,
+                                               parallel_iterations=parallel_iterations, swap_memory=swap_memory)
