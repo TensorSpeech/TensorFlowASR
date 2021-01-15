@@ -13,7 +13,6 @@
 # limitations under the License.
 """ http://arxiv.org/abs/1811.06621 """
 
-from typing import Optional
 import tensorflow as tf
 
 from .layers.subsampling import TimeReduction
@@ -225,24 +224,18 @@ class StreamingTransducer(Transducer):
         )
         self.time_reduction_factor = self.encoder.time_reduction_factor
 
-    def encoder_inference(self,
-                          features: tf.Tensor,
-                          states: tf.Tensor,
-                          input_length: Optional[tf.Tensor] = None,
-                          with_batch: bool = False):
+    def encoder_inference(self, features: tf.Tensor, states: tf.Tensor):
         """Infer function for encoder (or encoders)
 
         Args:
             features (tf.Tensor): features with shape [T, F, C]
             states (tf.Tensor): previous states of encoders with shape [num_rnns, 1 or 2, 1, P]
-            with_batch (bool): indicates whether the features included batch dim or not
 
         Returns:
             tf.Tensor: output of encoders with shape [T, E]
             tf.Tensor: states of encoders with shape [num_rnns, 1 or 2, 1, P]
         """
         with tf.name_scope(f"{self.name}_encoder"):
-            if with_batch: return self.encoder.recognize(features, states)
             outputs = tf.expand_dims(features, axis=0)
             outputs, new_states = self.encoder.recognize(outputs, states)
             return tf.squeeze(outputs, axis=0), new_states
@@ -263,11 +256,7 @@ class StreamingTransducer(Transducer):
         Returns:
             tf.Tensor: a batch of decoded transcripts
         """
-        encoded, _ = self.encoder_inference(
-            features,
-            self.encoder.get_initial_state(),
-            input_length=input_length, with_batch=True
-        )
+        encoded, _ = self.encoder.recognize(features, self.encoder.get_initial_state())
         return self._perform_greedy_batch(encoded, input_length,
                                           parallel_iterations=parallel_iterations, swap_memory=swap_memory)
 
@@ -290,12 +279,7 @@ class StreamingTransducer(Transducer):
         encoded, new_encoder_states = self.encoder_inference(features, encoder_states)
         hypothesis = self._perform_greedy(encoded, tf.shape(encoded)[0], predicted, prediction_states)
         transcript = self.text_featurizer.indices2upoints(hypothesis.prediction)
-        return (
-            transcript,
-            hypothesis.prediction[-1],
-            new_encoder_states,
-            hypothesis.states
-        )
+        return transcript, hypothesis.index, new_encoder_states, hypothesis.states
 
     def recognize_tflite_with_timestamp(self, signal, predicted, encoder_states, prediction_states):
         features = self.speech_featurizer.tf_extract(signal)
@@ -318,14 +302,7 @@ class StreamingTransducer(Transducer):
         non_blank_stime = tf.gather_nd(tf.repeat(tf.expand_dims(stime, axis=-1), tf.shape(upoints)[-1], axis=-1), non_blank)
         non_blank_etime = tf.gather_nd(tf.repeat(tf.expand_dims(etime, axis=-1), tf.shape(upoints)[-1], axis=-1), non_blank)
 
-        return (
-            non_blank_transcript,
-            non_blank_stime,
-            non_blank_etime,
-            hypothesis.prediction,
-            new_encoder_states,
-            hypothesis.states
-        )
+        return non_blank_transcript, non_blank_stime, non_blank_etime, hypothesis.index, new_encoder_states, hypothesis.states
 
     # -------------------------------- BEAM SEARCH -------------------------------------
 
@@ -345,11 +322,7 @@ class StreamingTransducer(Transducer):
         Returns:
             tf.Tensor: a batch of decoded transcripts
         """
-        encoded, _ = self.encoder_inference(
-            features,
-            self.encoder.get_initial_state(),
-            input_length=input_length, with_batch=True
-        )
+        encoded, _ = self.encoder.recognize(features, self.encoder.get_initial_state())
         return self._perform_beam_search_batch(encoded, input_length, lm,
                                                parallel_iterations=parallel_iterations, swap_memory=swap_memory)
 

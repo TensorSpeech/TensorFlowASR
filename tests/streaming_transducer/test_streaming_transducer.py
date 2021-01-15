@@ -43,7 +43,7 @@ def test_streaming_transducer():
     converter.optimizations = [tf.lite.Optimize.DEFAULT]
     converter.experimental_new_converter = True
     converter.target_spec.supported_ops = [tf.lite.OpsSet.TFLITE_BUILTINS, tf.lite.OpsSet.SELECT_TF_OPS]
-    converter.convert()
+    tflite_model = converter.convert()
 
     print("Converted successfully with no timestamp")
 
@@ -55,3 +55,38 @@ def test_streaming_transducer():
     converter.convert()
 
     print("Converted successfully with timestamp")
+
+    tflitemodel = tf.lite.Interpreter(model_content=tflite_model)
+    signal = tf.random.normal([4000])
+
+    input_details = tflitemodel.get_input_details()
+    output_details = tflitemodel.get_output_details()
+    tflitemodel.resize_tensor_input(input_details[0]["index"], signal.shape)
+    tflitemodel.allocate_tensors()
+    tflitemodel.set_tensor(input_details[0]["index"], signal)
+    tflitemodel.set_tensor(
+        input_details[1]["index"],
+        tf.constant(text_featurizer.blank, dtype=tf.int32)
+    )
+    tflitemodel.set_tensor(
+        input_details[2]["index"],
+        tf.zeros(
+            [config.model_config["encoder_nlayers"], 2, 1, config.model_config["encoder_rnn_units"]],
+            dtype=tf.float32
+        )
+    )
+    tflitemodel.set_tensor(
+        input_details[3]["index"],
+        tf.zeros(
+            [config.model_config["prediction_num_rnns"], 2, 1, config.model_config["prediction_rnn_units"]],
+            dtype=tf.float32
+        )
+    )
+    tflitemodel.invoke()
+    hyp = tflitemodel.get_tensor(output_details[0]["index"])
+
+    print(hyp)
+
+
+if __name__ == '__main__':
+    test_streaming_transducer()
