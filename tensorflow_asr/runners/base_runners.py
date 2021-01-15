@@ -331,8 +331,8 @@ class BaseTrainer(BaseRunner):
 
     def _check_eval_interval(self):
         """Save log interval."""
-        if (self.steps % self.config.eval_interval_steps == 0) or \
-                (self.total_train_steps and self.steps >= self.total_train_steps):
+        if (self.steps % self.config.eval_interval_steps == 0): # or \
+                # (self.total_train_steps and self.steps >= self.total_train_steps):
             self._eval_epoch()
 
     # -------------------------------- UTILS -------------------------------------
