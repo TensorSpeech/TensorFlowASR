@@ -178,7 +178,7 @@ class ASRDataset(BaseDataset):
 
         lines = self.read_entries()
         for line in tqdm.tqdm(lines, desc=f"Computing max lengths for entries in {self.stage} dataset"):
-            _, input_length, _, label_length, _, prediction_length = self.preprocess(str(line[0]), str(line[2]).encode("utf-8"))
+            input_length, label_length, prediction_length = self._get_max_lengths(str(line[1]), str(line[2]).encode("utf-8"))
             self.max_input_length = input_length if input_length > self.max_input_length else self.max_input_length
             self.max_label_length = label_length if label_length > self.max_label_length else self.max_label_length
             self.max_prediction_length = prediction_length if prediction_length > self.max_prediction_length else self.max_prediction_length
@@ -191,6 +191,17 @@ class ASRDataset(BaseDataset):
             f.write(f"{self.max_input_length} {self.max_label_length} {self.max_prediction_length}")
 
         print(f"Max lengths written to {max_lengths_path}")
+
+    def _get_max_lengths(self, duration, transcript):
+        with tf.device("/CPU:0"):
+            input_length = int(float(duration)*100//1)+1
+            input_length = tf.cast(input_length, tf.int32)
+            label = self.text_featurizer.extract(transcript.decode("utf-8"))
+            label_length = tf.cast(tf.shape(label)[0], tf.int32)
+            prediction = self.text_featurizer.prepand_blank(label)
+            prediction_length = tf.cast(tf.shape(prediction)[0], tf.int32)
+
+            return duration, label_length, prediction_length
 
 
 class ASRTFRecordDataset(ASRDataset):
