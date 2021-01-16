@@ -370,3 +370,84 @@ class ASRSliceTestDataset(ASRDataset):
         entries = np.delete(entries, 1, 1)  # Remove unused duration
         dataset = tf.data.Dataset.from_tensor_slices(entries)
         return self.process(dataset, batch_size)
+
+
+class ASRDatasetKeras(ASRDataset):
+    def process(self, dataset, batch_size):
+        dataset = dataset.map(self.parse, num_parallel_calls=AUTOTUNE)
+
+        if self.cache:
+            dataset = dataset.cache()
+
+        if self.shuffle:
+            dataset = dataset.shuffle(self.buffer_size, reshuffle_each_iteration=True)
+
+        # PADDED BATCH the dataset
+        dataset = dataset.padded_batch(
+            batch_size=batch_size,
+            padded_shapes=(
+                {
+                    "input": tf.TensorShape(self.speech_featurizer.shape),
+                    "input_length": tf.TensorShape([]),
+                    "prediction": tf.TensorShape([None]),
+                    "prediction_length": tf.TensorShape([])
+                },
+                {
+                    "label": tf.TensorShape([None]),
+                    "label_length": tf.TensorShape([])
+                },
+            ),
+            padding_values=(
+                {
+                    "input": 0.,
+                    "input_length": 0,
+                    "prediction": self.text_featurizer.blank,
+                    "prediction_length": 0
+                },
+                {
+                    "label": self.text_featurizer.blank,
+                    "label_length": 0
+                }
+            ),
+            drop_remainder=True
+        )
+
+        # PREFETCH to improve speed of input length
+        dataset = dataset.prefetch(AUTOTUNE)
+        self.total_steps = get_num_batches(self.total_steps, batch_size)
+        return dataset
+
+
+class ASRSliceDatasetKeras(ASRDatasetKeras):
+    """ Keras Dataset for ASR using Slice """
+
+    def preprocess(self, path, transcript):
+        return super(ASRSliceDatasetKeras, self).preprocess(path.decode("utf-8"), transcript)
+
+    @tf.function
+    def parse(self, record):
+        features, input_length, label, label_length, \
+            prediction, prediction_length = tf.numpy_function(
+                self.preprocess,
+                inp=[record[0], record[1]],
+                Tout=[tf.float32, tf.int32, tf.int32, tf.int32, tf.int32, tf.int32]
+            )
+        return (
+            {
+                "input": features,
+                "input_length": input_length,
+                "prediction": prediction,
+                "prediction_length": prediction_length
+            },
+            {
+                "label": label,
+                "label_length": label_length
+            }
+        )
+
+    def create(self, batch_size):
+        entries = self.read_entries()
+        if len(entries) == 0: return None
+        entries = np.delete(entries, 1, 1)  # Remove unused duration
+        dataset = tf.data.Dataset.from_tensor_slices(entries)
+        return self.process(dataset, batch_size)

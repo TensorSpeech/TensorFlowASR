@@ -52,7 +52,7 @@ model_config:
   prediction_num_rnns: 1
   prediction_rnn_units: 320
   prediction_rnn_type: lstm
-  prediction_rnn_implementation: 1
+  prediction_rnn_implementation: 2
   prediction_layer_norm: True
   prediction_projection_units: 0
   joint_dim: 320
