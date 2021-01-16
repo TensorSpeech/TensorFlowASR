@@ -28,8 +28,6 @@ parser.add_argument("--tfrecords_shards", type=int, default=16, help="Number of 
 
 parser.add_argument("--shuffle", default=False, action="store_true", help="Shuffle data or not")
 
-parser.add_argument("--max_lengths_path", type=str, default=None, help="Directory to save max lengths values for TPU training")
-
 parser.add_argument("transcripts", nargs="+", type=str, default=None, help="Paths to transcript files")
 
 args = parser.parse_args()
@@ -39,12 +37,8 @@ assert args.mode in modes, f"Mode must in {modes}"
 transcripts = preprocess_paths(args.transcripts)
 tfrecords_dir = preprocess_paths(args.tfrecords_dir)
 
-dataset = ASRTFRecordDataset(
+ASRTFRecordDataset(
     data_paths=transcripts, tfrecords_dir=tfrecords_dir,
     speech_featurizer=None, text_featurizer=None,
     stage=args.mode, shuffle=args.shuffle, tfrecords_shards=args.tfrecords_shards
-)
-dataset.create_tfrecords()
-
-if args.max_lengths_path is not None:
-    dataset.compute_max_lengths(args.max_lengths_path)
+).create_tfrecords()
