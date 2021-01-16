@@ -201,7 +201,7 @@ class ASRDataset(BaseDataset):
             prediction = self.text_featurizer.prepand_blank(label)
             prediction_length = tf.cast(tf.shape(prediction)[0], tf.int32)
 
-            return duration, label_length, prediction_length
+            return input_length, label_length, prediction_length
 
 
 class ASRTFRecordDataset(ASRDataset):
