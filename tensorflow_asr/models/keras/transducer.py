@@ -14,7 +14,6 @@
 """ https://arxiv.org/pdf/1811.06621.pdf """
 
 import tensorflow as tf
-from tensorflow.python.keras.engine import data_adapter
 
 from ..transducer import Transducer as BaseTransducer
 from ...utils.utils import get_reduced_length
@@ -47,14 +46,17 @@ class Transducer(BaseTransducer):
             "logit_length": get_reduced_length(inputs["input_length"], self.time_reduction_factor)
         }
 
-    def train_step(self, data):
-        data = data_adapter.expand_1d(data)
-        x, y, sample_weight = data_adapter.unpack_x_y_sample_weight(data)
-
+    def train_step(self, batch):
+        x, y_true = batch
         with tf.GradientTape() as tape:
             y_pred = self(x, training=True)
-            loss = self.loss(y, y_pred)
+            loss = self.loss(y_true, y_pred)
         gradients = tape.gradient(loss, self.trainable_variables)
         self.optimizer.apply_gradients(zip(gradients, self.trainable_variables))
+        return {"loss": loss}
 
+    def test_step(self, batch):
+        x, y_true = batch
+        y_pred = self(x, training=True)
+        loss = self.loss(y_true, y_pred)
         return {"loss": loss}

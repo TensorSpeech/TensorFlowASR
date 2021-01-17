@@ -142,5 +142,10 @@ with strategy.scope():
     conformer.compile(optimizer=optimizer, loss=loss)
 
 train_data_loader = train_dataset.create(global_batch_size)
-conformer.fit(train_data_loader, epochs=config.learning_config.running_config.num_epochs,
-              steps_per_epoch=train_dataset.total_steps)
+eval_data_loader = eval_dataset.create(global_batch_size)
+
+conformer.fit(
+    train_data_loader, epochs=config.learning_config.running_config.num_epochs,
+    validation_data=eval_data_loader,
+    steps_per_epoch=train_dataset.total_steps
+)
