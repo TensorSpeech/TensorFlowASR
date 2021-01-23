@@ -62,7 +62,7 @@ from tensorflow_asr.featurizers.text_featurizers import SubwordFeaturizer
 from tensorflow_asr.runners.base_runners import BaseTester
 from tensorflow_asr.models.contextnet import ContextNet
 
-config = Config(args.config, learning=True)
+config = Config(args.config)
 speech_featurizer = TFSpeechFeaturizer(config.speech_config)
 
 if args.subwords and os.path.exists(args.subwords):

@@ -65,7 +65,7 @@ from tensorflow_asr.featurizers.text_featurizers import CharFeaturizer
 from tensorflow_asr.runners.transducer_runners import TransducerTrainerGA
 from tensorflow_asr.models.streaming_transducer import StreamingTransducer
 
-config = Config(args.config, learning=True)
+config = Config(args.config)
 speech_featurizer = TFSpeechFeaturizer(config.speech_config)
 text_featurizer = CharFeaturizer(config.decoder_config)
 

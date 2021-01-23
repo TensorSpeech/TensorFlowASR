@@ -24,7 +24,7 @@ strategy = setup_strategy(args.devices)
 from tensorflow_asr.configs.config import Config
 from tensorflow_asr.featurizers.text_featurizers import SentencePieceFeaturizer
 
-config = Config(args.config, learning=True)
+config = Config(args.config)
 
 print("Generating subwords ...")
 text_featurizer = SentencePieceFeaturizer.build_from_corpus(

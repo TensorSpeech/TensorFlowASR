@@ -284,6 +284,8 @@ class Transducer(Model):
         outputs = self.joint_net([enc, pred], training=training, **kwargs)
         return outputs
 
+    # -------------------------------- INFERENCES-------------------------------------
+
     def encoder_inference(self, features: tf.Tensor):
         """Infer function for encoder (or encoders)
 

@@ -25,7 +25,7 @@ from tensorflow_asr.featurizers.speech_featurizers import TFSpeechFeaturizer
 
 
 def test_streaming_transducer():
-    config = Config(DEFAULT_YAML, learning=False)
+    config = Config(DEFAULT_YAML)
 
     text_featurizer = CharFeaturizer(config.decoder_config)
 

@@ -64,7 +64,7 @@ from tensorflow_asr.runners.transducer_runners import TransducerTrainer
 from tensorflow_asr.models.contextnet import ContextNet
 from tensorflow_asr.optimizers.schedules import TransformerSchedule
 
-config = Config(args.config, learning=True)
+config = Config(args.config)
 speech_featurizer = TFSpeechFeaturizer(config.speech_config)
 
 if args.subwords and os.path.exists(args.subwords):
