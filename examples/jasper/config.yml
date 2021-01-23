@@ -81,3 +81,16 @@ learning_config:
     log_interval_steps: 400
     save_interval_steps: 400
     eval_interval_steps: 800
+    checkpoint:
+      filepath: /mnt/Miscellanea/Models/local/jasper/checkpoints/{epoch:02d}.h5
+      save_best_only: True
+      save_weights_only: False
+      save_freq: epoch
+    states_dir: /mnt/Miscellanea/Models/local/jasper/states
+    tensorboard:
+      log_dir: /mnt/Miscellanea/Models/local/jasper/tensorboard
+      histogram_freq: 1
+      write_graph: True
+      write_images: True
+      update_freq: 'epoch'
+      profile_batch: 2

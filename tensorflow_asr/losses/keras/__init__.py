@@ -13,4 +13,5 @@
 # limitations under the License.
 
 from .rnnt_losses import RnntLoss
-__all__ = ['RnntLoss']
+from .ctc_losses import CtcLoss
+__all__ = ['RnntLoss', 'CtcLoss']
