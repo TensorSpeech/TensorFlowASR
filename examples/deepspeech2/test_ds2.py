@@ -59,7 +59,7 @@ from tensorflow_asr.models.deepspeech2 import DeepSpeech2
 tf.random.set_seed(0)
 assert args.export
 
-config = Config(args.config, learning=True)
+config = Config(args.config)
 speech_featurizer = TFSpeechFeaturizer(config.speech_config)
 text_featurizer = CharFeaturizer(config.decoder_config)
 # Build DS2 model

@@ -62,7 +62,7 @@ from tensorflow_asr.runners.transducer_runners import TransducerTrainerGA
 from tensorflow_asr.models.conformer import Conformer
 from tensorflow_asr.optimizers.schedules import TransformerSchedule
 
-config = Config(args.config, learning=True)
+config = Config(args.config)
 speech_featurizer = TFSpeechFeaturizer(config.speech_config)
 text_featurizer = CharFeaturizer(config.decoder_config)
 

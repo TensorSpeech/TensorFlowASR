@@ -46,7 +46,7 @@ args = parser.parse_args()
 
 assert args.saved and args.output
 
-config = Config(args.config, learning=True)
+config = Config(args.config)
 speech_featurizer = TFSpeechFeaturizer(config.speech_config)
 
 if args.subwords and os.path.exists(args.subwords):

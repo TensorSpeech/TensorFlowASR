@@ -15,7 +15,7 @@
 import tensorflow as tf
 from tensorflow.python.keras.utils import losses_utils
 
-from ..rnnt_losses import rnnt_loss
+from .. import rnnt_loss
 
 
 class RnntLoss(tf.keras.losses.Loss):

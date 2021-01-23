@@ -59,14 +59,13 @@ tf.config.optimizer.set_experimental_options({"auto_mixed_precision": args.mxp})
 strategy = setup_strategy(args.devices)
 
 from tensorflow_asr.configs.config import Config
-from tensorflow_asr.datasets.asr_dataset import ASRTFRecordDataset, ASRSliceDatasetKeras
+from tensorflow_asr.datasets.keras import ASRTFRecordDatasetKeras, ASRSliceDatasetKeras
 from tensorflow_asr.featurizers.speech_featurizers import TFSpeechFeaturizer
 from tensorflow_asr.featurizers.text_featurizers import SubwordFeaturizer, SentencePieceFeaturizer
 from tensorflow_asr.models.keras.conformer import Conformer
 from tensorflow_asr.optimizers.schedules import TransformerSchedule
-from tensorflow_asr.losses.keras.rnnt_losses import RnntLoss
 
-config = Config(args.config, learning=True)
+config = Config(args.config)
 speech_featurizer = TFSpeechFeaturizer(config.speech_config)
 
 if args.sentence_piece:
@@ -84,7 +83,7 @@ else:
     text_featurizer.save_to_file(args.subwords)
 
 if args.tfrecords:
-    train_dataset = ASRTFRecordDataset(
+    train_dataset = ASRTFRecordDatasetKeras(
         data_paths=config.learning_config.dataset_config.train_paths,
         tfrecords_dir=config.learning_config.dataset_config.tfrecords_dir,
         speech_featurizer=speech_featurizer,
@@ -94,7 +93,7 @@ if args.tfrecords:
         stage="train", cache=args.cache,
         shuffle=True, buffer_size=args.bfs,
     )
-    eval_dataset = ASRTFRecordDataset(
+    eval_dataset = ASRTFRecordDatasetKeras(
         data_paths=config.learning_config.dataset_config.eval_paths,
         tfrecords_dir=config.learning_config.dataset_config.tfrecords_dir,
         tfrecords_shards=args.tfrecords_shards,
@@ -121,6 +120,8 @@ else:
     )
 
 with strategy.scope():
+    global_batch_size = config.learning_config.running_config.batch_size
+    global_batch_size *= strategy.num_replicas_in_sync
     # build model
     conformer = Conformer(**config.model_config, vocabulary_size=text_featurizer.num_classes)
     conformer._build(speech_featurizer.shape)
@@ -136,16 +137,20 @@ with strategy.scope():
         beta_2=config.learning_config.optimizer_config["beta2"],
         epsilon=config.learning_config.optimizer_config["epsilon"]
     )
-    global_batch_size = config.learning_config.running_config.batch_size
-    global_batch_size *= strategy.num_replicas_in_sync
-    loss = RnntLoss(blank=text_featurizer.blank, global_batch_size=global_batch_size)
-    conformer.compile(optimizer=optimizer, loss=loss)
 
-train_data_loader = train_dataset.create(global_batch_size)
-eval_data_loader = eval_dataset.create(global_batch_size)
+    conformer.compile(optimizer=optimizer, global_batch_size=global_batch_size, blank=text_featurizer.blank)
 
-conformer.fit(
-    train_data_loader, epochs=config.learning_config.running_config.num_epochs,
-    validation_data=eval_data_loader,
-    steps_per_epoch=train_dataset.total_steps
-)
+    train_data_loader = train_dataset.create(global_batch_size)
+    eval_data_loader = eval_dataset.create(global_batch_size)
+
+    callbacks = [
+        tf.keras.callbacks.ModelCheckpoint(**config.learning_config.running_config.checkpoint),
+        tf.keras.callbacks.experimental.BackupAndRestore(config.learning_config.running_config.states_dir),
+        tf.keras.callbacks.TensorBoard(**config.learning_config.running_config.tensorboard)
+    ]
+
+    conformer.fit(
+        train_data_loader, epochs=config.learning_config.running_config.num_epochs,
+        validation_data=eval_data_loader, callbacks=callbacks,
+        steps_per_epoch=train_dataset.total_steps
+    )
