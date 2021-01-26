@@ -59,7 +59,7 @@ learning_config:
       - /mnt/Miscellanea/Datasets/Speech/LibriSpeech/dev-other/transcripts.tsv
     test_paths:
       - /mnt/Miscellanea/Datasets/Speech/LibriSpeech/test-clean/transcripts.tsv
-    tfrecords_dir: null
+    tfrecords_dir: /mnt/Miscellanea/Datasets/Speech/LibriSpeech/tfrecords
 
   optimizer_config:
     class_name: adam
@@ -74,3 +74,16 @@ learning_config:
     log_interval_steps: 400
     save_interval_steps: 400
     eval_interval_steps: 800
+    checkpoint:
+      filepath: /mnt/Miscellanea/Models/local/deepspeech2/checkpoints/{epoch:02d}.h5
+      save_best_only: True
+      save_weights_only: False
+      save_freq: epoch
+    states_dir: /mnt/Miscellanea/Models/local/deepspeech2/states
+    tensorboard:
+      log_dir: /mnt/Miscellanea/Models/local/deepspeech2/tensorboard
+      histogram_freq: 1
+      write_graph: True
+      write_images: True
+      update_freq: 'epoch'
+      profile_batch: 2

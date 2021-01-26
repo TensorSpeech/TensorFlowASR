@@ -51,7 +51,7 @@ from tensorflow_asr.featurizers.speech_featurizers import TFSpeechFeaturizer
 from tensorflow_asr.featurizers.text_featurizers import CharFeaturizer
 from tensorflow_asr.models.conformer import Conformer
 
-config = Config(args.config, learning=True)
+config = Config(args.config)
 speech_featurizer = TFSpeechFeaturizer(config.speech_config)
 text_featurizer = CharFeaturizer(config.decoder_config)
 

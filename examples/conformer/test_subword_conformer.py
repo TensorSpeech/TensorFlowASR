@@ -64,7 +64,7 @@ from tensorflow_asr.featurizers.text_featurizers import SubwordFeaturizer, Sente
 from tensorflow_asr.runners.base_runners import BaseTester
 from tensorflow_asr.models.conformer import Conformer
 
-config = Config(args.config, learning=True)
+config = Config(args.config)
 speech_featurizer = TFSpeechFeaturizer(config.speech_config)
 
 if args.sentence_piece:

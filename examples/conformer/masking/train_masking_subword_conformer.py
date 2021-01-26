@@ -70,7 +70,7 @@ from trainer import TrainerWithMasking
 from tensorflow_asr.models.conformer import Conformer
 from tensorflow_asr.optimizers.schedules import TransformerSchedule
 
-config = Config(args.config, learning=True)
+config = Config(args.config)
 speech_featurizer = TFSpeechFeaturizer(config.speech_config)
 
 if args.subwords and os.path.exists(args.subwords):

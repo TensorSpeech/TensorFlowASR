@@ -43,7 +43,7 @@ args = parser.parse_args()
 
 assert args.saved and args.output
 
-config = Config(args.config, learning=True)
+config = Config(args.config)
 speech_featurizer = TFSpeechFeaturizer(config.speech_config)
 text_featurizer = CharFeaturizer(config.decoder_config)
 
