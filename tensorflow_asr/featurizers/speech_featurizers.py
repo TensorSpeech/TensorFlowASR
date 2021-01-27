@@ -40,6 +40,11 @@ def read_raw_audio(audio, sample_rate=16000):
     return wave
 
 
+def tf_read_raw_audio(audio: tf.Tensor, sample_rate=16000):
+    wave, _ = tf.audio.decode_wav(audio, desired_channels=1, desired_samples=sample_rate)
+    return tf.squeeze(wave, axis=-1)
+
+
 def slice_signal(signal, window_size, stride=0.5) -> np.ndarray:
     """ Return windows of the given signal by sweeping in stride fractions of window """
     assert signal.ndim == 1, signal.ndim

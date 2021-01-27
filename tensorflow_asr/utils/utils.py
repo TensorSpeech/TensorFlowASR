@@ -103,10 +103,10 @@ def read_bytes(path: str) -> tf.Tensor:
     return tf.convert_to_tensor(content, dtype=tf.string)
 
 
-def shape_list(x):
+def shape_list(x, out_type=tf.int32):
     """Deal with dynamic shape in tensorflow cleanly."""
     static = x.shape.as_list()
-    dynamic = tf.shape(x)
+    dynamic = tf.shape(x, out_type=out_type)
     return [dynamic[i] if s is None else s for i, s in enumerate(static)]
 
 

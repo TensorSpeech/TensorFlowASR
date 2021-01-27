@@ -12,9 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import os
 import argparse
+from tensorflow_asr.configs.config import Config
 from tensorflow_asr.utils.utils import preprocess_paths
 from tensorflow_asr.datasets.asr_dataset import ASRTFRecordDataset
+from tensorflow_asr.featurizers.text_featurizers import SubwordFeaturizer
 
 modes = ["train", "eval", "test"]
 
@@ -22,11 +25,15 @@ parser = argparse.ArgumentParser(prog="TFRecords Creation")
 
 parser.add_argument("--mode", "-m", type=str, default=None, help=f"Mode in {modes}")
 
+parser.add_argument("--config", type=str, default=None, help="The file path of model configuration file")
+
 parser.add_argument("--tfrecords_dir", type=str, default=None, help="Directory to tfrecords")
 
 parser.add_argument("--tfrecords_shards", type=int, default=16, help="Number of tfrecords shards")
 
 parser.add_argument("--shuffle", default=False, action="store_true", help="Shuffle data or not")
+
+parser.add_argument("--subwords", type=str, default=None, help="Path to file that stores generated subwords")
 
 parser.add_argument("transcripts", nargs="+", type=str, default=None, help="Paths to transcript files")
 
@@ -37,8 +44,15 @@ assert args.mode in modes, f"Mode must in {modes}"
 transcripts = preprocess_paths(args.transcripts)
 tfrecords_dir = preprocess_paths(args.tfrecords_dir)
 
+config = Config(args.config)
+if args.subwords and os.path.exists(args.subwords):
+    print("Loading subwords ...")
+    text_featurizer = SubwordFeaturizer.load_from_file(config.decoder_config, args.subwords)
+else:
+    raise ValueError("subwords must be set")
+
 ASRTFRecordDataset(
     data_paths=transcripts, tfrecords_dir=tfrecords_dir,
-    speech_featurizer=None, text_featurizer=None,
+    speech_featurizer=None, text_featurizer=text_featurizer,
     stage=args.mode, shuffle=args.shuffle, tfrecords_shards=args.tfrecords_shards
 ).create_tfrecords()

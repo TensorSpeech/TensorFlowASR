@@ -27,6 +27,7 @@ class BaseDataset(metaclass=abc.ABCMeta):
                  cache: bool = False,
                  shuffle: bool = False,
                  buffer_size: int = BUFFER_SIZE,
+                 use_tf: bool = False,
                  stage: str = "train"):
         self.data_paths = data_paths
         self.augmentations = augmentations  # apply augmentation
@@ -36,6 +37,7 @@ class BaseDataset(metaclass=abc.ABCMeta):
             raise ValueError("buffer_size must be positive when shuffle is on")
         self.buffer_size = buffer_size  # shuffle buffer size
         self.stage = stage  # for defining tfrecords files
+        self.use_tf = use_tf  # whether to use only pure tf in the dataset pipeline
         self.total_steps = None  # for better training visualization
 
     @abc.abstractmethod

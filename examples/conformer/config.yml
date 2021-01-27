@@ -60,6 +60,7 @@ model_config:
 
 learning_config:
   augmentations:
+    use_tf: True
     after:
       time_masking:
         num_masks: 10
@@ -77,7 +78,7 @@ learning_config:
       - /mnt/Miscellanea/Datasets/Speech/LibriSpeech/dev-other/transcripts.tsv
     test_paths:
       - /mnt/Miscellanea/Datasets/Speech/LibriSpeech/test-clean/transcripts.tsv
-    tfrecords_dir: /mnt/Miscellanea/Datasets/Speech/LibriSpeech/tfrecords
+    tfrecords_dir: /mnt/Miscellanea/Datasets/Speech/LibriSpeech/tfrecords-test
 
   optimizer_config:
     warmup_steps: 40000

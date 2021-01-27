@@ -17,11 +17,11 @@ import multiprocessing
 import tensorflow as tf
 import numpy as np
 
-from ..asr_dataset import ASRDataset, AUTOTUNE, TFRECORD_SHARDS, write_tfrecord_file
+from ..asr_dataset import ASRDataset, AUTOTUNE, TFRECORD_SHARDS
 from ..base_dataset import BUFFER_SIZE
-from ...featurizers.speech_featurizers import SpeechFeaturizer
+from ...featurizers.speech_featurizers import SpeechFeaturizer, read_raw_audio, tf_read_raw_audio
 from ...featurizers.text_featurizers import TextFeaturizer
-from ...utils.utils import get_num_batches
+from ...utils.utils import get_num_batches, bytestring_feature, print_one_line
 from ...augmentations.augments import Augmentation
 
 
@@ -95,6 +95,23 @@ class ASRTFRecordDatasetKeras(ASRDatasetKeras):
         if not tf.io.gfile.exists(self.tfrecords_dir):
             tf.io.gfile.makedirs(self.tfrecords_dir)
 
+    def write_tfrecord_file(self, splitted_entries):
+        shard_path, entries = splitted_entries
+        with tf.io.TFRecordWriter(shard_path, options='ZLIB') as out:
+            for audio_file, _, transcript in entries:
+                with tf.io.gfile.GFile(audio_file, mode="rb") as f:
+                    audio = f.read()
+                indices = " ".join([str(x) for x in self.text_featurizer.extract(transcript).numpy()])
+                feature = {
+                    "path": bytestring_feature([bytes(audio_file, "utf-8")]),
+                    "audio": bytestring_feature([audio]),
+                    "indices": bytestring_feature([bytes(indices, "utf-8")])
+                }
+                example = tf.train.Example(features=tf.train.Features(feature=feature))
+                out.write(example.SerializeToString())
+                print_one_line("Processed:", audio_file)
+        print(f"\nCreated {shard_path}")
+
     def create_tfrecords(self):
         if not tf.io.gfile.exists(self.tfrecords_dir):
             tf.io.gfile.makedirs(self.tfrecords_dir)
@@ -116,23 +133,42 @@ class ASRTFRecordDatasetKeras(ASRDatasetKeras):
 
         splitted_entries = np.array_split(entries, self.tfrecords_shards)
         with multiprocessing.Pool(self.tfrecords_shards) as pool:
-            pool.map(write_tfrecord_file, zip(shards, splitted_entries))
+            pool.map(self.write_tfrecord_file, zip(shards, splitted_entries))
 
         return True
+
+    def preprocess(self, audio, indices):
+        with tf.device("/CPU:0"):
+            signal = read_raw_audio(audio, self.speech_featurizer.sample_rate)
+
+            signal = self.augmentations.before.augment(signal)
+
+            features = self.speech_featurizer.extract(signal)
+
+            features = self.augmentations.after.augment(features)
+
+            label = tf.strings.to_number(tf.strings.split(indices), out_type=tf.int32)
+            label_length = tf.cast(tf.shape(label)[0], tf.int32)
+            prediction = self.text_featurizer.prepand_blank(label)
+            prediction_length = tf.cast(tf.shape(prediction)[0], tf.int32)
+            features = tf.convert_to_tensor(features, tf.float32)
+            input_length = tf.cast(tf.shape(features)[0], tf.int32)
+
+            return features, input_length, label, label_length, prediction, prediction_length
 
     @tf.function
     def parse(self, record):
         feature_description = {
             "path": tf.io.FixedLenFeature([], tf.string),
             "audio": tf.io.FixedLenFeature([], tf.string),
-            "transcript": tf.io.FixedLenFeature([], tf.string)
+            "indices": tf.io.FixedLenFeature([], tf.string)
         }
         example = tf.io.parse_single_example(record, feature_description)
 
         features, input_length, label, label_length, \
             prediction, prediction_length = tf.numpy_function(
                 self.preprocess,
-                inp=[example["audio"], example["transcript"]],
+                inp=[example["audio"], example["indices"]],
                 Tout=[tf.float32, tf.int32, tf.int32, tf.int32, tf.int32, tf.int32]
             )
 
@@ -162,6 +198,52 @@ class ASRTFRecordDatasetKeras(ASRDatasetKeras):
         dataset = tf.data.TFRecordDataset(files_ds, compression_type='ZLIB', num_parallel_reads=AUTOTUNE)
 
         return self.process(dataset, batch_size)
+
+
+class TFASRTFRecordDatasetKeras(ASRDatasetKeras):
+    def preprocess(self, audio, indices):
+        with tf.device("/CPU:0"):
+            signal = tf_read_raw_audio(audio, self.speech_featurizer.sample_rate)
+
+            signal = self.augmentations.before.augment(signal)
+
+            features = self.speech_featurizer.tf_extract(signal)
+
+            features = self.augmentations.after.augment(features)
+
+            label = tf.strings.to_number(tf.strings.split(indices), out_type=tf.int32)
+            label_length = tf.cast(tf.shape(label)[0], tf.int32)
+            prediction = self.text_featurizer.prepand_blank(label)
+            prediction_length = tf.cast(tf.shape(prediction)[0], tf.int32)
+            features = tf.convert_to_tensor(features, tf.float32)
+            input_length = tf.cast(tf.shape(features)[0], tf.int32)
+
+            return features, input_length, label, label_length, prediction, prediction_length
+
+    @tf.function
+    def parse(self, record):
+        feature_description = {
+            "path": tf.io.FixedLenFeature([], tf.string),
+            "audio": tf.io.FixedLenFeature([], tf.string),
+            "indices": tf.io.FixedLenFeature([], tf.string)
+        }
+        example = tf.io.parse_single_example(record, feature_description)
+
+        features, input_length, label, label_length, \
+            prediction, prediction_length = self.preprocess([example["audio"], example["indices"]])
+
+        return (
+            {
+                "input": features,
+                "input_length": input_length,
+                "prediction": prediction,
+                "prediction_length": prediction_length
+            },
+            {
+                "label": label,
+                "label_length": label_length
+            }
+        )
 
 
 class ASRSliceDatasetKeras(ASRDatasetKeras):
