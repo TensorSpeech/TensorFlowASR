@@ -200,7 +200,7 @@ class ASRTFRecordDatasetKeras(ASRDatasetKeras):
         return self.process(dataset, batch_size)
 
 
-class TFASRTFRecordDatasetKeras(ASRDatasetKeras):
+class TFASRTFRecordDatasetKeras(ASRTFRecordDatasetKeras):
     def preprocess(self, audio, indices):
         with tf.device("/CPU:0"):
             signal = tf_read_raw_audio(audio, self.speech_featurizer.sample_rate)
@@ -279,3 +279,6 @@ class ASRSliceDatasetKeras(ASRDatasetKeras):
         entries = np.delete(entries, 1, 1)  # Remove unused duration
         dataset = tf.data.Dataset.from_tensor_slices(entries)
         return self.process(dataset, batch_size)
+
+
+class TFASRSliceDatasetKeras(ASRSliceDatasetKeras):
