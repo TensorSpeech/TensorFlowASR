@@ -28,6 +28,7 @@ class BaseDataset(metaclass=abc.ABCMeta):
                  shuffle: bool = False,
                  buffer_size: int = BUFFER_SIZE,
                  use_tf: bool = False,
+                 drop_remainder: bool = True,
                  stage: str = "train"):
         self.data_paths = data_paths
         self.augmentations = augmentations  # apply augmentation
@@ -38,6 +39,7 @@ class BaseDataset(metaclass=abc.ABCMeta):
         self.buffer_size = buffer_size  # shuffle buffer size
         self.stage = stage  # for defining tfrecords files
         self.use_tf = use_tf  # whether to use only pure tf in the dataset pipeline
+        self.drop_remainder = drop_remainder  # whether to drop remainder for multi gpu training
         self.total_steps = None  # for better training visualization
 
     @abc.abstractmethod

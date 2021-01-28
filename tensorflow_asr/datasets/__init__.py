@@ -13,5 +13,5 @@
 # limitations under the License.
 
 from .base_dataset import BaseDataset
-from .asr_dataset import ASRTFRecordDataset, ASRSliceDataset, ASRTFRecordTestDataset, ASRSliceTestDataset
-__all__ = ['BaseDataset', 'ASRTFRecordDataset', 'ASRSliceDataset', 'ASRTFRecordTestDataset', 'ASRSliceTestDataset']
+from .asr_dataset import ASRDataset, ASRTFRecordDataset, ASRSliceDataset
+__all__ = ['BaseDataset', 'ASRDataset', 'ASRTFRecordDataset', 'ASRSliceDataset']

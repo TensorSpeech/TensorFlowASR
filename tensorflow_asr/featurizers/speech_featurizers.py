@@ -19,9 +19,15 @@ import numpy as np
 import librosa
 import soundfile as sf
 import tensorflow as tf
+import tensorflow_io as tfio
 
 from ..utils.utils import log10
 from .gammatone import fft_weights
+
+
+def load_and_convert_to_wav(path: str) -> tf.Tensor:
+    data = tfio.audio.AudioIOTensor(path, dtype=tf.float32)
+    return tfio.audio.encode_wav(data.to_tensor(), rate=tf.cast(data.rate, dtype=tf.int64))
 
 
 def read_raw_audio(audio, sample_rate=16000):

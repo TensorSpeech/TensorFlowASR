@@ -47,7 +47,7 @@ class TransducerTrainer(BaseTrainer):
 
     @tf.function(experimental_relax_shapes=True)
     def _train_step(self, batch):
-        features, input_length, labels, label_length, prediction, prediction_length = batch
+        _, features, input_length, labels, label_length, prediction, prediction_length = batch
 
         with tf.GradientTape() as tape:
             logits = self.model([features, input_length, prediction, prediction_length], training=True)
@@ -67,7 +67,7 @@ class TransducerTrainer(BaseTrainer):
 
     @tf.function(experimental_relax_shapes=True)
     def _eval_step(self, batch):
-        features, input_length, labels, label_length, prediction, prediction_length = batch
+        _, features, input_length, labels, label_length, prediction, prediction_length = batch
 
         logits = self.model([features, input_length, prediction, prediction_length], training=False)
         eval_loss = rnnt_loss(
@@ -106,7 +106,7 @@ class TransducerTrainerGA(TransducerTrainer):
 
     @tf.function(experimental_relax_shapes=True)
     def _train_step(self, batch):
-        features, input_length, labels, label_length, prediction, prediction_length = batch
+        _, features, input_length, labels, label_length, prediction, prediction_length = batch
 
         with tf.GradientTape() as tape:
             logits = self.model([features, input_length, prediction, prediction_length], training=True)

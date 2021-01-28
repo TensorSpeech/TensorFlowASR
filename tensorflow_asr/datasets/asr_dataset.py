@@ -12,17 +12,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import abc
 import multiprocessing
 import os
 
-import librosa
 import numpy as np
 import tensorflow as tf
 
 from ..augmentations.augments import Augmentation
 from .base_dataset import BaseDataset, BUFFER_SIZE
-from ..featurizers.speech_featurizers import read_raw_audio, tf_read_raw_audio, SpeechFeaturizer
+from ..featurizers.speech_featurizers import load_and_convert_to_wav, read_raw_audio, tf_read_raw_audio, SpeechFeaturizer
 from ..featurizers.text_featurizers import TextFeaturizer
 from ..utils.utils import bytestring_feature, print_one_line, get_num_batches
 
@@ -33,21 +31,21 @@ TFRECORD_SHARDS = 16
 def write_tfrecord_file(splitted_entries):
     shard_path, entries = splitted_entries
     with tf.io.TFRecordWriter(shard_path, options='ZLIB') as out:
-        for audio_file, _, indices in entries:
-            with tf.io.gfile.GFile(audio_file, "rb") as f:
-                audio = f.read()
+        for path, audio, indices in entries:
             feature = {
-                "path": bytestring_feature([bytes(audio_file, "utf-8")]),
+                "path": bytestring_feature([bytes(path, "utf-8")]),
                 "audio": bytestring_feature([audio]),
                 "indices": bytestring_feature([bytes(indices, "utf-8")])
             }
             example = tf.train.Example(features=tf.train.Features(feature=feature))
             out.write(example.SerializeToString())
-            print_one_line("Processed:", audio_file)
+            print_one_line("Processed:", path)
     print(f"\nCreated {shard_path}")
 
 
 class ASRDataset(BaseDataset):
+    """ Dataset for ASR using Generator """
+
     def __init__(self,
                  stage: str,
                  speech_featurizer: SpeechFeaturizer,
@@ -57,43 +55,39 @@ class ASRDataset(BaseDataset):
                  cache: bool = False,
                  shuffle: bool = False,
                  use_tf: bool = False,
+                 drop_remainder: bool = True,
                  buffer_size: int = BUFFER_SIZE):
         super(ASRDataset, self).__init__(
             data_paths=data_paths, augmentations=augmentations,
             cache=cache, shuffle=shuffle, stage=stage, buffer_size=buffer_size,
-            use_tf=use_tf
+            use_tf=use_tf, drop_remainder=drop_remainder
         )
         self.speech_featurizer = speech_featurizer
         self.text_featurizer = text_featurizer
 
     def read_entries(self):
-        lines = []
+        self.lines = []
         for file_path in self.data_paths:
             print(f"Reading {file_path} ...")
             with tf.io.gfile.GFile(file_path, "r") as f:
                 temp_lines = f.read().splitlines()
                 # Skip the header of tsv file
-                lines += temp_lines[1:]
+                self.lines += temp_lines[1:]
         # The files is "\t" seperated
-        lines = [line.split("\t", 2) for line in lines]
-        lines = np.array(lines)
-        for i, line in enumerate(lines):
-            filepath = f"{os.path.splitext(line[0])[0]}.wav",
-            librosa.output.write_wav(
-                filepath,
-                read_raw_audio(line[0], self.speech_featurizer.sample_rate),
-                self.speech_featurizer.sample_rate
-            )
-            lines[i][0] = filepath
-            indices = " ".join([str(x) for x in self.text_featurizer.extract(line[-1]).numpy()])
-            lines[i][-1] = indices
-        if self.shuffle:
-            np.random.shuffle(lines)  # Mix transcripts.tsv
-        self.total_steps = len(lines)
-        return lines
+        self.lines = [line.split("\t", 2) for line in self.lines]
+        self.lines = np.array(self.lines)
+        for i, line in enumerate(self.lines):
+            self.lines[i][-1] = " ".join([str(x) for x in self.text_featurizer.extract(line[-1]).numpy()])
+        if self.shuffle: np.random.shuffle(self.lines)  # Mix transcripts.tsv
+        self.total_steps = len(self.lines)
 
-    def preprocess(self, audio, indices):
-        def fn(_audio, _indices):
+    def generator(self):
+        for path, _, indices in self.lines:
+            audio = load_and_convert_to_wav(path)
+            yield path, audio, indices
+
+    def preprocess(self, path, audio, indices):
+        def fn(_path, _audio, _indices):
             with tf.device("/CPU:0"):
                 signal = read_raw_audio(_audio, self.speech_featurizer.sample_rate)
 
@@ -110,14 +104,14 @@ class ASRDataset(BaseDataset):
                 features = tf.convert_to_tensor(features, tf.float32)
                 input_length = tf.cast(tf.shape(features)[0], tf.int32)
 
-                return features, input_length, label, label_length, prediction, prediction_length
+                return _path, features, input_length, label, label_length, prediction, prediction_length
 
         return tf.numpy_function(
-            fn, inp=[audio, indices],
-            Tout=[tf.float32, tf.int32, tf.int32, tf.int32, tf.int32, tf.int32]
+            fn, inp=[path, audio, indices],
+            Tout=[tf.string, tf.float32, tf.int32, tf.int32, tf.int32, tf.int32, tf.int32]
         )
 
-    def tf_preprocess(self, audio, indices):
+    def tf_preprocess(self, path, audio, indices):
         with tf.device("/CPU:0"):
             signal = tf_read_raw_audio(audio, self.speech_featurizer.sample_rate)
 
@@ -134,7 +128,7 @@ class ASRDataset(BaseDataset):
             features = tf.convert_to_tensor(features, tf.float32)
             input_length = tf.cast(tf.shape(features)[0], tf.int32)
 
-            return features, input_length, label, label_length, prediction, prediction_length
+            return path, features, input_length, label, label_length, prediction, prediction_length
 
     def process(self, dataset, batch_size):
         dataset = dataset.map(self.parse, num_parallel_calls=AUTOTUNE)
@@ -149,6 +143,7 @@ class ASRDataset(BaseDataset):
         dataset = dataset.padded_batch(
             batch_size=batch_size,
             padded_shapes=(
+                tf.TensorShape([]),
                 tf.TensorShape(self.speech_featurizer.shape),
                 tf.TensorShape([]),
                 tf.TensorShape([None]),
@@ -156,8 +151,8 @@ class ASRDataset(BaseDataset):
                 tf.TensorShape([None]),
                 tf.TensorShape([]),
             ),
-            padding_values=(0., 0, self.text_featurizer.blank, 0, self.text_featurizer.blank, 0),
-            drop_remainder=True
+            padding_values=("", 0., 0, self.text_featurizer.blank, 0, self.text_featurizer.blank, 0),
+            drop_remainder=self.drop_remainder
         )
 
         # PREFETCH to improve speed of input length
@@ -165,17 +160,24 @@ class ASRDataset(BaseDataset):
         self.total_steps = get_num_batches(self.total_steps, batch_size)
         return dataset
 
-    @abc.abstractmethod
-    def parse(self, *args, **kwargs):
+    @tf.function
+    def parse(self, path: tf.Tensor, audio: tf.Tensor, indices: tf.Tensor):
         """
         Returns:
             path, features, input_lengths, labels, label_lengths, pred_inp
         """
-        raise NotImplementedError()
+        if self.use_tf: return self.tf_preprocess(path, audio, indices)
+        return self.preprocess(path, audio, indices)
 
-    @abc.abstractmethod
-    def create(self, batch_size):
-        raise NotImplementedError()
+    def create(self, batch_size: int):
+        self.read_entries()
+        if not self.total_steps or self.total_steps == 0: return None
+        dataset = tf.data.Dataset.from_generator(
+            self.generator,
+            output_types=(tf.string, tf.string, tf.string),
+            output_shapes=(tf.TensorShape([]), tf.TensorShape([]), tf.TensorShape([]))
+        )
+        return self.process(dataset, batch_size)
 
 
 class ASRTFRecordDataset(ASRDataset):
@@ -201,8 +203,7 @@ class ASRTFRecordDataset(ASRDataset):
         self.tfrecords_dir = tfrecords_dir
         if tfrecords_shards <= 0: raise ValueError("tfrecords_shards must be positive")
         self.tfrecords_shards = tfrecords_shards
-        if not tf.io.gfile.exists(self.tfrecords_dir):
-            tf.io.gfile.makedirs(self.tfrecords_dir)
+        if not tf.io.gfile.exists(self.tfrecords_dir): tf.io.gfile.makedirs(self.tfrecords_dir)
 
     def create_tfrecords(self):
         if not tf.io.gfile.exists(self.tfrecords_dir):
@@ -214,9 +215,9 @@ class ASRTFRecordDataset(ASRDataset):
 
         print(f"Creating {self.stage}.tfrecord ...")
 
-        entries = self.read_entries()
-        if len(entries) <= 0:
-            return False
+        self.read_entries()
+        if not self.total_steps or self.total_steps == 0: return False
+        entries = np.fromiter(self.generator(), dtype=str)
 
         def get_shard_path(shard_id):
             return os.path.join(self.tfrecords_dir, f"{self.stage}_{shard_id}.tfrecord")
@@ -230,21 +231,17 @@ class ASRTFRecordDataset(ASRDataset):
         return True
 
     @tf.function
-    def parse(self, record):
+    def parse(self, record: tf.Tensor):
         feature_description = {
             "path": tf.io.FixedLenFeature([], tf.string),
             "audio": tf.io.FixedLenFeature([], tf.string),
             "indices": tf.io.FixedLenFeature([], tf.string)
         }
         example = tf.io.parse_single_example(record, feature_description)
+        if self.use_tf: return self.tf_preprocess(**example)
+        return self.preprocess(**example)
 
-        if self.use_tf:
-            return self.tf_preprocess(example["audio"], example["indices"])
-
-        return self.preprocess(example["audio"], example["indices"])
-
-    def create(self, batch_size):
-        # Create TFRecords dataset
+    def create(self, batch_size: int):
         have_data = self.create_tfrecords()
         if not have_data: return None
 
@@ -261,147 +258,14 @@ class ASRTFRecordDataset(ASRDataset):
 class ASRSliceDataset(ASRDataset):
     """ Dataset for ASR using Slice """
 
-    def preprocess(self, path, indices):
-        return super(ASRSliceDataset, self).preprocess(path.decode("utf-8"), indices)
+    @staticmethod
+    def load(record: tf.Tensor):
+        audio = load_and_convert_to_wav(record[0])
+        return record[0], audio, record[2]
 
-    @tf.function
-    def parse(self, record):
-        return tf.numpy_function(
-            self.preprocess,
-            inp=[record[0], record[1]],
-            Tout=[tf.float32, tf.int32, tf.int32, tf.int32, tf.int32, tf.int32]
-        )
-
-    def create(self, batch_size):
-        entries = self.read_entries()
-        if len(entries) == 0: return None
-        entries = np.delete(entries, 1, 1)  # Remove unused duration
-        dataset = tf.data.Dataset.from_tensor_slices(entries)
-        return self.process(dataset, batch_size)
-
-
-class ASRTFRecordTestDataset(ASRTFRecordDataset):
-    def preprocess(self, path, audio, indices):
-        with tf.device("/CPU:0"):
-            signal = read_raw_audio(audio, self.speech_featurizer.sample_rate)
-
-            features = self.speech_featurizer.extract(signal)
-            features = tf.convert_to_tensor(features, tf.float32)
-            input_length = tf.cast(tf.shape(features)[0], tf.int32)
-
-            label = tf.strings.to_number(tf.strings.split(indices), out_type=tf.int32)
-
-            return path, features, input_length, label
-
-    @tf.function
-    def parse(self, record):
-        feature_description = {
-            "path": tf.io.FixedLenFeature([], tf.string),
-            "audio": tf.io.FixedLenFeature([], tf.string),
-            "indices": tf.io.FixedLenFeature([], tf.string)
-        }
-        example = tf.io.parse_single_example(record, feature_description)
-
-        return tf.numpy_function(
-            self.preprocess,
-            inp=[example["path"], example["audio"], example["indices"]],
-            Tout=[tf.string, tf.float32, tf.int32, tf.int32]
-        )
-
-    def process(self, dataset, batch_size):
-        dataset = dataset.map(self.parse, num_parallel_calls=AUTOTUNE)
-
-        if self.cache:
-            dataset = dataset.cache()
-
-        if self.shuffle:
-            dataset = dataset.shuffle(self.buffer_size, reshuffle_each_iteration=True)
-
-        # PADDED BATCH the dataset
-        dataset = dataset.padded_batch(
-            batch_size=batch_size,
-            padded_shapes=(
-                tf.TensorShape([]),
-                tf.TensorShape(self.speech_featurizer.shape),
-                tf.TensorShape([]),
-                tf.TensorShape([None]),
-            ),
-            padding_values=("", 0.0, 0, self.text_featurizer.blank),
-            drop_remainder=True
-        )
-
-        # PREFETCH to improve speed of input length
-        dataset = dataset.prefetch(AUTOTUNE)
-        self.total_steps = get_num_batches(self.total_steps, batch_size)
-        return dataset
-
-    def create(self, batch_size):
-        # Create TFRecords dataset
-        have_data = self.create_tfrecords()
-        if not have_data: return None
-
-        pattern = os.path.join(self.tfrecords_dir, f"{self.stage}*.tfrecord")
-        files_ds = tf.data.Dataset.list_files(pattern)
-        ignore_order = tf.data.Options()
-        ignore_order.experimental_deterministic = False
-        files_ds = files_ds.with_options(ignore_order)
-        dataset = tf.data.TFRecordDataset(files_ds, compression_type='ZLIB', num_parallel_reads=AUTOTUNE)
-
-        return self.process(dataset, batch_size)
-
-
-class ASRSliceTestDataset(ASRDataset):
-    def preprocess(self, path, transcript):
-        with tf.device("/CPU:0"):
-            signal = read_raw_audio(path.decode("utf-8"), self.speech_featurizer.sample_rate)
-
-            features = self.speech_featurizer.extract(signal)
-            features = tf.convert_to_tensor(features, tf.float32)
-            input_length = tf.cast(tf.shape(features)[0], tf.int32)
-
-            label = self.text_featurizer.extract(transcript.decode("utf-8"))
-            label = tf.convert_to_tensor(label, dtype=tf.int32)
-
-            return path, features, input_length, label
-
-    @tf.function
-    def parse(self, record):
-        return tf.numpy_function(
-            self.preprocess,
-            inp=[record[0], record[1]],
-            Tout=[tf.string, tf.float32, tf.int32, tf.int32]
-        )
-
-    def process(self, dataset, batch_size):
-        dataset = dataset.map(self.parse, num_parallel_calls=AUTOTUNE)
-
-        if self.cache:
-            dataset = dataset.cache()
-
-        if self.shuffle:
-            dataset = dataset.shuffle(self.buffer_size, reshuffle_each_iteration=True)
-
-        # PADDED BATCH the dataset
-        dataset = dataset.padded_batch(
-            batch_size=batch_size,
-            padded_shapes=(
-                tf.TensorShape([]),
-                tf.TensorShape(self.speech_featurizer.shape),
-                tf.TensorShape([]),
-                tf.TensorShape([None]),
-            ),
-            padding_values=("", 0.0, 0, self.text_featurizer.blank),
-            drop_remainder=True
-        )
-
-        # PREFETCH to improve speed of input length
-        dataset = dataset.prefetch(AUTOTUNE)
-        self.total_steps = get_num_batches(self.total_steps, batch_size)
-        return dataset
-
-    def create(self, batch_size):
-        entries = self.read_entries()
-        if len(entries) == 0: return None
-        entries = np.delete(entries, 1, 1)  # Remove unused duration
-        dataset = tf.data.Dataset.from_tensor_slices(entries)
+    def create(self, batch_size: int):
+        self.read_entries()
+        if not self.total_steps or self.total_steps == 0: return None
+        dataset = tf.data.Dataset.from_tensor_slices(self.lines)
+        dataset = dataset.map(self.load, num_parallel_calls=AUTOTUNE)
         return self.process(dataset, batch_size)
