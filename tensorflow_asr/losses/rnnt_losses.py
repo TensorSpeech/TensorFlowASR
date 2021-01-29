@@ -14,18 +14,20 @@
 # RNNT loss implementation in pure TensorFlow is borrowed from [iamjanvijay's repo](https://github.com/iamjanvijay/rnnt)
 
 import tensorflow as tf
+from tensorflow.python.ops.gen_array_ops import matrix_diag_part_v2
+
 try:
     from warprnnt_tensorflow import rnnt_loss as warp_rnnt_loss
     use_warprnnt = True
 except ImportError:
     print("Cannot import RNNT loss in warprnnt. Falls back to RNNT in TensorFlow")
     print("Note: The RNNT in Tensorflow is not supported for CPU yet")
-    from tensorflow.python.ops.gen_array_ops import matrix_diag_part_v2
     use_warprnnt = False
 
 
 def rnnt_loss(logits, labels, label_length, logit_length, blank=0, name=None):
     if use_warprnnt:
+        from tensorflow.python.ops.gen_array_ops import matrix_diag_part_v2
         return rnnt_loss_warprnnt(logits=logits, labels=labels,
                                   label_length=label_length, logit_length=logit_length, blank=blank)
     else:
