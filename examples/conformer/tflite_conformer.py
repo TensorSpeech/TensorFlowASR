@@ -43,7 +43,7 @@ args = parser.parse_args()
 
 assert args.saved and args.output
 
-config = Config(args.config, learning=True)
+config = Config(args.config)
 speech_featurizer = TFSpeechFeaturizer(config.speech_config)
 text_featurizer = CharFeaturizer(config.decoder_config)
 
@@ -54,11 +54,10 @@ conformer.load_weights(args.saved)
 conformer.summary(line_length=150)
 conformer.add_featurizers(speech_featurizer, text_featurizer)
 
-concrete_func = conformer.make_tflite_function(greedy=True).get_concrete_function()
+concrete_func = conformer.make_tflite_function().get_concrete_function()
 converter = tf.lite.TFLiteConverter.from_concrete_functions([concrete_func])
 converter.optimizations = [tf.lite.Optimize.DEFAULT]
-converter.target_spec.supported_ops = [tf.lite.OpsSet.TFLITE_BUILTINS,
-                                       tf.lite.OpsSet.SELECT_TF_OPS]
+converter.target_spec.supported_ops = [tf.lite.OpsSet.TFLITE_BUILTINS, tf.lite.OpsSet.SELECT_TF_OPS]
 tflite_model = converter.convert()
 
 if not os.path.exists(os.path.dirname(args.output)):

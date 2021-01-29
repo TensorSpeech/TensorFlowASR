@@ -46,7 +46,7 @@ args = parser.parse_args()
 
 assert args.saved and args.output
 
-config = Config(args.config, learning=True)
+config = Config(args.config)
 speech_featurizer = TFSpeechFeaturizer(config.speech_config)
 
 if args.subwords and os.path.exists(args.subwords):
@@ -62,7 +62,7 @@ conformer.load_weights(args.saved, by_name=True)
 conformer.summary(line_length=150)
 conformer.add_featurizers(speech_featurizer, text_featurizer)
 
-concrete_func = conformer.make_tflite_function(greedy=True).get_concrete_function()
+concrete_func = conformer.make_tflite_function().get_concrete_function()
 converter = tf.lite.TFLiteConverter.from_concrete_functions([concrete_func])
 converter.experimental_new_converter = True
 converter.optimizations = [tf.lite.Optimize.DEFAULT]

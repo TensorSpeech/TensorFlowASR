@@ -45,8 +45,7 @@ class FFModule(tf.keras.layers.Layer):
             kernel_regularizer=kernel_regularizer,
             bias_regularizer=bias_regularizer
         )
-        self.swish = tf.keras.layers.Activation(
-            tf.keras.activations.swish, name=f"{name}_swish_activation")
+        self.swish = tf.keras.layers.Activation(tf.nn.swish, name=f"{name}_swish_activation")
         self.do1 = tf.keras.layers.Dropout(dropout, name=f"{name}_dropout_1")
         self.ffn2 = tf.keras.layers.Dense(
             input_dim, name=f"{name}_dense_2",
@@ -168,8 +167,7 @@ class ConvModule(tf.keras.layers.Layer):
             gamma_regularizer=kernel_regularizer,
             beta_regularizer=bias_regularizer
         )
-        self.swish = tf.keras.layers.Activation(
-            tf.keras.activations.swish, name=f"{name}_swish_activation")
+        self.swish = tf.keras.layers.Activation(tf.nn.swish, name=f"{name}_swish_activation")
         self.pw_conv_2 = tf.keras.layers.Conv2D(
             filters=input_dim, kernel_size=1, strides=1,
             padding="valid", name=f"{name}_pw_conv_2",

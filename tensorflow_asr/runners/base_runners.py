@@ -125,7 +125,7 @@ class BaseTrainer(BaseRunner):
 
         self.train_data = train_dataset.create(self.global_batch_size)
         self.train_data_loader = self.strategy.experimental_distribute_dataset(self.train_data)
-        if hasattr(self, "accumulation"):
+        if hasattr(self, "accumulation") and train_dataset.total_steps is not None:
             self.train_steps_per_epoch = train_dataset.total_steps // self.config.accumulation_steps
         else:
             self.train_steps_per_epoch = train_dataset.total_steps
@@ -149,10 +149,8 @@ class BaseTrainer(BaseRunner):
         with self.strategy.scope():
             self.ckpt = tf.train.Checkpoint(steps=self.steps, **kwargs)
             checkpoint_dir = os.path.join(self.config.outdir, "checkpoints")
-            if not os.path.exists(checkpoint_dir):
-                os.makedirs(checkpoint_dir)
-            self.ckpt_manager = tf.train.CheckpointManager(
-                self.ckpt, checkpoint_dir, max_to_keep=max_to_keep)
+            if not os.path.exists(checkpoint_dir): os.makedirs(checkpoint_dir)
+            self.ckpt_manager = tf.train.CheckpointManager(self.ckpt, checkpoint_dir, max_to_keep=max_to_keep)
 
     def save_checkpoint(self):
         """Save checkpoint."""
@@ -191,9 +189,11 @@ class BaseTrainer(BaseRunner):
         while not self._finished():
             self._train_epoch()
 
-        # save when training is done
+        # save and evaluate when training is done
         self.save_checkpoint()
         self.save_model_weights()
+        self.log_train_metrics()
+        self._eval_epoch()
 
         self.train_progbar.close()
         print("> Finish training")
@@ -221,8 +221,7 @@ class BaseTrainer(BaseRunner):
             self._check_save_interval()
 
             # Print epoch info
-            self.train_progbar.set_description_str(
-                f"[Train] [Epoch {self.epochs}/{self.config.num_epochs}]")
+            self.train_progbar.set_description_str(f"[Train] [Epoch {self.epochs}/{self.config.num_epochs}]")
 
             # Print train info to progress bar
             self._print_train_metrics(self.train_progbar)
@@ -313,40 +312,36 @@ class BaseTrainer(BaseRunner):
 
     # -------------------------------- LOGGING -------------------------------------
 
+    def log_train_metrics(self):
+        self._write_to_tensorboard(self.train_metrics, self.steps, stage="train")
+        """Reset train metrics after save it to tensorboard."""
+        for metric in self.train_metrics.keys():
+            self.train_metrics[metric].reset_states()
+
     def _check_log_interval(self):
         """Save log interval."""
-        if (self.steps % self.config.log_interval_steps == 0) or \
-                (self.total_train_steps and self.steps >= self.total_train_steps):
-            self._write_to_tensorboard(self.train_metrics, self.steps, stage="train")
-            """Reset train metrics after save it to tensorboard."""
-            for metric in self.train_metrics.keys():
-                self.train_metrics[metric].reset_states()
+        if (self.steps.numpy() % self.config.log_interval_steps == 0):
+            self.log_train_metrics()
 
     def _check_save_interval(self):
         """Save log interval."""
-        if (self.steps % self.config.save_interval_steps == 0) or \
-                (self.total_train_steps and self.steps >= self.total_train_steps):
+        if (self.steps.numpy() % self.config.save_interval_steps == 0):
             self.save_checkpoint()
             self.save_model_weights()
 
     def _check_eval_interval(self):
         """Save log interval."""
-        if (self.steps % self.config.eval_interval_steps == 0): # or \
-                # (self.total_train_steps and self.steps >= self.total_train_steps):
+        if (self.steps.numpy() % self.config.eval_interval_steps == 0):
             self._eval_epoch()
 
     # -------------------------------- UTILS -------------------------------------
 
     def _print_train_metrics(self, progbar):
-        result_dict = {}
-        for key, value in self.train_metrics.items():
-            result_dict[f"{key}"] = str(value.result().numpy())
+        result_dict = {key: str(value.result().numpy()) for key, value in self.train_metrics.items()}
         progbar.set_postfix(result_dict)
 
     def _print_eval_metrics(self, progbar):
-        result_dict = {}
-        for key, value in self.eval_metrics.items():
-            result_dict[f"{key}"] = str(value.result().numpy())
+        result_dict = {key: str(value.result().numpy()) for key, value in self.eval_metrics.items()}
         progbar.set_postfix(result_dict)
 
     # -------------------------------- END -------------------------------------

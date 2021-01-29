@@ -49,8 +49,11 @@ def check_key_in_dict(dictionary, keys):
 
 def preprocess_paths(paths: Union[List, str]):
     if isinstance(paths, list):
-        return [os.path.abspath(os.path.expanduser(path)) for path in paths]
-    return os.path.abspath(os.path.expanduser(paths)) if paths else None
+        return [path if path.startswith('gs://') else os.path.abspath(os.path.expanduser(path)) for path in paths]
+    elif isinstance(paths, str):
+        return paths if paths.startswith('gs://') else os.path.abspath(os.path.expanduser(paths))
+    else:
+        return None
 
 
 def nan_to_zero(input_tensor):
@@ -153,3 +156,7 @@ def log10(x):
 
 def get_reduced_length(length, reduction_factor):
     return tf.cast(tf.math.ceil(tf.divide(length, tf.cast(reduction_factor, dtype=length.dtype))), dtype=tf.int32)
+
+
+def count_non_blank(tensor: tf.Tensor, blank: int or tf.Tensor = 0, axis=None):
+    return tf.reduce_sum(tf.where(tf.not_equal(tensor, blank), x=tf.ones_like(tensor), y=tf.zeros_like(tensor)), axis=axis)

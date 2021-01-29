@@ -61,11 +61,14 @@ def setup_strategy(devices):
     return tf.distribute.MirroredStrategy()
 
 
-# def setup_tpu(tpu_address):
-#     import tensorflow as tf
+def setup_tpu(tpu_address=None):
+    import tensorflow as tf
 
-#     resolver = tf.distribute.cluster_resolver.TPUClusterResolver(tpu='grpc://' + tpu_address)
-#     tf.config.experimental_connect_to_cluster(resolver)
-#     tf.tpu.experimental.initialize_tpu_system(resolver)
-#     print("All TPUs: ", tf.config.list_logical_devices('TPU'))
-#     return resolver
+    if tpu_address is None:
+        resolver = tf.distribute.cluster_resolver.TPUClusterResolver()
+    else:
+        resolver = tf.distribute.cluster_resolver.TPUClusterResolver(tpu='grpc://' + tpu_address)
+    tf.config.experimental_connect_to_cluster(resolver)
+    tf.tpu.experimental.initialize_tpu_system(resolver)
+    print("All TPUs: ", tf.config.list_logical_devices('TPU'))
+    return tf.distribute.experimental.TPUStrategy(resolver)

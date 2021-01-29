@@ -48,7 +48,7 @@ from tensorflow_asr.featurizers.speech_featurizers import TFSpeechFeaturizer
 from tensorflow_asr.featurizers.text_featurizers import CharFeaturizer, SubwordFeaturizer
 from tensorflow_asr.models.conformer import Conformer
 
-config = Config(args.config, learning=False)
+config = Config(args.config)
 speech_featurizer = TFSpeechFeaturizer(config.speech_config)
 if args.subwords and os.path.exists(args.subwords):
     print("Loading subwords ...")

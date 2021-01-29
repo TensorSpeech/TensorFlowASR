@@ -40,7 +40,7 @@ model_config:
   first_additional_block_strides: 2
   first_additional_block_dilation: 1
   first_additional_block_dropout: 0.2
-  nsubblocks: 3
+  nsubblocks: 1
   block_channels: [256, 384, 512, 640, 768]
   block_kernels: [11, 13, 17, 21, 25]
   block_dropout: [0.2, 0.2, 0.2, 0.3, 0.3]
