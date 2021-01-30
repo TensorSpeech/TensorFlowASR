@@ -62,7 +62,12 @@ class Transducer(BaseTransducer):
     def train_step(self, batch):
         x, y_true = batch
         with tf.GradientTape() as tape:
-            y_pred = self(x, training=True)
+            y_pred = self({
+                "input": x["input"],
+                "input_length": x["input_length"],
+                "prediction": x["prediction"],
+                "prediction_length": x["prediction_length"],
+            }, training=True)
             loss = self.loss(y_true, y_pred)
             scaled_loss = self.optimizer.get_scaled_loss(loss)
         scaled_gradients = tape.gradient(scaled_loss, self.trainable_weights)
@@ -72,6 +77,11 @@ class Transducer(BaseTransducer):
 
     def test_step(self, batch):
         x, y_true = batch
-        y_pred = self(x, training=False)
+        y_pred = self({
+            "input": x["input"],
+            "input_length": x["input_length"],
+            "prediction": x["prediction"],
+            "prediction_length": x["prediction_length"],
+        }, training=False)
         loss = self.loss(y_true, y_pred)
         return {"val_rnnt_loss": loss}

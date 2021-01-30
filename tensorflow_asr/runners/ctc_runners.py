@@ -49,7 +49,7 @@ class CTCTrainer(BaseTrainer):
 
     @tf.function(experimental_relax_shapes=True)
     def _train_step(self, batch):
-        features, input_length, labels, label_length, _, _ = batch
+        _, features, input_length, labels, label_length, _, _ = batch
 
         with tf.GradientTape() as tape:
             y_pred = self.model(features, training=True)
@@ -70,7 +70,7 @@ class CTCTrainer(BaseTrainer):
 
     @tf.function(experimental_relax_shapes=True)
     def _eval_step(self, batch):
-        features, input_length, labels, label_length, _, _ = batch
+        _, features, input_length, labels, label_length, _, _ = batch
 
         logits = self.model(features, training=False)
 
@@ -111,7 +111,7 @@ class CTCTrainerGA(CTCTrainer):
 
     @tf.function(experimental_relax_shapes=True)
     def _train_step(self, batch):
-        features, input_length, labels, label_length, _, _ = batch
+        _, features, input_length, labels, label_length, _, _ = batch
 
         with tf.GradientTape() as tape:
             y_pred = self.model(features, training=True)
