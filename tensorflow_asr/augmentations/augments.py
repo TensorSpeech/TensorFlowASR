@@ -54,13 +54,13 @@ class TFAugmentationExecutor:
 class Augmentation:
     def __init__(self, config: dict = None):
         if not config: config = {}
-        use_tf = config.get("use_tf", False)
-        if use_tf:
-            self.before = self.tf_parse(config.get("before", {}))
-            self.after = self.tf_parse(config.get("after", {}))
+        self.use_tf = config.pop("use_tf", False)
+        if self.use_tf:
+            self.before = self.tf_parse(config.pop("before", {}))
+            self.after = self.tf_parse(config.pop("after", {}))
         else:
-            self.before = self.parse(config.get("before", {}))
-            self.after = self.parse(config.get("after", {}))
+            self.before = self.parse(config.pop("before", {}))
+            self.after = self.parse(config.pop("after", {}))
 
     @staticmethod
     def parse(config: dict) -> list:

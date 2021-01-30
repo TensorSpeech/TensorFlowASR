@@ -40,6 +40,7 @@ class DatasetConfig:
         self.eval_paths = preprocess_paths(config.pop("eval_paths", None))
         self.test_paths = preprocess_paths(config.pop("test_paths", None))
         self.tfrecords_dir = preprocess_paths(config.pop("tfrecords_dir", None))
+        self.use_tf = config.pop("use_tf", False)
         for k, v in config.items(): setattr(self, k, v)
 
 

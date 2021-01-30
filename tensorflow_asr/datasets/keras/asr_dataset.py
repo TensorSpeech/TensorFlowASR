@@ -14,7 +14,7 @@
 
 import tensorflow as tf
 
-from ..asr_dataset import ASRDataset, ASRTFRecordDataset, ASRSliceDataset, AUTOTUNE
+from ..asr_dataset import ASRDataset, ASRTFRecordDataset, ASRSliceDataset, AUTOTUNE, TFRECORD_SHARDS
 from ..base_dataset import BUFFER_SIZE
 from ...featurizers.speech_featurizers import SpeechFeaturizer
 from ...featurizers.text_featurizers import TextFeaturizer
@@ -101,30 +101,37 @@ class ASRTFRecordDatasetKeras(ASRDatasetKeras, ASRTFRecordDataset):
     """ Keras Dataset for ASR using TFRecords """
 
     def __init__(self,
-                 stage: str,
+                 data_paths: list,
+                 tfrecords_dir: str,
                  speech_featurizer: SpeechFeaturizer,
                  text_featurizer: TextFeaturizer,
-                 data_paths: list,
+                 stage: str,
                  augmentations: Augmentation = Augmentation(None),
+                 tfrecords_shards: int = TFRECORD_SHARDS,
                  cache: bool = False,
                  shuffle: bool = False,
-                 use_tf: bool = False,
                  drop_remainder: bool = True,
                  buffer_size: int = BUFFER_SIZE):
         ASRTFRecordDataset.__init__(
             self, stage=stage, speech_featurizer=speech_featurizer, text_featurizer=text_featurizer,
-            data_paths=data_paths, augmentations=augmentations, cache=cache, shuffle=shuffle, use_tf=use_tf,
-            drop_remainder=drop_remainder, buffer_size=buffer_size
+            data_paths=data_paths, tfrecords_dir=tfrecords_dir, augmentations=augmentations, cache=cache, shuffle=shuffle,
+            tfrecords_shards=tfrecords_shards, drop_remainder=drop_remainder, buffer_size=buffer_size
         )
         ASRDatasetKeras.__init__(
             self, stage=stage, speech_featurizer=speech_featurizer, text_featurizer=text_featurizer,
-            data_paths=data_paths, augmentations=augmentations, cache=cache, shuffle=shuffle, use_tf=use_tf,
+            data_paths=data_paths, augmentations=augmentations, cache=cache, shuffle=shuffle,
             drop_remainder=drop_remainder, buffer_size=buffer_size
         )
 
     @tf.function
-    def parse(self, path: tf.Tensor, audio: tf.Tensor, indices: tf.Tensor):
-        return ASRDatasetKeras.parse(self, path, audio, indices)
+    def parse(self, record: tf.Tensor):
+        feature_description = {
+            "path": tf.io.FixedLenFeature([], tf.string),
+            "audio": tf.io.FixedLenFeature([], tf.string),
+            "indices": tf.io.FixedLenFeature([], tf.string)
+        }
+        example = tf.io.parse_single_example(record, feature_description)
+        return ASRDatasetKeras.parse(self, **example)
 
     def process(self, dataset: tf.data.Dataset, batch_size: int):
         return ASRDatasetKeras.process(self, dataset, batch_size)
@@ -141,17 +148,16 @@ class ASRSliceDatasetKeras(ASRDatasetKeras, ASRSliceDataset):
                  augmentations: Augmentation = Augmentation(None),
                  cache: bool = False,
                  shuffle: bool = False,
-                 use_tf: bool = False,
                  drop_remainder: bool = True,
                  buffer_size: int = BUFFER_SIZE):
         ASRSliceDataset.__init__(
             self, stage=stage, speech_featurizer=speech_featurizer, text_featurizer=text_featurizer,
-            data_paths=data_paths, augmentations=augmentations, cache=cache, shuffle=shuffle, use_tf=use_tf,
+            data_paths=data_paths, augmentations=augmentations, cache=cache, shuffle=shuffle,
             drop_remainder=drop_remainder, buffer_size=buffer_size
         )
         ASRDatasetKeras.__init__(
             self, stage=stage, speech_featurizer=speech_featurizer, text_featurizer=text_featurizer,
-            data_paths=data_paths, augmentations=augmentations, cache=cache, shuffle=shuffle, use_tf=use_tf,
+            data_paths=data_paths, augmentations=augmentations, cache=cache, shuffle=shuffle,
             drop_remainder=drop_remainder, buffer_size=buffer_size
         )
 

@@ -59,7 +59,7 @@ tf.config.optimizer.set_experimental_options({"auto_mixed_precision": args.mxp})
 strategy = setup_strategy(args.devices)
 
 from tensorflow_asr.configs.config import Config
-from tensorflow_asr.datasets.asr_dataset import TFASRTFRecordDataset, ASRSliceDataset
+from tensorflow_asr.datasets.asr_dataset import ASRTFRecordDataset, ASRSliceDataset
 from tensorflow_asr.featurizers.speech_featurizers import TFSpeechFeaturizer
 from tensorflow_asr.featurizers.text_featurizers import SubwordFeaturizer, SentencePieceFeaturizer
 from tensorflow_asr.runners.transducer_runners import TransducerTrainer
@@ -84,7 +84,7 @@ else:
     text_featurizer.save_to_file(args.subwords)
 
 if args.tfrecords:
-    train_dataset = TFASRTFRecordDataset(
+    train_dataset = ASRTFRecordDataset(
         data_paths=config.learning_config.dataset_config.train_paths,
         tfrecords_dir=config.learning_config.dataset_config.tfrecords_dir,
         speech_featurizer=speech_featurizer,
@@ -94,7 +94,7 @@ if args.tfrecords:
         stage="train", cache=args.cache,
         shuffle=True, buffer_size=args.bfs,
     )
-    eval_dataset = TFASRTFRecordDataset(
+    eval_dataset = ASRTFRecordDataset(
         data_paths=config.learning_config.dataset_config.eval_paths,
         tfrecords_dir=config.learning_config.dataset_config.tfrecords_dir,
         tfrecords_shards=args.tfrecords_shards,

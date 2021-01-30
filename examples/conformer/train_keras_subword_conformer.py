@@ -59,7 +59,7 @@ tf.config.optimizer.set_experimental_options({"auto_mixed_precision": args.mxp})
 strategy = setup_strategy(args.devices)
 
 from tensorflow_asr.configs.config import Config
-from tensorflow_asr.datasets.keras import ASRTFRecordDatasetKeras, ASRDatasetKeras
+from tensorflow_asr.datasets.keras import ASRTFRecordDatasetKeras, ASRSliceDatasetKeras
 from tensorflow_asr.featurizers.speech_featurizers import TFSpeechFeaturizer
 from tensorflow_asr.featurizers.text_featurizers import SubwordFeaturizer, SentencePieceFeaturizer
 from tensorflow_asr.models.keras.conformer import Conformer
@@ -103,7 +103,7 @@ if args.tfrecords:
         shuffle=True, buffer_size=args.bfs,
     )
 else:
-    train_dataset = ASRDatasetKeras(
+    train_dataset = ASRSliceDatasetKeras(
         data_paths=config.learning_config.dataset_config.train_paths,
         speech_featurizer=speech_featurizer,
         text_featurizer=text_featurizer,
@@ -111,7 +111,7 @@ else:
         stage="train", cache=args.cache,
         shuffle=True, buffer_size=args.bfs,
     )
-    eval_dataset = ASRDatasetKeras(
+    eval_dataset = ASRSliceDatasetKeras(
         data_paths=config.learning_config.dataset_config.eval_paths,
         speech_featurizer=speech_featurizer,
         text_featurizer=text_featurizer,

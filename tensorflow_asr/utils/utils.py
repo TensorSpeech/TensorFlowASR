@@ -160,3 +160,10 @@ def get_reduced_length(length, reduction_factor):
 
 def count_non_blank(tensor: tf.Tensor, blank: int or tf.Tensor = 0, axis=None):
     return tf.reduce_sum(tf.where(tf.not_equal(tensor, blank), x=tf.ones_like(tensor), y=tf.zeros_like(tensor)), axis=axis)
+
+
+def has_gpu_or_tpu():
+    gpus = tf.config.list_logical_devices("GPU")
+    tpus = tf.config.list_logical_devices("TPU")
+    if len(gpus) == 0 and len(tpus) == 0: return False
+    return True
