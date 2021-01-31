@@ -32,8 +32,6 @@ parser.add_argument("--max_ckpts", type=int, default=10, help="Max number of che
 
 parser.add_argument("--tfrecords", default=False, action="store_true", help="Whether to use tfrecords")
 
-parser.add_argument("--tfrecords_shards", type=int, default=16, help="Number of tfrecords shards")
-
 parser.add_argument("--tbs", type=int, default=None, help="Train batch size per replica")
 
 parser.add_argument("--ebs", type=int, default=None, help="Evaluation batch size per replica")
@@ -42,13 +40,9 @@ parser.add_argument("--devices", type=int, nargs="*", default=[0], help="Devices
 
 parser.add_argument("--mxp", default=False, action="store_true", help="Enable mixed precision")
 
-parser.add_argument("--cache", default=False, action="store_true", help="Enable caching for dataset")
-
 parser.add_argument("--subwords", type=str, default=None, help="Path to file that stores generated subwords")
 
 parser.add_argument("--subwords_corpus", nargs="*", type=str, default=[], help="Transcript files for generating subwords")
-
-parser.add_argument("--bfs", type=int, default=100, help="Buffer size for shuffling")
 
 args = parser.parse_args()
 
@@ -79,39 +73,21 @@ else:
 
 if args.tfrecords:
     train_dataset = ASRTFRecordDatasetKeras(
-        data_paths=config.learning_config.dataset_config.train_paths,
-        tfrecords_dir=config.learning_config.dataset_config.tfrecords_dir,
-        speech_featurizer=speech_featurizer,
-        text_featurizer=text_featurizer,
-        augmentations=config.learning_config.augmentations,
-        tfrecords_shards=args.tfrecords_shards,
-        stage="train", cache=args.cache,
-        shuffle=True, buffer_size=args.bfs,
+        speech_featurizer=speech_featurizer, text_featurizer=text_featurizer,
+        **vars(config.learning_config.train_dataset_config)
     )
     eval_dataset = ASRTFRecordDatasetKeras(
-        data_paths=config.learning_config.dataset_config.eval_paths,
-        tfrecords_dir=config.learning_config.dataset_config.tfrecords_dir,
-        tfrecords_shards=args.tfrecords_shards,
-        speech_featurizer=speech_featurizer,
-        text_featurizer=text_featurizer,
-        stage="eval", cache=args.cache,
-        shuffle=True, buffer_size=args.bfs,
+        speech_featurizer=speech_featurizer, text_featurizer=text_featurizer,
+        **vars(config.learning_config.eval_dataset_config)
     )
 else:
     train_dataset = ASRSliceDatasetKeras(
-        data_paths=config.learning_config.dataset_config.train_paths,
-        speech_featurizer=speech_featurizer,
-        text_featurizer=text_featurizer,
-        augmentations=config.learning_config.augmentations,
-        stage="train", cache=args.cache,
-        shuffle=True, buffer_size=args.bfs,
+        speech_featurizer=speech_featurizer, text_featurizer=text_featurizer,
+        **vars(config.learning_config.train_dataset_config)
     )
     eval_dataset = ASRSliceDatasetKeras(
-        data_paths=config.learning_config.dataset_config.eval_paths,
-        speech_featurizer=speech_featurizer,
-        text_featurizer=text_featurizer,
-        stage="eval", cache=args.cache,
-        shuffle=True, buffer_size=args.bfs,
+        speech_featurizer=speech_featurizer, text_featurizer=text_featurizer,
+        **vars(config.learning_config.eval_dataset_config)
     )
 
 with strategy.scope():

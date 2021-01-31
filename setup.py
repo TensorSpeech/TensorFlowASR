@@ -18,9 +18,9 @@ with open("README.md", "r") as fh:
     long_description = fh.read()
 
 requirements = [
-    "tensorflow-datasets>=3.2.1,<4.0.0",
+    "tensorflow-datasets>=4.2.0",
     "tensorflow-addons>=0.10.0",
-    "tensorflow-io>=0.17.0",
+    "tensorflow-io>=0.16.0",
     "setuptools>=47.1.1",
     "librosa>=0.8.0",
     "soundfile>=0.10.3",

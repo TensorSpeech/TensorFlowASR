@@ -40,6 +40,7 @@ class Conformer(Transducer):
                  prediction_projection_units: int = 0,
                  joint_dim: int = 1024,
                  joint_activation: str = "tanh",
+                 prejoint_linear: bool = True,
                  kernel_regularizer=L2,
                  bias_regularizer=L2,
                  name: str = "conformer_transducer",
@@ -71,6 +72,7 @@ class Conformer(Transducer):
             projection_units=prediction_projection_units,
             joint_dim=joint_dim,
             joint_activation=joint_activation,
+            prejoint_linear=prejoint_linear,
             kernel_regularizer=kernel_regularizer,
             bias_regularizer=bias_regularizer,
             name=name, **kwargs

@@ -192,7 +192,7 @@ class SubwordFeaturizer(TextFeaturizer):
         }
         """
         super(SubwordFeaturizer, self).__init__(decoder_config)
-        self.subwords = subwords
+        self.subwords = self.__load_subwords() if subwords is None else subwords
         self.blank = 0  # subword treats blank as 0
         self.num_classes = self.subwords.vocab_size
         # create upoints
@@ -205,8 +205,15 @@ class SubwordFeaturizer(TextFeaturizer):
         self.upoints = tf.strings.unicode_decode(text, "UTF-8")
         self.upoints = self.upoints.to_tensor()  # [num_classes, max_subword_length]
 
+    def __load_subwords(self):
+        filename_prefix = os.path.splitext(self.decoder_config.vocabulary)[0]
+        return tds.deprecated.text.SubwordTextEncoder.load_from_file(filename_prefix)
+
     @classmethod
-    def build_from_corpus(cls, decoder_config: dict, corpus_files: list):
+    def build_from_corpus(cls, decoder_config: dict, corpus_files: list = None):
+        dconf = DecoderConfig(decoder_config.copy())
+        corpus_files = dconf.corpus_files if corpus_files is None or len(corpus_files) == 0 else corpus_files
+
         def corpus_generator():
             for file in corpus_files:
                 with open(file, "r", encoding="utf-8") as f:
@@ -215,29 +222,27 @@ class SubwordFeaturizer(TextFeaturizer):
                 for line in lines:
                     line = line.split("\t")
                     yield line[-1]
-        subwords = tds.features.text.SubwordTextEncoder.build_from_corpus(
+
+        subwords = tds.deprecated.text.SubwordTextEncoder.build_from_corpus(
             corpus_generator(),
-            decoder_config.get("target_vocab_size", 1024),
-            decoder_config.get("max_subword_length", 4),
-            decoder_config.get("max_corpus_chars", None),
-            decoder_config.get("reserved_tokens", None)
+            dconf.target_vocab_size,
+            dconf.max_subword_length,
+            dconf.max_corpus_chars,
+            dconf.reserved_tokens
         )
         return cls(decoder_config, subwords)
 
     @classmethod
     def load_from_file(cls, decoder_config: dict, filename: str = None):
-        if filename is not None:
-            filename_prefix = os.path.splitext(preprocess_paths(filename))[0]
-        else:
-            filename_prefix = decoder_config.get("vocabulary", None)
-        subwords = tds.features.text.SubwordTextEncoder.load_from_file(filename_prefix)
+        dconf = DecoderConfig(decoder_config.copy())
+        filename = dconf.vocabulary if filename is None else preprocess_paths(filename)
+        filename_prefix = os.path.splitext(filename)[0]
+        subwords = tds.deprecated.text.SubwordTextEncoder.load_from_file(filename_prefix)
         return cls(decoder_config, subwords)
 
     def save_to_file(self, filename: str = None):
-        if filename is not None:
-            filename_prefix = os.path.splitext(preprocess_paths(filename))[0]
-        else:
-            filename_prefix = self.decoder_config.vocabulary
+        filename = self.decoder_config.vocabulary if filename is None else preprocess_paths(filename)
+        filename_prefix = os.path.splitext(filename)[0]
         return self.subwords.save_to_file(filename_prefix)
 
     def extract(self, text: str) -> tf.Tensor:

@@ -19,13 +19,10 @@ import numpy as np
 import tensorflow as tf
 
 from ..augmentations.augments import Augmentation
-from .base_dataset import BaseDataset, BUFFER_SIZE
+from .base_dataset import BaseDataset, BUFFER_SIZE, TFRECORD_SHARDS, AUTOTUNE
 from ..featurizers.speech_featurizers import load_and_convert_to_wav, read_raw_audio, tf_read_raw_audio, SpeechFeaturizer
 from ..featurizers.text_featurizers import TextFeaturizer
 from ..utils.utils import bytestring_feature, print_one_line, get_num_batches
-
-AUTOTUNE = tf.data.experimental.AUTOTUNE
-TFRECORD_SHARDS = 16
 
 
 class ASRDataset(BaseDataset):
@@ -40,11 +37,13 @@ class ASRDataset(BaseDataset):
                  cache: bool = False,
                  shuffle: bool = False,
                  drop_remainder: bool = True,
-                 buffer_size: int = BUFFER_SIZE):
+                 use_tf: bool = False,
+                 buffer_size: int = BUFFER_SIZE,
+                 **kwargs):
         super(ASRDataset, self).__init__(
             data_paths=data_paths, augmentations=augmentations,
             cache=cache, shuffle=shuffle, stage=stage, buffer_size=buffer_size,
-            drop_remainder=drop_remainder
+            drop_remainder=drop_remainder, use_tf=use_tf
         )
         self.speech_featurizer = speech_featurizer
         self.text_featurizer = text_featurizer
@@ -71,9 +70,9 @@ class ASRDataset(BaseDataset):
             yield bytes(path, "utf-8"), audio, bytes(indices, "utf-8")
 
     def preprocess(self, path: tf.Tensor, audio: tf.Tensor, indices: tf.Tensor):
-        def fn(_path: bytes, _audio: bytes, _indices: bytes):
-            with tf.device("/CPU:0"):
-                signal = read_raw_audio(_audio, self.speech_featurizer.sample_rate)
+        with tf.device("/CPU:0"):
+            def fn(_path: bytes, _audio: bytes, _indices: bytes):
+                signal = read_raw_audio(_audio, sample_rate=self.speech_featurizer.sample_rate)
 
                 signal = self.augmentations.before.augment(signal)
 
@@ -90,10 +89,10 @@ class ASRDataset(BaseDataset):
 
                 return _path, features, input_length, label, label_length, prediction, prediction_length
 
-        return tf.numpy_function(
-            fn, inp=[path, audio, indices],
-            Tout=[tf.string, tf.float32, tf.int32, tf.int32, tf.int32, tf.int32, tf.int32]
-        )
+            return tf.numpy_function(
+                fn, inp=[path, audio, indices],
+                Tout=[tf.string, tf.float32, tf.int32, tf.int32, tf.int32, tf.int32, tf.int32]
+            )
 
     def tf_preprocess(self, path: tf.Tensor, audio: tf.Tensor, indices: tf.Tensor):
         with tf.device("/CPU:0"):
@@ -177,13 +176,16 @@ class ASRTFRecordDataset(ASRDataset):
                  tfrecords_shards: int = TFRECORD_SHARDS,
                  cache: bool = False,
                  shuffle: bool = False,
+                 use_tf: bool = False,
                  drop_remainder: bool = True,
-                 buffer_size: int = BUFFER_SIZE):
+                 buffer_size: int = BUFFER_SIZE,
+                 **kwargs):
         super(ASRTFRecordDataset, self).__init__(
             stage=stage, speech_featurizer=speech_featurizer, text_featurizer=text_featurizer,
             data_paths=data_paths, augmentations=augmentations, cache=cache, shuffle=shuffle, buffer_size=buffer_size,
-            drop_remainder=drop_remainder
+            drop_remainder=drop_remainder, use_tf=use_tf
         )
+        if not self.stage: raise ValueError("stage must be defined, either 'train', 'eval' or 'test'")
         self.tfrecords_dir = tfrecords_dir
         if tfrecords_shards <= 0: raise ValueError("tfrecords_shards must be positive")
         self.tfrecords_shards = tfrecords_shards

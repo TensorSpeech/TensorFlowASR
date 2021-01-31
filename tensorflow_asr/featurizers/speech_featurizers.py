@@ -26,8 +26,8 @@ from .gammatone import fft_weights
 
 
 def load_and_convert_to_wav(path: str) -> tf.Tensor:
-    data = tfio.audio.AudioIOTensor(path, dtype=tf.float32)
-    return tfio.audio.encode_wav(data.to_tensor(), rate=tf.cast(data.rate, dtype=tf.int64))
+    wave, rate = librosa.load(os.path.expanduser(path), sr=None, mono=True)
+    return tf.audio.encode_wav(tf.expand_dims(wave, axis=-1), sample_rate=rate)
 
 
 def read_raw_audio(audio, sample_rate=16000):
@@ -47,8 +47,9 @@ def read_raw_audio(audio, sample_rate=16000):
 
 
 def tf_read_raw_audio(audio: tf.Tensor, sample_rate=16000):
-    wave, _ = tf.audio.decode_wav(audio, desired_channels=1, desired_samples=sample_rate)
-    return tf.squeeze(wave, axis=-1)
+    wave, rate = tf.audio.decode_wav(audio, desired_channels=1, desired_samples=-1)
+    resampled = tfio.audio.resample(wave, rate_in=tf.cast(rate, dtype=tf.int64), rate_out=sample_rate)
+    return tf.reshape(resampled, shape=[-1])  # reshape for using tf.signal
 
 
 def slice_signal(signal, window_size, stride=0.5) -> np.ndarray:

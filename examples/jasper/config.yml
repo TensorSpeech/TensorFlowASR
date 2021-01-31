@@ -56,17 +56,36 @@ model_config:
   third_additional_block_dropout: 0.4
 
 learning_config:
-  augmentations: null
-
-  dataset_config:
-    train_paths:
+  train_dataset_config:
+    use_tf: True
+    data_paths:
       - /mnt/Miscellanea/Datasets/Speech/LibriSpeech/train-clean-100/transcripts.tsv
-    eval_paths:
+    tfrecords_dir: /mnt/Miscellanea/Datasets/Speech/LibriSpeech/tfrecords-test
+    shuffle: True
+    cache: True
+    buffer_size: 100
+    drop_remainder: True
+
+  eval_dataset_config:
+    use_tf: True
+    data_paths:
       - /mnt/Miscellanea/Datasets/Speech/LibriSpeech/dev-clean/transcripts.tsv
       - /mnt/Miscellanea/Datasets/Speech/LibriSpeech/dev-other/transcripts.tsv
-    test_paths:
+    tfrecords_dir: /mnt/Miscellanea/Datasets/Speech/LibriSpeech/tfrecords-test
+    shuffle: False
+    cache: True
+    buffer_size: 100
+    drop_remainder: True
+
+  test_dataset_config:
+    use_tf: True
+    data_paths:
       - /mnt/Miscellanea/Datasets/Speech/LibriSpeech/test-clean/transcripts.tsv
-    tfrecords_dir: null
+    tfrecords_dir: /mnt/Miscellanea/Datasets/Speech/LibriSpeech/tfrecords-test
+    shuffle: False
+    cache: True
+    buffer_size: 100
+    drop_remainder: True
 
   optimizer_config:
     class_name: adam

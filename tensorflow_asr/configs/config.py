@@ -20,27 +20,36 @@ from ..utils.utils import preprocess_paths
 class DecoderConfig:
     def __init__(self, config: dict = None):
         if not config: config = {}
-        self.vocabulary = preprocess_paths(config.pop("vocabulary", None))
         self.beam_width = config.pop("beam_width", 0)
         self.blank_at_zero = config.pop("blank_at_zero", True)
-        self.target_vocab_size = config.pop("target_vocab_size", 1024)
-        self.max_subword_length = config.pop("max_subword_length", 4)
         self.norm_score = config.pop("norm_score", True)
         self.lm_config = config.pop("lm_config", {})
+
+        self.vocabulary = preprocess_paths(config.pop("vocabulary", None))
+        self.target_vocab_size = config.pop("target_vocab_size", 1024)
+        self.max_subword_length = config.pop("max_subword_length", 4)
         self.output_path_prefix = preprocess_paths(config.pop("output_path_prefix", None))
         self.model_type = config.pop("model_type", None)
-        self.corpus_files = config.pop("corpus_files", None)
+        self.corpus_files = preprocess_paths(config.pop("corpus_files", []))
+        self.max_corpus_chars = config.pop("max_corpus_chars", None)
+        self.reserved_tokens = config.pop("reserved_tokens", None)
+
         for k, v in config.items(): setattr(self, k, v)
 
 
 class DatasetConfig:
     def __init__(self, config: dict = None):
         if not config: config = {}
-        self.train_paths = preprocess_paths(config.pop("train_paths", None))
-        self.eval_paths = preprocess_paths(config.pop("eval_paths", None))
-        self.test_paths = preprocess_paths(config.pop("test_paths", None))
+        self.stage = config.pop("stage", None)
+        self.data_paths = preprocess_paths(config.pop("data_paths", None))
         self.tfrecords_dir = preprocess_paths(config.pop("tfrecords_dir", None))
+        self.tfrecords_shards = config.pop("tfrecords_shards", 16)
+        self.shuffle = config.pop("shuffle", False)
+        self.cache = config.pop("cache", False)
+        self.drop_remainder = config.pop("drop_remainder", True)
+        self.buffer_size = config.pop("buffer_size", 100)
         self.use_tf = config.pop("use_tf", False)
+        self.augmentations = Augmentation(config.pop("augmentation_config", {}), use_tf=self.use_tf)
         for k, v in config.items(): setattr(self, k, v)
 
 
@@ -60,8 +69,9 @@ class RunningConfig:
 class LearningConfig:
     def __init__(self, config: dict = None):
         if not config: config = {}
-        self.augmentations = Augmentation(config.pop("augmentations", {}))
-        self.dataset_config = DatasetConfig(config.pop("dataset_config", {}))
+        self.train_dataset_config = DatasetConfig(config.pop("train_dataset_config", {}))
+        self.eval_dataset_config = DatasetConfig(config.pop("eval_dataset_config", {}))
+        self.test_dataset_config = DatasetConfig(config.pop("test_dataset_config", {}))
         self.optimizer_config = config.pop("optimizer_config", {})
         self.running_config = RunningConfig(config.pop("running_config", {}))
         for k, v in config.items(): setattr(self, k, v)

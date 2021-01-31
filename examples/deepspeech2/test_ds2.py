@@ -25,23 +25,17 @@ tf.keras.backend.clear_session()
 
 parser = argparse.ArgumentParser(prog="Deep Speech 2 Tester")
 
-parser.add_argument("--config", "-c", type=str, default=DEFAULT_YAML,
-                    help="The file path of model configuration file")
+parser.add_argument("--config", "-c", type=str, default=DEFAULT_YAML, help="The file path of model configuration file")
 
-parser.add_argument("--saved", type=str, default=None,
-                    help="Path to the model file to be exported")
+parser.add_argument("--saved", type=str, default=None, help="Path to the model file to be exported")
 
-parser.add_argument("--tfrecords", default=False, action="store_true",
-                    help="Whether to use tfrecords dataset")
+parser.add_argument("--tfrecords", default=False, action="store_true", help="Whether to use tfrecords dataset")
 
-parser.add_argument("--mxp", default=False, action="store_true",
-                    help="Enable mixed precision")
+parser.add_argument("--mxp", default=False, action="store_true", help="Enable mixed precision")
 
-parser.add_argument("--device", type=int, default=0,
-                    help="Device's id to run test on")
+parser.add_argument("--device", type=int, default=0, help="Device's id to run test on")
 
-parser.add_argument("--output_name", type=str, default="test",
-                    help="Result filename name prefix")
+parser.add_argument("--output_name", type=str, default="test", help="Result filename name prefix")
 
 args = parser.parse_args()
 
@@ -50,7 +44,7 @@ tf.config.optimizer.set_experimental_options({"auto_mixed_precision": args.mxp})
 setup_devices([args.device])
 
 from tensorflow_asr.configs.config import Config
-from tensorflow_asr.datasets.asr_dataset import ASRTFRecordTestDataset, ASRSliceTestDataset
+from tensorflow_asr.datasets.asr_dataset import ASRTFRecordDataset, ASRSliceDataset
 from tensorflow_asr.featurizers.speech_featurizers import TFSpeechFeaturizer
 from tensorflow_asr.featurizers.text_featurizers import CharFeaturizer
 from tensorflow_asr.runners.base_runners import BaseTester
@@ -70,19 +64,14 @@ ds2_model.summary(line_length=120)
 ds2_model.add_featurizers(speech_featurizer, text_featurizer)
 
 if args.tfrecords:
-    test_dataset = ASRTFRecordTestDataset(
-        data_paths=config.learning_config.dataset_config.test_paths,
-        tfrecords_dir=config.learning_config.dataset_config.tfrecords_dir,
-        speech_featurizer=speech_featurizer,
-        text_featurizer=text_featurizer,
-        stage="test", shuffle=False
+    test_dataset = ASRTFRecordDataset(
+        speech_featurizer=speech_featurizer, text_featurizer=text_featurizer,
+        **vars(config.learning_config.test_dataset_config)
     )
 else:
-    test_dataset = ASRSliceTestDataset(
-        data_paths=config.learning_config.dataset_config.test_paths,
-        speech_featurizer=speech_featurizer,
-        text_featurizer=text_featurizer,
-        stage="test", shuffle=False
+    test_dataset = ASRSliceDataset(
+        speech_featurizer=speech_featurizer, text_featurizer=text_featurizer,
+        **vars(config.learning_config.test_dataset_config)
     )
 
 ctc_tester = BaseTester(

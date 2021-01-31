@@ -13,9 +13,13 @@
 # limitations under the License.
 import abc
 
+import tensorflow as tf
+
 from ..augmentations.augments import Augmentation
 
 BUFFER_SIZE = 100
+TFRECORD_SHARDS = 16
+AUTOTUNE = tf.data.experimental.AUTOTUNE
 
 
 class BaseDataset(metaclass=abc.ABCMeta):
@@ -28,16 +32,17 @@ class BaseDataset(metaclass=abc.ABCMeta):
                  shuffle: bool = False,
                  buffer_size: int = BUFFER_SIZE,
                  drop_remainder: bool = True,
-                 stage: str = "train"):
+                 use_tf: bool = False,
+                 stage: str = "train",
+                 **kwargs):
         self.data_paths = data_paths
         self.augmentations = augmentations  # apply augmentation
         self.cache = cache  # whether to cache WHOLE transformed dataset to memory
         self.shuffle = shuffle  # whether to shuffle tf.data.Dataset
-        if buffer_size <= 0 and shuffle:
-            raise ValueError("buffer_size must be positive when shuffle is on")
+        if buffer_size <= 0 and shuffle: raise ValueError("buffer_size must be positive when shuffle is on")
         self.buffer_size = buffer_size  # shuffle buffer size
         self.stage = stage  # for defining tfrecords files
-        self.use_tf = self.augmentations.use_tf
+        self.use_tf = use_tf
         self.drop_remainder = drop_remainder  # whether to drop remainder for multi gpu training
         self.total_steps = None  # for better training visualization
 

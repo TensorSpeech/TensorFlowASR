@@ -25,29 +25,19 @@ tf.keras.backend.clear_session()
 
 parser = argparse.ArgumentParser(prog="Conformer Training")
 
-parser.add_argument("--config", type=str, default=DEFAULT_YAML,
-                    help="The file path of model configuration file")
+parser.add_argument("--config", type=str, default=DEFAULT_YAML, help="The file path of model configuration file")
 
-parser.add_argument("--max_ckpts", type=int, default=10,
-                    help="Max number of checkpoints to keep")
+parser.add_argument("--max_ckpts", type=int, default=10, help="Max number of checkpoints to keep")
 
-parser.add_argument("--tfrecords", default=False, action="store_true",
-                    help="Whether to use tfrecords")
+parser.add_argument("--tfrecords", default=False, action="store_true", help="Whether to use tfrecords")
 
-parser.add_argument("--tbs", type=int, default=None,
-                    help="Train batch size per replica")
+parser.add_argument("--tbs", type=int, default=None, help="Train batch size per replica")
 
-parser.add_argument("--ebs", type=int, default=None,
-                    help="Evaluation batch size per replica")
+parser.add_argument("--ebs", type=int, default=None, help="Evaluation batch size per replica")
 
-parser.add_argument("--devices", type=int, nargs="*", default=[0],
-                    help="Devices' ids to apply distributed training")
+parser.add_argument("--devices", type=int, nargs="*", default=[0], help="Devices' ids to apply distributed training")
 
-parser.add_argument("--mxp", default=False, action="store_true",
-                    help="Enable mixed precision")
-
-parser.add_argument("--cache", default=False, action="store_true",
-                    help="Enable caching for dataset")
+parser.add_argument("--mxp", default=False, action="store_true", help="Enable mixed precision")
 
 args = parser.parse_args()
 
@@ -68,33 +58,21 @@ text_featurizer = CharFeaturizer(config.decoder_config)
 
 if args.tfrecords:
     train_dataset = ASRTFRecordDataset(
-        data_paths=config.learning_config.dataset_config.train_paths,
-        tfrecords_dir=config.learning_config.dataset_config.tfrecords_dir,
-        speech_featurizer=speech_featurizer,
-        text_featurizer=text_featurizer,
-        augmentations=config.learning_config.augmentations,
-        stage="train", cache=args.cache, shuffle=True
+        speech_featurizer=speech_featurizer, text_featurizer=text_featurizer,
+        **vars(config.learning_config.train_dataset_config)
     )
     eval_dataset = ASRTFRecordDataset(
-        data_paths=config.learning_config.dataset_config.eval_paths,
-        tfrecords_dir=config.learning_config.dataset_config.tfrecords_dir,
-        speech_featurizer=speech_featurizer,
-        text_featurizer=text_featurizer,
-        stage="eval", cache=args.cache, shuffle=True
+        speech_featurizer=speech_featurizer, text_featurizer=text_featurizer,
+        **vars(config.learning_config.eval_dataset_config)
     )
 else:
     train_dataset = ASRSliceDataset(
-        data_paths=config.learning_config.dataset_config.train_paths,
-        speech_featurizer=speech_featurizer,
-        text_featurizer=text_featurizer,
-        augmentations=config.learning_config.augmentations,
-        stage="train", cache=args.cache, shuffle=True
+        speech_featurizer=speech_featurizer, text_featurizer=text_featurizer,
+        **vars(config.learning_config.train_dataset_config)
     )
     eval_dataset = ASRSliceDataset(
-        data_paths=config.learning_config.dataset_config.eval_paths,
-        speech_featurizer=speech_featurizer,
-        text_featurizer=text_featurizer,
-        stage="eval", cache=args.cache, shuffle=True
+        speech_featurizer=speech_featurizer, text_featurizer=text_featurizer,
+        **vars(config.learning_config.eval_dataset_config)
     )
 
 streaming_transducer_trainer = TransducerTrainer(

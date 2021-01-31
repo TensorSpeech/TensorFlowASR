@@ -52,10 +52,9 @@ class TFAugmentationExecutor:
 
 
 class Augmentation:
-    def __init__(self, config: dict = None):
+    def __init__(self, config: dict = None, use_tf: bool = False):
         if not config: config = {}
-        self.use_tf = config.pop("use_tf", False)
-        if self.use_tf:
+        if use_tf:
             self.before = self.tf_parse(config.pop("before", {}))
             self.after = self.tf_parse(config.pop("after", {}))
         else:

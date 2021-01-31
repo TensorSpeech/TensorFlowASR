@@ -110,17 +110,19 @@ class ASRTFRecordDatasetKeras(ASRDatasetKeras, ASRTFRecordDataset):
                  tfrecords_shards: int = TFRECORD_SHARDS,
                  cache: bool = False,
                  shuffle: bool = False,
+                 use_tf: bool = False,
                  drop_remainder: bool = True,
-                 buffer_size: int = BUFFER_SIZE):
+                 buffer_size: int = BUFFER_SIZE,
+                 **kwargs):
         ASRTFRecordDataset.__init__(
             self, stage=stage, speech_featurizer=speech_featurizer, text_featurizer=text_featurizer,
             data_paths=data_paths, tfrecords_dir=tfrecords_dir, augmentations=augmentations, cache=cache, shuffle=shuffle,
-            tfrecords_shards=tfrecords_shards, drop_remainder=drop_remainder, buffer_size=buffer_size
+            tfrecords_shards=tfrecords_shards, drop_remainder=drop_remainder, buffer_size=buffer_size, use_tf=use_tf
         )
         ASRDatasetKeras.__init__(
             self, stage=stage, speech_featurizer=speech_featurizer, text_featurizer=text_featurizer,
             data_paths=data_paths, augmentations=augmentations, cache=cache, shuffle=shuffle,
-            drop_remainder=drop_remainder, buffer_size=buffer_size
+            drop_remainder=drop_remainder, buffer_size=buffer_size, use_tf=use_tf
         )
 
     @tf.function
@@ -148,17 +150,19 @@ class ASRSliceDatasetKeras(ASRDatasetKeras, ASRSliceDataset):
                  augmentations: Augmentation = Augmentation(None),
                  cache: bool = False,
                  shuffle: bool = False,
+                 use_tf: bool = False,
                  drop_remainder: bool = True,
-                 buffer_size: int = BUFFER_SIZE):
+                 buffer_size: int = BUFFER_SIZE,
+                 **kwargs):
         ASRSliceDataset.__init__(
             self, stage=stage, speech_featurizer=speech_featurizer, text_featurizer=text_featurizer,
             data_paths=data_paths, augmentations=augmentations, cache=cache, shuffle=shuffle,
-            drop_remainder=drop_remainder, buffer_size=buffer_size
+            drop_remainder=drop_remainder, buffer_size=buffer_size, use_tf=use_tf
         )
         ASRDatasetKeras.__init__(
             self, stage=stage, speech_featurizer=speech_featurizer, text_featurizer=text_featurizer,
             data_paths=data_paths, augmentations=augmentations, cache=cache, shuffle=shuffle,
-            drop_remainder=drop_remainder, buffer_size=buffer_size
+            drop_remainder=drop_remainder, buffer_size=buffer_size, use_tf=use_tf
         )
 
     @tf.function
