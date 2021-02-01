@@ -14,7 +14,7 @@
 # RNNT loss implementation in pure TensorFlow is borrowed from [iamjanvijay's repo](https://github.com/iamjanvijay/rnnt)
 
 import tensorflow as tf
-
+from tensorflow.python.ops.gen_array_ops import matrix_diag_part_v2
 from ..utils.utils import has_gpu_or_tpu
 
 use_cpu = not has_gpu_or_tpu()
@@ -24,7 +24,7 @@ try:
     use_warprnnt = True
 except ImportError:
     print("Cannot import RNNT loss in warprnnt. Falls back to RNNT in TensorFlow")
-    from tensorflow.python.ops.gen_array_ops import matrix_diag_part_v2
+    print("Note: The RNNT in Tensorflow is not supported for CPU yet")
     use_warprnnt = False
 
 
