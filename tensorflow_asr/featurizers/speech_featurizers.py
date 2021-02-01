@@ -19,9 +19,15 @@ import numpy as np
 import librosa
 import soundfile as sf
 import tensorflow as tf
+import tensorflow_io as tfio
 
 from ..utils.utils import log10
 from .gammatone import fft_weights
+
+
+def load_and_convert_to_wav(path: str) -> tf.Tensor:
+    wave, rate = librosa.load(os.path.expanduser(path), sr=None, mono=True)
+    return tf.audio.encode_wav(tf.expand_dims(wave, axis=-1), sample_rate=rate)
 
 
 def read_raw_audio(audio, sample_rate=16000):
@@ -38,6 +44,12 @@ def read_raw_audio(audio, sample_rate=16000):
     else:
         raise ValueError("input audio must be either a path or bytes")
     return wave
+
+
+def tf_read_raw_audio(audio: tf.Tensor, sample_rate=16000):
+    wave, rate = tf.audio.decode_wav(audio, desired_channels=1, desired_samples=-1)
+    resampled = tfio.audio.resample(wave, rate_in=tf.cast(rate, dtype=tf.int64), rate_out=sample_rate)
+    return tf.reshape(resampled, shape=[-1])  # reshape for using tf.signal
 
 
 def slice_signal(signal, window_size, stride=0.5) -> np.ndarray:

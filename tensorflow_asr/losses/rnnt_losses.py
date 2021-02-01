@@ -15,6 +15,9 @@
 
 import tensorflow as tf
 from tensorflow.python.ops.gen_array_ops import matrix_diag_part_v2
+from ..utils.utils import has_gpu_or_tpu
+
+use_cpu = not has_gpu_or_tpu()
 
 try:
     from warprnnt_tensorflow import rnnt_loss as warp_rnnt_loss
@@ -27,7 +30,6 @@ except ImportError:
 
 def rnnt_loss(logits, labels, label_length, logit_length, blank=0, name=None):
     if use_warprnnt:
-        from tensorflow.python.ops.gen_array_ops import matrix_diag_part_v2
         return rnnt_loss_warprnnt(logits=logits, labels=labels,
                                   label_length=label_length, logit_length=logit_length, blank=blank)
     else:
@@ -210,7 +212,7 @@ def compute_rnnt_loss_and_grad_helper(logits, labels, label_length, logit_length
     a = tf.tile(tf.reshape(tf.range(target_max_len - 1, dtype=tf.int64), shape=(1, 1, target_max_len - 1, 1)),
                 multiples=[batch_size, 1, 1, 1])
     b = tf.cast(tf.reshape(labels - 1, shape=(batch_size, 1, target_max_len - 1, 1)), dtype=tf.int64)
-    # b = tf.where(tf.equal(b, -1), tf.zeros_like(b), b)  # for cpu testing (index -1 on cpu will raise errors)
+    if use_cpu: b = tf.where(tf.equal(b, -1), tf.zeros_like(b), b)  # for cpu testing (index -1 on cpu will raise errors)
     c = tf.concat([a, b], axis=3)
     d = tf.tile(c, multiples=(1, input_max_len, 1, 1))
     e = tf.tile(tf.reshape(tf.range(input_max_len, dtype=tf.int64), shape=(1, input_max_len, 1, 1)),

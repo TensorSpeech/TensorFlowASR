@@ -436,7 +436,7 @@ class BaseTester(BaseRunner):
         Returns:
             (file_paths, groundtruth, greedy, beamsearch, beamsearch_lm) each has shape [B]
         """
-        file_paths, features, input_length, labels = batch
+        file_paths, features, input_length, labels, _, _, _ = batch
 
         labels = self.model.text_featurizer.iextract(labels)
         input_length = get_reduced_length(input_length, self.model.time_reduction_factor)

@@ -24,12 +24,16 @@ speech_config:
   normalize_per_feature: False
 
 decoder_config:
-  vocabulary: null
-  target_vocab_size: 1024
+  vocabulary: ./vocabularies/librispeech_train_4_4076.subwords
+  target_vocab_size: 4096
   max_subword_length: 4
   blank_at_zero: True
   beam_width: 5
   norm_score: True
+  corpus_files:
+    - /media/nlhuy/Data/ML/ASR/Raw/LibriSpeech/LibriSpeech/train-clean-100/transcripts.tsv
+    - /media/nlhuy/Data/ML/ASR/Raw/LibriSpeech/LibriSpeech/train-clean-360/transcripts.tsv
+    - /media/nlhuy/Data/ML/ASR/Raw/LibriSpeech/LibriSpeech/train-other-500/transcripts.tsv
 
 model_config:
   name: conformer
@@ -53,31 +57,51 @@ model_config:
   prediction_rnn_units: 320
   prediction_rnn_type: lstm
   prediction_rnn_implementation: 2
-  prediction_layer_norm: True
+  prediction_layer_norm: False
   prediction_projection_units: 0
-  joint_dim: 320
+  joint_dim: 640
   joint_activation: tanh
 
 learning_config:
-  augmentations:
-    after:
-      time_masking:
-        num_masks: 10
-        mask_factor: 100
-        p_upperbound: 0.05
-      freq_masking:
-        num_masks: 1
-        mask_factor: 27
-
-  dataset_config:
-    train_paths:
+  train_dataset_config:
+    use_tf: True
+    augmentation_config:
+      after:
+        time_masking:
+          num_masks: 10
+          mask_factor: 100
+          p_upperbound: 0.05
+        freq_masking:
+          num_masks: 1
+          mask_factor: 27
+    data_paths:
       - /mnt/Miscellanea/Datasets/Speech/LibriSpeech/train-clean-100/transcripts.tsv
-    eval_paths:
+    tfrecords_dir: /mnt/Miscellanea/Datasets/Speech/LibriSpeech/tfrecords-test
+    shuffle: True
+    cache: True
+    buffer_size: 100
+    drop_remainder: True
+
+  eval_dataset_config:
+    use_tf: True
+    data_paths:
       - /mnt/Miscellanea/Datasets/Speech/LibriSpeech/dev-clean/transcripts.tsv
       - /mnt/Miscellanea/Datasets/Speech/LibriSpeech/dev-other/transcripts.tsv
-    test_paths:
+    tfrecords_dir: /mnt/Miscellanea/Datasets/Speech/LibriSpeech/tfrecords-test
+    shuffle: False
+    cache: True
+    buffer_size: 100
+    drop_remainder: True
+
+  test_dataset_config:
+    use_tf: True
+    data_paths:
       - /mnt/Miscellanea/Datasets/Speech/LibriSpeech/test-clean/transcripts.tsv
-    tfrecords_dir: /mnt/Miscellanea/Datasets/Speech/LibriSpeech/tfrecords
+    tfrecords_dir: /mnt/Miscellanea/Datasets/Speech/LibriSpeech/tfrecords-test
+    shuffle: False
+    cache: True
+    buffer_size: 100
+    drop_remainder: True
 
   optimizer_config:
     warmup_steps: 40000

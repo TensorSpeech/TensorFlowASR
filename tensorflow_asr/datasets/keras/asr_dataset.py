@@ -12,12 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import os
-import multiprocessing
 import tensorflow as tf
-import numpy as np
 
-from ..asr_dataset import ASRDataset, AUTOTUNE, TFRECORD_SHARDS, write_tfrecord_file
+from ..asr_dataset import ASRDataset, ASRTFRecordDataset, ASRSliceDataset, AUTOTUNE, TFRECORD_SHARDS
 from ..base_dataset import BUFFER_SIZE
 from ...featurizers.speech_featurizers import SpeechFeaturizer
 from ...featurizers.text_featurizers import TextFeaturizer
@@ -26,6 +23,33 @@ from ...augmentations.augments import Augmentation
 
 
 class ASRDatasetKeras(ASRDataset):
+    """ Keras Dataset for ASR using Generator """
+
+    @tf.function
+    def parse(self, path: tf.Tensor, audio: tf.Tensor, indices: tf.Tensor):
+        """
+        Returns:
+            path, features, input_lengths, labels, label_lengths, pred_inp
+        """
+        if self.use_tf: data = self.tf_preprocess(path, audio, indices)
+        else: data = self.preprocess(path, audio, indices)
+
+        path, features, input_length, label, label_length, prediction, prediction_length = data
+
+        return (
+            {
+                "path": path,
+                "input": features,
+                "input_length": input_length,
+                "prediction": prediction,
+                "prediction_length": prediction_length
+            },
+            {
+                "label": label,
+                "label_length": label_length
+            }
+        )
+
     def process(self, dataset, batch_size):
         dataset = dataset.map(self.parse, num_parallel_calls=AUTOTUNE)
 
@@ -40,6 +64,7 @@ class ASRDatasetKeras(ASRDataset):
             batch_size=batch_size,
             padded_shapes=(
                 {
+                    "path": tf.TensorShape([]),
                     "input": tf.TensorShape(self.speech_featurizer.shape),
                     "input_length": tf.TensorShape([]),
                     "prediction": tf.TensorShape([None]),
@@ -52,6 +77,7 @@ class ASRDatasetKeras(ASRDataset):
             ),
             padding_values=(
                 {
+                    "path": "",
                     "input": 0.,
                     "input_length": 0,
                     "prediction": self.text_featurizer.blank,
@@ -62,7 +88,7 @@ class ASRDatasetKeras(ASRDataset):
                     "label_length": 0
                 }
             ),
-            drop_remainder=True
+            drop_remainder=self.drop_remainder
         )
 
         # PREFETCH to improve speed of input length
@@ -71,7 +97,7 @@ class ASRDatasetKeras(ASRDataset):
         return dataset
 
 
-class ASRTFRecordDatasetKeras(ASRDatasetKeras):
+class ASRTFRecordDatasetKeras(ASRDatasetKeras, ASRTFRecordDataset):
     """ Keras Dataset for ASR using TFRecords """
 
     def __init__(self,
@@ -84,116 +110,64 @@ class ASRTFRecordDatasetKeras(ASRDatasetKeras):
                  tfrecords_shards: int = TFRECORD_SHARDS,
                  cache: bool = False,
                  shuffle: bool = False,
-                 buffer_size: int = BUFFER_SIZE):
-        super(ASRTFRecordDatasetKeras, self).__init__(
-            stage=stage, speech_featurizer=speech_featurizer, text_featurizer=text_featurizer,
-            data_paths=data_paths, augmentations=augmentations, cache=cache, shuffle=shuffle, buffer_size=buffer_size
+                 use_tf: bool = False,
+                 drop_remainder: bool = True,
+                 buffer_size: int = BUFFER_SIZE,
+                 **kwargs):
+        ASRTFRecordDataset.__init__(
+            self, stage=stage, speech_featurizer=speech_featurizer, text_featurizer=text_featurizer,
+            data_paths=data_paths, tfrecords_dir=tfrecords_dir, augmentations=augmentations, cache=cache, shuffle=shuffle,
+            tfrecords_shards=tfrecords_shards, drop_remainder=drop_remainder, buffer_size=buffer_size, use_tf=use_tf
         )
-        self.tfrecords_dir = tfrecords_dir
-        if tfrecords_shards <= 0: raise ValueError("tfrecords_shards must be positive")
-        self.tfrecords_shards = tfrecords_shards
-        if not tf.io.gfile.exists(self.tfrecords_dir):
-            tf.io.gfile.makedirs(self.tfrecords_dir)
-
-    def create_tfrecords(self):
-        if not tf.io.gfile.exists(self.tfrecords_dir):
-            tf.io.gfile.makedirs(self.tfrecords_dir)
-
-        if tf.io.gfile.glob(os.path.join(self.tfrecords_dir, f"{self.stage}*.tfrecord")):
-            print(f"TFRecords're already existed: {self.stage}")
-            return True
-
-        print(f"Creating {self.stage}.tfrecord ...")
-
-        entries = self.read_entries()
-        if len(entries) <= 0:
-            return False
-
-        def get_shard_path(shard_id):
-            return os.path.join(self.tfrecords_dir, f"{self.stage}_{shard_id}.tfrecord")
-
-        shards = [get_shard_path(idx) for idx in range(1, self.tfrecords_shards + 1)]
-
-        splitted_entries = np.array_split(entries, self.tfrecords_shards)
-        with multiprocessing.Pool(self.tfrecords_shards) as pool:
-            pool.map(write_tfrecord_file, zip(shards, splitted_entries))
-
-        return True
+        ASRDatasetKeras.__init__(
+            self, stage=stage, speech_featurizer=speech_featurizer, text_featurizer=text_featurizer,
+            data_paths=data_paths, augmentations=augmentations, cache=cache, shuffle=shuffle,
+            drop_remainder=drop_remainder, buffer_size=buffer_size, use_tf=use_tf
+        )
 
     @tf.function
-    def parse(self, record):
+    def parse(self, record: tf.Tensor):
         feature_description = {
             "path": tf.io.FixedLenFeature([], tf.string),
             "audio": tf.io.FixedLenFeature([], tf.string),
-            "transcript": tf.io.FixedLenFeature([], tf.string)
+            "indices": tf.io.FixedLenFeature([], tf.string)
         }
         example = tf.io.parse_single_example(record, feature_description)
+        return ASRDatasetKeras.parse(self, **example)
 
-        features, input_length, label, label_length, \
-            prediction, prediction_length = tf.numpy_function(
-                self.preprocess,
-                inp=[example["audio"], example["transcript"]],
-                Tout=[tf.float32, tf.int32, tf.int32, tf.int32, tf.int32, tf.int32]
-            )
-
-        return (
-            {
-                "input": features,
-                "input_length": input_length,
-                "prediction": prediction,
-                "prediction_length": prediction_length
-            },
-            {
-                "label": label,
-                "label_length": label_length
-            }
-        )
-
-    def create(self, batch_size):
-        # Create TFRecords dataset
-        have_data = self.create_tfrecords()
-        if not have_data: return None
-
-        pattern = os.path.join(self.tfrecords_dir, f"{self.stage}*.tfrecord")
-        files_ds = tf.data.Dataset.list_files(pattern)
-        ignore_order = tf.data.Options()
-        ignore_order.experimental_deterministic = False
-        files_ds = files_ds.with_options(ignore_order)
-        dataset = tf.data.TFRecordDataset(files_ds, compression_type='ZLIB', num_parallel_reads=AUTOTUNE)
-
-        return self.process(dataset, batch_size)
+    def process(self, dataset: tf.data.Dataset, batch_size: int):
+        return ASRDatasetKeras.process(self, dataset, batch_size)
 
 
-class ASRSliceDatasetKeras(ASRDatasetKeras):
+class ASRSliceDatasetKeras(ASRDatasetKeras, ASRSliceDataset):
     """ Keras Dataset for ASR using Slice """
 
-    def preprocess(self, path, transcript):
-        return super(ASRSliceDatasetKeras, self).preprocess(path.decode("utf-8"), transcript)
-
-    @tf.function
-    def parse(self, record):
-        features, input_length, label, label_length, \
-            prediction, prediction_length = tf.numpy_function(
-                self.preprocess,
-                inp=[record[0], record[1]],
-                Tout=[tf.float32, tf.int32, tf.int32, tf.int32, tf.int32, tf.int32]
-            )
-        return (
-            {
-                "input": features,
-                "input_length": input_length,
-                "prediction": prediction,
-                "prediction_length": prediction_length
-            },
-            {
-                "label": label,
-                "label_length": label_length
-            }
+    def __init__(self,
+                 stage: str,
+                 speech_featurizer: SpeechFeaturizer,
+                 text_featurizer: TextFeaturizer,
+                 data_paths: list,
+                 augmentations: Augmentation = Augmentation(None),
+                 cache: bool = False,
+                 shuffle: bool = False,
+                 use_tf: bool = False,
+                 drop_remainder: bool = True,
+                 buffer_size: int = BUFFER_SIZE,
+                 **kwargs):
+        ASRSliceDataset.__init__(
+            self, stage=stage, speech_featurizer=speech_featurizer, text_featurizer=text_featurizer,
+            data_paths=data_paths, augmentations=augmentations, cache=cache, shuffle=shuffle,
+            drop_remainder=drop_remainder, buffer_size=buffer_size, use_tf=use_tf
+        )
+        ASRDatasetKeras.__init__(
+            self, stage=stage, speech_featurizer=speech_featurizer, text_featurizer=text_featurizer,
+            data_paths=data_paths, augmentations=augmentations, cache=cache, shuffle=shuffle,
+            drop_remainder=drop_remainder, buffer_size=buffer_size, use_tf=use_tf
         )
 
-    def create(self, batch_size):
-        entries = self.read_entries()
-        if len(entries) == 0: return None
-        entries = np.delete(entries, 1, 1)  # Remove unused duration
-        dataset = tf.data.Dataset.from_tensor_slices(entries)
-        return self.process(dataset, batch_size)
+    @tf.function
+    def parse(self, path: tf.Tensor, audio: tf.Tensor, indices: tf.Tensor):
+        return ASRDatasetKeras.parse(self, path, audio, indices)
+
+    def process(self, dataset: tf.data.Dataset, batch_size: int):
+        return ASRDatasetKeras.process(self, dataset, batch_size)

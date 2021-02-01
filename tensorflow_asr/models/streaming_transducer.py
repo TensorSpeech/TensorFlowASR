@@ -192,6 +192,7 @@ class StreamingTransducer(Transducer):
                  prediction_projection_units: int = 640,
                  joint_dim: int = 640,
                  joint_activation: str = "tanh",
+                 prejoint_linear: bool = True,
                  kernel_regularizer = None,
                  bias_regularizer = None,
                  name = "StreamingTransducer",
@@ -218,6 +219,7 @@ class StreamingTransducer(Transducer):
             projection_units=prediction_projection_units,
             joint_dim=joint_dim,
             joint_activation=joint_activation,
+            prejoint_linear=prejoint_linear,
             kernel_regularizer=kernel_regularizer,
             bias_regularizer=bias_regularizer,
             name=name, **kwargs
