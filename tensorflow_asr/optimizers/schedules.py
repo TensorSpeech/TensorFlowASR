@@ -87,3 +87,36 @@ class BoundExponentialDecay(ExponentialDecay):
             new_lr = math_ops.multiply(
                 initial_learning_rate, math_ops.pow(decay_rate, p), name=name)
             return math_ops.maximum(self.min_lr, new_lr)
+
+
+class CyclicLR(tf.keras.optimizers.schedules.LearningRateSchedule):
+    def __init__(self, d_model, warmup_steps=4000, max_lr=None, 
+                 step_size=None):
+        super().__init__()
+
+        self.d_model = d_model
+        self.d_model = tf.cast(self.d_model, tf.float32)
+        self.warmup_steps = warmup_steps
+        self.max_lr = max_lr
+        self.step_size = step_size
+
+    def __call__(self, step):        
+        warmup = step * (self.warmup_steps ** -1.5)
+        lr = 2 * tf.math.rsqrt(step)
+        lr = tf.math.rsqrt(self.d_model) * tf.math.minimum(lr, warmup)
+        lr = tf.math.minimum(self.max_lr, lr)
+        cycle = tf.math.floor(1 + step / (2 * self.step_size))
+        x = tf.math.abs(step / self.step_size - 2 * cycle + 1)
+        lr = lr * (0.5 + tf.math.maximum(0., x))
+        lr = tf.math.minimum(self.max_lr, 
+                             tf.math.minimum(lr, warmup))
+        return lr
+
+    def get_config(self):
+        return {
+            "d_model": self.d_model,
+            "warmup_steps": self.warmup_steps,
+            "max_lr": self.max_lr,
+            "step_size": self.step_size
+        }
+    
