@@ -65,8 +65,13 @@ def bytes_to_string(array: np.ndarray, encoding: str = "utf-8"):
     return [transcript.decode(encoding) for transcript in array]
 
 
-def get_num_batches(samples, batch_size, drop_remainders=True):
-    if samples is None or batch_size is None: return None
+def get_num_batches(dataset, samples, batch_size, drop_remainders=True):
+    if samples is None:
+        if batch_size is None: return None
+        else:
+            samples = 0
+            for s in dataset:
+                samples += s[0].shape[0]
     if drop_remainders: return math.floor(float(samples) / float(batch_size))
     return math.ceil(float(samples) / float(batch_size))
 

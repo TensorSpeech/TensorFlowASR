@@ -140,7 +140,7 @@ class ASRDataset(BaseDataset):
 
         # PREFETCH to improve speed of input length
         dataset = dataset.prefetch(AUTOTUNE)
-        self.total_steps = get_num_batches(self.total_steps, batch_size)
+        self.total_steps = get_num_batches(dataset, self.total_steps, batch_size)
         return dataset
 
     @tf.function
@@ -228,8 +228,6 @@ class ASRTFRecordDataset(ASRDataset):
         splitted_entries = np.array_split(self.entries, self.tfrecords_shards)
         for entries in zip(shards, splitted_entries):
             self.write_tfrecord_file(entries)
-        # with multiprocessing.Pool(self.tfrecords_shards) as pool:
-            # pool.map(self.write_tfrecord_file, zip(shards, splitted_entries))
 
         return True
 
