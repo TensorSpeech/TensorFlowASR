@@ -89,7 +89,7 @@ class BoundExponentialDecay(ExponentialDecay):
             return math_ops.maximum(self.min_lr, new_lr)
 
 
-class CyclicLR(tf.keras.optimizers.schedules.LearningRateSchedule):
+class CyclicTransformerSchedule(tf.keras.optimizers.schedules.LearningRateSchedule):
     def __init__(self, d_model, warmup_steps=4000, max_lr=None, 
                  step_size=None):
         super().__init__()
