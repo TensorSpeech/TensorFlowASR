@@ -19,11 +19,9 @@ from tensorflow_asr.utils.utils import preprocess_paths
 from tensorflow_asr.datasets.asr_dataset import ASRTFRecordDataset
 from tensorflow_asr.featurizers.text_featurizers import SubwordFeaturizer
 
-modes = ["train", "eval", "test"]
-
 parser = argparse.ArgumentParser(prog="TFRecords Creation")
 
-parser.add_argument("--mode", "-m", type=str, default=None, help=f"Mode in {modes}")
+parser.add_argument("--mode", "-m", type=str, default=None, help="Mode")
 
 parser.add_argument("--config", type=str, default=None, help="The file path of model configuration file")
 
@@ -38,8 +36,6 @@ parser.add_argument("--subwords", type=str, default=None, help="Path to file tha
 parser.add_argument("transcripts", nargs="+", type=str, default=None, help="Paths to transcript files")
 
 args = parser.parse_args()
-
-assert args.mode in modes, f"Mode must in {modes}"
 
 transcripts = preprocess_paths(args.transcripts)
 tfrecords_dir = preprocess_paths(args.tfrecords_dir)
