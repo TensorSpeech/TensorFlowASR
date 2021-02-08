@@ -140,7 +140,7 @@ class ASRDataset(BaseDataset):
 
         # PREFETCH to improve speed of input length
         dataset = dataset.prefetch(AUTOTUNE)
-        self.total_steps = get_num_batches(dataset, self.total_steps, batch_size)
+        self.total_steps = get_num_batches(self.total_steps, batch_size)
         return dataset
 
     @tf.function
