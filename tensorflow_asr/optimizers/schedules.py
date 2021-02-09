@@ -29,6 +29,7 @@ class TransformerSchedule(tf.keras.optimizers.schedules.LearningRateSchedule):
 
     def __call__(self, step):
         # lr = (d_model^-0.5) * min(step^-0.5, step*(warm_up^-1.5))
+        step = tf.cast(step, dtype=tf.float32)
         arg1 = tf.math.rsqrt(step)
         arg2 = step * (self.warmup_steps ** -1.5)
         lr = tf.math.rsqrt(self.d_model) * tf.math.minimum(arg1, arg2)
@@ -54,9 +55,9 @@ class SANSchedule(tf.keras.optimizers.schedules.LearningRateSchedule):
         self.warmup_steps = tf.cast(warmup_steps, tf.float32)
 
     def __call__(self, step):
+        step = tf.cast(step, dtype=tf.float32)
         arg1 = step / (self.warmup_steps ** 1.5)
         arg2 = 1 / tf.math.sqrt(step)
-
         return (self.lamb / tf.math.sqrt(self.d_model)) * tf.math.minimum(arg1, arg2)
 
     def get_config(self):
