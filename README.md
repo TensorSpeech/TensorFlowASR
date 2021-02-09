@@ -104,6 +104,12 @@ cd TensorFlowASR
 pip install .
 ```
 
+### Running in a container
+
+```bash
+docker-compose up -d
+```
+
 ## Setup training and testing
 
 - For datasets, see [datasets](./tensorflow_asr/datasets/README.md)

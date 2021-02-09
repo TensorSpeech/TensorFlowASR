@@ -1,8 +1,12 @@
 version: "3.9"
 
 services:
-  text-classification:
-    image: oblivion208/asr:2.3.0-gpu
+  tensorflow_asr:
+    build:
+      context: .
+      args:
+        using_gpu: "true"
+        install_rnnt_loss: "true"
     tty: true
     runtime: nvidia
     environment:
