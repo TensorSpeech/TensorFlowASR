@@ -167,3 +167,42 @@ def has_gpu_or_tpu():
     tpus = tf.config.list_logical_devices("TPU")
     if len(gpus) == 0 and len(tpus) == 0: return False
     return True
+
+
+def find_max_length_prediction_tfarray(tfarray: tf.TensorArray) -> tf.Tensor:
+    with tf.name_scope("find_max_length_prediction_tfarray"):
+        index = tf.constant(0, dtype=tf.int32)
+        total = tfarray.size()
+        max_length = tf.constant(0, dtype=tf.int32)
+
+        def condition(index, _): return tf.less(index, total)
+
+        def body(index, max_length):
+            prediction = tfarray.read(index)
+            length = tf.shape(prediction)[0]
+            max_length = tf.where(tf.greater(length, max_length), length, max_length)
+            return index + 1, max_length
+
+        index, max_length = tf.while_loop(condition, body, loop_vars=[index, max_length], swap_memory=False)
+        return max_length
+
+
+def pad_prediction_tfarray(tfarray: tf.TensorArray, blank: int or tf.Tensor) -> tf.TensorArray:
+    with tf.name_scope("pad_prediction_tfarray"):
+        index = tf.constant(0, dtype=tf.int32)
+        total = tfarray.size()
+        max_length = find_max_length_prediction_tfarray(tfarray)
+
+        def condition(index, _): return tf.less(index, total)
+
+        def body(index, tfarray):
+            prediction = tfarray.read(index)
+            prediction = tf.pad(
+                prediction, paddings=[[0, max_length - tf.shape(prediction)[0]]],
+                mode="CONSTANT", constant_values=blank
+            )
+            tfarray = tfarray.write(index, prediction)
+            return index + 1, tfarray
+
+        index, tfarray = tf.while_loop(condition, body, loop_vars=[index, tfarray], swap_memory=False)
+        return tfarray

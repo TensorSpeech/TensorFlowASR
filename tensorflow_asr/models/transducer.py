@@ -17,7 +17,7 @@ import collections
 import tensorflow as tf
 
 from . import Model
-from ..utils.utils import get_rnn, shape_list, count_non_blank
+from ..utils.utils import get_rnn, shape_list, count_non_blank, pad_prediction_tfarray
 from ..featurizers.speech_featurizers import SpeechFeaturizer
 from ..featurizers.text_featurizers import TextFeaturizer
 from .layers.embedding import Embedding
@@ -400,42 +400,40 @@ class Transducer(Model):
                               encoded: tf.Tensor,
                               encoded_length: tf.Tensor,
                               parallel_iterations: int = 10,
-                              swap_memory: bool = False):
-        total_batch, total_time, _ = shape_list(encoded)
-        batch = tf.constant(0, dtype=tf.int32)
+                              swap_memory: bool = False,
+                              version: str = 'v1'):
+        with tf.name_scope(f"{self.name}_perform_greedy_batch"):
+            total_batch = tf.shape(encoded)[0]
+            batch = tf.constant(0, dtype=tf.int32)
 
-        decoded = tf.TensorArray(
-            dtype=tf.int32, size=total_batch, dynamic_size=False,
-            clear_after_read=False, element_shape=None
-        )
+            greedy_fn = self._perform_greedy if version == 'v1' else self._perform_greedy_v2
 
-        def condition(batch, _): return tf.less(batch, total_batch)
-
-        def body(batch, decoded):
-            hypothesis = self._perform_greedy(
-                encoded=encoded[batch],
-                encoded_length=encoded_length[batch],
-                predicted=tf.constant(self.text_featurizer.blank, dtype=tf.int32),
-                states=self.predict_net.get_initial_state(),
-                parallel_iterations=parallel_iterations,
-                swap_memory=swap_memory
+            decoded = tf.TensorArray(
+                dtype=tf.int32, size=total_batch, dynamic_size=False,
+                clear_after_read=False, element_shape=tf.TensorShape([None])
             )
-            prediction = tf.pad(
-                hypothesis.prediction,
-                paddings=[[0, 2 * (total_time - encoded_length[batch])]],
-                mode="CONSTANT", constant_values=self.text_featurizer.blank
+
+            def condition(batch, _): return tf.less(batch, total_batch)
+
+            def body(batch, decoded):
+                hypothesis = greedy_fn(
+                    encoded=encoded[batch],
+                    encoded_length=encoded_length[batch],
+                    predicted=tf.constant(self.text_featurizer.blank, dtype=tf.int32),
+                    states=self.predict_net.get_initial_state(),
+                    parallel_iterations=parallel_iterations,
+                    swap_memory=swap_memory
+                )
+                decoded = decoded.write(batch, hypothesis.prediction)
+                return batch + 1, decoded
+
+            batch, decoded = tf.while_loop(
+                condition, body, loop_vars=[batch, decoded],
+                parallel_iterations=parallel_iterations, swap_memory=True,
             )
-            decoded = decoded.write(batch, prediction)
-            return batch + 1, decoded
 
-        batch, decoded = tf.while_loop(
-            condition, body,
-            loop_vars=[batch, decoded],
-            parallel_iterations=parallel_iterations,
-            swap_memory=True,
-        )
-
-        return self.text_featurizer.iextract(decoded.stack())
+            decoded = pad_prediction_tfarray(decoded, blank=self.text_featurizer.blank)
+            return self.text_featurizer.iextract(decoded.stack())
 
     def _perform_greedy(self,
                         encoded: tf.Tensor,
@@ -457,12 +455,12 @@ class Transducer(Model):
                 states=states
             )
 
-            def condition(_time, _total, _encoded, _hypothesis): return tf.less(_time, _total)
+            def condition(_time, _hypothesis): return tf.less(_time, total)
 
-            def body(_time, _total, _encoded, _hypothesis):
+            def body(_time, _hypothesis):
                 ytu, _states = self.decoder_inference(
                     # avoid using [index] in tflite
-                    encoded=tf.gather_nd(_encoded, tf.reshape(_time, shape=[1])),
+                    encoded=tf.gather_nd(encoded, tf.reshape(_time, shape=[1])),
                     predicted=_hypothesis.index,
                     states=_hypothesis.states
                 )
@@ -480,13 +478,11 @@ class Transducer(Model):
                 _prediction = _hypothesis.prediction.write(_time, _predict)
                 _hypothesis = Hypothesis(index=_index, prediction=_prediction, states=_states)
 
-                return _time + 1, _total, _encoded, _hypothesis
+                return _time + 1, _hypothesis
 
-            _, _, _, hypothesis = tf.while_loop(
+            time, hypothesis = tf.while_loop(
                 condition, body,
-                loop_vars=[time, total, encoded, hypothesis],
-                parallel_iterations=parallel_iterations,
-                swap_memory=swap_memory
+                loop_vars=[time, hypothesis], parallel_iterations=parallel_iterations, swap_memory=swap_memory
             )
 
             return Hypothesis(index=hypothesis.index, prediction=hypothesis.prediction.stack(), states=hypothesis.states)
@@ -512,12 +508,12 @@ class Transducer(Model):
                 states=states
             )
 
-            def condition(_time, _total, _encoded, _hypothesis): return tf.less(_time, _total)
+            def condition(_time, _hypothesis): return tf.less(_time, total)
 
-            def body(_time, _total, _encoded, _hypothesis):
+            def body(_time, _hypothesis):
                 ytu, _states = self.decoder_inference(
                     # avoid using [index] in tflite
-                    encoded=tf.gather_nd(_encoded, tf.reshape(_time, shape=[1])),
+                    encoded=tf.gather_nd(encoded, tf.reshape(_time, shape=[1])),
                     predicted=_hypothesis.index,
                     states=_hypothesis.states
                 )
@@ -531,13 +527,11 @@ class Transducer(Model):
                 _prediction = _hypothesis.prediction.write(_time, _predict)
                 _hypothesis = Hypothesis(index=_index, prediction=_prediction, states=_states)
 
-                return _time, _total, _encoded, _hypothesis
+                return _time, _hypothesis
 
-            _, _, _, hypothesis = tf.while_loop(
+            time, hypothesis = tf.while_loop(
                 condition, body,
-                loop_vars=[time, total, encoded, hypothesis],
-                parallel_iterations=parallel_iterations,
-                swap_memory=swap_memory
+                loop_vars=[time, hypothesis], parallel_iterations=parallel_iterations, swap_memory=swap_memory
             )
 
             return Hypothesis(index=hypothesis.index, prediction=hypothesis.prediction.stack(), states=hypothesis.states)
@@ -570,37 +564,32 @@ class Transducer(Model):
                                    lm: bool = False,
                                    parallel_iterations: int = 10,
                                    swap_memory: bool = False):
-        total_batch, total_time, _ = shape_list(encoded)
-        batch = tf.constant(0, dtype=tf.int32)
+        with tf.name_scope(f"{self.name}_perform_beam_search_batch"):
+            total_batch = tf.shape(encoded)[0]
+            batch = tf.constant(0, dtype=tf.int32)
 
-        decoded = tf.TensorArray(
-            dtype=tf.int32, size=total_batch, dynamic_size=False,
-            clear_after_read=False, element_shape=None
-        )
-
-        def condition(batch, _): return tf.less(batch, total_batch)
-
-        def body(batch, decoded):
-            hypothesis = self._perform_beam_search(
-                encoded[batch], encoded_length[batch], lm,
-                parallel_iterations=parallel_iterations, swap_memory=swap_memory
+            decoded = tf.TensorArray(
+                dtype=tf.int32, size=total_batch, dynamic_size=False,
+                clear_after_read=False, element_shape=None
             )
-            prediction = tf.pad(
-                hypothesis.prediction,
-                paddings=[[0, 2 * (total_time - encoded_length[batch])]],
-                mode="CONSTANT", constant_values=self.text_featurizer.blank
+
+            def condition(batch, _): return tf.less(batch, total_batch)
+
+            def body(batch, decoded):
+                hypothesis = self._perform_beam_search(
+                    encoded[batch], encoded_length[batch], lm,
+                    parallel_iterations=parallel_iterations, swap_memory=swap_memory
+                )
+                decoded = decoded.write(batch, hypothesis.prediction)
+                return batch + 1, decoded
+
+            batch, decoded = tf.while_loop(
+                condition, body, loop_vars=[batch, decoded],
+                parallel_iterations=parallel_iterations, swap_memory=True,
             )
-            decoded = decoded.write(batch, prediction)
-            return batch + 1, decoded
 
-        batch, decoded = tf.while_loop(
-            condition, body,
-            loop_vars=[batch, decoded],
-            parallel_iterations=parallel_iterations,
-            swap_memory=True,
-        )
-
-        return self.text_featurizer.iextract(decoded.stack())
+            decoded = pad_prediction_tfarray(decoded, blank=self.text_featurizer.blank)
+            return self.text_featurizer.iextract(decoded.stack())
 
     def _perform_beam_search(self,
                              encoded: tf.Tensor,
@@ -640,7 +629,7 @@ class Transducer(Model):
             B = BeamHypothesis(
                 score=B.score.write(0, 0.0),
                 indices=B.indices.write(0, self.text_featurizer.blank),
-                prediction=B.prediction.write(0, tf.ones([total * 2], dtype=tf.int32) * self.text_featurizer.blank),
+                prediction=B.prediction.write(0, tf.ones([total], dtype=tf.int32) * self.text_featurizer.blank),
                 states=B.states.write(0, self.predict_net.get_initial_state())
             )
 
@@ -651,7 +640,8 @@ class Transducer(Model):
                 A = BeamHypothesis(
                     score=A.score.unstack(B.score.stack()),
                     indices=A.indices.unstack(B.indices.stack()),
-                    prediction=A.prediction.unstack(B.prediction.stack()),
+                    prediction=A.prediction.unstack(
+                        pad_prediction_tfarray(B.prediction, blank=self.text_featurizer.blank).stack()),
                     states=A.states.unstack(B.states.stack()),
                 )
                 A_i = tf.constant(0, tf.int32)
@@ -666,7 +656,8 @@ class Transducer(Model):
                     y_hat_score, y_hat_score_index = tf.math.top_k(A.score.stack(), k=1, sorted=True)
                     y_hat_score = y_hat_score[0]
                     y_hat_index = tf.gather_nd(A.indices.stack(), y_hat_score_index)
-                    y_hat_prediction = tf.gather_nd(A.prediction.stack(), y_hat_score_index)
+                    y_hat_prediction = tf.gather_nd(
+                        pad_prediction_tfarray(A.prediction, blank=self.text_featurizer.blank).stack(), y_hat_score_index)
                     y_hat_states = tf.gather_nd(A.states.stack(), y_hat_score_index)
 
                     # remove y_hat from A
@@ -676,7 +667,8 @@ class Transducer(Model):
                     A = BeamHypothesis(
                         score=A.score.unstack(tf.gather_nd(A.score.stack(), remain_indices)),
                         indices=A.indices.unstack(tf.gather_nd(A.indices.stack(), remain_indices)),
-                        prediction=A.prediction.unstack(tf.gather_nd(A.prediction.stack(), remain_indices)),
+                        prediction=A.prediction.unstack(tf.gather_nd(
+                            pad_prediction_tfarray(A.prediction, blank=self.text_featurizer.blank).stack(), remain_indices)),
                         states=A.states.unstack(tf.gather_nd(A.states.stack(), remain_indices)),
                     )
                     A_i = tf.cond(tf.equal(A_i, 0), true_fn=lambda: A_i, false_fn=lambda: A_i - 1)
@@ -752,14 +744,15 @@ class Transducer(Model):
             )
 
             scores = B.score.stack()
+            prediction = pad_prediction_tfarray(B.prediction, blank=self.text_featurizer.blank).stack()
             if self.text_featurizer.decoder_config.norm_score:
-                prediction_lengths = count_non_blank(B.prediction.stack(), blank=self.text_featurizer.blank, axis=1)
+                prediction_lengths = count_non_blank(prediction, blank=self.text_featurizer.blank, axis=1)
                 scores /= tf.cast(prediction_lengths, dtype=scores.dtype)
 
             y_hat_score, y_hat_score_index = tf.math.top_k(scores, k=1)
             y_hat_score = y_hat_score[0]
             y_hat_index = tf.gather_nd(B.indices.stack(), y_hat_score_index)
-            y_hat_prediction = tf.gather_nd(B.prediction.stack(), y_hat_score_index)
+            y_hat_prediction = tf.gather_nd(prediction, y_hat_score_index)
             y_hat_states = tf.gather_nd(B.states.stack(), y_hat_score_index)
 
             return Hypothesis(index=y_hat_index, prediction=y_hat_prediction, states=y_hat_states)
