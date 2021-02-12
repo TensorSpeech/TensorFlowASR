@@ -226,8 +226,8 @@ class ASRTFRecordDataset(ASRDataset):
         shards = [get_shard_path(idx) for idx in range(1, self.tfrecords_shards + 1)]
 
         splitted_entries = np.array_split(self.entries, self.tfrecords_shards)
-        with multiprocessing.Pool(self.tfrecords_shards) as pool:
-            pool.map(self.write_tfrecord_file, zip(shards, splitted_entries))
+        for entries in zip(shards, splitted_entries):
+            self.write_tfrecord_file(entries)
 
         return True
 
