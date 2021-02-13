@@ -128,5 +128,5 @@ learning_config:
       histogram_freq: 1
       write_graph: True
       write_images: True
-      update_freq: "epoch"
+      update_freq: epoch
       profile_batch: 2
