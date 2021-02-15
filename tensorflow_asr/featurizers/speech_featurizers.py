@@ -177,7 +177,7 @@ def tf_depreemphasis(signal: tf.Tensor, coeff=0.97):
 
 
 class SpeechFeaturizer(metaclass=abc.ABCMeta):
-    def __init__(self, speech_config: dict):
+    def __init__(self, speech_config: dict, tpu: bool = False):
         """
         We should use TFSpeechFeaturizer for training to avoid differences
         between tf and librosa when converting to tflite in post-training stage
@@ -207,6 +207,9 @@ class SpeechFeaturizer(metaclass=abc.ABCMeta):
         self.normalize_signal = speech_config.get("normalize_signal", True)
         self.normalize_feature = speech_config.get("normalize_feature", True)
         self.normalize_per_feature = speech_config.get("normalize_per_feature", False)
+        # Length
+        self.tpu = tpu
+        self.max_length = 0
 
     @property
     def nfft(self) -> int:
@@ -217,6 +220,9 @@ class SpeechFeaturizer(metaclass=abc.ABCMeta):
     def shape(self) -> list:
         """ The shape of extracted features """
         raise NotImplementedError()
+
+    def update_length(self, length: int):
+        self.max_length = max(self.max_length, length)
 
     @abc.abstractclassmethod
     def stft(self, signal):
@@ -233,8 +239,8 @@ class SpeechFeaturizer(metaclass=abc.ABCMeta):
 
 
 class NumpySpeechFeaturizer(SpeechFeaturizer):
-    def __init__(self, speech_config: dict):
-        super(NumpySpeechFeaturizer, self).__init__(speech_config)
+    def __init__(self, speech_config: dict, tpu: bool = False):
+        super(NumpySpeechFeaturizer, self).__init__(speech_config, tpu)
         self.delta = speech_config.get("delta", False)
         self.delta_delta = speech_config.get("delta_delta", False)
         self.pitch = speech_config.get("pitch", False)
@@ -253,7 +259,9 @@ class NumpySpeechFeaturizer(SpeechFeaturizer):
         if self.pitch:
             channel_dim += 1
 
-        return [None, self.num_feature_bins, channel_dim]
+        length = self.max_length if (self.max_length > 0 and self.tpu) else None
+
+        return [length, self.num_feature_bins, channel_dim]
 
     def stft(self, signal):
         return np.square(
@@ -383,8 +391,8 @@ class NumpySpeechFeaturizer(SpeechFeaturizer):
 class TFSpeechFeaturizer(SpeechFeaturizer):
     @property
     def shape(self) -> list:
-        # None for time dimension
-        return [None, self.num_feature_bins, 1]
+        length = self.max_length if (self.max_length > 0 and self.tpu) else None
+        return [length, self.num_feature_bins, 1]
 
     def stft(self, signal):
         return tf.square(

@@ -12,9 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import multiprocessing
 import os
-
 import numpy as np
 import tensorflow as tf
 
@@ -129,9 +127,9 @@ class ASRDataset(BaseDataset):
                 tf.TensorShape([]),
                 tf.TensorShape(self.speech_featurizer.shape),
                 tf.TensorShape([]),
-                tf.TensorShape([None]),
+                tf.TensorShape(self.text_featurizer.shape),
                 tf.TensorShape([]),
-                tf.TensorShape([None]),
+                tf.TensorShape(self.text_featurizer.prepand_shape),
                 tf.TensorShape([]),
             ),
             padding_values=("", 0., 0, self.text_featurizer.blank, 0, self.text_featurizer.blank, 0),
