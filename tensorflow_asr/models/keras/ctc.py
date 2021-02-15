@@ -23,12 +23,14 @@ from ...losses.keras.ctc_losses import CtcLoss
 class CtcModel(BaseCtcModel):
     """ Keras CTC Model Warper """
 
-    def compile(self, optimizer, global_batch_size, blank=0,
+    def compile(self, optimizer, global_batch_size, blank=0, use_loss_scale=False,
                 loss_weights=None, weighted_metrics=None, run_eagerly=None, **kwargs):
         loss = CtcLoss(blank=blank, global_batch_size=global_batch_size)
-        optimizer_with_scale = mxp.experimental.LossScaleOptimizer(tf.keras.optimizers.get(optimizer), 'dynamic')
+        self.use_loss_scale = use_loss_scale
+        if self.use_loss_scale:
+            optimizer = mxp.experimental.LossScaleOptimizer(tf.keras.optimizers.get(optimizer), 'dynamic')
         super(CtcModel, self).compile(
-            optimizer=optimizer_with_scale, loss=loss,
+            optimizer=optimizer, loss=loss,
             loss_weights=loss_weights, weighted_metrics=weighted_metrics,
             run_eagerly=run_eagerly,
             **kwargs
@@ -43,9 +45,13 @@ class CtcModel(BaseCtcModel):
                 'logit_length': get_reduced_length(x['input_length'], self.time_reduction_factor)
             }
             loss = self.loss(y_true, y_pred)
-            scaled_loss = self.optimizer.get_scaled_loss(loss)
-        scaled_gradients = tape.gradient(scaled_loss, self.trainable_weights)
-        gradients = self.optimizer.get_unscaled_gradients(scaled_gradients)
+            if self.use_loss_scale:
+                scaled_loss = self.optimizer.get_scaled_loss(loss)
+        if self.use_loss_scale:
+            scaled_gradients = tape.gradient(scaled_loss, self.trainable_weights)
+            gradients = self.optimizer.get_unscaled_gradients(scaled_gradients)
+        else:
+            gradients = tape.gradient(loss, self.trainable_weights)
         self.optimizer.apply_gradients(zip(gradients, self.trainable_variables))
         return {"ctc_loss": loss}
 
