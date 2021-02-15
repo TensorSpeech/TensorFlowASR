@@ -73,7 +73,7 @@ class Transducer(BaseTransducer):
         scaled_gradients = tape.gradient(scaled_loss, self.trainable_weights)
         gradients = self.optimizer.get_unscaled_gradients(scaled_gradients)
         self.optimizer.apply_gradients(zip(gradients, self.trainable_variables))
-        return {"train_rnnt_loss": loss}
+        return {"rnnt_loss": loss}
 
     def test_step(self, batch):
         x, y_true = batch
@@ -84,4 +84,4 @@ class Transducer(BaseTransducer):
             "prediction_length": x["prediction_length"],
         }, training=False)
         loss = self.loss(y_true, y_pred)
-        return {"val_rnnt_loss": loss}
+        return {"rnnt_loss": loss}

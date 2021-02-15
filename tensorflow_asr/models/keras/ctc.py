@@ -47,7 +47,7 @@ class CtcModel(BaseCtcModel):
         scaled_gradients = tape.gradient(scaled_loss, self.trainable_weights)
         gradients = self.optimizer.get_unscaled_gradients(scaled_gradients)
         self.optimizer.apply_gradients(zip(gradients, self.trainable_variables))
-        return {"train_ctc_loss": loss}
+        return {"ctc_loss": loss}
 
     def test_step(self, batch):
         x, y_true = batch
@@ -57,4 +57,4 @@ class CtcModel(BaseCtcModel):
             'logit_length': get_reduced_length(x['input_length'], self.time_reduction_factor)
         }
         loss = self.loss(y_true, y_pred)
-        return {"val_ctc_loss": loss}
+        return {"ctc_loss": loss}

@@ -58,8 +58,9 @@ model_config:
   prediction_rnn_type: lstm
   prediction_rnn_implementation: 2
   prediction_layer_norm: False
-  prediction_projection_units: 0
+  prediction_projection_units: 144
   joint_dim: 640
+  prejoint_linear: False
   joint_activation: tanh
 
 learning_config:
@@ -112,7 +113,7 @@ learning_config:
   running_config:
     batch_size: 2
     accumulation_steps: 4
-    num_epochs: 20
+    num_epochs: 50
     outdir: /mnt/Miscellanea/Models/local/conformer
     log_interval_steps: 300
     eval_interval_steps: 500
