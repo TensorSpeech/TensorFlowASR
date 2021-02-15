@@ -4,7 +4,7 @@ scipy
 sklearn
 pandas
 tensorflow-datasets>=4.2.0
-tensorflow-addons>=0.10.0
+tensorflow-addons>=0.11.1
 tensorflow-io>=0.16.0
 setuptools>=47.1.1
 librosa>=0.8.0
