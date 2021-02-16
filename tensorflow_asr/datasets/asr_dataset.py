@@ -90,7 +90,7 @@ class ASRDataset(BaseDataset):
     # -------------------------------- ENTRIES -------------------------------------
 
     def read_entries(self):
-        if hasattr(self, 'entries') and len(self.entries) > 0: return
+        if hasattr(self, "entries") and len(self.entries) > 0: return
         self.entries = []
         for file_path in self.data_paths:
             print(f"Reading {file_path} ...")
