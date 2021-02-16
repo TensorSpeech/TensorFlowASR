@@ -67,11 +67,11 @@ class ASRDatasetKeras(ASRDataset):
                     "path": tf.TensorShape([]),
                     "input": tf.TensorShape(self.speech_featurizer.shape),
                     "input_length": tf.TensorShape([]),
-                    "prediction": tf.TensorShape([None]),
+                    "prediction": tf.TensorShape(self.text_featurizer.prepand_shape),
                     "prediction_length": tf.TensorShape([])
                 },
                 {
-                    "label": tf.TensorShape([None]),
+                    "label": tf.TensorShape(self.text_featurizer.shape),
                     "label_length": tf.TensorShape([])
                 },
             ),
