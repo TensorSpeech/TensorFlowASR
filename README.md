@@ -21,13 +21,11 @@ TensorFlowASR implements some automatic speech recognition architectures such as
 
 ## What's New?
 
+- (02/16/2021) Supported for TPU training
 - (12/27/2020) Supported _naive_ token level timestamp, see [demo](./examples/demonstration/conformer.py) with flag `--timestamp`
 - (12/17/2020) Supported ContextNet [http://arxiv.org/abs/2005.03191](http://arxiv.org/abs/2005.03191)
 - (12/12/2020) Add support for using masking
 - (11/14/2020) Supported Gradient Accumulation for Training in Larger Batch Size
-- (11/3/2020) Reduce differences between `librosa.stft` and `tf.signal.stft`
-- (10/31/2020) Update DeepSpeech2 and Supported Jasper [https://arxiv.org/abs/1904.03288](https://arxiv.org/abs/1904.03288)
-- (10/18/2020) Supported Streaming Transducer [https://arxiv.org/abs/1811.06621](https://arxiv.org/abs/1811.06621)
 
 ## Table of Contents
 
@@ -41,6 +39,7 @@ TensorFlowASR implements some automatic speech recognition architectures such as
 - [Installation](#installation)
   - [Installing via PyPi](#installing-via-pypi)
   - [Installing from source](#installing-from-source)
+  - [Running in a container](#running-in-a-container)
 - [Setup training and testing](#setup-training-and-testing)
 - [TFLite Convertion](#tflite-convertion)
 - [Features Extraction](#features-extraction)
