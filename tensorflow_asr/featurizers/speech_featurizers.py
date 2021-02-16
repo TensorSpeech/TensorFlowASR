@@ -177,7 +177,7 @@ def tf_depreemphasis(signal: tf.Tensor, coeff=0.97):
 
 
 class SpeechFeaturizer(metaclass=abc.ABCMeta):
-    def __init__(self, speech_config: dict, tpu: bool = False):
+    def __init__(self, speech_config: dict):
         """
         We should use TFSpeechFeaturizer for training to avoid differences
         between tf and librosa when converting to tflite in post-training stage
@@ -208,7 +208,6 @@ class SpeechFeaturizer(metaclass=abc.ABCMeta):
         self.normalize_feature = speech_config.get("normalize_feature", True)
         self.normalize_per_feature = speech_config.get("normalize_per_feature", False)
         # Length
-        self.tpu = tpu
         self.max_length = 0
 
     @property
@@ -259,7 +258,7 @@ class NumpySpeechFeaturizer(SpeechFeaturizer):
         if self.pitch:
             channel_dim += 1
 
-        length = self.max_length if (self.max_length > 0 and self.tpu) else None
+        length = self.max_length if self.max_length > 0 else None
 
         return [length, self.num_feature_bins, channel_dim]
 
@@ -391,7 +390,7 @@ class NumpySpeechFeaturizer(SpeechFeaturizer):
 class TFSpeechFeaturizer(SpeechFeaturizer):
     @property
     def shape(self) -> list:
-        length = self.max_length if (self.max_length > 0 and self.tpu) else None
+        length = self.max_length if self.max_length > 0 else None
         return [length, self.num_feature_bins, 1]
 
     def stft(self, signal):

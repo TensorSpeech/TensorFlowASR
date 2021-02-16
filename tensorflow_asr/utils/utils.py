@@ -206,3 +206,7 @@ def pad_prediction_tfarray(tfarray: tf.TensorArray, blank: int or tf.Tensor) -> 
 
         index, tfarray = tf.while_loop(condition, body, loop_vars=[index, tfarray], swap_memory=False)
         return tfarray
+
+
+def get_nsamples_from_duration(duration, sample_rate=16000):
+    return math.ceil(float(duration) * sample_rate)

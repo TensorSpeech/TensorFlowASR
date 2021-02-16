@@ -246,11 +246,11 @@ class Transducer(Model):
         )
         self.time_reduction_factor = 1
 
-    def _build(self, input_shape):
-        inputs = tf.keras.Input(shape=input_shape, dtype=tf.float32)
-        input_length = tf.keras.Input(shape=[], dtype=tf.int32)
-        pred = tf.keras.Input(shape=[None], dtype=tf.int32)
-        pred_length = tf.keras.Input(shape=[], dtype=tf.int32)
+    def _build(self, input_shape, prediction_shape=[None], batch_size=None):
+        inputs = tf.keras.Input(shape=input_shape, batch_size=batch_size, dtype=tf.float32)
+        input_length = tf.keras.Input(shape=[], batch_size=batch_size, dtype=tf.int32)
+        pred = tf.keras.Input(shape=prediction_shape, batch_size=batch_size, dtype=tf.int32)
+        pred_length = tf.keras.Input(shape=[], batch_size=batch_size, dtype=tf.int32)
         self([inputs, input_length, pred, pred_length], training=False)
 
     def summary(self, line_length=None, **kwargs):

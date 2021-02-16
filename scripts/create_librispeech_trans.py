@@ -23,11 +23,9 @@ from tensorflow_asr.utils.utils import preprocess_paths
 
 parser = argparse.ArgumentParser(prog="Setup LibriSpeech Transcripts")
 
-parser.add_argument("--dir", "-d", type=str,
-                    default=None, help="Directory of dataset")
+parser.add_argument("--dir", "-d", type=str, default=None, help="Directory of dataset")
 
-parser.add_argument("output", type=str,
-                    default=None, help="The output .tsv transcript file path")
+parser.add_argument("output", type=str, default=None, help="The output .tsv transcript file path")
 
 args = parser.parse_args()
 
@@ -50,7 +48,7 @@ for text_file in tqdm(text_files, desc="[Loading]"):
         y, sr = librosa.load(audio_file, sr=None)
         duration = librosa.get_duration(y, sr)
         text = unicodedata.normalize("NFC", line[1].lower())
-        transcripts.append(f"{audio_file}\t{duration:.2f}\t{text}\n")
+        transcripts.append(f"{audio_file}\t{duration}\t{text}\n")
 
 with open(args.output, "w", encoding="utf-8") as out:
     out.write("PATH\tDURATION\tTRANSCRIPT\n")

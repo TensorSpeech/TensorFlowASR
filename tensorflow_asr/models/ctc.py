@@ -27,8 +27,8 @@ class CtcModel(Model):
         super(CtcModel, self).__init__(**kwargs)
         self.time_reduction_factor = 1
 
-    def _build(self, input_shape):
-        features = tf.keras.Input(input_shape, dtype=tf.float32)
+    def _build(self, input_shape, batch_size=None):
+        features = tf.keras.Input(input_shape, batch_size=batch_size, dtype=tf.float32)
         self(features, training=False)
 
     def add_featurizers(self,
