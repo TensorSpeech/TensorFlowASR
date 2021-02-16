@@ -238,8 +238,8 @@ class SpeechFeaturizer(metaclass=abc.ABCMeta):
 
 
 class NumpySpeechFeaturizer(SpeechFeaturizer):
-    def __init__(self, speech_config: dict, tpu: bool = False):
-        super(NumpySpeechFeaturizer, self).__init__(speech_config, tpu)
+    def __init__(self, speech_config: dict):
+        super(NumpySpeechFeaturizer, self).__init__(speech_config)
         self.delta = speech_config.get("delta", False)
         self.delta_delta = speech_config.get("delta_delta", False)
         self.pitch = speech_config.get("pitch", False)

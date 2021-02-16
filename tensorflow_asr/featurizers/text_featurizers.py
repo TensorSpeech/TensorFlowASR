@@ -30,23 +30,22 @@ ENGLISH_CHARACTERS = [" ", "a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k"
 
 
 class TextFeaturizer(metaclass=abc.ABCMeta):
-    def __init__(self, decoder_config: dict, tpu: bool = False):
+    def __init__(self, decoder_config: dict):
         self.scorer = None
         self.decoder_config = DecoderConfig(decoder_config)
         self.blank = None
         self.tokens2indices = {}
         self.tokens = []
         self.num_classes = None
-        self.tpu = tpu
         self.max_length = 0
 
     @property
     def shape(self) -> list:
-        return [self.max_length if (self.max_length > 0 and self.tpu) else None]
+        return [self.max_length if self.max_length > 0 else None]
 
     @property
     def prepand_shape(self) -> list:
-        return [self.max_length + 1 if (self.max_length > 0 and self.tpu) else None]
+        return [self.max_length + 1 if self.max_length > 0 else None]
 
     def update_length(self, length: int):
         self.max_length = max(self.max_length, length)
@@ -97,7 +96,7 @@ class CharFeaturizer(TextFeaturizer):
     converted to a sequence of integer indexes.
     """
 
-    def __init__(self, decoder_config: dict, tpu: bool = False):
+    def __init__(self, decoder_config: dict):
         """
         decoder_config = {
             "vocabulary": str,
@@ -108,7 +107,7 @@ class CharFeaturizer(TextFeaturizer):
             }
         }
         """
-        super(CharFeaturizer, self).__init__(decoder_config, tpu)
+        super(CharFeaturizer, self).__init__(decoder_config)
         self.__init_vocabulary()
 
     def __init_vocabulary(self):
@@ -191,7 +190,7 @@ class SubwordFeaturizer(TextFeaturizer):
     converted to a sequence of integer indexes.
     """
 
-    def __init__(self, decoder_config: dict, subwords=None, tpu: bool = False):
+    def __init__(self, decoder_config: dict, subwords=None):
         """
         decoder_config = {
             "target_vocab_size": int,
@@ -204,7 +203,7 @@ class SubwordFeaturizer(TextFeaturizer):
             }
         }
         """
-        super(SubwordFeaturizer, self).__init__(decoder_config, tpu)
+        super(SubwordFeaturizer, self).__init__(decoder_config)
         self.subwords = self.__load_subwords() if subwords is None else subwords
         self.blank = 0  # subword treats blank as 0
         self.num_classes = self.subwords.vocab_size
@@ -223,7 +222,7 @@ class SubwordFeaturizer(TextFeaturizer):
         return tds.deprecated.text.SubwordTextEncoder.load_from_file(filename_prefix)
 
     @classmethod
-    def build_from_corpus(cls, decoder_config: dict, corpus_files: list = None, tpu: bool = False):
+    def build_from_corpus(cls, decoder_config: dict, corpus_files: list = None):
         dconf = DecoderConfig(decoder_config.copy())
         corpus_files = dconf.corpus_files if corpus_files is None or len(corpus_files) == 0 else corpus_files
 
@@ -243,15 +242,15 @@ class SubwordFeaturizer(TextFeaturizer):
             dconf.max_corpus_chars,
             dconf.reserved_tokens
         )
-        return cls(decoder_config, subwords, tpu)
+        return cls(decoder_config, subwords)
 
     @classmethod
-    def load_from_file(cls, decoder_config: dict, filename: str = None, tpu: bool = False):
+    def load_from_file(cls, decoder_config: dict, filename: str = None):
         dconf = DecoderConfig(decoder_config.copy())
         filename = dconf.vocabulary if filename is None else preprocess_paths(filename)
         filename_prefix = os.path.splitext(filename)[0]
         subwords = tds.deprecated.text.SubwordTextEncoder.load_from_file(filename_prefix)
-        return cls(decoder_config, subwords, tpu)
+        return cls(decoder_config, subwords)
 
     def save_to_file(self, filename: str = None):
         filename = self.decoder_config.vocabulary if filename is None else preprocess_paths(filename)
@@ -329,8 +328,8 @@ class SentencePieceFeaturizer(TextFeaturizer):
     EOS_TOKEN, EOS_TOKEN_ID = "</s>", 3
     PAD_TOKEN, PAD_TOKEN_ID = "<pad>", 0  # unused, by default
 
-    def __init__(self, decoder_config: dict, model=None, tpu: bool = False):
-        super(SentencePieceFeaturizer, self).__init__(decoder_config, tpu)
+    def __init__(self, decoder_config: dict, model=None):
+        super(SentencePieceFeaturizer, self).__init__(decoder_config)
         self.model = model
         self.blank = 0  # treats blank as 0 (pad)
         self.upoints = None
@@ -346,7 +345,7 @@ class SentencePieceFeaturizer(TextFeaturizer):
         self.upoints = self.upoints.to_tensor()  # [num_classes, max_subword_length]
 
     @classmethod
-    def build_from_corpus(cls, decoder_config: dict, tpu: bool = False):
+    def build_from_corpus(cls, decoder_config: dict):
         """
         --model_prefix: output model name prefix. <model_name>.model and <model_name>.vocab are generated.
         --vocab_size: vocabulary size, e.g., 8000, 16000, or 32000
@@ -394,17 +393,17 @@ class SentencePieceFeaturizer(TextFeaturizer):
             for _, s in sorted(vocab.items(), key=lambda x: x[0]):
                 f_out.write(f"{s} 1\n")
 
-        return cls(decoder_config, processor, tpu)
+        return cls(decoder_config, processor)
 
     @classmethod
-    def load_from_file(cls, decoder_config: dict, filename: str = None, tpu: bool = False):
+    def load_from_file(cls, decoder_config: dict, filename: str = None):
         if filename is not None:
             filename_prefix = os.path.splitext(preprocess_paths(filename))[0]
         else:
             filename_prefix = decoder_config.get("output_path_prefix", None)
         processor = sp.SentencePieceProcessor()
         processor.load(filename_prefix + ".model")
-        return cls(decoder_config, processor, tpu)
+        return cls(decoder_config, processor)
 
     def extract(self, text: str) -> tf.Tensor:
         """
