@@ -60,32 +60,35 @@ learning_config:
     use_tf: True
     data_paths:
       - /mnt/Miscellanea/Datasets/Speech/LibriSpeech/train-clean-100/transcripts.tsv
-    tfrecords_dir: /mnt/Miscellanea/Datasets/Speech/LibriSpeech/tfrecords-test
+    tfrecords_dir: /mnt/Miscellanea/Datasets/Speech/LibriSpeech/tfrecords
     shuffle: True
     cache: True
     buffer_size: 100
     drop_remainder: True
+    stage: train
 
   eval_dataset_config:
     use_tf: True
     data_paths:
       - /mnt/Miscellanea/Datasets/Speech/LibriSpeech/dev-clean/transcripts.tsv
       - /mnt/Miscellanea/Datasets/Speech/LibriSpeech/dev-other/transcripts.tsv
-    tfrecords_dir: /mnt/Miscellanea/Datasets/Speech/LibriSpeech/tfrecords-test
+    tfrecords_dir: /mnt/Miscellanea/Datasets/Speech/LibriSpeech/tfrecords
     shuffle: False
     cache: True
     buffer_size: 100
     drop_remainder: True
+    stage: eval
 
   test_dataset_config:
     use_tf: True
     data_paths:
       - /mnt/Miscellanea/Datasets/Speech/LibriSpeech/test-clean/transcripts.tsv
-    tfrecords_dir: /mnt/Miscellanea/Datasets/Speech/LibriSpeech/tfrecords-test
+    tfrecords_dir: /mnt/Miscellanea/Datasets/Speech/LibriSpeech/tfrecords
     shuffle: False
     cache: True
     buffer_size: 100
     drop_remainder: True
+    stage: test
 
   optimizer_config:
     class_name: adam
