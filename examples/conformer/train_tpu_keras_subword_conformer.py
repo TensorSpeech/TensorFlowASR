@@ -92,11 +92,12 @@ train_dataset.load_max_lengths(args.max_lengths_prefix)
 eval_dataset.load_max_lengths(args.max_lengths_prefix)
 
 with strategy.scope():
-    global_batch_size = config.learning_config.running_config.batch_size
+    batch_size = args.bs if args.bs is not None else config.learning_config.running_config.batch_size
+    global_batch_size = batch_size
     global_batch_size *= strategy.num_replicas_in_sync
     # build model
     conformer = Conformer(**config.model_config, vocabulary_size=text_featurizer.num_classes)
-    conformer._build(speech_featurizer.shape)
+    conformer._build(speech_featurizer.shape, prediction_shape=text_featurizer.prepand_shape, batch_size=batch_size)
     conformer.summary(line_length=120)
 
     optimizer = tf.keras.optimizers.Adam(
