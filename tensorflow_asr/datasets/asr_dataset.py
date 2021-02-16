@@ -61,9 +61,9 @@ class ASRDataset(BaseDataset):
             self.speech_featurizer.update_length(input_length)
             self.text_featurizer.update_length(label_length)
 
-    def save_max_lengths(self, max_lengths_dir: str = None):
-        if max_lengths_dir is None: return
-        max_lengths_path = os.path.join(preprocess_paths(max_lengths_dir), "max_lengths.json")
+    def save_max_lengths(self, max_lengths_prefix: str = None):
+        if max_lengths_prefix is None: return
+        max_lengths_path = preprocess_paths(max_lengths_prefix) + ".max_lengths.json"
         content = {
             "max_input_length": self.speech_featurizer.max_length,
             "max_label_length": self.text_featurizer.max_length
@@ -72,9 +72,9 @@ class ASRDataset(BaseDataset):
             f.write(json.dumps(content))
         print(f"Max lengths written to {max_lengths_path}")
 
-    def load_max_lengths(self, max_lengths_dir: str = None):
-        if max_lengths_dir is None: return
-        max_lengths_path = os.path.join(preprocess_paths(max_lengths_dir), "max_lengths.json")
+    def load_max_lengths(self, max_lengths_prefix: str = None):
+        if max_lengths_prefix is None: return
+        max_lengths_path = preprocess_paths(max_lengths_prefix) + ".max_lengths.json"
         if tf.io.gfile.exists(max_lengths_path):
             print(f"Loading max lengths from {max_lengths_path} ...")
             with tf.io.gfile.GFile(max_lengths_path, "r") as f:
@@ -82,10 +82,10 @@ class ASRDataset(BaseDataset):
                 self.speech_featurizer.update_length(int(content["max_input_length"]))
                 self.text_featurizer.update_length(int(content["max_label_length"]))
 
-    def update_lengths(self, max_lengths_dir: str = None):
-        self.load_max_lengths(max_lengths_dir)
+    def update_lengths(self, max_lengths_prefix: str = None):
+        self.load_max_lengths(max_lengths_prefix)
         self.compute_max_lengths()
-        self.save_max_lengths(max_lengths_dir)
+        self.save_max_lengths(max_lengths_prefix)
 
     # -------------------------------- ENTRIES -------------------------------------
 

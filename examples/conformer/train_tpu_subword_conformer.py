@@ -36,8 +36,7 @@ parser.add_argument("--bs", type=int, default=None, help="Common training and ev
 
 parser.add_argument("--tpu_address", type=str, default=None, help="TPU address. Leave None on Colab")
 
-parser.add_argument("--max_lengths_dir", type=str, default="~",
-                    help="Path to file containing max lengths. Will be computed if not exists")
+parser.add_argument("--max_lengths_prefix", type=str, default=None, help="Path to file containing max lengths")
 
 parser.add_argument("--compute_lengths", default=False, action="store_true", help="Whether to compute lengths")
 
@@ -87,12 +86,12 @@ eval_dataset = ASRTFRecordDataset(
 )
 
 if args.compute_lengths:
-    train_dataset.update_lengths(args.max_lengths_dir)
-    eval_dataset.update_lengths(args.max_lengths_dir)
+    train_dataset.update_lengths(args.max_lengths_prefix)
+    eval_dataset.update_lengths(args.max_lengths_prefix)
 
 # Update max lengths calculated from both train and eval datasets
-train_dataset.load_max_lengths(args.max_lengths_dir)
-eval_dataset.load_max_lengths(args.max_lengths_dir)
+train_dataset.load_max_lengths(args.max_lengths_prefix)
+eval_dataset.load_max_lengths(args.max_lengths_prefix)
 
 strategy = setup_tpu(args.tpu_address)
 
