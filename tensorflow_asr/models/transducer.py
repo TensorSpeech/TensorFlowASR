@@ -93,10 +93,11 @@ class TransducerPrediction(tf.keras.Model):
         # inputs has shape [B, U]
         # use tf.gather_nd instead of tf.gather for tflite conversion
         outputs, prediction_length = inputs
+        if not hasattr(self, "max_length"): self.max_length = shape_list(outputs)[-1]
         outputs = self.embed(outputs, training=training)
         outputs = self.do(outputs, training=training)
         for rnn in self.rnns:
-            mask = tf.sequence_mask(prediction_length)
+            mask = tf.sequence_mask(prediction_length, maxlen=self.max_length)
             outputs = rnn["rnn"](outputs, training=training, mask=mask)
             outputs = outputs[0]
             if rnn["ln"] is not None:
@@ -246,11 +247,11 @@ class Transducer(Model):
         )
         self.time_reduction_factor = 1
 
-    def _build(self, input_shape):
-        inputs = tf.keras.Input(shape=input_shape, dtype=tf.float32)
-        input_length = tf.keras.Input(shape=[], dtype=tf.int32)
-        pred = tf.keras.Input(shape=[None], dtype=tf.int32)
-        pred_length = tf.keras.Input(shape=[], dtype=tf.int32)
+    def _build(self, input_shape, prediction_shape=[None], batch_size=None):
+        inputs = tf.keras.Input(shape=input_shape, batch_size=batch_size, dtype=tf.float32)
+        input_length = tf.keras.Input(shape=[], batch_size=batch_size, dtype=tf.int32)
+        pred = tf.keras.Input(shape=prediction_shape, batch_size=batch_size, dtype=tf.int32)
+        pred_length = tf.keras.Input(shape=[], batch_size=batch_size, dtype=tf.int32)
         self([inputs, input_length, pred, pred_length], training=False)
 
     def summary(self, line_length=None, **kwargs):

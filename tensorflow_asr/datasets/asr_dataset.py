@@ -12,9 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import multiprocessing
 import os
-
+import json
+import tqdm
 import numpy as np
 import tensorflow as tf
 
@@ -22,7 +22,7 @@ from ..augmentations.augments import Augmentation
 from .base_dataset import BaseDataset, BUFFER_SIZE, TFRECORD_SHARDS, AUTOTUNE
 from ..featurizers.speech_featurizers import load_and_convert_to_wav, read_raw_audio, tf_read_raw_audio, SpeechFeaturizer
 from ..featurizers.text_featurizers import TextFeaturizer
-from ..utils.utils import bytestring_feature, print_one_line, get_num_batches
+from ..utils.utils import bytestring_feature, get_num_batches, preprocess_paths, get_nsamples_from_duration
 
 
 class ASRDataset(BaseDataset):
@@ -48,7 +48,49 @@ class ASRDataset(BaseDataset):
         self.speech_featurizer = speech_featurizer
         self.text_featurizer = text_featurizer
 
+    # -------------------------------- MAX LENGTHS -------------------------------------
+
+    def compute_max_lengths(self):
+        self.read_entries()
+        for _, duration, indices in tqdm.tqdm(self.entries, desc=f"Computing max lengths for entries in {self.stage} dataset"):
+            nsamples = get_nsamples_from_duration(duration, sample_rate=self.speech_featurizer.sample_rate)
+            # https://www.tensorflow.org/api_docs/python/tf/signal/frame
+            input_length = -(-nsamples // self.speech_featurizer.frame_step)
+            label = str(indices).split()
+            label_length = len(label)
+            self.speech_featurizer.update_length(input_length)
+            self.text_featurizer.update_length(label_length)
+
+    def save_max_lengths(self, max_lengths_prefix: str = None):
+        if max_lengths_prefix is None: return
+        max_lengths_path = preprocess_paths(max_lengths_prefix) + ".max_lengths.json"
+        content = {
+            "max_input_length": self.speech_featurizer.max_length,
+            "max_label_length": self.text_featurizer.max_length
+        }
+        with tf.io.gfile.GFile(max_lengths_path, "w") as f:
+            f.write(json.dumps(content))
+        print(f"Max lengths written to {max_lengths_path}")
+
+    def load_max_lengths(self, max_lengths_prefix: str = None):
+        if max_lengths_prefix is None: return
+        max_lengths_path = preprocess_paths(max_lengths_prefix) + ".max_lengths.json"
+        if tf.io.gfile.exists(max_lengths_path):
+            print(f"Loading max lengths from {max_lengths_path} ...")
+            with tf.io.gfile.GFile(max_lengths_path, "r") as f:
+                content = json.loads(f.read())
+                self.speech_featurizer.update_length(int(content["max_input_length"]))
+                self.text_featurizer.update_length(int(content["max_label_length"]))
+
+    def update_lengths(self, max_lengths_prefix: str = None):
+        self.load_max_lengths(max_lengths_prefix)
+        self.compute_max_lengths()
+        self.save_max_lengths(max_lengths_prefix)
+
+    # -------------------------------- ENTRIES -------------------------------------
+
     def read_entries(self):
+        if hasattr(self, "entries") and len(self.entries) > 0: return
         self.entries = []
         for file_path in self.data_paths:
             print(f"Reading {file_path} ...")
@@ -63,6 +105,8 @@ class ASRDataset(BaseDataset):
         self.entries = np.array(self.entries)
         if self.shuffle: np.random.shuffle(self.entries)  # Mix transcripts.tsv
         self.total_steps = len(self.entries)
+
+    # -------------------------------- LOAD AND PREPROCESS -------------------------------------
 
     def generator(self):
         for path, _, indices in self.entries:
@@ -113,6 +157,17 @@ class ASRDataset(BaseDataset):
 
             return path, features, input_length, label, label_length, prediction, prediction_length
 
+    @tf.function
+    def parse(self, path: tf.Tensor, audio: tf.Tensor, indices: tf.Tensor):
+        """
+        Returns:
+            path, features, input_lengths, labels, label_lengths, pred_inp
+        """
+        if self.use_tf: return self.tf_preprocess(path, audio, indices)
+        return self.preprocess(path, audio, indices)
+
+    # -------------------------------- CREATION -------------------------------------
+
     def process(self, dataset: tf.data.Dataset, batch_size: int):
         dataset = dataset.map(self.parse, num_parallel_calls=AUTOTUNE)
 
@@ -129,9 +184,9 @@ class ASRDataset(BaseDataset):
                 tf.TensorShape([]),
                 tf.TensorShape(self.speech_featurizer.shape),
                 tf.TensorShape([]),
-                tf.TensorShape([None]),
+                tf.TensorShape(self.text_featurizer.shape),
                 tf.TensorShape([]),
-                tf.TensorShape([None]),
+                tf.TensorShape(self.text_featurizer.prepand_shape),
                 tf.TensorShape([]),
             ),
             padding_values=("", 0., 0, self.text_featurizer.blank, 0, self.text_featurizer.blank, 0),
@@ -142,15 +197,6 @@ class ASRDataset(BaseDataset):
         dataset = dataset.prefetch(AUTOTUNE)
         self.total_steps = get_num_batches(self.total_steps, batch_size, drop_remainders=self.drop_remainder)
         return dataset
-
-    @tf.function
-    def parse(self, path: tf.Tensor, audio: tf.Tensor, indices: tf.Tensor):
-        """
-        Returns:
-            path, features, input_lengths, labels, label_lengths, pred_inp
-        """
-        if self.use_tf: return self.tf_preprocess(path, audio, indices)
-        return self.preprocess(path, audio, indices)
 
     def create(self, batch_size: int):
         self.read_entries()
@@ -194,18 +240,25 @@ class ASRTFRecordDataset(ASRDataset):
     @staticmethod
     def write_tfrecord_file(splitted_entries):
         shard_path, entries = splitted_entries
-        with tf.io.TFRecordWriter(shard_path, options='ZLIB') as out:
-            for path, _, indices in entries:
-                audio = load_and_convert_to_wav(path).numpy()
+
+        def parse(record):
+            def fn(path, indices):
+                audio = load_and_convert_to_wav(path.decode("utf-8")).numpy()
                 feature = {
-                    "path": bytestring_feature([bytes(path, "utf-8")]),
+                    "path": bytestring_feature([path]),
                     "audio": bytestring_feature([audio]),
-                    "indices": bytestring_feature([bytes(indices, "utf-8")])
+                    "indices": bytestring_feature([indices])
                 }
                 example = tf.train.Example(features=tf.train.Features(feature=feature))
-                out.write(example.SerializeToString())
-                print_one_line("Processed:", path)
-        print(f"\nCreated {shard_path}")
+                return example.SerializeToString()
+            return tf.numpy_function(fn, inp=[record[0], record[2]], Tout=tf.string)
+
+        dataset = tf.data.Dataset.from_tensor_slices(entries)
+        dataset = dataset.map(parse, num_parallel_calls=AUTOTUNE)
+        writer = tf.data.experimental.TFRecordWriter(shard_path, compression_type="ZLIB")
+        print(f"Processing {shard_path} ...")
+        writer.write(dataset)
+        print(f"Created {shard_path}")
 
     def create_tfrecords(self):
         if not tf.io.gfile.exists(self.tfrecords_dir):
@@ -251,7 +304,7 @@ class ASRTFRecordDataset(ASRDataset):
         ignore_order = tf.data.Options()
         ignore_order.experimental_deterministic = False
         files_ds = files_ds.with_options(ignore_order)
-        dataset = tf.data.TFRecordDataset(files_ds, compression_type='ZLIB', num_parallel_reads=AUTOTUNE)
+        dataset = tf.data.TFRecordDataset(files_ds, compression_type="ZLIB", num_parallel_reads=AUTOTUNE)
 
         return self.process(dataset, batch_size)
 

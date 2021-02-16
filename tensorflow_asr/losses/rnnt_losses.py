@@ -22,9 +22,9 @@ use_cpu = not has_gpu_or_tpu()
 try:
     from warprnnt_tensorflow import rnnt_loss as warp_rnnt_loss
     use_warprnnt = True
+    print("Use RNNT loss in WarpRnnt")
 except ImportError:
-    print("Cannot import RNNT loss in warprnnt. Falls back to RNNT in TensorFlow")
-    print("Note: The RNNT in Tensorflow is not supported for CPU yet")
+    print("Use RNNT loss in TensorFlow")
     use_warprnnt = False
 
 

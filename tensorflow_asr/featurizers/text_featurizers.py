@@ -37,6 +37,18 @@ class TextFeaturizer(metaclass=abc.ABCMeta):
         self.tokens2indices = {}
         self.tokens = []
         self.num_classes = None
+        self.max_length = 0
+
+    @property
+    def shape(self) -> list:
+        return [self.max_length if self.max_length > 0 else None]
+
+    @property
+    def prepand_shape(self) -> list:
+        return [self.max_length + 1 if self.max_length > 0 else None]
+
+    def update_length(self, length: int):
+        self.max_length = max(self.max_length, length)
 
     def preprocess_text(self, text):
         text = unicodedata.normalize("NFC", text.lower())
@@ -317,7 +329,7 @@ class SentencePieceFeaturizer(TextFeaturizer):
     PAD_TOKEN, PAD_TOKEN_ID = "<pad>", 0  # unused, by default
 
     def __init__(self, decoder_config: dict, model=None):
-        super().__init__(decoder_config)
+        super(SentencePieceFeaturizer, self).__init__(decoder_config)
         self.model = model
         self.blank = 0  # treats blank as 0 (pad)
         self.upoints = None
@@ -335,9 +347,9 @@ class SentencePieceFeaturizer(TextFeaturizer):
     @classmethod
     def build_from_corpus(cls, decoder_config: dict):
         """
-        --model_prefix: output model name prefix. <model_name>.model and <model_name>.vocab are generated.  
+        --model_prefix: output model name prefix. <model_name>.model and <model_name>.vocab are generated.
         --vocab_size: vocabulary size, e.g., 8000, 16000, or 32000
-        --model_type: model type. Choose from unigram (default), bpe, char, or word. 
+        --model_type: model type. Choose from unigram (default), bpe, char, or word.
         The input sentence must be pretokenized when using word type."""
         decoder_cfg = DecoderConfig(decoder_config)
         # Train SentencePiece Model

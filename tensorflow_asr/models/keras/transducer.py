@@ -24,17 +24,17 @@ from ...losses.keras.rnnt_losses import RnntLoss
 class Transducer(BaseTransducer):
     """ Keras Transducer Model Warper """
 
-    def _build(self, input_shape):
-        features = tf.keras.Input(shape=input_shape, dtype=tf.float32)
-        input_length = tf.keras.Input(shape=[], dtype=tf.int32)
-        pred = tf.keras.Input(shape=[None], dtype=tf.int32)
-        pred_length = tf.keras.Input(shape=[], dtype=tf.int32)
+    def _build(self, input_shape, prediction_shape=[None], batch_size=None):
+        inputs = tf.keras.Input(shape=input_shape, batch_size=batch_size, dtype=tf.float32)
+        input_length = tf.keras.Input(shape=[], batch_size=batch_size, dtype=tf.int32)
+        pred = tf.keras.Input(shape=prediction_shape, batch_size=batch_size, dtype=tf.int32)
+        pred_length = tf.keras.Input(shape=[], batch_size=batch_size, dtype=tf.int32)
         self({
-            "input": features,
+            "input": inputs,
             "input_length": input_length,
             "prediction": pred,
             "prediction_length": pred_length
-        }, training=True)
+        }, training=False)
 
     def call(self, inputs, training=False, **kwargs):
         features = inputs["input"]

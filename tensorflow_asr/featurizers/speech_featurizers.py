@@ -21,8 +21,18 @@ import soundfile as sf
 import tensorflow as tf
 import tensorflow_io as tfio
 
-from ..utils.utils import log10
+from ..utils.utils import log10, has_tpu
 from .gammatone import fft_weights
+
+tpu = has_tpu()
+
+
+# def tf_resample(signal, rate_in, rate_out):
+#     if rate_in == rate_out: return signal
+#     rate_in = tf.cast(rate_in, dtype=tf.float32)
+#     rate_out = tf.cast(rate_out, dtype=tf.float32)
+#     ratio = rate_out / rate_in
+#     nsamples = tf.math.ceil(tf.shape(signal)[0] * ratio)
 
 
 def load_and_convert_to_wav(path: str) -> tf.Tensor:
@@ -48,8 +58,10 @@ def read_raw_audio(audio, sample_rate=16000):
 
 def tf_read_raw_audio(audio: tf.Tensor, sample_rate=16000):
     wave, rate = tf.audio.decode_wav(audio, desired_channels=1, desired_samples=-1)
-    resampled = tfio.audio.resample(wave, rate_in=tf.cast(rate, dtype=tf.int64), rate_out=sample_rate)
-    return tf.reshape(resampled, shape=[-1])  # reshape for using tf.signal
+    if not tpu:
+        resampled = tfio.audio.resample(wave, rate_in=tf.cast(rate, dtype=tf.int64), rate_out=sample_rate)
+        return tf.reshape(resampled, shape=[-1])  # reshape for using tf.signal
+    return tf.reshape(wave, shape=[-1])  # reshape for using tf.signal
 
 
 def slice_signal(signal, window_size, stride=0.5) -> np.ndarray:
@@ -207,6 +219,8 @@ class SpeechFeaturizer(metaclass=abc.ABCMeta):
         self.normalize_signal = speech_config.get("normalize_signal", True)
         self.normalize_feature = speech_config.get("normalize_feature", True)
         self.normalize_per_feature = speech_config.get("normalize_per_feature", False)
+        # Length
+        self.max_length = 0
 
     @property
     def nfft(self) -> int:
@@ -217,6 +231,9 @@ class SpeechFeaturizer(metaclass=abc.ABCMeta):
     def shape(self) -> list:
         """ The shape of extracted features """
         raise NotImplementedError()
+
+    def update_length(self, length: int):
+        self.max_length = max(self.max_length, length)
 
     @abc.abstractclassmethod
     def stft(self, signal):
@@ -253,7 +270,9 @@ class NumpySpeechFeaturizer(SpeechFeaturizer):
         if self.pitch:
             channel_dim += 1
 
-        return [None, self.num_feature_bins, channel_dim]
+        length = self.max_length if self.max_length > 0 else None
+
+        return [length, self.num_feature_bins, channel_dim]
 
     def stft(self, signal):
         return np.square(
@@ -383,8 +402,8 @@ class NumpySpeechFeaturizer(SpeechFeaturizer):
 class TFSpeechFeaturizer(SpeechFeaturizer):
     @property
     def shape(self) -> list:
-        # None for time dimension
-        return [None, self.num_feature_bins, 1]
+        length = self.max_length if self.max_length > 0 else None
+        return [length, self.num_feature_bins, 1]
 
     def stft(self, signal):
         return tf.square(

@@ -169,6 +169,12 @@ def has_gpu_or_tpu():
     return True
 
 
+def has_tpu():
+    tpus = tf.config.list_logical_devices("TPU")
+    if len(tpus) == 0: return False
+    return True
+
+
 def find_max_length_prediction_tfarray(tfarray: tf.TensorArray) -> tf.Tensor:
     with tf.name_scope("find_max_length_prediction_tfarray"):
         index = tf.constant(0, dtype=tf.int32)
@@ -206,3 +212,7 @@ def pad_prediction_tfarray(tfarray: tf.TensorArray, blank: int or tf.Tensor) -> 
 
         index, tfarray = tf.while_loop(condition, body, loop_vars=[index, tfarray], swap_memory=False)
         return tfarray
+
+
+def get_nsamples_from_duration(duration, sample_rate=16000):
+    return math.ceil(float(duration) * sample_rate)

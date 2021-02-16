@@ -42,11 +42,12 @@ splits = [
 
 chars = set()
 
+
 def prepare_split(dataset_dir, split, opus=False):
     # Setup necessary paths
     split_home = os.path.join(dataset_dir, split)
     transcripts_infile = os.path.join(split_home, 'transcripts.txt')
-    transcripts_outfile  = os.path.join(split_home, 'transcripts_tfasr.tsv')
+    transcripts_outfile = os.path.join(split_home, 'transcripts_tfasr.tsv')
     audio_home = os.path.join(split_home, "audio")
     extension = ".opus" if opus else ".flac"
     transcripts = []
@@ -59,7 +60,7 @@ def prepare_split(dataset_dir, split, opus=False):
             audio_path = os.path.join(audio_home, speaker_id, book_id, f"{file_id}{extension}")
             y, sr = librosa.load(audio_path, sr=None)
             duration = librosa.get_duration(y, sr)
-            transcripts.append(f"{audio_path}\t{duration:2f}\t{transcript}\n")
+            transcripts.append(f"{audio_path}\t{duration}\t{transcript}\n")
             for char in transcript:
                 chars.add(char)
 
@@ -83,10 +84,12 @@ def make_alphabet_file(filepath, chars_list, lang):
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser(description="Download and prepare MLS dataset in a given language")
-    ap.add_argument("--dataset-home", "-d", help="Path to home directory to download and prepare dataset. Default to ~/.keras", default=None, required=False)
-    ap.add_argument("--language", "-l", type=str, choices=langs, help="Any name of language included in MLS", default=None, required=True)
-    ap.add_argument("--opus", help="Whether to use dataset in opus format or not", default=False, action='store_true')
-    
+    ap.add_argument("--dataset-home", "-d", default=None, required=False,
+                    help="Path to home directory to download and prepare dataset. Default to ~/.keras")
+    ap.add_argument("--language", "-l", type=str, choices=langs, default=None, required=True,
+                    help="Any name of language included in MLS")
+    ap.add_argument("--opus", default=False, action="store_true", help="Whether to use dataset in opus format or not")
+
     args = ap.parse_args()
     fname = "mls_{}{}.tar.gz".format(args.language, "_opus" if args.opus else "")
     subdir = fname[:-7]
@@ -99,7 +102,7 @@ if __name__ == "__main__":
         full_url,
         cache_subdir=dataset_home,
         extract=True
-        )
+    )
 
     print(f"Dataset extracted to {dataset_dir}. Preparing...")
 
