@@ -27,6 +27,14 @@ from .gammatone import fft_weights
 tpu = has_tpu()
 
 
+# def tf_resample(signal, rate_in, rate_out):
+#     if rate_in == rate_out: return signal
+#     rate_in = tf.cast(rate_in, dtype=tf.float32)
+#     rate_out = tf.cast(rate_out, dtype=tf.float32)
+#     ratio = rate_out / rate_in
+#     nsamples = tf.math.ceil(tf.shape(signal)[0] * ratio)
+
+
 def load_and_convert_to_wav(path: str) -> tf.Tensor:
     wave, rate = librosa.load(os.path.expanduser(path), sr=None, mono=True)
     return tf.audio.encode_wav(tf.expand_dims(wave, axis=-1), sample_rate=rate)
