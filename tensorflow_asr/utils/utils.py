@@ -169,6 +169,12 @@ def has_gpu_or_tpu():
     return True
 
 
+def has_tpu():
+    tpus = tf.config.list_logical_devices("TPU")
+    if len(tpus) == 0: return False
+    return True
+
+
 def find_max_length_prediction_tfarray(tfarray: tf.TensorArray) -> tf.Tensor:
     with tf.name_scope("find_max_length_prediction_tfarray"):
         index = tf.constant(0, dtype=tf.int32)

@@ -21,8 +21,10 @@ import soundfile as sf
 import tensorflow as tf
 import tensorflow_io as tfio
 
-from ..utils.utils import log10
+from ..utils.utils import log10, has_tpu
 from .gammatone import fft_weights
+
+tpu = has_tpu()
 
 
 def load_and_convert_to_wav(path: str) -> tf.Tensor:
@@ -48,8 +50,10 @@ def read_raw_audio(audio, sample_rate=16000):
 
 def tf_read_raw_audio(audio: tf.Tensor, sample_rate=16000):
     wave, rate = tf.audio.decode_wav(audio, desired_channels=1, desired_samples=-1)
-    resampled = tfio.audio.resample(wave, rate_in=tf.cast(rate, dtype=tf.int64), rate_out=sample_rate)
-    return tf.reshape(resampled, shape=[-1])  # reshape for using tf.signal
+    if not tpu:
+        resampled = tfio.audio.resample(wave, rate_in=tf.cast(rate, dtype=tf.int64), rate_out=sample_rate)
+        return tf.reshape(resampled, shape=[-1])  # reshape for using tf.signal
+    return tf.reshape(wave, shape=[-1])  # reshape for using tf.signal
 
 
 def slice_signal(signal, window_size, stride=0.5) -> np.ndarray:
