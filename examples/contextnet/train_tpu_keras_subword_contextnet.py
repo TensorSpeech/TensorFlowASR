@@ -114,7 +114,9 @@ with strategy.scope():
     contextnet.compile(optimizer=optimizer, global_batch_size=global_batch_size, blank=text_featurizer.blank)
 
     train_data_loader = train_dataset.create(global_batch_size).take(10)
+    print(train_data_loader.element_spec)
     eval_data_loader = eval_dataset.create(global_batch_size)
+    print(eval_data_loader.element_spec)
 
     callbacks = [
         tf.keras.callbacks.ModelCheckpoint(**config.learning_config.running_config.checkpoint),
