@@ -113,7 +113,7 @@ with strategy.scope():
 
     contextnet.compile(optimizer=optimizer, global_batch_size=global_batch_size, blank=text_featurizer.blank)
 
-    train_data_loader = train_dataset.create(global_batch_size).take(10)
+    train_data_loader = train_dataset.create(global_batch_size)
     eval_data_loader = eval_dataset.create(global_batch_size)
 
     callbacks = [
