@@ -96,22 +96,22 @@ with strategy.scope():
     global_batch_size = batch_size
     global_batch_size *= strategy.num_replicas_in_sync
     # build model
-    conformer = ContextNet(**config.model_config, vocabulary_size=text_featurizer.num_classes)
-    conformer._build(speech_featurizer.shape, prediction_shape=text_featurizer.prepand_shape, batch_size=global_batch_size)
-    conformer.summary(line_length=120)
+    contextnet = ContextNet(**config.model_config, vocabulary_size=text_featurizer.num_classes)
+    contextnet._build(speech_featurizer.shape, prediction_shape=text_featurizer.prepand_shape, batch_size=global_batch_size)
+    contextnet.summary(line_length=120)
 
     optimizer = tf.keras.optimizers.Adam(
         TransformerSchedule(
-            d_model=conformer.dmodel,
+            d_model=contextnet.dmodel,
             warmup_steps=config.learning_config.optimizer_config["warmup_steps"],
-            max_lr=(0.05 / math.sqrt(conformer.dmodel))
+            max_lr=(0.05 / math.sqrt(contextnet.dmodel))
         ),
         beta_1=config.learning_config.optimizer_config["beta1"],
         beta_2=config.learning_config.optimizer_config["beta2"],
         epsilon=config.learning_config.optimizer_config["epsilon"]
     )
 
-    conformer.compile(optimizer=optimizer, global_batch_size=global_batch_size, blank=text_featurizer.blank)
+    contextnet.compile(optimizer=optimizer, global_batch_size=global_batch_size, blank=text_featurizer.blank)
 
     train_data_loader = train_dataset.create(global_batch_size).take(10)
     eval_data_loader = eval_dataset.create(global_batch_size)
@@ -122,7 +122,7 @@ with strategy.scope():
         tf.keras.callbacks.TensorBoard(**config.learning_config.running_config.tensorboard)
     ]
 
-    conformer.fit(
+    contextnet.fit(
         train_data_loader, epochs=config.learning_config.running_config.num_epochs,
         validation_data=eval_data_loader, callbacks=callbacks,
     )
