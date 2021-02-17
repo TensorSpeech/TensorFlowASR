@@ -69,12 +69,12 @@ class ContextNet(Transducer):
         for block in self.encoder.blocks: self.time_reduction_factor *= block.time_reduction_factor
 
     def call(self, inputs, training=False, **kwargs):
-        enc = self.encoder([inputs['input'], inputs['input_length']], training=training, **kwargs)
-        pred = self.predict_net([inputs['prediction'], inputs['prediction_length']], training=training, **kwargs)
+        enc = self.encoder([inputs["input"], inputs["input_length"]], training=training, **kwargs)
+        pred = self.predict_net([inputs["prediction"], inputs["prediction_length"]], training=training, **kwargs)
         outputs = self.joint_net([enc, pred], training=training, **kwargs)
         return {
-            'logit': outputs,
-            'logit_length': get_reduced_length(inputs['input_length'], self.time_reduction_factor)
+            "logit": outputs,
+            "logit_length": get_reduced_length(inputs["input_length"], self.time_reduction_factor)
         }
 
     def encoder_inference(self, features: tf.Tensor, input_length: tf.Tensor):
