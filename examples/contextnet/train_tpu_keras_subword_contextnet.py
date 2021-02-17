@@ -91,10 +91,14 @@ if args.compute_lengths:
 train_dataset.load_max_lengths(args.max_lengths_prefix)
 eval_dataset.load_max_lengths(args.max_lengths_prefix)
 
+batch_size = args.bs if args.bs is not None else config.learning_config.running_config.batch_size
+global_batch_size = batch_size
+global_batch_size *= strategy.num_replicas_in_sync
+
+train_data_loader = train_dataset.create(global_batch_size).take(10)
+eval_data_loader = eval_dataset.create(global_batch_size)
+
 with strategy.scope():
-    batch_size = args.bs if args.bs is not None else config.learning_config.running_config.batch_size
-    global_batch_size = batch_size
-    global_batch_size *= strategy.num_replicas_in_sync
     # build model
     contextnet = ContextNet(**config.model_config, vocabulary_size=text_featurizer.num_classes)
     contextnet._build(speech_featurizer.shape, prediction_shape=text_featurizer.prepand_shape, batch_size=global_batch_size)
@@ -112,11 +116,6 @@ with strategy.scope():
     )
 
     contextnet.compile(optimizer=optimizer, global_batch_size=global_batch_size, blank=text_featurizer.blank)
-
-    train_data_loader = train_dataset.create(global_batch_size).take(10)
-    print(train_data_loader.element_spec)
-    eval_data_loader = eval_dataset.create(global_batch_size)
-    print(eval_data_loader.element_spec)
 
     callbacks = [
         tf.keras.callbacks.ModelCheckpoint(**config.learning_config.running_config.checkpoint),
