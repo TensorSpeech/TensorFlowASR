@@ -54,7 +54,7 @@ contextnet.load_weights(args.saved)
 contextnet.summary(line_length=150)
 contextnet.add_featurizers(speech_featurizer, text_featurizer)
 
-concrete_func = contextnet.make_tflite_function(greedy=True).get_concrete_function()
+concrete_func = contextnet.make_tflite_function().get_concrete_function()
 converter = tf.lite.TFLiteConverter.from_concrete_functions([concrete_func])
 converter.optimizations = [tf.lite.Optimize.DEFAULT]
 converter.target_spec.supported_ops = [tf.lite.OpsSet.TFLITE_BUILTINS,

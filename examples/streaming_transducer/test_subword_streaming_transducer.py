@@ -83,7 +83,7 @@ streaming_transducer = StreamingTransducer(
     **config.model_config
 )
 streaming_transducer._build(speech_featurizer.shape)
-streaming_transducer.load_weights(args.saved, by_name=True)
+streaming_transducer.load_weights(args.saved)
 streaming_transducer.summary(line_length=150)
 streaming_transducer.add_featurizers(speech_featurizer, text_featurizer)
 

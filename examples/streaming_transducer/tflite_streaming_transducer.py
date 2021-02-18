@@ -57,7 +57,7 @@ streaming_transducer.load_weights(args.saved)
 streaming_transducer.summary(line_length=150)
 streaming_transducer.add_featurizers(speech_featurizer, text_featurizer)
 
-concrete_func = streaming_transducer.make_tflite_function(greedy=True).get_concrete_function()
+concrete_func = streaming_transducer.make_tflite_function().get_concrete_function()
 converter = tf.lite.TFLiteConverter.from_concrete_functions([concrete_func])
 converter.optimizations = [tf.lite.Optimize.DEFAULT]
 converter.target_spec.supported_ops = [tf.lite.OpsSet.TFLITE_BUILTINS,

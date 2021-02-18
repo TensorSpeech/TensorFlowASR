@@ -135,7 +135,7 @@ After converting to tflite, the tflite model is like a function that transforms 
 4. Convert model's function to tflite as follows:
 
 ```python
-func = model.make_tflite_function(greedy=True) # or False
+func = model.make_tflite_function(**options) # options are the arguments of the function
 concrete_func = func.get_concrete_function()
 converter = tf.lite.TFLiteConverter.from_concrete_functions([concrete_func])
 converter.experimental_new_converter = True

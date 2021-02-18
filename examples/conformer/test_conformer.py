@@ -73,7 +73,7 @@ else:
 # build model
 conformer = Conformer(**config.model_config, vocabulary_size=text_featurizer.num_classes)
 conformer._build(speech_featurizer.shape)
-conformer.load_weights(args.saved, by_name=True)
+conformer.load_weights(args.saved)
 conformer.summary(line_length=120)
 conformer.add_featurizers(speech_featurizer, text_featurizer)
 

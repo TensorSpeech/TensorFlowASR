@@ -59,7 +59,7 @@ text_featurizer = CharFeaturizer(config.decoder_config)
 # Build DS2 model
 ds2_model = DeepSpeech2(**config.model_config, vocabulary_size=text_featurizer.num_classes)
 ds2_model._build(speech_featurizer.shape)
-ds2_model.load_weights(args.saved, by_name=True)
+ds2_model.load_weights(args.saved)
 ds2_model.summary(line_length=120)
 ds2_model.add_featurizers(speech_featurizer, text_featurizer)
 

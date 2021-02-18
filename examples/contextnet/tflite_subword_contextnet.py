@@ -58,11 +58,11 @@ else:
 # build model
 contextnet = ContextNet(**config.model_config, vocabulary_size=text_featurizer.num_classes)
 contextnet._build(speech_featurizer.shape)
-contextnet.load_weights(args.saved, by_name=True)
+contextnet.load_weights(args.saved)
 contextnet.summary(line_length=150)
 contextnet.add_featurizers(speech_featurizer, text_featurizer)
 
-concrete_func = contextnet.make_tflite_function(greedy=True).get_concrete_function()
+concrete_func = contextnet.make_tflite_function().get_concrete_function()
 converter = tf.lite.TFLiteConverter.from_concrete_functions([concrete_func])
 converter.optimizations = [tf.lite.Optimize.DEFAULT]
 converter.target_spec.supported_ops = [tf.lite.OpsSet.TFLITE_BUILTINS,
