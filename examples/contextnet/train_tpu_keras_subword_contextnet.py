@@ -113,7 +113,12 @@ with strategy.scope():
         epsilon=config.learning_config.optimizer_config["epsilon"]
     )
 
-    contextnet.compile(optimizer=optimizer, global_batch_size=global_batch_size, blank=text_featurizer.blank)
+    contextnet.compile(
+        optimizer=optimizer,
+        experimental_steps_per_execution=args.spx,
+        global_batch_size=global_batch_size,
+        blank=text_featurizer.blank
+    )
 
     train_data_loader = train_dataset.create(global_batch_size)
     eval_data_loader = eval_dataset.create(global_batch_size)
@@ -127,5 +132,4 @@ with strategy.scope():
     contextnet.fit(
         train_data_loader, epochs=config.learning_config.running_config.num_epochs,
         validation_data=eval_data_loader, callbacks=callbacks,
-        experimental_steps_per_execution=args.spx
     )
