@@ -127,5 +127,5 @@ with strategy.scope():
     contextnet.fit(
         train_data_loader, epochs=config.learning_config.running_config.num_epochs,
         validation_data=eval_data_loader, callbacks=callbacks,
-        steps_per_execution=args.spx
+        experimental_steps_per_execution=args.spx
     )
