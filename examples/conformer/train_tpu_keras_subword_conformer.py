@@ -32,6 +32,8 @@ parser.add_argument("--sentence_piece", default=False, action="store_true", help
 
 parser.add_argument("--bs", type=int, default=None, help="Batch size per replica")
 
+parser.add_argument("--spx", type=int, default=50, help="Steps per execution for maximizing TPU performance")
+
 parser.add_argument("--tpu_address", type=str, default=None, help="TPU address. Leave None on Colab")
 
 parser.add_argument("--max_lengths_prefix", type=str, default=None, help="Path to file containing max lengths")
@@ -125,4 +127,5 @@ with strategy.scope():
     conformer.fit(
         train_data_loader, epochs=config.learning_config.running_config.num_epochs,
         validation_data=eval_data_loader, callbacks=callbacks,
+        steps_per_execution=args.spx
     )
