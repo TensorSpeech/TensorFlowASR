@@ -36,7 +36,7 @@ parser.add_argument("--spx", type=int, default=50, help="Steps per execution for
 
 parser.add_argument("--tpu_address", type=str, default=None, help="TPU address. Leave None on Colab")
 
-parser.add_argument("--max_lengths_prefix", type=str, default=None, help="Path to file containing max lengths")
+parser.add_argument("--metadata_prefix", type=str, default=None, help="Path to file containing metadata")
 
 parser.add_argument("--compute_lengths", default=False, action="store_true", help="Whether to compute lengths")
 
@@ -86,12 +86,12 @@ eval_dataset = ASRTFRecordDatasetKeras(
 )
 
 if args.compute_lengths:
-    train_dataset.update_lengths(args.max_lengths_prefix)
-    eval_dataset.update_lengths(args.max_lengths_prefix)
+    train_dataset.update_lengths(args.metadata_prefix)
+    eval_dataset.update_lengths(args.metadata_prefix)
 
-# Update max lengths calculated from both train and eval datasets
-train_dataset.load_max_lengths(args.max_lengths_prefix)
-eval_dataset.load_max_lengths(args.max_lengths_prefix)
+# Update metadata calculated from both train and eval datasets
+train_dataset.load_metadata(args.metadata_prefix)
+eval_dataset.load_metadata(args.metadata_prefix)
 
 with strategy.scope():
     batch_size = args.bs if args.bs is not None else config.learning_config.running_config.batch_size

@@ -22,11 +22,13 @@ from tensorflow_asr.featurizers.text_featurizers import SubwordFeaturizer, Sente
 
 parser = argparse.ArgumentParser(prog="TFRecords Creation")
 
+parser.add_argument("--stage", type=str, default="train", help="The stage of dataset")
+
 parser.add_argument("--config", type=str, default=None, help="The file path of model configuration file")
 
 parser.add_argument("--sentence_piece", default=False, action="store_true", help="Whether to use `SentencePiece` model")
 
-parser.add_argument("--max_lengths_prefix", type=str, default=None, help="Path to file containing max lengths")
+parser.add_argument("--metadata_prefix", type=str, default=None, help="Path to file containing metadata")
 
 parser.add_argument("--subwords", type=str, default=None, help="Path to file that stores generated subwords")
 
@@ -34,7 +36,7 @@ parser.add_argument("transcripts", nargs="+", type=str, default=None, help="Path
 
 args = parser.parse_args()
 
-assert args.max_lengths_prefix is not None, "max_lengths_prefix must be defined"
+assert args.metadata_prefix is not None, "metadata_prefix must be defined"
 
 transcripts = preprocess_paths(args.transcripts)
 
@@ -52,7 +54,7 @@ elif args.subwords and os.path.exists(args.subwords):
 dataset = ASRDataset(
     data_paths=transcripts,
     speech_featurizer=speech_featurizer, text_featurizer=text_featurizer,
-    stage="train", shuffle=False,
+    stage=args.stage, shuffle=False,
 )
 
-dataset.update_lengths(args.max_lengths_prefix)
+dataset.update_metadata(args.metadata_prefix)

@@ -48,11 +48,11 @@ class ASRDataset(BaseDataset):
         self.speech_featurizer = speech_featurizer
         self.text_featurizer = text_featurizer
 
-    # -------------------------------- MAX LENGTHS -------------------------------------
+    # -------------------------------- metadata -------------------------------------
 
-    def compute_max_lengths(self):
+    def compute_metadata(self):
         self.read_entries()
-        for _, duration, indices in tqdm.tqdm(self.entries, desc=f"Computing max lengths for entries in {self.stage} dataset"):
+        for _, duration, indices in tqdm.tqdm(self.entries, desc=f"Computing metadata for entries in {self.stage} dataset"):
             nsamples = get_nsamples_from_duration(duration, sample_rate=self.speech_featurizer.sample_rate)
             # https://www.tensorflow.org/api_docs/python/tf/signal/frame
             input_length = -(-nsamples // self.speech_featurizer.frame_step)
@@ -61,31 +61,38 @@ class ASRDataset(BaseDataset):
             self.speech_featurizer.update_length(input_length)
             self.text_featurizer.update_length(label_length)
 
-    def save_max_lengths(self, max_lengths_prefix: str = None):
-        if max_lengths_prefix is None: return
-        max_lengths_path = preprocess_paths(max_lengths_prefix) + ".max_lengths.json"
-        content = {
-            "max_input_length": self.speech_featurizer.max_length,
-            "max_label_length": self.text_featurizer.max_length
-        }
-        with tf.io.gfile.GFile(max_lengths_path, "w") as f:
-            f.write(json.dumps(content))
-        print(f"Max lengths written to {max_lengths_path}")
-
-    def load_max_lengths(self, max_lengths_prefix: str = None):
-        if max_lengths_prefix is None: return
-        max_lengths_path = preprocess_paths(max_lengths_prefix) + ".max_lengths.json"
-        if tf.io.gfile.exists(max_lengths_path):
-            print(f"Loading max lengths from {max_lengths_path} ...")
-            with tf.io.gfile.GFile(max_lengths_path, "r") as f:
+    def save_metadata(self, metadata_prefix: str = None):
+        if metadata_prefix is None: return
+        metadata_path = preprocess_paths(metadata_prefix) + ".metadata.json"
+        if tf.io.gfile.exists(metadata_path):
+            with tf.io.gfile.GFile(metadata_path, "r") as f:
                 content = json.loads(f.read())
-                self.speech_featurizer.update_length(int(content["max_input_length"]))
-                self.text_featurizer.update_length(int(content["max_label_length"]))
+        else:
+            content = {}
+        content[self.stage] = {
+            "max_input_length": self.speech_featurizer.max_length,
+            "max_label_length": self.text_featurizer.max_length,
+            "num_entries": self.total_steps
+        }
+        with tf.io.gfile.GFile(metadata_path, "w") as f:
+            f.write(json.dumps(content, indent=2))
+        print(f"metadata written to {metadata_path}")
 
-    def update_lengths(self, max_lengths_prefix: str = None):
-        self.load_max_lengths(max_lengths_prefix)
-        self.compute_max_lengths()
-        self.save_max_lengths(max_lengths_prefix)
+    def load_metadata(self, metadata_prefix: str = None):
+        if metadata_prefix is None: return
+        metadata_path = preprocess_paths(metadata_prefix) + ".metadata.json"
+        if tf.io.gfile.exists(metadata_path):
+            print(f"Loading metadata from {metadata_path} ...")
+            with tf.io.gfile.GFile(metadata_path, "r") as f:
+                content = json.loads(f.read()).get(self.stage, {})
+                self.speech_featurizer.update_length(int(content.get("max_input_length", 0)))
+                self.text_featurizer.update_length(int(content.get("max_label_length", 0)))
+                self.total_steps = int(content.get("num_entries", 0))
+
+    def update_metadata(self, metadata_prefix: str = None):
+        self.load_metadata(metadata_prefix)
+        self.compute_metadata()
+        self.save_metadata(metadata_prefix)
 
     # -------------------------------- ENTRIES -------------------------------------
 

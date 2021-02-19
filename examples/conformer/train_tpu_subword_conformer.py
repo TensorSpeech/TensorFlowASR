@@ -36,7 +36,7 @@ parser.add_argument("--bs", type=int, default=None, help="Common training and ev
 
 parser.add_argument("--tpu_address", type=str, default=None, help="TPU address. Leave None on Colab")
 
-parser.add_argument("--max_lengths_prefix", type=str, default=None, help="Path to file containing max lengths")
+parser.add_argument("--metadata_prefix", type=str, default=None, help="Path to file containing metadata")
 
 parser.add_argument("--compute_lengths", default=False, action="store_true", help="Whether to compute lengths")
 
@@ -58,7 +58,7 @@ from tensorflow_asr.runners.transducer_runners import TransducerTrainer
 from tensorflow_asr.models.conformer import Conformer
 from tensorflow_asr.optimizers.schedules import TransformerSchedule
 
-config = Config(args.config, learning=True)
+config = Config(args.config)
 speech_featurizer = TFSpeechFeaturizer(config.speech_config)
 
 if args.sentence_piece:
@@ -86,12 +86,12 @@ eval_dataset = ASRTFRecordDataset(
 )
 
 if args.compute_lengths:
-    train_dataset.update_lengths(args.max_lengths_prefix)
-    eval_dataset.update_lengths(args.max_lengths_prefix)
+    train_dataset.update_lengths(args.metadata_prefix)
+    eval_dataset.update_lengths(args.metadata_prefix)
 
-# Update max lengths calculated from both train and eval datasets
-train_dataset.load_max_lengths(args.max_lengths_prefix)
-eval_dataset.load_max_lengths(args.max_lengths_prefix)
+# Update metadata calculated from both train and eval datasets
+train_dataset.load_metadata(args.metadata_prefix)
+eval_dataset.load_metadata(args.metadata_prefix)
 
 strategy = setup_tpu(args.tpu_address)
 
