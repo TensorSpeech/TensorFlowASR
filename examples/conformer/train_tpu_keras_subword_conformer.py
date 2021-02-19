@@ -131,5 +131,6 @@ with strategy.scope():
 
     conformer.fit(
         train_data_loader, epochs=config.learning_config.running_config.num_epochs,
-        validation_data=eval_data_loader, callbacks=callbacks
+        validation_data=eval_data_loader, callbacks=callbacks,
+        steps_per_epoch=train_dataset.total_steps, validation_steps=eval_dataset.total_steps
     )
