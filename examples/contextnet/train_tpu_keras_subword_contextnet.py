@@ -115,7 +115,6 @@ with strategy.scope():
 
     contextnet.compile(
         optimizer=optimizer,
-        experimental_steps_per_execution=args.spx,
         global_batch_size=global_batch_size,
         blank=text_featurizer.blank
     )
@@ -132,5 +131,4 @@ with strategy.scope():
     contextnet.fit(
         train_data_loader, epochs=config.learning_config.running_config.num_epochs,
         validation_data=eval_data_loader, callbacks=callbacks,
-        steps_per_epoch=train_dataset.total_steps, validation_steps=eval_dataset.total_steps
     )
