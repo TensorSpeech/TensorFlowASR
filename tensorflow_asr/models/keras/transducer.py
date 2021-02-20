@@ -23,6 +23,9 @@ from ...losses.keras.rnnt_losses import RnntLoss
 
 class Transducer(BaseTransducer):
     """ Keras Transducer Model Warper """
+    @property
+    def metrics(self):
+        return [self.loss_metric]
 
     def _build(self, input_shape, prediction_shape=[None], batch_size=None):
         inputs = tf.keras.Input(shape=input_shape, batch_size=batch_size, dtype=tf.float32)
@@ -48,18 +51,13 @@ class Transducer(BaseTransducer):
             "logit_length": get_reduced_length(inputs["input_length"], self.time_reduction_factor)
         }
 
-    def compile(self, optimizer, global_batch_size, blank=0, use_loss_scale=False,
-                loss_weights=None, weighted_metrics=None, run_eagerly=None, **kwargs):
+    def compile(self, optimizer, global_batch_size, blank=0, use_loss_scale=False, run_eagerly=None, **kwargs):
         loss = RnntLoss(blank=blank, global_batch_size=global_batch_size)
         self.use_loss_scale = use_loss_scale
         if self.use_loss_scale:
-            optimizer = mxp.experimental.LossScaleOptimizer(tf.keras.optimizers.get(optimizer), 'dynamic')
-        super(Transducer, self).compile(
-            optimizer=optimizer, loss=loss,
-            loss_weights=loss_weights, weighted_metrics=weighted_metrics,
-            run_eagerly=run_eagerly,
-            **kwargs
-        )
+            optimizer = mxp.experimental.LossScaleOptimizer(tf.keras.optimizers.get(optimizer), "dynamic")
+        self.loss_metric = tf.keras.metrics.Mean(name="rnnt_loss", dtype=tf.float32)
+        super(Transducer, self).compile(optimizer=optimizer, loss=loss, run_eagerly=run_eagerly, **kwargs)
 
     def train_step(self, batch):
         x, y_true = batch
@@ -79,7 +77,8 @@ class Transducer(BaseTransducer):
         else:
             gradients = tape.gradient(loss, self.trainable_weights)
         self.optimizer.apply_gradients(zip(gradients, self.trainable_variables))
-        return {"rnnt_loss": loss}
+        self.loss_metric.update_state(loss)
+        return {m.name: m.result() for m in self.metrics}
 
     def test_step(self, batch):
         x, y_true = batch
@@ -90,4 +89,5 @@ class Transducer(BaseTransducer):
             "prediction_length": x["prediction_length"],
         }, training=False)
         loss = self.loss(y_true, y_pred)
-        return {"rnnt_loss": loss}
+        self.loss_metric.update_state(loss)
+        return {m.name: m.result() for m in self.metrics}

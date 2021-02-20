@@ -13,13 +13,11 @@
 # limitations under the License.
 
 import tensorflow as tf
-from tensorflow.python.keras.utils import losses_utils
-
 from .. import rnnt_loss
 
 
 class RnntLoss(tf.keras.losses.Loss):
-    def __init__(self, blank=0, global_batch_size=None, reduction=losses_utils.ReductionV2.NONE, name=None):
+    def __init__(self, blank=0, global_batch_size=None, reduction=tf.keras.losses.Reduction.NONE, name=None):
         super(RnntLoss, self).__init__(reduction=reduction, name=name)
         self.blank = blank
         self.global_batch_size = global_batch_size
