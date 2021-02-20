@@ -56,7 +56,7 @@ class CtcModel(BaseCtcModel):
 
     def test_step(self, batch):
         x, y_true = batch
-        logit = self(x, training=False)
+        logit = self(x["input"], training=False)
         y_pred = {
             "logit": logit,
             "logit_length": get_reduced_length(x["input_length"], self.time_reduction_factor)
