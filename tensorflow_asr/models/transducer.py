@@ -93,11 +93,10 @@ class TransducerPrediction(tf.keras.Model):
         # inputs has shape [B, U]
         # use tf.gather_nd instead of tf.gather for tflite conversion
         outputs, prediction_length = inputs
-        if not hasattr(self, "max_length"): self.max_length = shape_list(outputs)[-1]
         outputs = self.embed(outputs, training=training)
         outputs = self.do(outputs, training=training)
         for rnn in self.rnns:
-            mask = tf.sequence_mask(prediction_length, maxlen=self.max_length)
+            mask = tf.sequence_mask(prediction_length, maxlen=tf.shape(outputs)[1])
             outputs = rnn["rnn"](outputs, training=training, mask=mask)
             outputs = outputs[0]
             if rnn["ln"] is not None:
