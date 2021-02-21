@@ -83,13 +83,17 @@ else:
     )
     eval_dataset = ASRSliceDatasetKeras(
         speech_featurizer=speech_featurizer, text_featurizer=text_featurizer,
-        **vars(config.learning_config.eval_dataset_config)
+        **vars(config.learning_config.eval_dataset_config),
+        indefinite=True
     )
 
-with strategy.scope():
-    global_batch_size = config.learning_config.running_config.batch_size
-    global_batch_size *= strategy.num_replicas_in_sync
+global_batch_size = config.learning_config.running_config.batch_size
+global_batch_size *= strategy.num_replicas_in_sync
 
+train_data_loader = train_dataset.create(global_batch_size)
+eval_data_loader = eval_dataset.create(global_batch_size)
+
+with strategy.scope():
     jasper = Jasper(**config.model_config, vocabulary_size=text_featurizer.num_classes)
     jasper._build(speech_featurizer.shape)
     jasper.summary(line_length=120)
@@ -101,17 +105,14 @@ with strategy.scope():
         blank=text_featurizer.blank
     )
 
-    train_data_loader = train_dataset.create(global_batch_size)
-    eval_data_loader = eval_dataset.create(global_batch_size)
+callbacks = [
+    tf.keras.callbacks.ModelCheckpoint(**config.learning_config.running_config.checkpoint),
+    tf.keras.callbacks.experimental.BackupAndRestore(config.learning_config.running_config.states_dir),
+    tf.keras.callbacks.TensorBoard(**config.learning_config.running_config.tensorboard)
+]
 
-    callbacks = [
-        tf.keras.callbacks.ModelCheckpoint(**config.learning_config.running_config.checkpoint),
-        tf.keras.callbacks.experimental.BackupAndRestore(config.learning_config.running_config.states_dir),
-        tf.keras.callbacks.TensorBoard(**config.learning_config.running_config.tensorboard)
-    ]
-
-    jasper.fit(
-        train_data_loader, epochs=config.learning_config.running_config.num_epochs,
-        validation_data=eval_data_loader, callbacks=callbacks,
-        steps_per_epoch=train_dataset.total_steps, validation_steps=eval_dataset.total_steps
-    )
+jasper.fit(
+    train_data_loader, epochs=config.learning_config.running_config.num_epochs,
+    validation_data=eval_data_loader, callbacks=callbacks,
+    steps_per_epoch=train_dataset.total_steps, validation_steps=eval_dataset.total_steps
+)
