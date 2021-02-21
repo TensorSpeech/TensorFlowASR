@@ -165,7 +165,6 @@ class ASRDataset(BaseDataset):
 
             return path, features, input_length, label, label_length, prediction, prediction_length
 
-    @tf.function
     def parse(self, path: tf.Tensor, audio: tf.Tensor, indices: tf.Tensor):
         """
         Returns:
@@ -183,7 +182,8 @@ class ASRDataset(BaseDataset):
             dataset = dataset.cache()
 
         if self.shuffle:
-            dataset = dataset.shuffle(self.buffer_size, reshuffle_each_iteration=True)
+            reshuffle = not self.indefinite
+            dataset = dataset.shuffle(self.buffer_size, reshuffle_each_iteration=reshuffle)
 
         if self.indefinite:
             dataset = dataset.repeat()
@@ -296,7 +296,6 @@ class ASRTFRecordDataset(ASRDataset):
 
         return True
 
-    @tf.function
     def parse(self, record: tf.Tensor):
         feature_description = {
             "path": tf.io.FixedLenFeature([], tf.string),

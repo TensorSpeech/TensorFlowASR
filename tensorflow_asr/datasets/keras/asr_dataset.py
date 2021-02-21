@@ -25,7 +25,6 @@ from ...augmentations.augments import Augmentation
 class ASRDatasetKeras(ASRDataset):
     """ Keras Dataset for ASR using Generator """
 
-    @tf.function
     def parse(self, path: tf.Tensor, audio: tf.Tensor, indices: tf.Tensor):
         """
         Returns:
@@ -57,7 +56,8 @@ class ASRDatasetKeras(ASRDataset):
             dataset = dataset.cache()
 
         if self.shuffle:
-            dataset = dataset.shuffle(self.buffer_size, reshuffle_each_iteration=True)
+            reshuffle = not self.indefinite
+            dataset = dataset.shuffle(self.buffer_size, reshuffle_each_iteration=reshuffle)
 
         if self.indefinite:
             dataset = dataset.repeat()
@@ -131,7 +131,6 @@ class ASRTFRecordDatasetKeras(ASRDatasetKeras, ASRTFRecordDataset):
             indefinite=indefinite
         )
 
-    @tf.function
     def parse(self, record: tf.Tensor):
         feature_description = {
             "path": tf.io.FixedLenFeature([], tf.string),
@@ -174,7 +173,6 @@ class ASRSliceDatasetKeras(ASRDatasetKeras, ASRSliceDataset):
             indefinite=indefinite
         )
 
-    @tf.function
     def parse(self, path: tf.Tensor, audio: tf.Tensor, indices: tf.Tensor):
         return ASRDatasetKeras.parse(self, path, audio, indices)
 
