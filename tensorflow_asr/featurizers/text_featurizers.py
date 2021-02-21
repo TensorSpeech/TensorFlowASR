@@ -51,6 +51,9 @@ class TextFeaturizer(metaclass=abc.ABCMeta):
     def update_length(self, length: int):
         self.max_length = max(self.max_length, length)
 
+    def reset_length(self):
+        self.max_length = 0
+
     def preprocess_text(self, text):
         text = unicodedata.normalize("NFC", text.lower())
         return text.strip("\n")  # remove trailing newline

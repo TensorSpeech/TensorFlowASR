@@ -33,15 +33,12 @@ class BaseRunner(metaclass=abc.ABCMeta):
         self.config = config
         # Writers
         self.writers = {
-            "train": tf.summary.create_file_writer(
-                os.path.join(self.config.outdir, "tensorboard", "train")),
-            "eval": tf.summary.create_file_writer(
-                os.path.join(self.config.outdir, "tensorboard", "eval"))
+            "train": tf.summary.create_file_writer(os.path.join(self.config.outdir, "tensorboard", "train")),
+            "eval": tf.summary.create_file_writer(os.path.join(self.config.outdir, "tensorboard", "eval"))
         }
 
     def add_writer(self, stage: str):
-        self.writers[stage] = tf.summary.create_file_writer(
-            os.path.join(self.config.outdir, "tensorboard", stage))
+        self.writers[stage] = tf.summary.create_file_writer(os.path.join(self.config.outdir, "tensorboard", stage))
 
     def _write_to_tensorboard(self,
                               list_metrics: dict,
@@ -149,7 +146,7 @@ class BaseTrainer(BaseRunner):
         with self.strategy.scope():
             self.ckpt = tf.train.Checkpoint(steps=self.steps, **kwargs)
             checkpoint_dir = os.path.join(self.config.outdir, "checkpoints")
-            if not os.path.exists(checkpoint_dir): os.makedirs(checkpoint_dir)
+            if not tf.io.gfile.exists(checkpoint_dir): tf.io.gfile.makedirs(checkpoint_dir)
             self.ckpt_manager = tf.train.CheckpointManager(self.ckpt, checkpoint_dir, max_to_keep=max_to_keep)
 
     def save_checkpoint(self):

@@ -235,6 +235,9 @@ class SpeechFeaturizer(metaclass=abc.ABCMeta):
     def update_length(self, length: int):
         self.max_length = max(self.max_length, length)
 
+    def reset_length(self):
+        self.max_length = 0
+
     @abc.abstractclassmethod
     def stft(self, signal):
         raise NotImplementedError()

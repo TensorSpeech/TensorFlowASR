@@ -11,6 +11,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+
+import re
 import os
 import sys
 import math
@@ -47,11 +49,35 @@ def check_key_in_dict(dictionary, keys):
             raise ValueError("{} must be defined".format(key))
 
 
+def is_hdf5_filepath(filepath):
+    return (filepath.endswith('.h5') or filepath.endswith('.keras') or filepath.endswith('.hdf5'))
+
+
+def is_cloud_path(path):
+    """ Check if the path is on cloud (which requires tf.io.gfile)
+
+    Args:
+        path (str): Path to directory or file
+
+    Returns:
+        bool: True if path is on cloud, False otherwise
+    """
+    return bool(re.match(r"^[a-z]+://", path))
+
+
 def preprocess_paths(paths: Union[List, str]):
+    """Expand the path to the root "/"
+
+    Args:
+        paths (Union[List, str]): A path or list of paths
+
+    Returns:
+        Union[List, str]: A processed path or list of paths, return None if it's not path
+    """
     if isinstance(paths, list):
-        return [path if path.startswith('gs://') else os.path.abspath(os.path.expanduser(path)) for path in paths]
+        return [path if is_cloud_path(path) else os.path.abspath(os.path.expanduser(path)) for path in paths]
     elif isinstance(paths, str):
-        return paths if paths.startswith('gs://') else os.path.abspath(os.path.expanduser(paths))
+        return paths if is_cloud_path(paths) else os.path.abspath(os.path.expanduser(paths))
     else:
         return None
 

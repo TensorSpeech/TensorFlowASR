@@ -35,6 +35,10 @@ parser.add_argument("--tbs", type=int, default=None, help="Train batch size per 
 
 parser.add_argument("--ebs", type=int, default=None, help="Evaluation batch size per replica")
 
+parser.add_argument("--spx", type=int, default=1, help="Steps per execution for maximizing performance")
+
+parser.add_argument("--metadata_prefix", type=str, default=None, help="Path to file containing metadata")
+
 parser.add_argument("--devices", type=int, nargs="*", default=[0], help="Devices' ids to apply distributed training")
 
 parser.add_argument("--mxp", default=False, action="store_true", help="Enable mixed precision")
@@ -72,20 +76,30 @@ else:
 if args.tfrecords:
     train_dataset = ASRTFRecordDatasetKeras(
         speech_featurizer=speech_featurizer, text_featurizer=text_featurizer,
-        **vars(config.learning_config.train_dataset_config)
+        **vars(config.learning_config.train_dataset_config),
+        indefinite=True
     )
     eval_dataset = ASRTFRecordDatasetKeras(
         speech_featurizer=speech_featurizer, text_featurizer=text_featurizer,
-        **vars(config.learning_config.eval_dataset_config)
+        **vars(config.learning_config.eval_dataset_config),
+        indefinite=True
     )
+    # Update metadata calculated from both train and eval datasets
+    train_dataset.load_metadata(args.metadata_prefix)
+    eval_dataset.load_metadata(args.metadata_prefix)
+    # Use dynamic length
+    speech_featurizer.reset_length()
+    text_featurizer.reset_length()
 else:
     train_dataset = ASRSliceDatasetKeras(
         speech_featurizer=speech_featurizer, text_featurizer=text_featurizer,
-        **vars(config.learning_config.train_dataset_config)
+        **vars(config.learning_config.train_dataset_config),
+        indefinite=True
     )
     eval_dataset = ASRSliceDatasetKeras(
         speech_featurizer=speech_featurizer, text_featurizer=text_featurizer,
-        **vars(config.learning_config.eval_dataset_config)
+        **vars(config.learning_config.eval_dataset_config),
+        indefinite=True
     )
 
 with strategy.scope():
@@ -101,7 +115,12 @@ with strategy.scope():
 
     optimizer = tf.keras.optimizers.get(config.learning_config.optimizer_config)
 
-    streaming_transducer.compile(optimizer=optimizer, global_batch_size=global_batch_size, blank=text_featurizer.blank)
+    streaming_transducer.compile(
+        optimizer=optimizer,
+        experimental_steps_per_execution=args.spx,
+        global_batch_size=global_batch_size,
+        blank=text_featurizer.blank
+    )
 
     train_data_loader = train_dataset.create(global_batch_size)
     eval_data_loader = eval_dataset.create(global_batch_size)
@@ -115,5 +134,5 @@ with strategy.scope():
     streaming_transducer.fit(
         train_data_loader, epochs=config.learning_config.running_config.num_epochs,
         validation_data=eval_data_loader, callbacks=callbacks,
-        steps_per_epoch=train_dataset.total_steps
+        steps_per_epoch=train_dataset.total_steps, validation_steps=eval_dataset.total_steps
     )

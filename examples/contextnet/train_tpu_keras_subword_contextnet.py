@@ -78,11 +78,13 @@ else:
 
 train_dataset = ASRTFRecordDatasetKeras(
     speech_featurizer=speech_featurizer, text_featurizer=text_featurizer,
-    **vars(config.learning_config.train_dataset_config)
+    **vars(config.learning_config.train_dataset_config),
+    indefinite=True
 )
 eval_dataset = ASRTFRecordDatasetKeras(
     speech_featurizer=speech_featurizer, text_featurizer=text_featurizer,
-    **vars(config.learning_config.eval_dataset_config)
+    **vars(config.learning_config.eval_dataset_config),
+    indefinite=True
 )
 
 if args.compute_lengths:
@@ -131,4 +133,5 @@ with strategy.scope():
     contextnet.fit(
         train_data_loader, epochs=config.learning_config.running_config.num_epochs,
         validation_data=eval_data_loader, callbacks=callbacks,
+        steps_per_epoch=train_dataset.total_steps, validation_steps=eval_dataset.total_steps
     )

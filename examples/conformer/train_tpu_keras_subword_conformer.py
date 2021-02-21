@@ -78,11 +78,13 @@ else:
 
 train_dataset = ASRTFRecordDatasetKeras(
     speech_featurizer=speech_featurizer, text_featurizer=text_featurizer,
-    **vars(config.learning_config.train_dataset_config)
+    **vars(config.learning_config.train_dataset_config),
+    indefinite=True
 )
 eval_dataset = ASRTFRecordDatasetKeras(
     speech_featurizer=speech_featurizer, text_featurizer=text_featurizer,
-    **vars(config.learning_config.eval_dataset_config)
+    **vars(config.learning_config.eval_dataset_config),
+    indefinite=True
 )
 
 if args.compute_lengths:
