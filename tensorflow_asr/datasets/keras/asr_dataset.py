@@ -33,11 +33,10 @@ class ASRDatasetKeras(ASRDataset):
         if self.use_tf: data = self.tf_preprocess(path, audio, indices)
         else: data = self.preprocess(path, audio, indices)
 
-        path, features, input_length, label, label_length, prediction, prediction_length = data
+        _, features, input_length, label, label_length, prediction, prediction_length = data
 
         return (
             {
-                "path": path,
                 "input": features,
                 "input_length": input_length,
                 "prediction": prediction,
@@ -66,7 +65,6 @@ class ASRDatasetKeras(ASRDataset):
             batch_size=batch_size,
             padded_shapes=(
                 {
-                    "path": tf.TensorShape([]),
                     "input": tf.TensorShape(self.speech_featurizer.shape),
                     "input_length": tf.TensorShape([]),
                     "prediction": tf.TensorShape(self.text_featurizer.prepand_shape),
@@ -79,7 +77,6 @@ class ASRDatasetKeras(ASRDataset):
             ),
             padding_values=(
                 {
-                    "path": None,
                     "input": 0.,
                     "input_length": 0,
                     "prediction": self.text_featurizer.blank,
