@@ -44,7 +44,7 @@ TensorFlowASR implements some automatic speech recognition architectures such as
 - [TFLite Convertion](#tflite-convertion)
 - [Features Extraction](#features-extraction)
 - [Augmentations](#augmentations)
-- [Training & Testing](#training--testing)
+- [Training & Testing Tutorial](#training--testing-tutorial)
 - [Corpus Sources and Pretrained Models](#corpus-sources-and-pretrained-models)
   - [English](#english)
   - [Vietnamese](#vietnamese)
@@ -164,34 +164,17 @@ See [features_extraction](./tensorflow_asr/featurizers/README.md)
 
 See [augmentations](./tensorflow_asr/augmentations/README.md)
 
-## Training & Testing
+## Training & Testing Tutorial
 
-**Example YAML Config Structure**
+1. Define config YAML file, see the `config.yml` files in the [example folder](./examples) for reference (you can copy and modify values such as parameters, paths, etc.. to match your local machine configuration)
+2. Download your corpus (a.k.a datasets) and create a script to generate `transcripts.tsv` files from your corpus (this is general format used in this project because each dataset has different format). For more detail, see [datasets](./tensorflow_asr/datasets/README.md). **Note:** Make sure your data contain only characters in your language, for example, english has `a` to `z` and `'`. **Do not use `cache` if your dataset size is not fit in the RAM**.
+3. [Optional] Generate TFRecords to use `tf.data.TFRecordDataset` for better performance by using the script [create_tfrecords.py](./scripts/create_tfrecords.py)
+4. Create vocabulary file (characters or subwords/wordpieces) by defining `language.characters`, using the scripts [generate_vocab_subwords.py](./scripts/generate_vocab_subwords.py) or [generate_vocab_sentencepiece.py](./scripts/generate_vocab_sentencepiece.py). There're predefined ones in [vocabularies](./vocabularies)
+5. [Optional] Generate metadata file for your dataset by using script [generate_metadata.py](./scripts/generate_metadata.py). This metadata file contains maximum lengths calculated with your `config.yml` and total number of elements in each dataset, for static shape training and precalculated steps per epoch.
+6. For training, see `train_*.py` files in the [example folder](./examples) to see the options
+7. For testing, see `test_.*.py` files in the [example folder](./examples) to see the options. **Note:** Testing is currently not supported for TPUs. It will print nothing other than the progress bar in the console, but it will store the predicted transcripts to the file `output_name.tsv` in the `outdir` defined in the config yaml file. After testing is done, the metrics (WER and CER) are calculated from `output_name.tsv`. **If you define the same `output_name`, it will resume the testing from the previous tested batch, which means if the testing is done then it will only calculate the metrics, if you want to run a new test, define a new `output_name` that the file `output.tsv` is not exists or only contains the header**
 
-```yaml
-speech_config: ...
-model_config: ...
-decoder_config: ...
-learning_config:
-  train_dataset_config:
-    augmentation_config: ...
-    data_paths: ...
-    tfrecords_dir: ...
-  eval_dataset_config:
-    augmentation_config: ...
-    data_paths: ...
-    tfrecords_dir: ...
-  test_dataset_config:
-    augmentation_config: ...
-    data_paths: ...
-    tfrecords_dir: ...
-  optimizer_config: ...
-  running_config:
-    batch_size: 8
-    num_epochs: 20
-    outdir: ...
-    log_interval_steps: 500
-```
+**Recommendation**: For better performance, please use **keras builtin training functions** as in `train_keras_*.py` files and/or tfrecords. Keras builtin training uses **infinite dataset**, which avoids the potential last partial batch.
 
 See [examples](./examples/) for some predefined ASR models and results
 

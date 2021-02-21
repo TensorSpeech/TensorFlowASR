@@ -36,6 +36,7 @@ class ASRDataset(BaseDataset):
                  augmentations: Augmentation = Augmentation(None),
                  cache: bool = False,
                  shuffle: bool = False,
+                 indefinite: bool = False,
                  drop_remainder: bool = True,
                  use_tf: bool = False,
                  buffer_size: int = BUFFER_SIZE,
@@ -43,7 +44,7 @@ class ASRDataset(BaseDataset):
         super(ASRDataset, self).__init__(
             data_paths=data_paths, augmentations=augmentations,
             cache=cache, shuffle=shuffle, stage=stage, buffer_size=buffer_size,
-            drop_remainder=drop_remainder, use_tf=use_tf
+            drop_remainder=drop_remainder, use_tf=use_tf, indefinite=indefinite
         )
         self.speech_featurizer = speech_featurizer
         self.text_featurizer = text_featurizer
@@ -164,7 +165,6 @@ class ASRDataset(BaseDataset):
 
             return path, features, input_length, label, label_length, prediction, prediction_length
 
-    @tf.function
     def parse(self, path: tf.Tensor, audio: tf.Tensor, indices: tf.Tensor):
         """
         Returns:
@@ -184,6 +184,9 @@ class ASRDataset(BaseDataset):
         if self.shuffle:
             dataset = dataset.shuffle(self.buffer_size, reshuffle_each_iteration=True)
 
+        if self.indefinite:
+            dataset = dataset.repeat()
+
         # PADDED BATCH the dataset
         dataset = dataset.padded_batch(
             batch_size=batch_size,
@@ -196,7 +199,7 @@ class ASRDataset(BaseDataset):
                 tf.TensorShape(self.text_featurizer.prepand_shape),
                 tf.TensorShape([]),
             ),
-            padding_values=("", 0., 0, self.text_featurizer.blank, 0, self.text_featurizer.blank, 0),
+            padding_values=(None, 0., 0, self.text_featurizer.blank, 0, self.text_featurizer.blank, 0),
             drop_remainder=self.drop_remainder
         )
 
@@ -230,13 +233,14 @@ class ASRTFRecordDataset(ASRDataset):
                  cache: bool = False,
                  shuffle: bool = False,
                  use_tf: bool = False,
+                 indefinite: bool = False,
                  drop_remainder: bool = True,
                  buffer_size: int = BUFFER_SIZE,
                  **kwargs):
         super(ASRTFRecordDataset, self).__init__(
             stage=stage, speech_featurizer=speech_featurizer, text_featurizer=text_featurizer,
             data_paths=data_paths, augmentations=augmentations, cache=cache, shuffle=shuffle, buffer_size=buffer_size,
-            drop_remainder=drop_remainder, use_tf=use_tf
+            drop_remainder=drop_remainder, use_tf=use_tf, indefinite=indefinite
         )
         if not self.stage: raise ValueError("stage must be defined, either 'train', 'eval' or 'test'")
         self.tfrecords_dir = tfrecords_dir
@@ -291,7 +295,6 @@ class ASRTFRecordDataset(ASRDataset):
 
         return True
 
-    @tf.function
     def parse(self, record: tf.Tensor):
         feature_description = {
             "path": tf.io.FixedLenFeature([], tf.string),

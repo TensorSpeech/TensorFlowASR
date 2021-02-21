@@ -31,6 +31,7 @@ class BaseDataset(metaclass=abc.ABCMeta):
                  cache: bool = False,
                  shuffle: bool = False,
                  buffer_size: int = BUFFER_SIZE,
+                 indefinite: bool = False,
                  drop_remainder: bool = True,
                  use_tf: bool = False,
                  stage: str = "train",
@@ -44,6 +45,7 @@ class BaseDataset(metaclass=abc.ABCMeta):
         self.stage = stage  # for defining tfrecords files
         self.use_tf = use_tf
         self.drop_remainder = drop_remainder  # whether to drop remainder for multi gpu training
+        self.indefinite = indefinite  # Whether to make dataset repeat indefinitely -> avoid the potential last partial batch
         self.total_steps = None  # for better training visualization
 
     @abc.abstractmethod

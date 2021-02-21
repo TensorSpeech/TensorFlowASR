@@ -32,7 +32,7 @@ parser.add_argument("--sentence_piece", default=False, action="store_true", help
 
 parser.add_argument("--bs", type=int, default=None, help="Batch size per replica")
 
-parser.add_argument("--spx", type=int, default=1, help="Steps per execution for maximizing TPU performance")
+parser.add_argument("--spx", type=int, default=50, help="Steps per execution for maximizing TPU performance")
 
 parser.add_argument("--tpu_address", type=str, default=None, help="TPU address. Leave None on Colab")
 
@@ -78,11 +78,13 @@ else:
 
 train_dataset = ASRTFRecordDatasetKeras(
     speech_featurizer=speech_featurizer, text_featurizer=text_featurizer,
-    **vars(config.learning_config.train_dataset_config)
+    **vars(config.learning_config.train_dataset_config),
+    indefinite=True
 )
 eval_dataset = ASRTFRecordDatasetKeras(
     speech_featurizer=speech_featurizer, text_featurizer=text_featurizer,
-    **vars(config.learning_config.eval_dataset_config)
+    **vars(config.learning_config.eval_dataset_config),
+    indefinite=True
 )
 
 if args.compute_lengths:
@@ -93,10 +95,14 @@ if args.compute_lengths:
 train_dataset.load_metadata(args.metadata_prefix)
 eval_dataset.load_metadata(args.metadata_prefix)
 
+batch_size = args.bs if args.bs is not None else config.learning_config.running_config.batch_size
+global_batch_size = batch_size
+global_batch_size *= strategy.num_replicas_in_sync
+
+train_data_loader = train_dataset.create(global_batch_size)
+eval_data_loader = eval_dataset.create(global_batch_size)
+
 with strategy.scope():
-    batch_size = args.bs if args.bs is not None else config.learning_config.running_config.batch_size
-    global_batch_size = batch_size
-    global_batch_size *= strategy.num_replicas_in_sync
     # build model
     conformer = Conformer(**config.model_config, vocabulary_size=text_featurizer.num_classes)
     conformer._build(speech_featurizer.shape, prediction_shape=text_featurizer.prepand_shape, batch_size=global_batch_size)
@@ -120,17 +126,14 @@ with strategy.scope():
         blank=text_featurizer.blank
     )
 
-    train_data_loader = train_dataset.create(global_batch_size)
-    eval_data_loader = eval_dataset.create(global_batch_size)
+callbacks = [
+    tf.keras.callbacks.ModelCheckpoint(**config.learning_config.running_config.checkpoint),
+    tf.keras.callbacks.experimental.BackupAndRestore(config.learning_config.running_config.states_dir),
+    tf.keras.callbacks.TensorBoard(**config.learning_config.running_config.tensorboard)
+]
 
-    callbacks = [
-        tf.keras.callbacks.ModelCheckpoint(**config.learning_config.running_config.checkpoint),
-        tf.keras.callbacks.experimental.BackupAndRestore(config.learning_config.running_config.states_dir),
-        tf.keras.callbacks.TensorBoard(**config.learning_config.running_config.tensorboard)
-    ]
-
-    conformer.fit(
-        train_data_loader, epochs=config.learning_config.running_config.num_epochs,
-        validation_data=eval_data_loader, callbacks=callbacks,
-        steps_per_epoch=train_dataset.total_steps, validation_steps=eval_dataset.total_steps
-    )
+conformer.fit(
+    train_data_loader, epochs=config.learning_config.running_config.num_epochs,
+    validation_data=eval_data_loader, callbacks=callbacks,
+    steps_per_epoch=train_dataset.total_steps, validation_steps=eval_dataset.total_steps
+)

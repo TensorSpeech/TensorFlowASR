@@ -33,6 +33,8 @@ parser.add_argument("--tbs", type=int, default=None, help="Train batch size per 
 
 parser.add_argument("--ebs", type=int, default=None, help="Evaluation batch size per replicas")
 
+parser.add_argument("--metadata_prefix", type=str, default=None, help="Path to file containing metadata")
+
 parser.add_argument("--tfrecords", default=False, action="store_true", help="Whether to use tfrecords dataset")
 
 parser.add_argument("--devices", type=int, nargs="*", default=[0], help="Devices' ids to apply distributed training")
@@ -58,45 +60,58 @@ text_featurizer = CharFeaturizer(config.decoder_config)
 if args.tfrecords:
     train_dataset = ASRTFRecordDatasetKeras(
         speech_featurizer=speech_featurizer, text_featurizer=text_featurizer,
-        **vars(config.learning_config.train_dataset_config)
+        **vars(config.learning_config.train_dataset_config),
+        indefinite=True
     )
     eval_dataset = ASRTFRecordDatasetKeras(
         speech_featurizer=speech_featurizer, text_featurizer=text_featurizer,
         **vars(config.learning_config.eval_dataset_config)
     )
+    # Update metadata calculated from both train and eval datasets
+    train_dataset.load_metadata(args.metadata_prefix)
+    eval_dataset.load_metadata(args.metadata_prefix)
+    # Use dynamic length
+    speech_featurizer.reset_length()
+    text_featurizer.reset_length()
 else:
     train_dataset = ASRSliceDatasetKeras(
         speech_featurizer=speech_featurizer, text_featurizer=text_featurizer,
-        **vars(config.learning_config.train_dataset_config)
+        **vars(config.learning_config.train_dataset_config),
+        indefinite=True
     )
     eval_dataset = ASRSliceDatasetKeras(
         speech_featurizer=speech_featurizer, text_featurizer=text_featurizer,
-        **vars(config.learning_config.eval_dataset_config)
+        **vars(config.learning_config.eval_dataset_config),
+        indefinite=True
     )
+
+global_batch_size = config.learning_config.running_config.batch_size
+global_batch_size *= strategy.num_replicas_in_sync
+
+train_data_loader = train_dataset.create(global_batch_size)
+eval_data_loader = eval_dataset.create(global_batch_size)
 
 # Build DS2 model
 with strategy.scope():
-    global_batch_size = config.learning_config.running_config.batch_size
-    global_batch_size *= strategy.num_replicas_in_sync
-
     ds2_model = DeepSpeech2(**config.model_config, vocabulary_size=text_featurizer.num_classes)
     ds2_model._build(speech_featurizer.shape)
     ds2_model.summary(line_length=120)
 
-    ds2_model.compile(optimizer=config.learning_config.optimizer_config,
-                      global_batch_size=global_batch_size, blank=text_featurizer.blank)
-
-    train_data_loader = train_dataset.create(global_batch_size)
-    eval_data_loader = eval_dataset.create(global_batch_size)
-
-    callbacks = [
-        tf.keras.callbacks.ModelCheckpoint(**config.learning_config.running_config.checkpoint),
-        tf.keras.callbacks.experimental.BackupAndRestore(config.learning_config.running_config.states_dir),
-        tf.keras.callbacks.TensorBoard(**config.learning_config.running_config.tensorboard)
-    ]
-
-    ds2_model.fit(
-        train_data_loader, epochs=config.learning_config.running_config.num_epochs,
-        validation_data=eval_data_loader, callbacks=callbacks,
-        steps_per_epoch=train_dataset.total_steps
+    ds2_model.compile(
+        optimizer=config.learning_config.optimizer_config,
+        experimental_steps_per_execution=args.spx,
+        global_batch_size=global_batch_size,
+        blank=text_featurizer.blank
     )
+
+callbacks = [
+    tf.keras.callbacks.ModelCheckpoint(**config.learning_config.running_config.checkpoint),
+    tf.keras.callbacks.experimental.BackupAndRestore(config.learning_config.running_config.states_dir),
+    tf.keras.callbacks.TensorBoard(**config.learning_config.running_config.tensorboard)
+]
+
+ds2_model.fit(
+    train_data_loader, epochs=config.learning_config.running_config.num_epochs,
+    validation_data=eval_data_loader, callbacks=callbacks,
+    steps_per_epoch=train_dataset.total_steps, validation_steps=eval_dataset.total_steps
+)

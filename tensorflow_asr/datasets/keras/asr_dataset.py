@@ -25,7 +25,6 @@ from ...augmentations.augments import Augmentation
 class ASRDatasetKeras(ASRDataset):
     """ Keras Dataset for ASR using Generator """
 
-    @tf.function
     def parse(self, path: tf.Tensor, audio: tf.Tensor, indices: tf.Tensor):
         """
         Returns:
@@ -34,11 +33,10 @@ class ASRDatasetKeras(ASRDataset):
         if self.use_tf: data = self.tf_preprocess(path, audio, indices)
         else: data = self.preprocess(path, audio, indices)
 
-        path, features, input_length, label, label_length, prediction, prediction_length = data
+        _, features, input_length, label, label_length, prediction, prediction_length = data
 
         return (
             {
-                "path": path,
                 "input": features,
                 "input_length": input_length,
                 "prediction": prediction,
@@ -59,12 +57,14 @@ class ASRDatasetKeras(ASRDataset):
         if self.shuffle:
             dataset = dataset.shuffle(self.buffer_size, reshuffle_each_iteration=True)
 
+        if self.indefinite:
+            dataset = dataset.repeat()
+
         # PADDED BATCH the dataset
         dataset = dataset.padded_batch(
             batch_size=batch_size,
             padded_shapes=(
                 {
-                    "path": tf.TensorShape([]),
                     "input": tf.TensorShape(self.speech_featurizer.shape),
                     "input_length": tf.TensorShape([]),
                     "prediction": tf.TensorShape(self.text_featurizer.prepand_shape),
@@ -77,7 +77,6 @@ class ASRDatasetKeras(ASRDataset):
             ),
             padding_values=(
                 {
-                    "path": "",
                     "input": 0.,
                     "input_length": 0,
                     "prediction": self.text_featurizer.blank,
@@ -111,21 +110,23 @@ class ASRTFRecordDatasetKeras(ASRDatasetKeras, ASRTFRecordDataset):
                  cache: bool = False,
                  shuffle: bool = False,
                  use_tf: bool = False,
+                 indefinite: bool = False,
                  drop_remainder: bool = True,
                  buffer_size: int = BUFFER_SIZE,
                  **kwargs):
         ASRTFRecordDataset.__init__(
             self, stage=stage, speech_featurizer=speech_featurizer, text_featurizer=text_featurizer,
             data_paths=data_paths, tfrecords_dir=tfrecords_dir, augmentations=augmentations, cache=cache, shuffle=shuffle,
-            tfrecords_shards=tfrecords_shards, drop_remainder=drop_remainder, buffer_size=buffer_size, use_tf=use_tf
+            tfrecords_shards=tfrecords_shards, drop_remainder=drop_remainder, buffer_size=buffer_size, use_tf=use_tf,
+            indefinite=indefinite
         )
         ASRDatasetKeras.__init__(
             self, stage=stage, speech_featurizer=speech_featurizer, text_featurizer=text_featurizer,
             data_paths=data_paths, augmentations=augmentations, cache=cache, shuffle=shuffle,
-            drop_remainder=drop_remainder, buffer_size=buffer_size, use_tf=use_tf
+            drop_remainder=drop_remainder, buffer_size=buffer_size, use_tf=use_tf,
+            indefinite=indefinite
         )
 
-    @tf.function
     def parse(self, record: tf.Tensor):
         feature_description = {
             "path": tf.io.FixedLenFeature([], tf.string),
@@ -151,21 +152,23 @@ class ASRSliceDatasetKeras(ASRDatasetKeras, ASRSliceDataset):
                  cache: bool = False,
                  shuffle: bool = False,
                  use_tf: bool = False,
+                 indefinite: bool = False,
                  drop_remainder: bool = True,
                  buffer_size: int = BUFFER_SIZE,
                  **kwargs):
         ASRSliceDataset.__init__(
             self, stage=stage, speech_featurizer=speech_featurizer, text_featurizer=text_featurizer,
             data_paths=data_paths, augmentations=augmentations, cache=cache, shuffle=shuffle,
-            drop_remainder=drop_remainder, buffer_size=buffer_size, use_tf=use_tf
+            drop_remainder=drop_remainder, buffer_size=buffer_size, use_tf=use_tf,
+            indefinite=indefinite
         )
         ASRDatasetKeras.__init__(
             self, stage=stage, speech_featurizer=speech_featurizer, text_featurizer=text_featurizer,
             data_paths=data_paths, augmentations=augmentations, cache=cache, shuffle=shuffle,
-            drop_remainder=drop_remainder, buffer_size=buffer_size, use_tf=use_tf
+            drop_remainder=drop_remainder, buffer_size=buffer_size, use_tf=use_tf,
+            indefinite=indefinite
         )
 
-    @tf.function
     def parse(self, path: tf.Tensor, audio: tf.Tensor, indices: tf.Tensor):
         return ASRDatasetKeras.parse(self, path, audio, indices)
 
