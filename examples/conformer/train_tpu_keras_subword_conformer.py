@@ -32,7 +32,7 @@ parser.add_argument("--sentence_piece", default=False, action="store_true", help
 
 parser.add_argument("--bs", type=int, default=None, help="Batch size per replica")
 
-parser.add_argument("--spx", type=int, default=1, help="Steps per execution for maximizing TPU performance")
+parser.add_argument("--spx", type=int, default=50, help="Steps per execution for maximizing TPU performance")
 
 parser.add_argument("--tpu_address", type=str, default=None, help="TPU address. Leave None on Colab")
 
