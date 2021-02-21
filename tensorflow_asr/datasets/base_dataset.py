@@ -46,7 +46,6 @@ class BaseDataset(metaclass=abc.ABCMeta):
         self.use_tf = use_tf
         self.drop_remainder = drop_remainder  # whether to drop remainder for multi gpu training
         self.indefinite = indefinite  # Whether to make dataset repeat indefinitely -> avoid the potential last partial batch
-        if self.indefinite: self.drop_remainder = False  # No dropping remainder in indefinite dataset
         self.total_steps = None  # for better training visualization
 
     @abc.abstractmethod
