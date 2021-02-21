@@ -182,8 +182,7 @@ class ASRDataset(BaseDataset):
             dataset = dataset.cache()
 
         if self.shuffle:
-            reshuffle = not self.indefinite
-            dataset = dataset.shuffle(self.buffer_size, reshuffle_each_iteration=reshuffle)
+            dataset = dataset.shuffle(self.buffer_size, reshuffle_each_iteration=True)
 
         if self.indefinite:
             dataset = dataset.repeat()
@@ -200,7 +199,7 @@ class ASRDataset(BaseDataset):
                 tf.TensorShape(self.text_featurizer.prepand_shape),
                 tf.TensorShape([]),
             ),
-            padding_values=("", 0., 0, self.text_featurizer.blank, 0, self.text_featurizer.blank, 0),
+            padding_values=(None, 0., 0, self.text_featurizer.blank, 0, self.text_featurizer.blank, 0),
             drop_remainder=self.drop_remainder
         )
 

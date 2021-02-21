@@ -56,8 +56,7 @@ class ASRDatasetKeras(ASRDataset):
             dataset = dataset.cache()
 
         if self.shuffle:
-            reshuffle = not self.indefinite
-            dataset = dataset.shuffle(self.buffer_size, reshuffle_each_iteration=reshuffle)
+            dataset = dataset.shuffle(self.buffer_size, reshuffle_each_iteration=True)
 
         if self.indefinite:
             dataset = dataset.repeat()
@@ -80,7 +79,7 @@ class ASRDatasetKeras(ASRDataset):
             ),
             padding_values=(
                 {
-                    "path": "",
+                    "path": None,
                     "input": 0.,
                     "input_length": 0,
                     "prediction": self.text_featurizer.blank,
