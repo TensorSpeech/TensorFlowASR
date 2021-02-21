@@ -65,8 +65,7 @@ if args.tfrecords:
     )
     eval_dataset = ASRTFRecordDatasetKeras(
         speech_featurizer=speech_featurizer, text_featurizer=text_featurizer,
-        **vars(config.learning_config.eval_dataset_config),
-        indefinite=True
+        **vars(config.learning_config.eval_dataset_config)
     )
     # Update metadata calculated from both train and eval datasets
     train_dataset.load_metadata(args.metadata_prefix)
@@ -82,8 +81,7 @@ else:
     )
     eval_dataset = ASRSliceDatasetKeras(
         speech_featurizer=speech_featurizer, text_featurizer=text_featurizer,
-        **vars(config.learning_config.eval_dataset_config),
-        indefinite=True
+        **vars(config.learning_config.eval_dataset_config)
     )
 
 # Build DS2 model
