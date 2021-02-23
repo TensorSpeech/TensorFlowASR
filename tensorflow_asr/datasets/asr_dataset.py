@@ -22,7 +22,7 @@ from ..augmentations.augments import Augmentation
 from .base_dataset import BaseDataset, BUFFER_SIZE, TFRECORD_SHARDS, AUTOTUNE
 from ..featurizers.speech_featurizers import load_and_convert_to_wav, read_raw_audio, tf_read_raw_audio, SpeechFeaturizer
 from ..featurizers.text_featurizers import TextFeaturizer
-from ..utils.utils import bytestring_feature, get_num_batches, preprocess_paths, get_nsamples_from_duration
+from ..utils.utils import bytestring_feature, get_num_batches, preprocess_paths
 
 
 class ASRDataset(BaseDataset):
@@ -54,9 +54,7 @@ class ASRDataset(BaseDataset):
     def compute_metadata(self):
         self.read_entries()
         for _, duration, indices in tqdm.tqdm(self.entries, desc=f"Computing metadata for entries in {self.stage} dataset"):
-            nsamples = get_nsamples_from_duration(duration, sample_rate=self.speech_featurizer.sample_rate)
-            # https://www.tensorflow.org/api_docs/python/tf/signal/frame
-            input_length = -(-nsamples // self.speech_featurizer.frame_step)
+            input_length = self.speech_featurizer.get_length_from_duration(duration)
             label = str(indices).split()
             label_length = len(label)
             self.speech_featurizer.update_length(input_length)

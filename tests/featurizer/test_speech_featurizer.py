@@ -16,7 +16,9 @@ from tensorflow_asr.utils import setup_environment
 setup_environment()
 import librosa
 import numpy as np
+import tensorflow as tf
 import matplotlib.pyplot as plt
+import librosa.display
 from tensorflow_asr.featurizers.speech_featurizers import read_raw_audio, TFSpeechFeaturizer, NumpySpeechFeaturizer
 
 
@@ -33,26 +35,28 @@ def main(argv):
         "normalize_feature": True,
         "normalize_per_feature": False,
         "num_feature_bins": 80,
+        "center": True
     }
     signal = read_raw_audio(speech_file, speech_conf["sample_rate"])
 
     nsf = NumpySpeechFeaturizer(speech_conf)
     sf = TFSpeechFeaturizer(speech_conf)
-    ft = nsf.stft(signal)
+    nft = nsf.stft(signal)
+    print(nft.shape, np.mean(nft))
+    ft = sf.stft(signal).numpy().T
     print(ft.shape, np.mean(ft))
-    ft = sf.stft(signal).numpy()
-    print(ft.shape, np.mean(ft))
-    ft = sf.extract(signal)
+    print(nft == ft)
+    ft = tf.squeeze(sf.extract(signal)).numpy().T
 
     plt.figure(figsize=(16, 2.5))
     ax = plt.gca()
     ax.set_title(f"{feature_type}", fontweight="bold")
-    librosa.display.specshow(ft.T, cmap="magma")
+    librosa.display.specshow(ft, cmap="magma")
     v1 = np.linspace(ft.min(), ft.max(), 8, endpoint=True)
     plt.colorbar(pad=0.01, fraction=0.02, ax=ax, format="%.2f", ticks=v1)
     plt.tight_layout()
     # plt.savefig(argv[3])
-    # plt.show()
+    plt.show()
     # plt.figure(figsize=(15, 5))
     # for i in range(4):
     #     plt.subplot(2, 2, i + 1)

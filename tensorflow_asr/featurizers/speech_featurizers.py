@@ -11,10 +11,12 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+
 import os
 import io
 import abc
 import six
+import math
 import numpy as np
 import librosa
 import soundfile as sf
@@ -219,6 +221,7 @@ class SpeechFeaturizer(metaclass=abc.ABCMeta):
         self.normalize_signal = speech_config.get("normalize_signal", True)
         self.normalize_feature = speech_config.get("normalize_feature", True)
         self.normalize_per_feature = speech_config.get("normalize_per_feature", False)
+        self.center = speech_config.get("center", True)
         # Length
         self.max_length = 0
 
@@ -231,6 +234,11 @@ class SpeechFeaturizer(metaclass=abc.ABCMeta):
     def shape(self) -> list:
         """ The shape of extracted features """
         raise NotImplementedError()
+
+    def get_length_from_duration(self, duration):
+        nsamples = math.ceil(float(duration) * self.sample_rate)
+        if self.center: nsamples += self.nfft
+        return 1 + (nsamples - self.nfft) // self.frame_step  # https://www.tensorflow.org/api_docs/python/tf/signal/frame
 
     def update_length(self, length: int):
         self.max_length = max(self.max_length, length)
@@ -280,7 +288,7 @@ class NumpySpeechFeaturizer(SpeechFeaturizer):
     def stft(self, signal):
         return np.square(
             np.abs(librosa.core.stft(signal, n_fft=self.nfft, hop_length=self.frame_step,
-                                     win_length=self.frame_length, center=False, window="hann")))
+                                     win_length=self.frame_length, center=self.center, window="hann")))
 
     def power_to_db(self, S, ref=1.0, amin=1e-10, top_db=80.0):
         return librosa.power_to_db(S, ref=ref, amin=amin, top_db=top_db)
@@ -409,9 +417,14 @@ class TFSpeechFeaturizer(SpeechFeaturizer):
         return [length, self.num_feature_bins, 1]
 
     def stft(self, signal):
-        return tf.square(
-            tf.abs(tf.signal.stft(signal, frame_length=self.frame_length,
-                                  frame_step=self.frame_step, fft_length=self.nfft, pad_end=True)))
+        if self.center: signal = tf.pad(signal, [[self.nfft // 2, self.nfft // 2]], mode="REFLECT")
+        window = tf.signal.hann_window(self.frame_length, periodic=True)
+        left_pad = (self.nfft - self.frame_length) // 2
+        right_pad = self.nfft - self.frame_length - left_pad
+        window = tf.pad(window, [[left_pad, right_pad]])
+        framed_signals = tf.signal.frame(signal, frame_length=self.nfft, frame_step=self.frame_step)
+        framed_signals *= window
+        return tf.square(tf.abs(tf.signal.rfft(framed_signals, [self.nfft])))
 
     def power_to_db(self, S, ref=1.0, amin=1e-10, top_db=80.0):
         if amin <= 0:
