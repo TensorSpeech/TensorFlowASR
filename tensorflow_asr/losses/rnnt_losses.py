@@ -235,7 +235,6 @@ def rnnt_loss_tf(logits, labels, label_length, logit_length, name=None):
     name = "rnnt_loss" if name is None else name
     with tf.name_scope(name):
         logits = tf.convert_to_tensor(logits, name="logits")
-        logits = tf.nn.log_softmax(logits)
         labels = tf.convert_to_tensor(labels, name="labels")
         label_length = tf.convert_to_tensor(label_length, name="label_length")
         logit_length = tf.convert_to_tensor(logit_length, name="logit_length")
