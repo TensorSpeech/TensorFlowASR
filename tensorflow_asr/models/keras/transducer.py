@@ -17,7 +17,6 @@ import tensorflow as tf
 from tensorflow.keras import mixed_precision as mxp
 
 from ..transducer import Transducer as BaseTransducer
-from ...utils.metrics import ErrorRate, tf_cer
 from ...utils.utils import get_reduced_length
 from ...losses.keras.rnnt_losses import RnntLoss
 
@@ -27,10 +26,6 @@ class Transducer(BaseTransducer):
     @property
     def metrics(self):
         return [self.loss_metric]
-
-    @property
-    def eval_metrics(self):
-        return self.metrics + [self.cer]
 
     def _build(self, input_shape, prediction_shape=[None], batch_size=None):
         inputs = tf.keras.Input(shape=input_shape, batch_size=batch_size, dtype=tf.float32)
@@ -62,7 +57,6 @@ class Transducer(BaseTransducer):
         if self.use_loss_scale:
             optimizer = mxp.experimental.LossScaleOptimizer(tf.keras.optimizers.get(optimizer), "dynamic")
         self.loss_metric = tf.keras.metrics.Mean(name="rnnt_loss", dtype=tf.float32)
-        self.cer = ErrorRate(tf_cer, name="cer", dtype=tf.float32)
         super(Transducer, self).compile(optimizer=optimizer, loss=loss, run_eagerly=run_eagerly, **kwargs)
 
     def train_step(self, batch):
@@ -96,7 +90,4 @@ class Transducer(BaseTransducer):
         }, training=False)
         loss = self.loss(y_true, y_pred)
         self.loss_metric.update_state(loss)
-        target = self.text_featurizer.iextract(y_true["label"])
-        decoded = self.recognize(x["input"], x["input_length"])
-        self.cer.update_state(decoded, target)
-        return {m.name: m.result() for m in self.eval_metrics}
+        return {m.name: m.result() for m in self.metrics}
