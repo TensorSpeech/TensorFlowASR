@@ -96,7 +96,7 @@ class Transducer(BaseTransducer):
         }, training=False)
         loss = self.loss(y_true, y_pred)
         self.loss_metric.update_state(loss)
-        target = self.model.text_featurizer.iextract(y_true["label"])
+        target = self.text_featurizer.iextract(y_true["label"])
         decoded = self.recognize(x["input"], x["input_length"])
         self.cer.update_state(decoded, target)
         return {m.name: m.result() for m in self.eval_metrics}
