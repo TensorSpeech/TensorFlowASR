@@ -46,6 +46,8 @@ parser.add_argument("--subwords", type=str, default=None, help="Path to file tha
 
 parser.add_argument("--subwords_corpus", nargs="*", type=str, default=[], help="Transcript files for generating subwords")
 
+parser.add_argument("--saved", type=str, default=None, help="Path to saved model")
+
 args = parser.parse_args()
 
 tf.config.optimizer.set_experimental_options({"auto_mixed_precision": args.mxp})
@@ -107,6 +109,9 @@ with strategy.scope():
     conformer = Conformer(**config.model_config, vocabulary_size=text_featurizer.num_classes)
     conformer._build(speech_featurizer.shape, prediction_shape=text_featurizer.prepand_shape, batch_size=global_batch_size)
     conformer.summary(line_length=120)
+
+    if args.saved:
+        conformer.load_weights(args.saved, by_name=True, skip_mismatch=True)
 
     optimizer = tf.keras.optimizers.Adam(
         TransformerSchedule(
