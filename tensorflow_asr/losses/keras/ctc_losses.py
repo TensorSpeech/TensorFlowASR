@@ -17,8 +17,8 @@ from .. import ctc_loss
 
 
 class CtcLoss(tf.keras.losses.Loss):
-    def __init__(self, blank=0, global_batch_size=None, reduction=tf.keras.losses.Reduction.NONE, name=None):
-        super(CtcLoss, self).__init__(reduction=reduction, name=name)
+    def __init__(self, blank=0, global_batch_size=None, name=None):
+        super(CtcLoss, self).__init__(reduction=tf.keras.losses.Reduction.NONE, name=name)
         self.blank = blank
         self.global_batch_size = global_batch_size
 

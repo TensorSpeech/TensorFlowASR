@@ -13,22 +13,12 @@
 # limitations under the License.
 
 from typing import Tuple
-import numpy as np
 import tensorflow as tf
 from nltk.metrics import distance
 from .utils import bytes_to_string
 
 
-def wer(decode: np.ndarray, target: np.ndarray) -> Tuple[tf.Tensor, tf.Tensor]:
-    """Word Error Rate
-
-    Args:
-        decode (np.ndarray): array of prediction texts
-        target (np.ndarray): array of groundtruth texts
-
-    Returns:
-        tuple: a tuple of tf.Tensor of (edit distances, number of words) of each text
-    """
+def _wer(decode, target):
     decode = bytes_to_string(decode)
     target = bytes_to_string(target)
     dis = 0.0
@@ -45,7 +35,31 @@ def wer(decode: np.ndarray, target: np.ndarray) -> Tuple[tf.Tensor, tf.Tensor]:
     return tf.convert_to_tensor(dis, tf.float32), tf.convert_to_tensor(length, tf.float32)
 
 
-def cer(decode: np.ndarray, target: np.ndarray) -> Tuple[tf.Tensor, tf.Tensor]:
+def wer(_decode: tf.Tensor, _target: tf.Tensor) -> Tuple[tf.Tensor, tf.Tensor]:
+    """Word Error Rate
+
+    Args:
+        decode (np.ndarray): array of prediction texts
+        target (np.ndarray): array of groundtruth texts
+
+    Returns:
+        tuple: a tuple of tf.Tensor of (edit distances, number of words) of each text
+    """
+    return tf.numpy_function(_wer, inp=[_decode, _target], Tout=[tf.float32, tf.float32])
+
+
+def _cer(decode, target):
+    decode = bytes_to_string(decode)
+    target = bytes_to_string(target)
+    dis = 0
+    length = 0
+    for dec, tar in zip(decode, target):
+        dis += distance.edit_distance(dec, tar)
+        length += len(tar)
+    return tf.convert_to_tensor(dis, tf.float32), tf.convert_to_tensor(length, tf.float32)
+
+
+def cer(_decode: tf.Tensor, _target: tf.Tensor) -> Tuple[tf.Tensor, tf.Tensor]:
     """Character Error Rate
 
     Args:
@@ -55,14 +69,24 @@ def cer(decode: np.ndarray, target: np.ndarray) -> Tuple[tf.Tensor, tf.Tensor]:
     Returns:
         tuple: a tuple of tf.Tensor of (edit distances, number of characters) of each text
     """
-    decode = bytes_to_string(decode)
-    target = bytes_to_string(target)
-    dis = 0
-    length = 0
-    for dec, tar in zip(decode, target):
-        dis += distance.edit_distance(dec, tar)
-        length += len(tar)
-    return tf.convert_to_tensor(dis, tf.float32), tf.convert_to_tensor(length, tf.float32)
+    return tf.numpy_function(_cer, inp=[_decode, _target], Tout=[tf.float32, tf.float32])
+
+
+def tf_cer(decode: tf.Tensor, target: tf.Tensor) -> Tuple[tf.Tensor, tf.Tensor]:
+    """Tensorflwo Charactor Error rate
+
+    Args:
+        decoder (tf.Tensor): tensor shape [B]
+        target (tf.Tensor): tensor shape [B]
+
+    Returns:
+        tuple: a tuple of tf.Tensor of (edit distances, number of characters) of each text
+    """
+    decode = tf.strings.bytes_split(decode)  # [B, N]
+    target = tf.strings.bytes_split(target)  # [B, M]
+    distances = tf.edit_distance(decode.to_sparse(), target.to_sparse(), normalize=False)  # [B]
+    lengths = tf.cast(target.row_lengths(axis=1), dtype=tf.float32)  # [B]
+    return tf.reduce_sum(distances), tf.reduce_sum(lengths)
 
 
 class ErrorRate(tf.keras.metrics.Metric):
@@ -75,10 +99,9 @@ class ErrorRate(tf.keras.metrics.Metric):
         self.func = func
 
     def update_state(self, decode: tf.Tensor, target: tf.Tensor):
-        n, d = tf.numpy_function(self.func, inp=[decode, target], Tout=[tf.float32, tf.float32])
+        n, d = self.func(decode, target)
         self.numerator.assign_add(n)
         self.denominator.assign_add(d)
 
     def result(self):
-        if self.denominator == 0.0: return 0.0
-        return (self.numerator / self.denominator) * 100
+        return tf.math.divide_no_nan(self.numerator, self.denominator) * 100

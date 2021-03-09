@@ -24,14 +24,14 @@ speech_config:
   normalize_per_feature: False
 
 decoder_config:
-  vocabulary: ./vocabularies/librispeech_train_4_4076.subwords
+  vocabulary: ./vocabularies/librispeech/librispeech_train_4_1030.subwords
   target_vocab_size: 4096
   max_subword_length: 4
   blank_at_zero: True
   beam_width: 5
   norm_score: True
   corpus_files:
-    - /mnt/Miscellanea/Datasets/Speech/LibriSpeech/train-clean-100/transcripts.tsv
+    - /media/nlhuy/Data/ML/Datasets/ASR/Raw/LibriSpeech/train-clean-100/transcripts.tsv
 
 model_config:
   name: conformer
@@ -74,7 +74,7 @@ learning_config:
           num_masks: 1
           mask_factor: 27
     data_paths:
-      - /mnt/Miscellanea/Datasets/Speech/LibriSpeech/train-clean-100/transcripts.tsv
+      - /media/nlhuy/Data/ML/Datasets/ASR/Raw/LibriSpeech/train-clean-100/transcripts.tsv
     tfrecords_dir: /mnt/Miscellanea/Datasets/Speech/LibriSpeech/tfrecords
     shuffle: True
     cache: True
@@ -84,9 +84,7 @@ learning_config:
 
   eval_dataset_config:
     use_tf: True
-    data_paths:
-      - /mnt/Miscellanea/Datasets/Speech/LibriSpeech/dev-clean/transcripts.tsv
-      - /mnt/Miscellanea/Datasets/Speech/LibriSpeech/dev-other/transcripts.tsv
+    data_paths: null
     tfrecords_dir: /mnt/Miscellanea/Datasets/Speech/LibriSpeech/tfrecords
     shuffle: False
     cache: True
@@ -96,8 +94,7 @@ learning_config:
 
   test_dataset_config:
     use_tf: True
-    data_paths:
-      - /mnt/Miscellanea/Datasets/Speech/LibriSpeech/test-clean/transcripts.tsv
+    data_paths: null
     tfrecords_dir: /mnt/Miscellanea/Datasets/Speech/LibriSpeech/tfrecords
     shuffle: False
     cache: True
