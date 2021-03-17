@@ -36,7 +36,7 @@ class BaseDataset(metaclass=abc.ABCMeta):
                  use_tf: bool = False,
                  stage: str = "train",
                  **kwargs):
-        self.data_paths = data_paths
+        self.data_paths = data_paths or []
         self.augmentations = augmentations  # apply augmentation
         self.cache = cache  # whether to cache WHOLE transformed dataset to memory
         self.shuffle = shuffle  # whether to shuffle tf.data.Dataset

@@ -24,7 +24,7 @@ speech_config:
   normalize_per_feature: False
 
 decoder_config:
-  vocabulary: ./vocabularies/librispeech/librispeech_train_4_1030.subwords
+  vocabulary: null
   target_vocab_size: 4096
   max_subword_length: 4
   blank_at_zero: True
@@ -74,7 +74,7 @@ learning_config:
           num_masks: 1
           mask_factor: 27
     data_paths:
-      - /media/nlhuy/Data/ML/Datasets/ASR/Raw/LibriSpeech/train-clean-100/transcripts.tsv
+      - /mnt/Data/ML/Datasets/ASR/Raw/LibriSpeech/train-clean-100/transcripts.tsv
     tfrecords_dir: /mnt/Miscellanea/Datasets/Speech/LibriSpeech/tfrecords
     shuffle: True
     cache: True

@@ -136,7 +136,10 @@ class BaseTrainer(BaseRunner):
             return
         if not eval_bs: eval_bs = self.config.batch_size
         self.eval_data = eval_dataset.create(eval_bs * self.strategy.num_replicas_in_sync)
-        self.eval_data_loader = self.strategy.experimental_distribute_dataset(self.eval_data)
+        if self.eval_data is None:
+            self.eval_data_loader = None
+        else:
+            self.eval_data_loader = self.strategy.experimental_distribute_dataset(self.eval_data)
         self.eval_steps_per_epoch = eval_dataset.total_steps
 
     # -------------------------------- CHECKPOINTS -------------------------------------
