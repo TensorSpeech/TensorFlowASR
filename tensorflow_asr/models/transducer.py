@@ -141,12 +141,38 @@ class TransducerPrediction(tf.keras.Model):
         return conf
 
 
+class TransducerJointReshape(tf.keras.layers.Layer):
+    def __init__(self,
+                 joint_mode: str = "add",
+                 axis: int = 1,
+                 name="transducer_joint_reshape",
+                 **kwargs):
+        super(TransducerJointReshape, self).__init__(name=name, **kwargs)
+        self.joint_mode = joint_mode
+        if self.joint_mode not in ["add", "concat"]:
+            raise ValueError("joint_mode must be either 'add' or 'concat'")
+        self.axis = axis
+
+    def call(self, inputs, repeats=None, **kwargs):
+        outputs = tf.expand_dims(inputs, axis=self.axis)
+        if self.joint_mode == "concat":
+            return tf.repeat(outputs, repeats=repeats, axis=self.axis)
+        return outputs
+
+    def get_config(self):
+        conf = super(TransducerJointReshape, self).get_config()
+        conf.update({"joint_mode": self.joint_mode})
+        conf.update({"axis": self.axis})
+        return conf
+
+
 class TransducerJoint(tf.keras.Model):
     def __init__(self,
                  vocabulary_size: int,
                  joint_dim: int = 1024,
                  activation: str = "tanh",
                  prejoint_linear: bool = True,
+                 joint_mode: str = "add",
                  kernel_regularizer=None,
                  bias_regularizer=None,
                  name="tranducer_joint",
@@ -154,10 +180,14 @@ class TransducerJoint(tf.keras.Model):
         super(TransducerJoint, self).__init__(name=name, **kwargs)
 
         activation = activation.lower()
-        if activation == "linear": self.activation = tf.keras.activation.linear
-        elif activation == "relu": self.activation = tf.nn.relu
-        elif activation == "tanh": self.activation = tf.nn.tanh
-        else: raise ValueError("activation must be either 'linear', 'relu' or 'tanh'")
+        if activation == "linear":
+            self.activation = tf.keras.layers.Activation(tf.keras.activation.linear, name=f"{name}_linear")
+        elif activation == "relu":
+            self.activation = tf.keras.layers.Activation(tf.nn.relu, name=f"{name}_relu")
+        elif activation == "tanh":
+            self.activation = tf.keras.layers.Activation(tf.nn.tanh, name=f"{name}_tanh")
+        else:
+            raise ValueError("activation must be either 'linear', 'relu' or 'tanh'")
 
         self.prejoint_linear = prejoint_linear
 
@@ -171,6 +201,17 @@ class TransducerJoint(tf.keras.Model):
                 joint_dim, use_bias=False, name=f"{name}_pred",
                 kernel_regularizer=kernel_regularizer
             )
+
+        self.enc_reshape = TransducerJointReshape(joint_mode=joint_mode, axis=2, name=f"{name}_enc_reshape")
+        self.pred_reshape = TransducerJointReshape(joint_mode=joint_mode, axis=1, name=f"{name}_pred_reshape")
+
+        if joint_mode == "add":
+            self.joint = tf.keras.layers.Add(name=f"{name}_add")
+        elif joint_mode == "concat":
+            self.joint = tf.keras.layers.Concatenate(name=f"{name}_concat")
+        else:
+            raise ValueError("joint_mode must be either 'add' or 'concat'")
+
         self.ffn_out = tf.keras.layers.Dense(
             vocabulary_size, name=f"{name}_vocab",
             kernel_regularizer=kernel_regularizer,
@@ -184,9 +225,10 @@ class TransducerJoint(tf.keras.Model):
         if self.prejoint_linear:
             enc_out = self.ffn_enc(enc_out, training=training)  # [B, T, E] => [B, T, V]
             pred_out = self.ffn_pred(pred_out, training=training)  # [B, U, P] => [B, U, V]
-        enc_out = tf.expand_dims(enc_out, axis=2)
-        pred_out = tf.expand_dims(pred_out, axis=1)
-        outputs = self.activation(enc_out + pred_out)  # => [B, T, U, V]
+        enc_out = self.enc_reshape(enc_out, repeats=tf.shape(pred_out)[1])
+        pred_out = self.pred_reshape(pred_out, repeats=tf.shape(enc_out)[1])
+        outputs = self.joint([enc_out, pred_out], training=training)
+        outputs = self.activation(outputs, training=training)  # => [B, T, U, V]
         outputs = self.ffn_out(outputs, training=training)
         return outputs
 
@@ -194,7 +236,9 @@ class TransducerJoint(tf.keras.Model):
         conf = self.ffn_enc.get_config()
         conf.update(self.ffn_pred.get_config())
         conf.update(self.ffn_out.get_config())
-        conf.update({"prejoint_linear": self.prejoint_linear, "activation": self.activation})
+        conf.update(self.activation.get_config())
+        conf.update(self.joint.get_config())
+        conf.update({"prejoint_linear": self.prejoint_linear})
         return conf
 
 
@@ -215,6 +259,7 @@ class Transducer(Model):
                  joint_dim: int = 1024,
                  joint_activation: str = "tanh",
                  prejoint_linear: bool = True,
+                 joint_mode: str = "add",
                  kernel_regularizer=None,
                  bias_regularizer=None,
                  name="transducer",
@@ -240,6 +285,7 @@ class Transducer(Model):
             joint_dim=joint_dim,
             activation=joint_activation,
             prejoint_linear=prejoint_linear,
+            joint_mode=joint_mode,
             kernel_regularizer=kernel_regularizer,
             bias_regularizer=bias_regularizer,
             name=f"{name}_joint"

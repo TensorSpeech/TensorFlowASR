@@ -55,11 +55,12 @@ model_config:
   prediction_rnn_units: 320
   prediction_rnn_type: lstm
   prediction_rnn_implementation: 2
-  prediction_layer_norm: False
-  prediction_projection_units: 144
-  joint_dim: 640
+  prediction_layer_norm: True
+  prediction_projection_units: 0
+  joint_dim: 320
   prejoint_linear: False
   joint_activation: tanh
+  joint_mode: concat
 
 learning_config:
   train_dataset_config:
