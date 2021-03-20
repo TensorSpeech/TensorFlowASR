@@ -15,6 +15,7 @@
 import os
 import json
 import tqdm
+import math
 import numpy as np
 import tensorflow as tf
 
@@ -35,6 +36,7 @@ class ASRDataset(BaseDataset):
                  data_paths: list,
                  augmentations: Augmentation = Augmentation(None),
                  cache: bool = False,
+                 cache_percent: float = 1.0,
                  shuffle: bool = False,
                  indefinite: bool = False,
                  drop_remainder: bool = True,
@@ -43,7 +45,7 @@ class ASRDataset(BaseDataset):
                  **kwargs):
         super(ASRDataset, self).__init__(
             data_paths=data_paths, augmentations=augmentations,
-            cache=cache, shuffle=shuffle, stage=stage, buffer_size=buffer_size,
+            cache=cache, cache_percent=cache_percent, shuffle=shuffle, stage=stage, buffer_size=buffer_size,
             drop_remainder=drop_remainder, use_tf=use_tf, indefinite=indefinite
         )
         self.speech_featurizer = speech_featurizer
@@ -177,7 +179,12 @@ class ASRDataset(BaseDataset):
         dataset = dataset.map(self.parse, num_parallel_calls=AUTOTUNE)
 
         if self.cache:
-            dataset = dataset.cache()
+            num_shards = math.ceil(100 / (self.cache_percent * 100))
+            cache_dataset = dataset.shard(num_shards, index=0)
+            cache_dataset = cache_dataset.cache()
+            for index in range(1, num_shards):
+                cache_dataset = cache_dataset.concatenate(dataset.shard(num_shards, index=index))
+            dataset = cache_dataset
 
         if self.shuffle:
             dataset = dataset.shuffle(self.buffer_size, reshuffle_each_iteration=True)
@@ -229,6 +236,7 @@ class ASRTFRecordDataset(ASRDataset):
                  augmentations: Augmentation = Augmentation(None),
                  tfrecords_shards: int = TFRECORD_SHARDS,
                  cache: bool = False,
+                 cache_percent: float = 1.0,
                  shuffle: bool = False,
                  use_tf: bool = False,
                  indefinite: bool = False,
@@ -238,7 +246,7 @@ class ASRTFRecordDataset(ASRDataset):
         super(ASRTFRecordDataset, self).__init__(
             stage=stage, speech_featurizer=speech_featurizer, text_featurizer=text_featurizer,
             data_paths=data_paths, augmentations=augmentations, cache=cache, shuffle=shuffle, buffer_size=buffer_size,
-            drop_remainder=drop_remainder, use_tf=use_tf, indefinite=indefinite
+            drop_remainder=drop_remainder, use_tf=use_tf, indefinite=indefinite, cache_percent=cache_percent
         )
         if not self.stage: raise ValueError("stage must be defined, either 'train', 'eval' or 'test'")
         self.tfrecords_dir = tfrecords_dir

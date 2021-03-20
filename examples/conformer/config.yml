@@ -25,8 +25,8 @@ speech_config:
 
 decoder_config:
   vocabulary: null
-  target_vocab_size: 4096
-  max_subword_length: 4
+  target_vocab_size: 1000
+  max_subword_length: 10
   blank_at_zero: True
   beam_width: 5
   norm_score: True
@@ -79,6 +79,7 @@ learning_config:
     tfrecords_dir: /mnt/Miscellanea/Datasets/Speech/LibriSpeech/tfrecords
     shuffle: True
     cache: True
+    cache_percent: 0.2
     buffer_size: 100
     drop_remainder: True
     stage: train
