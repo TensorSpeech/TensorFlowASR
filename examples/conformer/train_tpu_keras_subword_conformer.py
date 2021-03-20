@@ -109,6 +109,7 @@ global_batch_size *= strategy.num_replicas_in_sync
 
 train_data_loader = train_dataset.create(global_batch_size)
 eval_data_loader = eval_dataset.create(global_batch_size) if args.validation else None
+validation_steps = eval_dataset.total_steps if args.validation else None
 
 with strategy.scope():
     # build model
@@ -148,5 +149,5 @@ callbacks = [
 conformer.fit(
     train_data_loader, epochs=config.learning_config.running_config.num_epochs,
     validation_data=eval_data_loader, callbacks=callbacks,
-    steps_per_epoch=train_dataset.total_steps, validation_steps=eval_dataset.total_steps
+    steps_per_epoch=train_dataset.total_steps, validation_steps=validation_steps
 )
