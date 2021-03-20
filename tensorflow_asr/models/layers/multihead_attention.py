@@ -268,7 +268,7 @@ class RelPositionMultiHeadAttention(MultiHeadAttention):
         logits_with_v = tf.einsum("...NHO,...MHO->...HNM", query_with_v, pos)
         logits_with_v = self.relative_shift(logits_with_v)
 
-        logits = logits_with_u + logits_with_v
+        logits = logits_with_u + logits_with_v[:, :, :, :tf.shape(logits_with_u)[3]]
 
         depth = tf.constant(self.head_size, dtype=tf.float32)
         logits /= tf.sqrt(depth)

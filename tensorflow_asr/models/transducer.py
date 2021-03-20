@@ -143,25 +143,18 @@ class TransducerPrediction(tf.keras.Model):
 
 class TransducerJointReshape(tf.keras.layers.Layer):
     def __init__(self,
-                 joint_mode: str = "add",
                  axis: int = 1,
                  name="transducer_joint_reshape",
                  **kwargs):
-        super(TransducerJointReshape, self).__init__(name=name, **kwargs)
-        self.joint_mode = joint_mode
-        if self.joint_mode not in ["add", "concat"]:
-            raise ValueError("joint_mode must be either 'add' or 'concat'")
+        super(TransducerJointReshape, self).__init__(name=name, trainable=False, **kwargs)
         self.axis = axis
 
     def call(self, inputs, repeats=None, **kwargs):
         outputs = tf.expand_dims(inputs, axis=self.axis)
-        if self.joint_mode == "concat":
-            return tf.repeat(outputs, repeats=repeats, axis=self.axis)
-        return outputs
+        return tf.repeat(outputs, repeats=repeats, axis=self.axis)
 
     def get_config(self):
         conf = super(TransducerJointReshape, self).get_config()
-        conf.update({"joint_mode": self.joint_mode})
         conf.update({"axis": self.axis})
         return conf
 
@@ -202,8 +195,8 @@ class TransducerJoint(tf.keras.Model):
                 kernel_regularizer=kernel_regularizer
             )
 
-        self.enc_reshape = TransducerJointReshape(joint_mode=joint_mode, axis=2, name=f"{name}_enc_reshape")
-        self.pred_reshape = TransducerJointReshape(joint_mode=joint_mode, axis=1, name=f"{name}_pred_reshape")
+        self.enc_reshape = TransducerJointReshape(axis=2, name=f"{name}_enc_reshape")
+        self.pred_reshape = TransducerJointReshape(axis=1, name=f"{name}_pred_reshape")
 
         if joint_mode == "add":
             self.joint = tf.keras.layers.Add(name=f"{name}_add")

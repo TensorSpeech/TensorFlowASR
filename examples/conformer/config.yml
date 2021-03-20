@@ -40,7 +40,7 @@ model_config:
     filters: 144
     kernel_size: 3
     strides: 2
-  encoder_positional_encoding: sinusoid_concat
+  encoder_positional_encoding: sinusoid_concat_v2
   encoder_dmodel: 144
   encoder_num_blocks: 16
   encoder_head_size: 36
@@ -58,9 +58,9 @@ model_config:
   prediction_layer_norm: True
   prediction_projection_units: 0
   joint_dim: 320
-  prejoint_linear: False
+  prejoint_linear: True
   joint_activation: tanh
-  joint_mode: concat
+  joint_mode: add
 
 learning_config:
   train_dataset_config:

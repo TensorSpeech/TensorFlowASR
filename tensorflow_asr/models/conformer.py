@@ -307,12 +307,17 @@ class ConformerEncoder(tf.keras.Model):
 
         if positional_encoding == "sinusoid":
             self.pe = PositionalEncoding(name=f"{name}_pe")
+        elif positional_encoding == "sinusoid_v2":
+            self.pe = PositionalEncoding(alpha=2, beta=0, name=f"{name}_pe")
         elif positional_encoding == "sinusoid_concat":
             self.pe = PositionalEncodingConcat(name=f"{name}_pe")
+        elif positional_encoding == "sinusoid_concat_v2":
+            self.pe = PositionalEncodingConcat(alpha=2, beta=-1, name=f"{name}_pe")
         elif positional_encoding == "subsampling":
             self.pe = tf.keras.layers.Activation("linear", name=f"{name}_pe")
         else:
-            raise ValueError("positional_encoding must be either 'sinusoid' or 'subsampling'")
+            raise ValueError("positional_encoding must be either 'sinusoid', \
+                'sinusoid_concat', 'sinusoid_v2', 'sinusoid_concat_v2' or 'subsampling'")
 
         self.linear = tf.keras.layers.Dense(
             dmodel, name=f"{name}_linear",
