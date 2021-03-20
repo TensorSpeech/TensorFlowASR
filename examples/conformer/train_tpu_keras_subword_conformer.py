@@ -48,6 +48,8 @@ parser.add_argument("--subwords_corpus", nargs="*", type=str, default=[], help="
 
 parser.add_argument("--saved", type=str, default=None, help="Path to saved model")
 
+parser.add_argument("--validation", default=False, action="store_true", help="Enable validation dataset")
+
 args = parser.parse_args()
 
 tf.config.optimizer.set_experimental_options({"auto_mixed_precision": args.mxp})
@@ -83,26 +85,30 @@ train_dataset = ASRTFRecordDatasetKeras(
     **vars(config.learning_config.train_dataset_config),
     indefinite=True
 )
-eval_dataset = ASRTFRecordDatasetKeras(
-    speech_featurizer=speech_featurizer, text_featurizer=text_featurizer,
-    **vars(config.learning_config.eval_dataset_config),
-    indefinite=True
-)
+
+if args.validation:
+    eval_dataset = ASRTFRecordDatasetKeras(
+        speech_featurizer=speech_featurizer, text_featurizer=text_featurizer,
+        **vars(config.learning_config.eval_dataset_config),
+        indefinite=True
+    )
 
 if args.compute_lengths:
     train_dataset.update_lengths(args.metadata_prefix)
-    eval_dataset.update_lengths(args.metadata_prefix)
+    if args.validation:
+        eval_dataset.update_lengths(args.metadata_prefix)
 
 # Update metadata calculated from both train and eval datasets
 train_dataset.load_metadata(args.metadata_prefix)
-eval_dataset.load_metadata(args.metadata_prefix)
+if args.validation:
+    eval_dataset.load_metadata(args.metadata_prefix)
 
 batch_size = args.bs if args.bs is not None else config.learning_config.running_config.batch_size
 global_batch_size = batch_size
 global_batch_size *= strategy.num_replicas_in_sync
 
 train_data_loader = train_dataset.create(global_batch_size)
-eval_data_loader = eval_dataset.create(global_batch_size)
+eval_data_loader = eval_dataset.create(global_batch_size) if args.validation else None
 
 with strategy.scope():
     # build model
