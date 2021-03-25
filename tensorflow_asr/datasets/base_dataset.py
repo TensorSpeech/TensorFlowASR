@@ -29,7 +29,6 @@ class BaseDataset(metaclass=abc.ABCMeta):
                  data_paths: list,
                  augmentations: Augmentation = Augmentation(None),
                  cache: bool = False,
-                 cache_percent: float = 1.0,
                  shuffle: bool = False,
                  buffer_size: int = BUFFER_SIZE,
                  indefinite: bool = False,
@@ -40,7 +39,6 @@ class BaseDataset(metaclass=abc.ABCMeta):
         self.data_paths = data_paths or []
         self.augmentations = augmentations  # apply augmentation
         self.cache = cache  # whether to cache transformed dataset to memory
-        self.cache_percent = cache_percent  # enable partial cache dataset
         self.shuffle = shuffle  # whether to shuffle tf.data.Dataset
         if buffer_size <= 0 and shuffle: raise ValueError("buffer_size must be positive when shuffle is on")
         self.buffer_size = buffer_size  # shuffle buffer size

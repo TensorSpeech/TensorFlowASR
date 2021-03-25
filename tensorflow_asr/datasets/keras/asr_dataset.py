@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import math
 import tensorflow as tf
 
 from ..asr_dataset import ASRDataset, ASRTFRecordDataset, ASRSliceDataset, AUTOTUNE, TFRECORD_SHARDS
@@ -53,12 +52,7 @@ class ASRDatasetKeras(ASRDataset):
         dataset = dataset.map(self.parse, num_parallel_calls=AUTOTUNE)
 
         if self.cache:
-            num_shards = math.ceil(100 / (self.cache_percent * 100))
-            cache_dataset = dataset.shard(num_shards, index=0)
-            cache_dataset = cache_dataset.cache()
-            for index in range(1, num_shards):
-                cache_dataset = cache_dataset.concatenate(dataset.shard(num_shards, index=index))
-            dataset = cache_dataset
+            dataset = dataset.cache()
 
         if self.shuffle:
             dataset = dataset.shuffle(self.buffer_size, reshuffle_each_iteration=True)
@@ -114,7 +108,6 @@ class ASRTFRecordDatasetKeras(ASRDatasetKeras, ASRTFRecordDataset):
                  augmentations: Augmentation = Augmentation(None),
                  tfrecords_shards: int = TFRECORD_SHARDS,
                  cache: bool = False,
-                 cache_percent: float = 1.0,
                  shuffle: bool = False,
                  use_tf: bool = False,
                  indefinite: bool = False,
@@ -125,13 +118,13 @@ class ASRTFRecordDatasetKeras(ASRDatasetKeras, ASRTFRecordDataset):
             self, stage=stage, speech_featurizer=speech_featurizer, text_featurizer=text_featurizer,
             data_paths=data_paths, tfrecords_dir=tfrecords_dir, augmentations=augmentations, cache=cache, shuffle=shuffle,
             tfrecords_shards=tfrecords_shards, drop_remainder=drop_remainder, buffer_size=buffer_size, use_tf=use_tf,
-            indefinite=indefinite, cache_percent=cache_percent
+            indefinite=indefinite
         )
         ASRDatasetKeras.__init__(
             self, stage=stage, speech_featurizer=speech_featurizer, text_featurizer=text_featurizer,
             data_paths=data_paths, augmentations=augmentations, cache=cache, shuffle=shuffle,
             drop_remainder=drop_remainder, buffer_size=buffer_size, use_tf=use_tf,
-            indefinite=indefinite, cache_percent=cache_percent
+            indefinite=indefinite
         )
 
     def parse(self, record: tf.Tensor):
@@ -157,7 +150,6 @@ class ASRSliceDatasetKeras(ASRDatasetKeras, ASRSliceDataset):
                  data_paths: list,
                  augmentations: Augmentation = Augmentation(None),
                  cache: bool = False,
-                 cache_percent: float = 1.0,
                  shuffle: bool = False,
                  use_tf: bool = False,
                  indefinite: bool = False,
@@ -168,13 +160,13 @@ class ASRSliceDatasetKeras(ASRDatasetKeras, ASRSliceDataset):
             self, stage=stage, speech_featurizer=speech_featurizer, text_featurizer=text_featurizer,
             data_paths=data_paths, augmentations=augmentations, cache=cache, shuffle=shuffle,
             drop_remainder=drop_remainder, buffer_size=buffer_size, use_tf=use_tf,
-            indefinite=indefinite, cache_percent=cache_percent
+            indefinite=indefinite
         )
         ASRDatasetKeras.__init__(
             self, stage=stage, speech_featurizer=speech_featurizer, text_featurizer=text_featurizer,
             data_paths=data_paths, augmentations=augmentations, cache=cache, shuffle=shuffle,
             drop_remainder=drop_remainder, buffer_size=buffer_size, use_tf=use_tf,
-            indefinite=indefinite, cache_percent=cache_percent
+            indefinite=indefinite
         )
 
     def parse(self, path: tf.Tensor, audio: tf.Tensor, indices: tf.Tensor):
