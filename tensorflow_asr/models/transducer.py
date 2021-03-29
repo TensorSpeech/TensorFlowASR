@@ -249,10 +249,12 @@ class Transducer(Model):
                  rnn_implementation: int = 2,
                  layer_norm: bool = True,
                  projection_units: int = 0,
+                 prediction_trainable: bool = True,
                  joint_dim: int = 1024,
                  joint_activation: str = "tanh",
                  prejoint_linear: bool = True,
                  joint_mode: str = "add",
+                 joint_trainable: bool = True,
                  kernel_regularizer=None,
                  bias_regularizer=None,
                  name="transducer",
@@ -271,6 +273,7 @@ class Transducer(Model):
             projection_units=projection_units,
             kernel_regularizer=kernel_regularizer,
             bias_regularizer=bias_regularizer,
+            trainable=prediction_trainable,
             name=f"{name}_prediction"
         )
         self.joint_net = TransducerJoint(
@@ -281,6 +284,7 @@ class Transducer(Model):
             joint_mode=joint_mode,
             kernel_regularizer=kernel_regularizer,
             bias_regularizer=bias_regularizer,
+            trainable=joint_trainable,
             name=f"{name}_joint"
         )
         self.time_reduction_factor = 1

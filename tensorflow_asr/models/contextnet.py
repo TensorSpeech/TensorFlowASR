@@ -197,6 +197,7 @@ class ContextNet(Transducer):
                  vocabulary_size: int,
                  encoder_blocks: List[dict],
                  encoder_alpha: float = 0.5,
+                 encoder_trainable: bool = True,
                  prediction_embed_dim: int = 512,
                  prediction_embed_dropout: int = 0,
                  prediction_num_rnns: int = 1,
@@ -205,10 +206,12 @@ class ContextNet(Transducer):
                  prediction_rnn_implementation: int = 2,
                  prediction_layer_norm: bool = True,
                  prediction_projection_units: int = 0,
+                 prediction_trainable: bool = True,
                  joint_dim: int = 1024,
                  joint_activation: str = "tanh",
                  prejoint_linear: bool = True,
                  joint_mode: str = "add",
+                 joint_trainable: bool = True,
                  kernel_regularizer=L2,
                  bias_regularizer=L2,
                  name: str = "contextnet",
@@ -219,6 +222,7 @@ class ContextNet(Transducer):
                 alpha=encoder_alpha,
                 kernel_regularizer=kernel_regularizer,
                 bias_regularizer=bias_regularizer,
+                trainable=encoder_trainable,
                 name=f"{name}_encoder"
             ),
             vocabulary_size=vocabulary_size,
@@ -229,14 +233,17 @@ class ContextNet(Transducer):
             rnn_type=prediction_rnn_type,
             rnn_implementation=prediction_rnn_implementation,
             layer_norm=prediction_layer_norm,
+            prediction_trainable=prediction_trainable,
             projection_units=prediction_projection_units,
             joint_dim=joint_dim,
             joint_activation=joint_activation,
             prejoint_linear=prejoint_linear,
             joint_mode=joint_mode,
+            joint_trainable=joint_trainable,
             kernel_regularizer=kernel_regularizer,
             bias_regularizer=bias_regularizer,
-            name=name, **kwargs
+            name=name,
+            **kwargs
         )
         self.dmodel = self.encoder.blocks[-1].dmodel
         self.time_reduction_factor = 1
