@@ -165,6 +165,7 @@ class TransducerJoint(tf.keras.Model):
                  joint_dim: int = 1024,
                  activation: str = "tanh",
                  prejoint_linear: bool = True,
+                 postjoint_linear: bool = False,
                  joint_mode: str = "add",
                  kernel_regularizer=None,
                  bias_regularizer=None,
@@ -183,6 +184,7 @@ class TransducerJoint(tf.keras.Model):
             raise ValueError("activation must be either 'linear', 'relu' or 'tanh'")
 
         self.prejoint_linear = prejoint_linear
+        self.postjoint_linear = postjoint_linear
 
         if self.prejoint_linear:
             self.ffn_enc = tf.keras.layers.Dense(
@@ -205,6 +207,13 @@ class TransducerJoint(tf.keras.Model):
         else:
             raise ValueError("joint_mode must be either 'add' or 'concat'")
 
+        if self.postjoint_linear:
+            self.ffn = tf.keras.layers.Dense(
+                joint_dim, name=f"{name}_ffn",
+                kernel_regularizer=kernel_regularizer,
+                bias_regularizer=bias_regularizer
+            )
+
         self.ffn_out = tf.keras.layers.Dense(
             vocabulary_size, name=f"{name}_vocab",
             kernel_regularizer=kernel_regularizer,
@@ -221,6 +230,8 @@ class TransducerJoint(tf.keras.Model):
         enc_out = self.enc_reshape(enc_out, repeats=tf.shape(pred_out)[1])
         pred_out = self.pred_reshape(pred_out, repeats=tf.shape(enc_out)[1])
         outputs = self.joint([enc_out, pred_out], training=training)
+        if self.postjoint_linear:
+            outputs = self.ffn(outputs, training=training)
         outputs = self.activation(outputs, training=training)  # => [B, T, U, V]
         outputs = self.ffn_out(outputs, training=training)
         return outputs
@@ -231,7 +242,7 @@ class TransducerJoint(tf.keras.Model):
         conf.update(self.ffn_out.get_config())
         conf.update(self.activation.get_config())
         conf.update(self.joint.get_config())
-        conf.update({"prejoint_linear": self.prejoint_linear})
+        conf.update({"prejoint_linear": self.prejoint_linear, "postjoint_linear": self.postjoint_linear})
         return conf
 
 
@@ -253,6 +264,7 @@ class Transducer(Model):
                  joint_dim: int = 1024,
                  joint_activation: str = "tanh",
                  prejoint_linear: bool = True,
+                 postjoint_linear: bool = False,
                  joint_mode: str = "add",
                  joint_trainable: bool = True,
                  kernel_regularizer=None,
@@ -281,6 +293,7 @@ class Transducer(Model):
             joint_dim=joint_dim,
             activation=joint_activation,
             prejoint_linear=prejoint_linear,
+            postjoint_linear=postjoint_linear,
             joint_mode=joint_mode,
             kernel_regularizer=kernel_regularizer,
             bias_regularizer=bias_regularizer,
