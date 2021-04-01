@@ -40,29 +40,32 @@ TFAUGMENTATIONS = {
 
 
 class TFAugmentationExecutor:
-    def __init__(self, augmentations: list):
+    def __init__(self, augmentations: list, prob: float = 0.5):
         self.augmentations = augmentations
+        self.prob = prob
 
     @tf.function
     def augment(self, inputs):
         outputs = inputs
         for au in self.augmentations:
-            outputs = au.augment(outputs)
+            if tf.random.uniform([]) < self.prob:
+                outputs = au.augment(outputs)
         return outputs
 
 
 class Augmentation:
     def __init__(self, config: dict = None, use_tf: bool = False):
         if not config: config = {}
+        prob = float(config.pop("prob", 0.5))
         if use_tf:
-            self.before = self.tf_parse(config.pop("before", {}))
-            self.after = self.tf_parse(config.pop("after", {}))
+            self.before = self.tf_parse(config.pop("before", {}), prob=prob)
+            self.after = self.tf_parse(config.pop("after", {}), prob=prob)
         else:
-            self.before = self.parse(config.pop("before", {}))
-            self.after = self.parse(config.pop("after", {}))
+            self.before = self.parse(config.pop("before", {}), prob=prob)
+            self.after = self.parse(config.pop("after", {}), prob=prob)
 
     @staticmethod
-    def parse(config: dict) -> list:
+    def parse(config: dict, prob: float = 0.5) -> naf.Sometimes:
         augmentations = []
         for key, value in config.items():
             au = AUGMENTATIONS.get(key, None)
@@ -71,10 +74,10 @@ class Augmentation:
                                f"Available augmentations: {AUGMENTATIONS.keys()}")
             aug = au(**value) if value is not None else au()
             augmentations.append(aug)
-        return naf.Sometimes(augmentations)
+        return naf.Sometimes(augmentations, pipeline_p=prob)
 
     @staticmethod
-    def tf_parse(config: dict) -> list:
+    def tf_parse(config: dict, prob: float = 0.5) -> TFAugmentationExecutor:
         augmentations = []
         for key, value in config.items():
             au = TFAUGMENTATIONS.get(key, None)
@@ -83,4 +86,4 @@ class Augmentation:
                                f"Available tf augmentations: {TFAUGMENTATIONS.keys()}")
             aug = au(**value) if value is not None else au()
             augmentations.append(aug)
-        return TFAugmentationExecutor(augmentations)
+        return TFAugmentationExecutor(augmentations, prob=prob)
