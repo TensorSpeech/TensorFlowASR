@@ -48,8 +48,8 @@ class TFAugmentationExecutor:
     def augment(self, inputs):
         outputs = inputs
         for au in self.augmentations:
-            if tf.random.uniform([]) < self.prob:
-                outputs = au.augment(outputs)
+            p = tf.random.uniform([])
+            outputs = tf.cond(tf.less(p, self.prob), true_fn=lambda: au.augment(outputs), false_fn=lambda: outputs)
         return outputs
 
 
