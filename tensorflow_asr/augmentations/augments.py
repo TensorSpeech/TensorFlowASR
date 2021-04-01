@@ -57,12 +57,9 @@ class Augmentation:
     def __init__(self, config: dict = None, use_tf: bool = False):
         if not config: config = {}
         prob = float(config.pop("prob", 0.5))
-        if use_tf:
-            self.before = self.tf_parse(config.pop("before", {}), prob=prob)
-            self.after = self.tf_parse(config.pop("after", {}), prob=prob)
-        else:
-            self.before = self.parse(config.pop("before", {}), prob=prob)
-            self.after = self.parse(config.pop("after", {}), prob=prob)
+        parser = self.tf_parse if use_tf else self.parse
+        self.before = parser(config.pop("before", {}), prob=prob)
+        self.after = parser(config.pop("after", {}), prob=prob)
 
     @staticmethod
     def parse(config: dict, prob: float = 0.5) -> naf.Sometimes:
