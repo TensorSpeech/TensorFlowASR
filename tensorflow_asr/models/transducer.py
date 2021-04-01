@@ -456,13 +456,10 @@ class Transducer(Model):
                               encoded: tf.Tensor,
                               encoded_length: tf.Tensor,
                               parallel_iterations: int = 10,
-                              swap_memory: bool = False,
-                              version: str = 'v1'):
+                              swap_memory: bool = False):
         with tf.name_scope(f"{self.name}_perform_greedy_batch"):
             total_batch = tf.shape(encoded)[0]
             batch = tf.constant(0, dtype=tf.int32)
-
-            greedy_fn = self._perform_greedy if version == 'v1' else self._perform_greedy_v2
 
             decoded = tf.TensorArray(
                 dtype=tf.int32, size=total_batch, dynamic_size=False,
@@ -472,7 +469,7 @@ class Transducer(Model):
             def condition(batch, _): return tf.less(batch, total_batch)
 
             def body(batch, decoded):
-                hypothesis = greedy_fn(
+                hypothesis = self._perform_greedy(
                     encoded=encoded[batch],
                     encoded_length=encoded_length[batch],
                     predicted=tf.constant(self.text_featurizer.blank, dtype=tf.int32),
