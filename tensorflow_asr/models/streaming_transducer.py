@@ -183,6 +183,7 @@ class StreamingTransducer(Transducer):
                  encoder_rnn_type: str = "lstm",
                  encoder_rnn_units: int = 2048,
                  encoder_layer_norm: bool = True,
+                 encoder_trainable: bool = True,
                  prediction_embed_dim: int = 320,
                  prediction_embed_dropout: float = 0,
                  prediction_num_rnns: int = 2,
@@ -190,9 +191,13 @@ class StreamingTransducer(Transducer):
                  prediction_rnn_type: str = "lstm",
                  prediction_layer_norm: bool = True,
                  prediction_projection_units: int = 640,
+                 prediction_trainable: bool = True,
                  joint_dim: int = 640,
                  joint_activation: str = "tanh",
                  prejoint_linear: bool = True,
+                 postjoint_linear: bool = False,
+                 joint_mode: str = "add",
+                 joint_trainable: bool = True,
                  kernel_regularizer = None,
                  bias_regularizer = None,
                  name = "StreamingTransducer",
@@ -207,6 +212,7 @@ class StreamingTransducer(Transducer):
                 layer_norm=encoder_layer_norm,
                 kernel_regularizer=kernel_regularizer,
                 bias_regularizer=bias_regularizer,
+                trainable=encoder_trainable,
                 name=f"{name}_encoder"
             ),
             vocabulary_size=vocabulary_size,
@@ -217,12 +223,17 @@ class StreamingTransducer(Transducer):
             rnn_type=prediction_rnn_type,
             layer_norm=prediction_layer_norm,
             projection_units=prediction_projection_units,
+            prediction_trainable=prediction_trainable,
             joint_dim=joint_dim,
             joint_activation=joint_activation,
             prejoint_linear=prejoint_linear,
+            postjoint_linear=postjoint_linear,
+            joint_mode=joint_mode,
+            joint_trainable=joint_trainable,
             kernel_regularizer=kernel_regularizer,
             bias_regularizer=bias_regularizer,
-            name=name, **kwargs
+            name=name,
+            **kwargs
         )
         self.time_reduction_factor = self.encoder.time_reduction_factor
 

@@ -295,8 +295,10 @@ class SubwordFeaturizer(TextFeaturizer):
             def cond(batch, total, _): return tf.less(batch, total)
 
             def body(batch, total, transcripts):
-                upoints = self.indices2upoints(indices[batch])
-                transcripts = transcripts.write(batch, tf.strings.unicode_encode(upoints, "UTF-8"))
+                norm_indices = self.normalize_indices(indices[batch])
+                norm_indices = tf.gather_nd(norm_indices, tf.where(tf.not_equal(norm_indices, 0)))
+                decoded = tf.numpy_function(self.subwords.decode, inp=[norm_indices], Tout=tf.string)
+                transcripts = transcripts.write(batch, decoded)
                 return batch + 1, total, transcripts
 
             _, _, transcripts = tf.while_loop(cond, body, loop_vars=[batch, total, transcripts])

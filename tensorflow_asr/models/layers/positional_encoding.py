@@ -17,6 +17,11 @@ from ...utils.utils import shape_list
 
 
 class PositionalEncoding(tf.keras.layers.Layer):
+    def __init__(self, alpha: int = 1, beta: int = 0, name="positional_encoding", **kwargs):
+        super().__init__(trainable=False, name=name, **kwargs)
+        self.alpha = alpha
+        self.beta = beta
+
     def build(self, input_shape):
         dmodel = input_shape[-1]
         assert dmodel % 2 == 0, f"Input last dim must be even: {dmodel}"
@@ -43,15 +48,15 @@ class PositionalEncoding(tf.keras.layers.Layer):
     def call(self, inputs, **kwargs):
         # inputs shape [B, T, V]
         _, max_len, dmodel = shape_list(inputs)
-        pe = self.encode(max_len, dmodel)
+        pe = self.encode(max_len * self.alpha + self.beta, dmodel)
         return tf.cast(pe, dtype=inputs.dtype)
 
     def get_config(self):
-        conf = super(PositionalEncoding, self).get_config()
-        return conf
+        conf = super().get_config()
+        return conf.update({"alpha": self.alpha, "beta": self.beta})
 
 
-class PositionalEncodingConcat(tf.keras.layers.Layer):
+class PositionalEncodingConcat(PositionalEncoding):
     def build(self, input_shape):
         dmodel = input_shape[-1]
         assert dmodel % 2 == 0, f"Input last dim must be even: {dmodel}"
@@ -71,9 +76,5 @@ class PositionalEncodingConcat(tf.keras.layers.Layer):
     def call(self, inputs, **kwargs):
         # inputs shape [B, T, V]
         _, max_len, dmodel = shape_list(inputs)
-        pe = self.encode(max_len, dmodel)
+        pe = self.encode(max_len * self.alpha + self.beta, dmodel)
         return tf.cast(pe, dtype=inputs.dtype)
-
-    def get_config(self):
-        conf = super(PositionalEncoding, self).get_config()
-        return conf

@@ -57,6 +57,8 @@ model_config:
   prediction_projection_units: 0
   joint_dim: 320
   joint_activation: tanh
+  prejoint_linear: False
+  joint_mode: concat
 
 learning_config:
   augmentations:

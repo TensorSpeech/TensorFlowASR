@@ -57,7 +57,7 @@ strategy = setup_tpu(args.tpu_address)
 from tensorflow_asr.configs.config import Config
 from tensorflow_asr.datasets.keras import ASRTFRecordDatasetKeras
 from tensorflow_asr.featurizers.speech_featurizers import TFSpeechFeaturizer
-from tensorflow_asr.featurizers.text_featurizers import SubwordFeaturizer, SentencePieceFeaturizer
+from tensorflow_asr.featurizers.text_featurizers import TFSubwordFeaturizer, SentencePieceFeaturizer
 from tensorflow_asr.models.keras.contextnet import ContextNet
 from tensorflow_asr.optimizers.schedules import TransformerSchedule
 
@@ -69,10 +69,10 @@ if args.sentence_piece:
     text_featurizer = SentencePieceFeaturizer.load_from_file(config.decoder_config, args.subwords)
 elif args.subwords and os.path.exists(args.subwords):
     print("Loading subwords ...")
-    text_featurizer = SubwordFeaturizer.load_from_file(config.decoder_config, args.subwords)
+    text_featurizer = TFSubwordFeaturizer.load_from_file(config.decoder_config, args.subwords)
 else:
     print("Generating subwords ...")
-    text_featurizer = SubwordFeaturizer.build_from_corpus(
+    text_featurizer = TFSubwordFeaturizer.build_from_corpus(
         config.decoder_config,
         corpus_files=args.subwords_corpus
     )

@@ -48,6 +48,8 @@ parser.add_argument("--subwords_corpus", nargs="*", type=str, default=[], help="
 
 parser.add_argument("--saved", type=str, default=None, help="Path to saved model")
 
+parser.add_argument("--validation", default=False, action="store_true", help="Enable validation dataset")
+
 args = parser.parse_args()
 
 tf.config.optimizer.set_experimental_options({"auto_mixed_precision": args.mxp})
@@ -83,35 +85,42 @@ train_dataset = ASRTFRecordDatasetKeras(
     **vars(config.learning_config.train_dataset_config),
     indefinite=True
 )
-eval_dataset = ASRTFRecordDatasetKeras(
-    speech_featurizer=speech_featurizer, text_featurizer=text_featurizer,
-    **vars(config.learning_config.eval_dataset_config),
-    indefinite=True
-)
+
+if args.validation:
+    eval_dataset = ASRTFRecordDatasetKeras(
+        speech_featurizer=speech_featurizer, text_featurizer=text_featurizer,
+        **vars(config.learning_config.eval_dataset_config),
+        indefinite=True
+    )
 
 if args.compute_lengths:
     train_dataset.update_lengths(args.metadata_prefix)
-    eval_dataset.update_lengths(args.metadata_prefix)
+    if args.validation:
+        eval_dataset.update_lengths(args.metadata_prefix)
 
 # Update metadata calculated from both train and eval datasets
 train_dataset.load_metadata(args.metadata_prefix)
-eval_dataset.load_metadata(args.metadata_prefix)
+if args.validation:
+    eval_dataset.load_metadata(args.metadata_prefix)
 
 batch_size = args.bs if args.bs is not None else config.learning_config.running_config.batch_size
 global_batch_size = batch_size
 global_batch_size *= strategy.num_replicas_in_sync
 
 train_data_loader = train_dataset.create(global_batch_size)
-eval_data_loader = eval_dataset.create(global_batch_size)
+eval_data_loader = eval_dataset.create(global_batch_size) if args.validation else None
+validation_steps = eval_dataset.total_steps if args.validation else None
 
 with strategy.scope():
     # build model
     conformer = Conformer(**config.model_config, vocabulary_size=text_featurizer.num_classes)
     conformer._build(speech_featurizer.shape, prediction_shape=text_featurizer.prepand_shape, batch_size=global_batch_size)
-    conformer.summary(line_length=120)
 
     if args.saved:
         conformer.load_weights(args.saved, by_name=True, skip_mismatch=True)
+        print('Load pretrained weights successfully')
+
+    conformer.summary(line_length=120)
 
     optimizer = tf.keras.optimizers.Adam(
         TransformerSchedule(
@@ -140,5 +149,5 @@ callbacks = [
 conformer.fit(
     train_data_loader, epochs=config.learning_config.running_config.num_epochs,
     validation_data=eval_data_loader, callbacks=callbacks,
-    steps_per_epoch=train_dataset.total_steps, validation_steps=eval_dataset.total_steps
+    steps_per_epoch=train_dataset.total_steps, validation_steps=validation_steps
 )

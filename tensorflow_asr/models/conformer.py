@@ -307,12 +307,17 @@ class ConformerEncoder(tf.keras.Model):
 
         if positional_encoding == "sinusoid":
             self.pe = PositionalEncoding(name=f"{name}_pe")
+        elif positional_encoding == "sinusoid_v2":
+            self.pe = PositionalEncoding(alpha=2, beta=0, name=f"{name}_pe")
         elif positional_encoding == "sinusoid_concat":
             self.pe = PositionalEncodingConcat(name=f"{name}_pe")
+        elif positional_encoding == "sinusoid_concat_v2":
+            self.pe = PositionalEncodingConcat(alpha=2, beta=-1, name=f"{name}_pe")
         elif positional_encoding == "subsampling":
             self.pe = tf.keras.layers.Activation("linear", name=f"{name}_pe")
         else:
-            raise ValueError("positional_encoding must be either 'sinusoid' or 'subsampling'")
+            raise ValueError("positional_encoding must be either 'sinusoid', \
+                'sinusoid_concat', 'sinusoid_v2', 'sinusoid_concat_v2' or 'subsampling'")
 
         self.linear = tf.keras.layers.Dense(
             dmodel, name=f"{name}_linear",
@@ -373,6 +378,7 @@ class Conformer(Transducer):
                  encoder_depth_multiplier: int = 1,
                  encoder_fc_factor: float = 0.5,
                  encoder_dropout: float = 0,
+                 encoder_trainable: bool = True,
                  prediction_embed_dim: int = 512,
                  prediction_embed_dropout: int = 0,
                  prediction_num_rnns: int = 1,
@@ -381,12 +387,16 @@ class Conformer(Transducer):
                  prediction_rnn_implementation: int = 2,
                  prediction_layer_norm: bool = True,
                  prediction_projection_units: int = 0,
+                 prediction_trainable: bool = True,
                  joint_dim: int = 1024,
                  joint_activation: str = "tanh",
                  prejoint_linear: bool = True,
+                 postjoint_linear: bool = False,
+                 joint_mode: str = "add",
+                 joint_trainable: bool = True,
                  kernel_regularizer=L2,
                  bias_regularizer=L2,
-                 name: str = "conformer_transducer",
+                 name: str = "conformer",
                  **kwargs):
         super(Conformer, self).__init__(
             encoder=ConformerEncoder(
@@ -402,7 +412,9 @@ class Conformer(Transducer):
                 fc_factor=encoder_fc_factor,
                 dropout=encoder_dropout,
                 kernel_regularizer=kernel_regularizer,
-                bias_regularizer=bias_regularizer
+                bias_regularizer=bias_regularizer,
+                trainable=encoder_trainable,
+                name=f"{name}_encoder"
             ),
             vocabulary_size=vocabulary_size,
             embed_dim=prediction_embed_dim,
@@ -413,12 +425,17 @@ class Conformer(Transducer):
             rnn_implementation=prediction_rnn_implementation,
             layer_norm=prediction_layer_norm,
             projection_units=prediction_projection_units,
+            prediction_trainable=prediction_trainable,
             joint_dim=joint_dim,
             joint_activation=joint_activation,
             prejoint_linear=prejoint_linear,
+            postjoint_linear=postjoint_linear,
+            joint_mode=joint_mode,
+            joint_trainable=joint_trainable,
             kernel_regularizer=kernel_regularizer,
             bias_regularizer=bias_regularizer,
-            name=name, **kwargs
+            name=name,
+            **kwargs
         )
         self.dmodel = encoder_dmodel
         self.time_reduction_factor = self.encoder.conv_subsampling.time_reduction_factor
