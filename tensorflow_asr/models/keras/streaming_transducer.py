@@ -17,6 +17,7 @@ import tensorflow as tf
 
 from .transducer import Transducer
 from ..streaming_transducer import StreamingTransducerEncoder
+from ...utils.utils import shape_list
 
 
 class StreamingTransducer(Transducer):
@@ -113,7 +114,8 @@ class StreamingTransducer(Transducer):
         Returns:
             tf.Tensor: a batch of decoded transcripts
         """
-        encoded, _ = self.encoder.recognize(features, self.encoder.get_initial_state())
+        batch_size, _, _, _ = shape_list(features)
+        encoded, _ = self.encoder.recognize(features, self.encoder.get_initial_state(batch_size))
         return self._perform_greedy_batch(encoded, input_length,
                                           parallel_iterations=parallel_iterations, swap_memory=swap_memory)
 
@@ -179,7 +181,8 @@ class StreamingTransducer(Transducer):
         Returns:
             tf.Tensor: a batch of decoded transcripts
         """
-        encoded, _ = self.encoder.recognize(features, self.encoder.get_initial_state())
+        batch_size, _, _, _ = shape_list(features)
+        encoded, _ = self.encoder.recognize(features, self.encoder.get_initial_state(batch_size))
         return self._perform_beam_search_batch(encoded, input_length, lm,
                                                parallel_iterations=parallel_iterations, swap_memory=swap_memory)
 

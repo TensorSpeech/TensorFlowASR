@@ -17,7 +17,7 @@ import tensorflow as tf
 
 from .layers.subsampling import TimeReduction
 from .transducer import Transducer
-from ..utils.utils import get_rnn, merge_two_last_dims
+from ..utils.utils import get_rnn, merge_two_last_dims, shape_list
 
 
 class Reshape(tf.keras.layers.Layer):
@@ -127,7 +127,7 @@ class StreamingTransducerEncoder(tf.keras.Model):
             reduction_factor = reductions.get(i, 0)
             if reduction_factor > 0: self.time_reduction_factor *= reduction_factor
 
-    def get_initial_state(self):
+    def get_initial_state(self, batch_size=1):
         """Get zeros states
 
         Returns:
@@ -138,7 +138,7 @@ class StreamingTransducerEncoder(tf.keras.Model):
             states.append(
                 tf.stack(
                     block.rnn.get_initial_state(
-                        tf.zeros([1, 1, 1], dtype=tf.float32)
+                        tf.zeros([batch_size, 1, 1], dtype=tf.float32)
                     ), axis=0
                 )
             )
@@ -269,7 +269,8 @@ class StreamingTransducer(Transducer):
         Returns:
             tf.Tensor: a batch of decoded transcripts
         """
-        encoded, _ = self.encoder.recognize(features, self.encoder.get_initial_state())
+        batch_size, _, _, _ = shape_list(features)
+        encoded, _ = self.encoder.recognize(features, self.encoder.get_initial_state(batch_size))
         return self._perform_greedy_batch(encoded, input_length,
                                           parallel_iterations=parallel_iterations, swap_memory=swap_memory)
 
@@ -335,7 +336,8 @@ class StreamingTransducer(Transducer):
         Returns:
             tf.Tensor: a batch of decoded transcripts
         """
-        encoded, _ = self.encoder.recognize(features, self.encoder.get_initial_state())
+        batch_size, _, _, _ = shape_list(features)
+        encoded, _ = self.encoder.recognize(features, self.encoder.get_initial_state(batch_size))
         return self._perform_beam_search_batch(encoded, input_length, lm,
                                                parallel_iterations=parallel_iterations, swap_memory=swap_memory)
 
