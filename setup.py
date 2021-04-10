@@ -22,7 +22,7 @@ with open("requirements.txt", "r") as fr:
 
 setuptools.setup(
     name="TensorFlowASR",
-    version="0.8.2",
+    version="0.8.3",
     author="Huy Le Nguyen",
     author_email="nlhuy.cs.16@gmail.com",
     description="Almost State-of-the-art Automatic Speech Recognition using Tensorflow 2",
@@ -31,6 +31,12 @@ setuptools.setup(
     url="https://github.com/TensorSpeech/TensorFlowASR",
     packages=setuptools.find_packages(include=["tensorflow_asr*"]),
     install_requires=requirements,
+    extras_require={
+        "tf2.3": ["tensorflow==2.3.2", "tensorflow-text==2.3.0", "tensorflow-io==0.16.0"],
+        "tf2.3-gpu": ["tensorflow-gpu==2.3.2", "tensorflow-text==2.3.0", "tensorflow-io==0.16.0"],
+        "tf2.4": ["tensorflow>=2.4", "tensorflow-text==2.4.3", "tensorflow-io==0.17.0"],
+        "tf2.4-gpu": ["tensorflow-gpu>=2.4", "tensorflow-text==2.4.3", "tensorflow-io==0.17.0"]
+    },
     classifiers=[
         "Programming Language :: Python :: 3.6",
         "Programming Language :: Python :: 3.7",

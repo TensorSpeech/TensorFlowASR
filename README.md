@@ -76,31 +76,31 @@ TensorFlowASR implements some automatic speech recognition architectures such as
 
 ## Installation
 
-Install `tensorflow>=2.3.0` or `tf-nightly`.
-
 For training and testing, you should use `git clone` for installing necessary packages from other authors (`ctc_decoders`, `rnnt_loss`, etc.)
 
 ### Installing via PyPi
 
-Run `pip3 install -U TensorFlowASR`
+For tensorflow 2.3.x, run `pip3 install -U 'TensorFlowASR[tf2.3]'` or `pip3 install -U 'TensorFlowASR[tf2.3-gpu]'`
+
+For tensorflow 2.4.x, run `pip3 install -U 'TensorFlowASR[tf2.4]'` or `pip3 install -U 'TensorFlowASR[tf2.4-gpu]'`
 
 ### Installing from source
 
 ```bash
 git clone https://github.com/TensorSpeech/TensorFlowASR.git
 cd TensorFlowASR
-pip3 install .
+pip3 install '.[tf2.3]' # or '.[tf2.3-gpu]' or '.[tf2.4]' or '.[tf2.4-gpu]'
 ```
 
 For anaconda3:
 
 ```bash
-conda create -y -n tfasr tensorflow-gpu python=3.8 # tensorflow if using CPU
+conda create -y -n tfasr tensorflow-gpu python=3.8 # tensorflow if using CPU, this makes sure conda install all dependencies for tensorflow
 conda activate tfasr
 pip install -U tensorflow-gpu # upgrade to latest version of tensorflow
 git clone https://github.com/TensorSpeech/TensorFlowASR.git
 cd TensorFlowASR
-pip install .
+pip3 install '.[tf2.3]' # or '.[tf2.3-gpu]' or '.[tf2.4]' or '.[tf2.4-gpu]'
 ```
 
 ### Running in a container
