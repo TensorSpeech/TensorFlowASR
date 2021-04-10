@@ -14,12 +14,12 @@
 
 import tensorflow as tf
 
-from ..utils.utils import merge_two_last_dims
+from ..utils import math_util
 from .ctc import CtcModel
 
 
 class Reshape(tf.keras.layers.Layer):
-    def call(self, inputs): return merge_two_last_dims(inputs)
+    def call(self, inputs): return math_util.merge_two_last_dims(inputs)
 
 
 class JasperSubBlock(tf.keras.layers.Layer):

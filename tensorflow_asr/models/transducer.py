@@ -15,12 +15,14 @@
 
 import collections
 import tensorflow as tf
+from tensorflow.keras import mixed_precision as mxp
 
 from . import Model
-from ..utils.utils import get_rnn, shape_list, count_non_blank, pad_prediction_tfarray
+from ..utils import math_util, layer_util, shape_util
 from ..featurizers.speech_featurizers import SpeechFeaturizer
 from ..featurizers.text_featurizers import TextFeaturizer
 from .layers.embedding import Embedding
+from ..losses.keras.rnnt_losses import RnntLoss
 
 Hypothesis = collections.namedtuple("Hypothesis", ("index", "prediction", "states"))
 
@@ -47,7 +49,7 @@ class TransducerPrediction(tf.keras.Model):
                                regularizer=kernel_regularizer, name=f"{name}_embedding")
         self.do = tf.keras.layers.Dropout(embed_dropout, name=f"{name}_dropout")
         # Initialize rnn layers
-        RNN = get_rnn(rnn_type)
+        RNN = layer_util.get_rnn(rnn_type)
         self.rnns = []
         for i in range(num_rnns):
             rnn = RNN(
@@ -302,12 +304,21 @@ class Transducer(Model):
         )
         self.time_reduction_factor = 1
 
+    @property
+    def metrics(self):
+        return [self.loss_metric]
+
     def _build(self, input_shape, prediction_shape=[None], batch_size=None):
         inputs = tf.keras.Input(shape=input_shape, batch_size=batch_size, dtype=tf.float32)
         input_length = tf.keras.Input(shape=[], batch_size=batch_size, dtype=tf.int32)
         pred = tf.keras.Input(shape=prediction_shape, batch_size=batch_size, dtype=tf.int32)
         pred_length = tf.keras.Input(shape=[], batch_size=batch_size, dtype=tf.int32)
-        self([inputs, input_length, pred, pred_length], training=False)
+        self({
+            "input": inputs,
+            "input_length": input_length,
+            "prediction": pred,
+            "prediction_length": pred_length
+        }, training=False)
 
     def summary(self, line_length=None, **kwargs):
         if self.encoder is not None: self.encoder.summary(line_length=line_length, **kwargs)
@@ -328,25 +339,25 @@ class Transducer(Model):
         self.speech_featurizer = speech_featurizer
         self.text_featurizer = text_featurizer
 
-    def call(self, inputs, training=False, **kwargs):
-        """
-        Transducer Model call function
-        Args:
-            features: audio features in shape [B, T, F, C]
-            input_length: features time length in shape [B]
-            prediction: predicted sequence of ids, in shape [B, U]
-            prediction_length: predicted sequence of ids length in shape [B]
-            training: python boolean
-            **kwargs: sth else
+    def compile(self, optimizer, global_batch_size, blank=0, use_loss_scale=False, run_eagerly=None, **kwargs):
+        loss = RnntLoss(blank=blank, global_batch_size=global_batch_size)
+        self.use_loss_scale = use_loss_scale
+        if self.use_loss_scale:
+            optimizer = mxp.experimental.LossScaleOptimizer(tf.keras.optimizers.get(optimizer), "dynamic")
+        self.loss_metric = tf.keras.metrics.Mean(name="rnnt_loss", dtype=tf.float32)
+        super(Transducer, self).compile(optimizer=optimizer, loss=loss, run_eagerly=run_eagerly, **kwargs)
 
-        Returns:
-            `logits` with shape [B, T, U, vocab]
-        """
-        features, _, prediction, prediction_length = inputs
+    def call(self, inputs, training=False, **kwargs):
+        features = inputs["input"]
+        prediction = inputs["prediction"]
+        prediction_length = inputs["prediction_length"]
         enc = self.encoder(features, training=training, **kwargs)
         pred = self.predict_net([prediction, prediction_length], training=training, **kwargs)
         outputs = self.joint_net([enc, pred], training=training, **kwargs)
-        return outputs
+        return {
+            "logit": outputs,
+            "logit_length": math_util.get_reduced_length(inputs["input_length"], self.time_reduction_factor)
+        }
 
     # -------------------------------- INFERENCES-------------------------------------
 
@@ -485,7 +496,7 @@ class Transducer(Model):
                 parallel_iterations=parallel_iterations, swap_memory=True,
             )
 
-            decoded = pad_prediction_tfarray(decoded, blank=self.text_featurizer.blank)
+            decoded = math_util.pad_prediction_tfarray(decoded, blank=self.text_featurizer.blank)
             return self.text_featurizer.iextract(decoded.stack())
 
     def _perform_greedy(self,
@@ -641,7 +652,7 @@ class Transducer(Model):
                 parallel_iterations=parallel_iterations, swap_memory=True,
             )
 
-            decoded = pad_prediction_tfarray(decoded, blank=self.text_featurizer.blank)
+            decoded = math_util.pad_prediction_tfarray(decoded, blank=self.text_featurizer.blank)
             return self.text_featurizer.iextract(decoded.stack())
 
     def _perform_beam_search(self,
@@ -661,20 +672,32 @@ class Transducer(Model):
             def initialize_beam(dynamic=False):
                 return BeamHypothesis(
                     score=tf.TensorArray(
-                        dtype=tf.float32, size=beam_width if not dynamic else 0, dynamic_size=dynamic,
-                        element_shape=tf.TensorShape([]), clear_after_read=False
+                        dtype=tf.float32,
+                        size=beam_width if not dynamic else 0,
+                        dynamic_size=dynamic,
+                        element_shape=tf.TensorShape([]),
+                        clear_after_read=False
                     ),
                     indices=tf.TensorArray(
-                        dtype=tf.int32, size=beam_width if not dynamic else 0, dynamic_size=dynamic,
-                        element_shape=tf.TensorShape([]), clear_after_read=False
+                        dtype=tf.int32,
+                        size=beam_width if not dynamic else 0,
+                        dynamic_size=dynamic,
+                        element_shape=tf.TensorShape([]),
+                        clear_after_read=False
                     ),
                     prediction=tf.TensorArray(
-                        dtype=tf.int32, size=beam_width if not dynamic else 0, dynamic_size=dynamic,
-                        element_shape=None, clear_after_read=False
+                        dtype=tf.int32,
+                        size=beam_width if not dynamic else 0,
+                        dynamic_size=dynamic,
+                        element_shape=None,
+                        clear_after_read=False
                     ),
                     states=tf.TensorArray(
-                        dtype=tf.float32, size=beam_width if not dynamic else 0, dynamic_size=dynamic,
-                        element_shape=tf.TensorShape(shape_list(self.predict_net.get_initial_state())), clear_after_read=False
+                        dtype=tf.float32,
+                        size=beam_width if not dynamic else 0,
+                        dynamic_size=dynamic,
+                        element_shape=tf.TensorShape(shape_util.shape_list(self.predict_net.get_initial_state())),
+                        clear_after_read=False
                     ),
                 )
 
@@ -694,7 +717,11 @@ class Transducer(Model):
                     score=A.score.unstack(B.score.stack()),
                     indices=A.indices.unstack(B.indices.stack()),
                     prediction=A.prediction.unstack(
-                        pad_prediction_tfarray(B.prediction, blank=self.text_featurizer.blank).stack()),
+                        math_util.pad_prediction_tfarray(
+                            B.prediction,
+                            blank=self.text_featurizer.blank
+                        ).stack()
+                    ),
                     states=A.states.unstack(B.states.stack()),
                 )
                 A_i = tf.constant(0, tf.int32)
@@ -710,7 +737,9 @@ class Transducer(Model):
                     y_hat_score = y_hat_score[0]
                     y_hat_index = tf.gather_nd(A.indices.stack(), y_hat_score_index)
                     y_hat_prediction = tf.gather_nd(
-                        pad_prediction_tfarray(A.prediction, blank=self.text_featurizer.blank).stack(), y_hat_score_index)
+                        math_util.pad_prediction_tfarray(A.prediction, blank=self.text_featurizer.blank).stack(),
+                        y_hat_score_index
+                    )
                     y_hat_states = tf.gather_nd(A.states.stack(), y_hat_score_index)
 
                     # remove y_hat from A
@@ -720,8 +749,12 @@ class Transducer(Model):
                     A = BeamHypothesis(
                         score=A.score.unstack(tf.gather_nd(A.score.stack(), remain_indices)),
                         indices=A.indices.unstack(tf.gather_nd(A.indices.stack(), remain_indices)),
-                        prediction=A.prediction.unstack(tf.gather_nd(
-                            pad_prediction_tfarray(A.prediction, blank=self.text_featurizer.blank).stack(), remain_indices)),
+                        prediction=A.prediction.unstack(
+                            tf.gather_nd(
+                                math_util.pad_prediction_tfarray(A.prediction, blank=self.text_featurizer.blank).stack(),
+                                remain_indices
+                            )
+                        ),
                         states=A.states.unstack(tf.gather_nd(A.states.stack(), remain_indices)),
                     )
                     A_i = tf.cond(tf.equal(A_i, 0), true_fn=lambda: A_i, false_fn=lambda: A_i - 1)
@@ -747,7 +780,7 @@ class Transducer(Model):
                             )
 
                         def false_fn():
-                            scatter_index = count_non_blank(y_hat_prediction, blank=self.text_featurizer.blank)
+                            scatter_index = math_util.count_non_blank(y_hat_prediction, blank=self.text_featurizer.blank)
                             updated_prediction = tf.tensor_scatter_nd_update(
                                 y_hat_prediction,
                                 indices=tf.reshape(scatter_index, [1, 1]),
@@ -797,9 +830,9 @@ class Transducer(Model):
             )
 
             scores = B.score.stack()
-            prediction = pad_prediction_tfarray(B.prediction, blank=self.text_featurizer.blank).stack()
+            prediction = math_util.pad_prediction_tfarray(B.prediction, blank=self.text_featurizer.blank).stack()
             if self.text_featurizer.decoder_config.norm_score:
-                prediction_lengths = count_non_blank(prediction, blank=self.text_featurizer.blank, axis=1)
+                prediction_lengths = math_util.count_non_blank(prediction, blank=self.text_featurizer.blank, axis=1)
                 scores /= tf.cast(prediction_lengths, dtype=scores.dtype)
 
             y_hat_score, y_hat_score_index = tf.math.top_k(scores, k=1)

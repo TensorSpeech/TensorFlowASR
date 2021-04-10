@@ -13,14 +13,15 @@
 # limitations under the License.
 
 from typing import Tuple
-import tensorflow as tf
 from nltk.metrics import distance
-from .utils import bytes_to_string
+import tensorflow as tf
+
+from . import math_util
 
 
-def _wer(decode, target):
-    decode = bytes_to_string(decode)
-    target = bytes_to_string(target)
+def execute_wer(decode, target):
+    decode = math_util.bytes_to_string(decode)
+    target = math_util.bytes_to_string(target)
     dis = 0.0
     length = 0.0
     for dec, tar in zip(decode, target):
@@ -35,7 +36,7 @@ def _wer(decode, target):
     return tf.convert_to_tensor(dis, tf.float32), tf.convert_to_tensor(length, tf.float32)
 
 
-def wer(_decode: tf.Tensor, _target: tf.Tensor) -> Tuple[tf.Tensor, tf.Tensor]:
+def wer(decode: tf.Tensor, target: tf.Tensor) -> Tuple[tf.Tensor, tf.Tensor]:
     """Word Error Rate
 
     Args:
@@ -45,12 +46,12 @@ def wer(_decode: tf.Tensor, _target: tf.Tensor) -> Tuple[tf.Tensor, tf.Tensor]:
     Returns:
         tuple: a tuple of tf.Tensor of (edit distances, number of words) of each text
     """
-    return tf.numpy_function(_wer, inp=[_decode, _target], Tout=[tf.float32, tf.float32])
+    return tf.numpy_function(execute_wer, inp=[decode, target], Tout=[tf.float32, tf.float32])
 
 
-def _cer(decode, target):
-    decode = bytes_to_string(decode)
-    target = bytes_to_string(target)
+def execute_cer(decode, target):
+    decode = math_util.bytes_to_string(decode)
+    target = math_util.bytes_to_string(target)
     dis = 0
     length = 0
     for dec, tar in zip(decode, target):
@@ -59,7 +60,7 @@ def _cer(decode, target):
     return tf.convert_to_tensor(dis, tf.float32), tf.convert_to_tensor(length, tf.float32)
 
 
-def cer(_decode: tf.Tensor, _target: tf.Tensor) -> Tuple[tf.Tensor, tf.Tensor]:
+def cer(decode: tf.Tensor, target: tf.Tensor) -> Tuple[tf.Tensor, tf.Tensor]:
     """Character Error Rate
 
     Args:
@@ -69,7 +70,7 @@ def cer(_decode: tf.Tensor, _target: tf.Tensor) -> Tuple[tf.Tensor, tf.Tensor]:
     Returns:
         tuple: a tuple of tf.Tensor of (edit distances, number of characters) of each text
     """
-    return tf.numpy_function(_cer, inp=[_decode, _target], Tout=[tf.float32, tf.float32])
+    return tf.numpy_function(execute_cer, inp=[decode, target], Tout=[tf.float32, tf.float32])
 
 
 def tf_cer(decode: tf.Tensor, target: tf.Tensor) -> Tuple[tf.Tensor, tf.Tensor]:
@@ -87,21 +88,3 @@ def tf_cer(decode: tf.Tensor, target: tf.Tensor) -> Tuple[tf.Tensor, tf.Tensor]:
     distances = tf.edit_distance(decode.to_sparse(), target.to_sparse(), normalize=False)  # [B]
     lengths = tf.cast(target.row_lengths(axis=1), dtype=tf.float32)  # [B]
     return tf.reduce_sum(distances), tf.reduce_sum(lengths)
-
-
-class ErrorRate(tf.keras.metrics.Metric):
-    """ Metric for WER and CER """
-
-    def __init__(self, func, name="error_rate", **kwargs):
-        super(ErrorRate, self).__init__(name=name, **kwargs)
-        self.numerator = self.add_weight(name=f"{name}_numerator", initializer="zeros")
-        self.denominator = self.add_weight(name=f"{name}_denominator", initializer="zeros")
-        self.func = func
-
-    def update_state(self, decode: tf.Tensor, target: tf.Tensor):
-        n, d = self.func(decode, target)
-        self.numerator.assign_add(n)
-        self.denominator.assign_add(d)
-
-    def result(self):
-        return tf.math.divide_no_nan(self.numerator, self.denominator) * 100

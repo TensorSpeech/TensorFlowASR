@@ -16,7 +16,7 @@
 from typing import List
 import tensorflow as tf
 from .transducer import Transducer
-from ..utils.utils import merge_two_last_dims, get_reduced_length
+from ..utils import math_util
 
 L2 = tf.keras.regularizers.l2(1e-6)
 
@@ -30,7 +30,7 @@ def get_activation(activation: str = "silu"):
 
 
 class Reshape(tf.keras.layers.Layer):
-    def call(self, inputs): return merge_two_last_dims(inputs)
+    def call(self, inputs): return math_util.merge_two_last_dims(inputs)
 
 
 class ConvModule(tf.keras.layers.Layer):
@@ -154,7 +154,7 @@ class ConvBlock(tf.keras.layers.Layer):
         for conv in self.convs:
             outputs = conv(outputs, training=training)
         outputs = self.last_conv(outputs, training=training)
-        input_length = get_reduced_length(input_length, self.last_conv.strides)
+        input_length = math_util.get_reduced_length(input_length, self.last_conv.strides)
         outputs = self.se([outputs, input_length], training=training)
         if self.residual is not None:
             res = self.residual(features, training=training)
@@ -282,8 +282,11 @@ class ContextNet(Transducer):
             tf.Tensor: a batch of decoded transcripts
         """
         encoded = self.encoder([features, input_length], training=False)
-        return self._perform_greedy_batch(encoded, input_length,
-                                          parallel_iterations=parallel_iterations, swap_memory=swap_memory)
+        return self._perform_greedy_batch(
+            encoded, input_length,
+            parallel_iterations=parallel_iterations,
+            swap_memory=swap_memory
+        )
 
     def recognize_tflite(self, signal, predicted, prediction_states):
         """
@@ -347,5 +350,8 @@ class ContextNet(Transducer):
             tf.Tensor: a batch of decoded transcripts
         """
         encoded = self.encoder([features, input_length], training=False)
-        return self._perform_beam_search_batch(encoded, input_length, lm,
-                                               parallel_iterations=parallel_iterations, swap_memory=swap_memory)
+        return self._perform_beam_search_batch(
+            encoded, input_length, lm,
+            parallel_iterations=parallel_iterations,
+            swap_memory=swap_memory
+        )

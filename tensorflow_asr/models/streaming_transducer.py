@@ -17,11 +17,11 @@ import tensorflow as tf
 
 from .layers.subsampling import TimeReduction
 from .transducer import Transducer
-from ..utils.utils import get_rnn, merge_two_last_dims, shape_list
+from ..utils import layer_util, math_util, shape_util
 
 
 class Reshape(tf.keras.layers.Layer):
-    def call(self, inputs): return merge_two_last_dims(inputs)
+    def call(self, inputs): return math_util.merge_two_last_dims(inputs)
 
 
 class StreamingTransducerBlock(tf.keras.Model):
@@ -41,7 +41,7 @@ class StreamingTransducerBlock(tf.keras.Model):
         else:
             self.reduction = None
 
-        RNN = get_rnn(rnn_type)
+        RNN = layer_util.get_rnn(rnn_type)
         self.rnn = RNN(
             units=rnn_units, return_sequences=True,
             name=f"{self.name}_{rnn_type}", return_state=True,
@@ -269,7 +269,7 @@ class StreamingTransducer(Transducer):
         Returns:
             tf.Tensor: a batch of decoded transcripts
         """
-        batch_size, _, _, _ = shape_list(features)
+        batch_size, _, _, _ = shape_util.shape_list(features)
         encoded, _ = self.encoder.recognize(features, self.encoder.get_initial_state(batch_size))
         return self._perform_greedy_batch(encoded, input_length,
                                           parallel_iterations=parallel_iterations, swap_memory=swap_memory)
@@ -336,7 +336,7 @@ class StreamingTransducer(Transducer):
         Returns:
             tf.Tensor: a batch of decoded transcripts
         """
-        batch_size, _, _, _ = shape_list(features)
+        batch_size, _, _, _ = shape_util.shape_list(features)
         encoded, _ = self.encoder.recognize(features, self.encoder.get_initial_state(batch_size))
         return self._perform_beam_search_batch(encoded, input_length, lm,
                                                parallel_iterations=parallel_iterations, swap_memory=swap_memory)

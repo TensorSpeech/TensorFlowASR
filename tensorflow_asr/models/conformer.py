@@ -14,12 +14,12 @@
 
 import tensorflow as tf
 
-from .activations import GLU
+from .activations.glu import GLU
 from .transducer import Transducer
 from .layers.subsampling import VggSubsampling, Conv2dSubsampling
 from .layers.positional_encoding import PositionalEncoding, PositionalEncodingConcat
 from .layers.multihead_attention import MultiHeadAttention, RelPositionMultiHeadAttention
-from ..utils.utils import shape_list
+from ..utils import shape_util
 
 L2 = tf.keras.regularizers.l2(1e-6)
 
@@ -179,7 +179,7 @@ class ConvModule(tf.keras.layers.Layer):
 
     def call(self, inputs, training=False, **kwargs):
         outputs = self.ln(inputs, training=training)
-        B, T, E = shape_list(outputs)
+        B, T, E = shape_util.shape_list(outputs)
         outputs = tf.reshape(outputs, [B, T, 1, E])
         outputs = self.pw_conv_1(outputs, training=training)
         outputs = self.glu(outputs)

@@ -15,11 +15,13 @@
 from typing import Optional
 import numpy as np
 import tensorflow as tf
+from tensorflow.keras import mixed_precision as mxp
 
 from . import Model
 from ..featurizers.speech_featurizers import TFSpeechFeaturizer
 from ..featurizers.text_featurizers import TextFeaturizer
-from ..utils.utils import shape_list, get_reduced_length
+from ..utils import math_util, shape_util
+from ..losses.keras.ctc_losses import CtcLoss
 
 
 class CtcModel(Model):
@@ -30,6 +32,49 @@ class CtcModel(Model):
     def _build(self, input_shape, batch_size=None):
         features = tf.keras.Input(input_shape, batch_size=batch_size, dtype=tf.float32)
         self(features, training=False)
+
+    @property
+    def metrics(self):
+        return [self.loss_metric]
+
+    def compile(self, optimizer, global_batch_size, blank=0, use_loss_scale=False, run_eagerly=None, **kwargs):
+        loss = CtcLoss(blank=blank, global_batch_size=global_batch_size)
+        self.use_loss_scale = use_loss_scale
+        if self.use_loss_scale:
+            optimizer = mxp.experimental.LossScaleOptimizer(tf.keras.optimizers.get(optimizer), "dynamic")
+        self.loss_metric = tf.keras.metrics.Mean(name="ctc_loss", dtype=tf.float32)
+        super(CtcModel, self).compile(optimizer=optimizer, loss=loss, run_eagerly=run_eagerly, **kwargs)
+
+    def train_step(self, batch):
+        x, y_true = batch
+        with tf.GradientTape() as tape:
+            logit = self(x["input"], training=True)
+            y_pred = {
+                "logit": logit,
+                "logit_length": math_util.get_reduced_length(x["input_length"], self.time_reduction_factor)
+            }
+            loss = self.loss(y_true, y_pred)
+            if self.use_loss_scale:
+                scaled_loss = self.optimizer.get_scaled_loss(loss)
+        if self.use_loss_scale:
+            scaled_gradients = tape.gradient(scaled_loss, self.trainable_weights)
+            gradients = self.optimizer.get_unscaled_gradients(scaled_gradients)
+        else:
+            gradients = tape.gradient(loss, self.trainable_weights)
+        self.optimizer.apply_gradients(zip(gradients, self.trainable_variables))
+        self.loss_metric.update_state(loss)
+        return {m.name: m.result() for m in self.metrics}
+
+    def test_step(self, batch):
+        x, y_true = batch
+        logit = self(x["input"], training=False)
+        y_pred = {
+            "logit": logit,
+            "logit_length": math_util.get_reduced_length(x["input_length"], self.time_reduction_factor)
+        }
+        loss = self.loss(y_true, y_pred)
+        self.loss_metric.update_state(loss)
+        return {m.name: m.result() for m in self.metrics}
 
     def add_featurizers(self,
                         speech_featurizer: TFSpeechFeaturizer,
@@ -67,8 +112,8 @@ class CtcModel(Model):
         """
         features = self.speech_featurizer.tf_extract(signal)
         features = tf.expand_dims(features, axis=0)
-        input_length = shape_list(features)[1]
-        input_length = get_reduced_length(input_length, self.time_reduction_factor)
+        input_length = shape_util.shape_list(features)[1]
+        input_length = math_util.get_reduced_length(input_length, self.time_reduction_factor)
         input_length = tf.expand_dims(input_length, axis=0)
         logits = self(features, training=False)
         probs = tf.nn.softmax(logits)
@@ -113,8 +158,8 @@ class CtcModel(Model):
         """
         features = self.speech_featurizer.tf_extract(signal)
         features = tf.expand_dims(features, axis=0)
-        input_length = shape_list(features)[1]
-        input_length = get_reduced_length(input_length, self.time_reduction_factor)
+        input_length = shape_util.shape_list(features)[1]
+        input_length = math_util.get_reduced_length(input_length, self.time_reduction_factor)
         input_length = tf.expand_dims(input_length, axis=0)
         logits = self(features, training=False)
         probs = tf.nn.softmax(logits)

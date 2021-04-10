@@ -14,14 +14,14 @@
 
 import tensorflow as tf
 
-from ..utils.utils import get_rnn, get_conv, merge_two_last_dims
+from ..utils import layer_util, math_util
 from .layers.row_conv_1d import RowConv1D
 from .layers.sequence_wise_bn import SequenceBatchNorm
 from .ctc import CtcModel
 
 
 class Reshape(tf.keras.layers.Layer):
-    def call(self, inputs): return merge_two_last_dims(inputs)
+    def call(self, inputs): return math_util.merge_two_last_dims(inputs)
 
 
 class ConvBlock(tf.keras.layers.Layer):
@@ -34,7 +34,7 @@ class ConvBlock(tf.keras.layers.Layer):
                  **kwargs):
         super(ConvBlock, self).__init__(**kwargs)
 
-        CNN = get_conv(conv_type)
+        CNN = layer_util.get_conv(conv_type)
         self.conv = CNN(filters=filters, kernel_size=kernels,
                         strides=strides, padding="same",
                         dtype=tf.float32, name=f"{self.name}_{conv_type}")
@@ -118,7 +118,7 @@ class RnnBlock(tf.keras.layers.Layer):
                  **kwargs):
         super(RnnBlock, self).__init__(**kwargs)
 
-        RNN = get_rnn(rnn_type)
+        RNN = layer_util.get_rnn(rnn_type)
         self.rnn = RNN(units, dropout=dropout, return_sequences=True,
                        use_bias=True, name=f"{self.name}_{rnn_type}")
         if bidirectional:
