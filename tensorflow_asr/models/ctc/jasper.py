@@ -14,7 +14,7 @@
 
 import tensorflow as tf
 
-from ..utils import math_util
+from ...utils import math_util
 from .ctc import CtcModel
 
 
@@ -195,9 +195,8 @@ class JasperBlock(tf.keras.Model):
         return conf
 
 
-class Jasper(CtcModel):
+class JasperEncoder(tf.keras.Model):
     def __init__(self,
-                 vocabulary_size: int,
                  dense: bool = False,
                  first_additional_block_channels: int = 256,
                  first_additional_block_kernels: int = 11,
@@ -220,9 +219,9 @@ class Jasper(CtcModel):
                  third_additional_block_dropout: int = 0.4,
                  kernel_regularizer=None,
                  bias_regularizer=None,
-                 name: str = "jasper",
+                 name: str = "jasper_encoder",
                  **kwargs):
-        super(Jasper, self).__init__(name=name, **kwargs)
+        super().__init__(name=name, **kwargs)
 
         assert len(block_channels) == len(block_kernels) == len(block_dropout)
 
@@ -275,18 +274,6 @@ class Jasper(CtcModel):
             name=f"{self.name}_third_block"
         )
 
-        self.last_block = tf.keras.layers.Conv1D(
-            filters=vocabulary_size, kernel_size=1,
-            strides=1, padding="same",
-            kernel_regularizer=kernel_regularizer,
-            bias_regularizer=bias_regularizer,
-            name=f"{self.name}_last_block"
-        )
-
-        self.time_reduction_factor = self.first_additional_block.reduction_factor
-        self.time_reduction_factor *= self.second_additional_block.reduction_factor
-        self.time_reduction_factor *= self.third_additional_block.reduction_factor
-
     def call(self, inputs, training=False, **kwargs):
         outputs = self.reshape(inputs)
         outputs = self.first_additional_block(outputs, training=training, **kwargs)
@@ -297,18 +284,85 @@ class Jasper(CtcModel):
 
         outputs = self.second_additional_block(outputs, training=training, **kwargs)
         outputs = self.third_additional_block(outputs, training=training, **kwargs)
-        outputs = self.last_block(outputs, training=training, **kwargs)
         return outputs
 
     def summary(self, line_length=100, **kwargs):
-        super(Jasper, self).summary(line_length=line_length, **kwargs)
+        super().summary(line_length=line_length, **kwargs)
 
     def get_config(self):
-        conf = self.reshape.get_config()
+        conf = super().get_config()
+        conf.update(self.reshape.get_config())
         conf.update(self.first_additional_block.get_config())
         for block in self.blocks:
             conf.update(block.get_config())
         conf.update(self.second_additional_block.get_config())
         conf.update(self.third_additional_block.get_config())
-        conf.update(self.last_block.get_config())
         return conf
+
+
+class Jasper(CtcModel):
+    def __init__(self,
+                 vocabulary_size: int,
+                 dense: bool = False,
+                 first_additional_block_channels: int = 256,
+                 first_additional_block_kernels: int = 11,
+                 first_additional_block_strides: int = 2,
+                 first_additional_block_dilation: int = 1,
+                 first_additional_block_dropout: int = 0.2,
+                 nsubblocks: int = 5,
+                 block_channels: list = [256, 384, 512, 640, 768],
+                 block_kernels: list = [11, 13, 17, 21, 25],
+                 block_dropout: list = [0.2, 0.2, 0.2, 0.3, 0.3],
+                 second_additional_block_channels: int = 896,
+                 second_additional_block_kernels: int = 1,
+                 second_additional_block_strides: int = 1,
+                 second_additional_block_dilation: int = 2,
+                 second_additional_block_dropout: int = 0.4,
+                 third_additional_block_channels: int = 1024,
+                 third_additional_block_kernels: int = 1,
+                 third_additional_block_strides: int = 1,
+                 third_additional_block_dilation: int = 1,
+                 third_additional_block_dropout: int = 0.4,
+                 kernel_regularizer=None,
+                 bias_regularizer=None,
+                 name="jasper",
+                 **kwargs):
+        super().__init__(
+            encoder=JasperEncoder(
+                dense=dense,
+                first_additional_block_channels=first_additional_block_channels,
+                first_additional_block_kernels=first_additional_block_kernels,
+                first_additional_block_strides=first_additional_block_strides,
+                first_additional_block_dilation=first_additional_block_dilation,
+                first_additional_block_dropout=first_additional_block_dropout,
+                nsubblocks=nsubblocks,
+                block_channels=block_channels,
+                block_kernels=block_kernels,
+                block_dropout=block_dropout,
+                second_additional_block_channels=second_additional_block_channels,
+                second_additional_block_kernels=second_additional_block_kernels,
+                second_additional_block_strides=second_additional_block_strides,
+                second_additional_block_dilation=second_additional_block_dilation,
+                second_additional_block_dropout=second_additional_block_dropout,
+                third_additional_block_channels=third_additional_block_channels,
+                third_additional_block_kernels=third_additional_block_kernels,
+                third_additional_block_strides=third_additional_block_strides,
+                third_additional_block_dilation=third_additional_block_dilation,
+                third_additional_block_dropout=third_additional_block_dropout,
+                kernel_regularizer=None,
+                bias_regularizer=None,
+            ),
+            decoder=tf.keras.layers.Conv1D(
+                filters=vocabulary_size, kernel_size=1,
+                strides=1, padding="same",
+                kernel_regularizer=kernel_regularizer,
+                bias_regularizer=bias_regularizer,
+                name=f"{self.name}_logits"
+            ),
+            vocabulary_size=vocabulary_size,
+            name=name,
+            **kwargs
+        )
+        self.time_reduction_factor = self.encoder.first_additional_block.reduction_factor
+        self.time_reduction_factor *= self.encoder.second_additional_block.reduction_factor
+        self.time_reduction_factor *= self.encoder.third_additional_block.reduction_factor

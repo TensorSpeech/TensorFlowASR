@@ -14,6 +14,7 @@
 
 import os
 import re
+import tempfile
 from typing import Union, List
 import tensorflow as tf
 
@@ -55,3 +56,23 @@ def read_bytes(path: str) -> tf.Tensor:
     with tf.io.gfile.GFile(path, "rb") as f:
         content = f.read()
     return tf.convert_to_tensor(content, dtype=tf.string)
+
+
+def save_file(filepath):
+    if is_cloud_path(filepath) and is_hdf5_filepath(filepath):
+        _, ext = os.path.splitext(filepath)
+        with tempfile.NamedTemporaryFile(suffix=ext) as tmp:
+            yield tmp.name
+            tf.io.gfile.copy(tmp.name, filepath, overwrite=True)
+    else:
+        yield filepath
+
+
+def read_file(filepath):
+    if is_cloud_path(filepath) and is_hdf5_filepath(filepath):
+        _, ext = os.path.splitext(filepath)
+        with tempfile.NamedTemporaryFile(suffix=ext) as tmp:
+            tf.io.gfile.copy(filepath, tmp.name, overwrite=True)
+            yield tmp.name
+    else:
+        yield filepath

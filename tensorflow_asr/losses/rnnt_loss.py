@@ -15,9 +15,11 @@
 
 import tensorflow as tf
 from tensorflow.python.ops.gen_array_ops import matrix_diag_part_v2
-from ..utils.utils import has_gpu_or_tpu
+from ..utils import env_util
 
-use_cpu = not has_gpu_or_tpu()
+use_cpu = not env_util.has_gpu_or_tpu()
+
+LOG_0 = float("-inf")
 
 try:
     from warprnnt_tensorflow import rnnt_loss as warp_rnnt_loss
@@ -28,6 +30,27 @@ except ImportError:
     use_warprnnt = False
 
 
+class RnntLoss(tf.keras.losses.Loss):
+    def __init__(self, blank=0, global_batch_size=None, name=None):
+        super(RnntLoss, self).__init__(reduction=tf.keras.losses.Reduction.NONE, name=name)
+        self.blank = blank
+        self.global_batch_size = global_batch_size
+
+    def call(self, y_true, y_pred):
+        logits, logits_length = y_pred.values()
+        labels, labels_length = y_true.values()
+        loss = rnnt_loss(
+            logits=logits,
+            logit_length=logits_length,
+            labels=labels,
+            label_length=labels_length,
+            blank=self.blank,
+            name=self.name
+        )
+        return tf.nn.compute_average_loss(loss, global_batch_size=self.global_batch_size)
+
+
+@tf.function
 def rnnt_loss(logits, labels, label_length, logit_length, blank=0, name=None):
     if use_warprnnt:
         return rnnt_loss_warprnnt(logits=logits, labels=labels,
@@ -36,7 +59,6 @@ def rnnt_loss(logits, labels, label_length, logit_length, blank=0, name=None):
         return rnnt_loss_tf(logits=logits, labels=labels, label_length=label_length, logit_length=logit_length, name=name)
 
 
-@tf.function
 def rnnt_loss_warprnnt(logits, labels, label_length, logit_length, blank=0):
     if not tf.config.list_physical_devices('GPU'):
         logits = tf.nn.log_softmax(logits)
@@ -48,9 +70,6 @@ def rnnt_loss_warprnnt(logits, labels, label_length, logit_length, blank=0):
         blank_label=blank
     )
     return loss
-
-
-LOG_0 = float("-inf")
 
 
 def nan_to_zero(input_tensor):

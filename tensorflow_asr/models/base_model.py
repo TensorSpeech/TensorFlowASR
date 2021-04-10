@@ -12,64 +12,112 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import os
-import abc
-import tempfile
 import tensorflow as tf
+from tensorflow.keras import mixed_precision as mxp
 
-from ..utils import file_util
+from ..utils import file_util, env_util
 
 
-class Model(tf.keras.Model):
-    def __init__(self, name, **kwargs):
-        super(Model, self).__init__(name=name, **kwargs)
-
-    def save(self, filepath, overwrite=True, include_optimizer=True, save_format=None,
-             signatures=None, options=None, save_traces=True):
-        if file_util.is_cloud_path(filepath) and file_util.is_hdf5_filepath(filepath):
-            _, ext = os.path.splitext(filepath)
-            with tempfile.NamedTemporaryFile(suffix=ext) as tmp:
-                super(Model, self).save(
-                    tmp.name, overwrite=overwrite, include_optimizer=include_optimizer,
-                    save_format=save_format, signatures=signatures, options=options, save_traces=save_traces
-                )
-                tf.io.gfile.copy(tmp.name, filepath, overwrite=True)
-        else:
-            super(Model, self).save(
-                filepath, overwrite=overwrite, include_optimizer=include_optimizer,
-                save_format=save_format, signatures=signatures, options=options, save_traces=save_traces
+class BaseModel(tf.keras.Model):
+    def save(self,
+             filepath,
+             overwrite=True,
+             include_optimizer=True,
+             save_format=None,
+             signatures=None,
+             options=None,
+             save_traces=True):
+        with file_util.save_file(filepath) as path:
+            super().save(
+                filepath=path,
+                overwrite=overwrite,
+                include_optimizer=include_optimizer,
+                save_format=save_format,
+                signatures=signatures,
+                options=options,
+                save_traces=save_traces
             )
 
-    def save_weights(self, filepath, overwrite=True, save_format=None, options=None):
-        if file_util.is_cloud_path(filepath) and file_util.is_hdf5_filepath(filepath):
-            _, ext = os.path.splitext(filepath)
-            with tempfile.NamedTemporaryFile(suffix=ext) as tmp:
-                super(Model, self).save_weights(tmp.name, overwrite=overwrite, save_format=save_format, options=options)
-                tf.io.gfile.copy(tmp.name, filepath, overwrite=True)
-        else:
-            super(Model, self).save_weights(filepath, overwrite=overwrite, save_format=save_format, options=options)
+    def save_weights(self,
+                     filepath,
+                     overwrite=True,
+                     save_format=None,
+                     options=None):
+        with file_util.save_file(filepath) as path:
+            super().save_weights(
+                filepath=path,
+                overwrite=overwrite,
+                save_format=save_format,
+                options=options
+            )
 
-    def load_weights(self, filepath, by_name=False, skip_mismatch=False, options=None):
-        if file_util.is_cloud_path(filepath) and file_util.is_hdf5_filepath(filepath):
-            _, ext = os.path.splitext(filepath)
-            with tempfile.NamedTemporaryFile(suffix=ext) as tmp:
-                tf.io.gfile.copy(filepath, tmp.name, overwrite=True)
-                super(Model, self).load_weights(tmp.name, by_name=by_name, skip_mismatch=skip_mismatch, options=options)
-        else:
-            super(Model, self).load_weights(filepath, by_name=by_name, skip_mismatch=skip_mismatch, options=options)
+    def load_weights(self,
+                     filepath,
+                     by_name=False,
+                     skip_mismatch=False,
+                     options=None):
+        with file_util.read_file(filepath) as path:
+            super().load_weights(
+                filepath=path,
+                by_name=by_name,
+                skip_mismatch=skip_mismatch,
+                options=options
+            )
 
-    @abc.abstractmethod
+    @property
+    def metrics(self):
+        return [self.loss_metric]
+
     def _build(self, *args, **kwargs):
         raise NotImplementedError()
 
-    @abc.abstractmethod
-    def call(self, inputs, training=False, **kwargs):
-        raise NotImplementedError()
+    def compile(self, loss, optimizer, run_eagerly=None, **kwargs):
+        self.use_loss_scale = False
+        if not env_util.has_tpu():
+            optimizer = mxp.experimental.LossScaleOptimizer(tf.keras.optimizers.get(optimizer), "dynamic")
+            self.use_loss_scale = True
+        self.loss_metric = tf.keras.metrics.Mean(name="loss", dtype=tf.float32)
+        super().compile(optimizer=optimizer, loss=loss, run_eagerly=run_eagerly, **kwargs)
 
-    @abc.abstractmethod
+    # -------------------------------- STEP FUNCTIONS -------------------------------------
+
+    def train_step(self, batch):
+        inputs, y_true = batch
+        with tf.GradientTape() as tape:
+            y_pred = self(inputs, training=True)
+            loss = self.loss(y_true, y_pred)
+            if self.use_loss_scale:
+                loss = self.optimizer.get_scaled_loss(loss)
+        gradients = tape.gradient(loss, self.trainable_weights)
+        if self.use_loss_scale:
+            gradients = self.optimizer.get_unscaled_gradients(gradients)
+        self.optimizer.apply_gradients(zip(gradients, self.trainable_variables))
+        self.loss_metric.update_state(loss)
+        return {m.name: m.result() for m in self.metrics}
+
+    def test_step(self, batch):
+        inputs, y_true = batch
+        y_pred = self(inputs, training=False)
+        loss = self.loss(y_true, y_pred)
+        self.loss_metric.update_state(loss)
+        return {m.name: m.result() for m in self.metrics}
+
+    def predict_step(self, batch):
+        """
+        Args:
+            batch ([tf.Tensor]): a batch of testing data
+
+        Returns:
+            [tf.Tensor]: stacked tensor of shape [B, 3] with each row is the text [truth, greedy, beam_search]
+        """
+        inputs, y_true = batch
+        labels = self.text_featurizer.iextract(y_true)
+        greedy_decoding = self.recognize(inputs)
+        beam_search_decoding = self.recognize_beam(inputs)
+        return tf.stack([labels, greedy_decoding, beam_search_decoding], axis=-1)
+
     def recognize(self, features, input_lengths, **kwargs):
         pass
 
-    @abc.abstractmethod
     def recognize_beam(self, features, input_lengths, **kwargs):
         pass

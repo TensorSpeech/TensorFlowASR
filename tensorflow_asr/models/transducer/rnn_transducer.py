@@ -15,16 +15,16 @@
 
 import tensorflow as tf
 
-from .layers.subsampling import TimeReduction
+from ..layers.subsampling import TimeReduction
 from .transducer import Transducer
-from ..utils import layer_util, math_util, shape_util
+from ...utils import layer_util, math_util, shape_util
 
 
 class Reshape(tf.keras.layers.Layer):
     def call(self, inputs): return math_util.merge_two_last_dims(inputs)
 
 
-class StreamingTransducerBlock(tf.keras.Model):
+class RnnTransducerBlock(tf.keras.Model):
     def __init__(self,
                  reduction_factor: int = 0,
                  dmodel: int = 640,
@@ -34,7 +34,7 @@ class StreamingTransducerBlock(tf.keras.Model):
                  kernel_regularizer=None,
                  bias_regularizer=None,
                  **kwargs):
-        super(StreamingTransducerBlock, self).__init__(**kwargs)
+        super().__init__(**kwargs)
 
         if reduction_factor > 0:
             self.reduction = TimeReduction(reduction_factor, name=f"{self.name}_reduction")
@@ -94,7 +94,7 @@ class StreamingTransducerBlock(tf.keras.Model):
         return conf
 
 
-class StreamingTransducerEncoder(tf.keras.Model):
+class RnnTransducerEncoder(tf.keras.Model):
     def __init__(self,
                  reductions: dict = {0: 3, 1: 2},
                  dmodel: int = 640,
@@ -105,12 +105,12 @@ class StreamingTransducerEncoder(tf.keras.Model):
                  kernel_regularizer=None,
                  bias_regularizer=None,
                  **kwargs):
-        super(StreamingTransducerEncoder, self).__init__(**kwargs)
+        super().__init__(**kwargs)
 
         self.reshape = Reshape(name=f"{self.name}_reshape")
 
         self.blocks = [
-            StreamingTransducerBlock(
+            RnnTransducerBlock(
                 reduction_factor=reductions.get(i, 0),  # key is index, value is the factor
                 dmodel=dmodel,
                 rnn_type=rnn_type,
@@ -174,7 +174,7 @@ class StreamingTransducerEncoder(tf.keras.Model):
         return conf
 
 
-class StreamingTransducer(Transducer):
+class RnnTransducer(Transducer):
     def __init__(self,
                  vocabulary_size: int,
                  encoder_reductions: dict = {0: 3, 1: 2},
@@ -200,10 +200,10 @@ class StreamingTransducer(Transducer):
                  joint_trainable: bool = True,
                  kernel_regularizer = None,
                  bias_regularizer = None,
-                 name = "StreamingTransducer",
+                 name = "RnnTransducer",
                  **kwargs):
-        super(StreamingTransducer, self).__init__(
-            encoder=StreamingTransducerEncoder(
+        super().__init__(
+            encoder=RnnTransducerEncoder(
                 reductions=encoder_reductions,
                 dmodel=encoder_dmodel,
                 nlayers=encoder_nlayers,

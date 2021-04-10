@@ -15,14 +15,13 @@
 
 import collections
 import tensorflow as tf
-from tensorflow.keras import mixed_precision as mxp
 
-from . import Model
-from ..utils import math_util, layer_util, shape_util
-from ..featurizers.speech_featurizers import SpeechFeaturizer
-from ..featurizers.text_featurizers import TextFeaturizer
-from .layers.embedding import Embedding
-from ..losses.keras.rnnt_losses import RnntLoss
+from ..base_model import BaseModel
+from ...utils import math_util, layer_util, shape_util, data_util
+from ...featurizers.speech_featurizers import SpeechFeaturizer
+from ...featurizers.text_featurizers import TextFeaturizer
+from ..layers.embedding import Embedding
+from ...losses.rnnt_loss import RnntLoss
 
 Hypothesis = collections.namedtuple("Hypothesis", ("index", "prediction", "states"))
 
@@ -44,7 +43,7 @@ class TransducerPrediction(tf.keras.Model):
                  bias_regularizer=None,
                  name="transducer_prediction",
                  **kwargs):
-        super(TransducerPrediction, self).__init__(name=name, **kwargs)
+        super().__init__(name=name, **kwargs)
         self.embed = Embedding(vocabulary_size, embed_dim,
                                regularizer=kernel_regularizer, name=f"{name}_embedding")
         self.do = tf.keras.layers.Dropout(embed_dropout, name=f"{name}_dropout")
@@ -148,7 +147,7 @@ class TransducerJointReshape(tf.keras.layers.Layer):
                  axis: int = 1,
                  name="transducer_joint_reshape",
                  **kwargs):
-        super(TransducerJointReshape, self).__init__(name=name, trainable=False, **kwargs)
+        super().__init__(name=name, trainable=False, **kwargs)
         self.axis = axis
 
     def call(self, inputs, repeats=None, **kwargs):
@@ -173,7 +172,7 @@ class TransducerJoint(tf.keras.Model):
                  bias_regularizer=None,
                  name="tranducer_joint",
                  **kwargs):
-        super(TransducerJoint, self).__init__(name=name, **kwargs)
+        super().__init__(name=name, **kwargs)
 
         activation = activation.lower()
         if activation == "linear":
@@ -248,7 +247,7 @@ class TransducerJoint(tf.keras.Model):
         return conf
 
 
-class Transducer(Model):
+class Transducer(BaseModel):
     """ Transducer Model Warper """
 
     def __init__(self,
@@ -273,7 +272,7 @@ class Transducer(Model):
                  bias_regularizer=None,
                  name="transducer",
                  **kwargs):
-        super(Transducer, self).__init__(name=name, **kwargs)
+        super().__init__(name=name, **kwargs)
         self.encoder = encoder
         self.predict_net = TransducerPrediction(
             vocabulary_size=vocabulary_size,
@@ -304,21 +303,20 @@ class Transducer(Model):
         )
         self.time_reduction_factor = 1
 
-    @property
-    def metrics(self):
-        return [self.loss_metric]
-
     def _build(self, input_shape, prediction_shape=[None], batch_size=None):
         inputs = tf.keras.Input(shape=input_shape, batch_size=batch_size, dtype=tf.float32)
-        input_length = tf.keras.Input(shape=[], batch_size=batch_size, dtype=tf.int32)
-        pred = tf.keras.Input(shape=prediction_shape, batch_size=batch_size, dtype=tf.int32)
-        pred_length = tf.keras.Input(shape=[], batch_size=batch_size, dtype=tf.int32)
-        self({
-            "input": inputs,
-            "input_length": input_length,
-            "prediction": pred,
-            "prediction_length": pred_length
-        }, training=False)
+        inputs_length = tf.keras.Input(shape=[], batch_size=batch_size, dtype=tf.int32)
+        predictions = tf.keras.Input(shape=prediction_shape, batch_size=batch_size, dtype=tf.int32)
+        predictions_length = tf.keras.Input(shape=[], batch_size=batch_size, dtype=tf.int32)
+        self(
+            data_util.create_inputs(
+                inputs=inputs,
+                inputs_length=inputs_length,
+                predictions=predictions,
+                predictions_length=predictions_length
+            ),
+            training=False
+        )
 
     def summary(self, line_length=None, **kwargs):
         if self.encoder is not None: self.encoder.summary(line_length=line_length, **kwargs)
@@ -339,27 +337,26 @@ class Transducer(Model):
         self.speech_featurizer = speech_featurizer
         self.text_featurizer = text_featurizer
 
-    def compile(self, optimizer, global_batch_size, blank=0, use_loss_scale=False, run_eagerly=None, **kwargs):
+    def compile(self,
+                optimizer,
+                global_batch_size,
+                blank=0,
+                run_eagerly=None,
+                **kwargs):
         loss = RnntLoss(blank=blank, global_batch_size=global_batch_size)
-        self.use_loss_scale = use_loss_scale
-        if self.use_loss_scale:
-            optimizer = mxp.experimental.LossScaleOptimizer(tf.keras.optimizers.get(optimizer), "dynamic")
-        self.loss_metric = tf.keras.metrics.Mean(name="rnnt_loss", dtype=tf.float32)
-        super(Transducer, self).compile(optimizer=optimizer, loss=loss, run_eagerly=run_eagerly, **kwargs)
+        super().compile(loss=loss, optimizer=optimizer, run_eagerly=run_eagerly, **kwargs)
 
     def call(self, inputs, training=False, **kwargs):
-        features = inputs["input"]
-        prediction = inputs["prediction"]
-        prediction_length = inputs["prediction_length"]
-        enc = self.encoder(features, training=training, **kwargs)
-        pred = self.predict_net([prediction, prediction_length], training=training, **kwargs)
-        outputs = self.joint_net([enc, pred], training=training, **kwargs)
-        return {
-            "logit": outputs,
-            "logit_length": math_util.get_reduced_length(inputs["input_length"], self.time_reduction_factor)
-        }
+        inputs, inputs_length, predictions, predictions_length = inputs.values()
+        enc = self.encoder(inputs, training=training, **kwargs)
+        pred = self.predict_net([predictions, predictions_length], training=training, **kwargs)
+        logits = self.joint_net([enc, pred], training=training, **kwargs)
+        return data_util.create_logits(
+            logits=logits,
+            logits_length=math_util.get_reduced_length(inputs_length, self.time_reduction_factor)
+        )
 
-    # -------------------------------- INFERENCES-------------------------------------
+    # -------------------------------- INFERENCES -------------------------------------
 
     def encoder_inference(self, features: tf.Tensor):
         """Infer function for encoder (or encoders)

@@ -14,9 +14,9 @@
 
 import tensorflow as tf
 
-from ..utils import layer_util, math_util
-from .layers.row_conv_1d import RowConv1D
-from .layers.sequence_wise_bn import SequenceBatchNorm
+from ...utils import layer_util, math_util
+from ..layers.row_conv_1d import RowConv1D
+from ..layers.sequence_wise_bn import SequenceBatchNorm
 from .ctc import CtcModel
 
 
@@ -210,7 +210,6 @@ class FcBlock(tf.keras.layers.Layer):
 
 class FcModule(tf.keras.Model):
     def __init__(self,
-                 vocabulary_size: int,
                  nlayers: int = 0,
                  units: int = 1024,
                  dropout: float = 0.1,
@@ -225,28 +224,21 @@ class FcModule(tf.keras.Model):
             ) for i in range(nlayers)
         ]
 
-        # Fully connected layer
-        self.fc = tf.keras.layers.Dense(units=vocabulary_size,
-                                        use_bias=True, name=f"{self.name}_fc")
-
     def call(self, inputs, training=False, **kwargs):
         outputs = inputs
         for block in self.blocks:
             outputs = block(outputs, training=training, **kwargs)
-        outputs = self.fc(outputs, training=training)
         return outputs
 
     def get_config(self):
         conf = {}
         for block in self.blocks:
             conf.update(block.get_config())
-        conf.update(self.fc.get_config())
         return conf
 
 
-class DeepSpeech2(CtcModel):
+class DeepSpeech2Encoder(tf.keras.Model):
     def __init__(self,
-                 vocabulary_size: int,
                  conv_type: str = "conv2d",
                  conv_kernels: list = [[11, 41], [11, 21], [11, 21]],
                  conv_strides: list = [[2, 2], [1, 2], [1, 2]],
@@ -261,9 +253,9 @@ class DeepSpeech2(CtcModel):
                  fc_nlayers: int = 0,
                  fc_units: int = 1024,
                  fc_dropout: float = 0.1,
-                 name: str = "deepspeech2",
+                 name="deepspeech2_encoder",
                  **kwargs):
-        super(DeepSpeech2, self).__init__(name=name, **kwargs)
+        super().__init__(**kwargs)
 
         self.conv_module = ConvModule(
             conv_type=conv_type,
@@ -288,27 +280,68 @@ class DeepSpeech2(CtcModel):
             nlayers=fc_nlayers,
             units=fc_units,
             dropout=fc_dropout,
-            vocabulary_size=vocabulary_size,
             name=f"{self.name}_fc_module"
         )
-
-        self.time_reduction_factor = self.conv_module.reduction_factor
-
-    def call(self, inputs, training=False, **kwargs):
-        outputs = self.conv_module(inputs, training=training, **kwargs)
-        outputs = self.rnn_module(outputs, training=training, **kwargs)
-        outputs = self.fc_module(outputs, training=training, **kwargs)
-        return outputs
 
     def summary(self, line_length=100, **kwargs):
         self.conv_module.summary(line_length=line_length, **kwargs)
         self.rnn_module.summary(line_length=line_length, **kwargs)
         self.fc_module.summary(line_length=line_length, **kwargs)
-        super(DeepSpeech2, self).summary(line_length=line_length, **kwargs)
+        super().summary(line_length=line_length, **kwargs)
+
+    def call(self, inputs, training, **kwargs):
+        outputs = self.conv_module(inputs, training=training, **kwargs)
+        outputs = self.rnn_module(outputs, training=training, **kwargs)
+        outputs = self.fc_module(outputs, training=training, **kwargs)
+        return outputs
 
     def get_config(self):
-        conf = super(DeepSpeech2, self).get_config()
+        conf = super().get_config()
         conf.update(self.conv_module.get_config())
         conf.update(self.rnn_module.get_config())
         conf.update(self.fc_module.get_config())
         return conf
+
+
+class DeepSpeech2(CtcModel):
+    def __init__(self,
+                 vocabulary_size: int,
+                 conv_type: str = "conv2d",
+                 conv_kernels: list = [[11, 41], [11, 21], [11, 21]],
+                 conv_strides: list = [[2, 2], [1, 2], [1, 2]],
+                 conv_filters: list = [32, 32, 96],
+                 conv_dropout: float = 0.1,
+                 rnn_nlayers: int = 5,
+                 rnn_type: str = "lstm",
+                 rnn_units: int = 1024,
+                 rnn_bidirectional: bool = True,
+                 rnn_rowconv: int = 0,
+                 rnn_dropout: float = 0.1,
+                 fc_nlayers: int = 0,
+                 fc_units: int = 1024,
+                 fc_dropout: float = 0.1,
+                 name: str = "deepspeech2",
+                 **kwargs):
+        super().__init__(
+            encoder=DeepSpeech2Encoder(
+                conv_type=conv_type,
+                conv_kernels=conv_kernels,
+                conv_strides=conv_strides,
+                conv_filters=conv_filters,
+                conv_dropout=conv_dropout,
+                rnn_nlayers=rnn_nlayers,
+                rnn_type=rnn_type,
+                rnn_units=rnn_units,
+                rnn_bidirectional=rnn_bidirectional,
+                rnn_rowconv=rnn_rowconv,
+                rnn_dropout=rnn_dropout,
+                fc_nlayers=fc_nlayers,
+                fc_units=fc_units,
+                fc_dropout=fc_dropout,
+                name=f"{name}_encoder"
+            ),
+            vocabulary_size=vocabulary_size,
+            name=name,
+            **kwargs
+        )
+        self.time_reduction_factor = self.encoder.conv_module.reduction_factor

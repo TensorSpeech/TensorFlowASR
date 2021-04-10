@@ -103,13 +103,14 @@ class CyclicTransformerSchedule(tf.keras.optimizers.schedules.LearningRateSchedu
         step_size: number of training iterations per
             half cycle. Authors suggest setting step_size
             2-8 x training iterations in epoch.
-    
+
     It is inspired from the paper:
     # References
       - [Cyclical Learning Rates for Training Neural Networks](
       https://arxiv.org/abs/1506.01186)
     """
-    def __init__(self, d_model, warmup_steps=4000, max_lr=None, 
+
+    def __init__(self, d_model, warmup_steps=4000, max_lr=None,
                  step_size=None):
         """Applies triangular cyclic to the square root decay learning rate.
         Args:
@@ -134,7 +135,7 @@ class CyclicTransformerSchedule(tf.keras.optimizers.schedules.LearningRateSchedu
         cycle = tf.math.floor(1 + step / (2 * self.step_size))
         x = tf.math.abs(step / self.step_size - 2 * cycle + 1)
         lr = lr * (0.5 + tf.math.maximum(0., x))
-        lr = tf.math.minimum(self.max_lr, 
+        lr = tf.math.minimum(self.max_lr,
                              tf.math.minimum(lr, warmup))
         return lr
 
@@ -145,4 +146,3 @@ class CyclicTransformerSchedule(tf.keras.optimizers.schedules.LearningRateSchedu
             "max_lr": self.max_lr,
             "step_size": self.step_size
         }
-    
