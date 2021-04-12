@@ -14,7 +14,7 @@
 
 from . import load_yaml
 from ..augmentations.augments import Augmentation
-from ..utils.utils import preprocess_paths
+from ..utils import file_util
 
 
 class DecoderConfig:
@@ -25,12 +25,12 @@ class DecoderConfig:
         self.norm_score = config.pop("norm_score", True)
         self.lm_config = config.pop("lm_config", {})
 
-        self.vocabulary = preprocess_paths(config.pop("vocabulary", None))
+        self.vocabulary = file_util.preprocess_paths(config.pop("vocabulary", None))
         self.target_vocab_size = config.pop("target_vocab_size", 1024)
         self.max_subword_length = config.pop("max_subword_length", 4)
-        self.output_path_prefix = preprocess_paths(config.pop("output_path_prefix", None))
+        self.output_path_prefix = file_util.preprocess_paths(config.pop("output_path_prefix", None))
         self.model_type = config.pop("model_type", None)
-        self.corpus_files = preprocess_paths(config.pop("corpus_files", []))
+        self.corpus_files = file_util.preprocess_paths(config.pop("corpus_files", []))
         self.max_corpus_chars = config.pop("max_corpus_chars", None)
         self.reserved_tokens = config.pop("reserved_tokens", None)
 
@@ -41,8 +41,8 @@ class DatasetConfig:
     def __init__(self, config: dict = None):
         if not config: config = {}
         self.stage = config.pop("stage", None)
-        self.data_paths = preprocess_paths(config.pop("data_paths", None))
-        self.tfrecords_dir = preprocess_paths(config.pop("tfrecords_dir", None))
+        self.data_paths = file_util.preprocess_paths(config.pop("data_paths", None))
+        self.tfrecords_dir = file_util.preprocess_paths(config.pop("tfrecords_dir", None))
         self.tfrecords_shards = config.pop("tfrecords_shards", 16)
         self.shuffle = config.pop("shuffle", False)
         self.cache = config.pop("cache", False)
@@ -59,7 +59,7 @@ class RunningConfig:
         self.batch_size = config.pop("batch_size", 1)
         self.accumulation_steps = config.pop("accumulation_steps", 1)
         self.num_epochs = config.pop("num_epochs", 20)
-        self.outdir = preprocess_paths(config.pop("outdir", None))
+        self.outdir = file_util.preprocess_paths(config.pop("outdir", None))
         self.log_interval_steps = config.pop("log_interval_steps", 500)
         self.save_interval_steps = config.pop("save_interval_steps", 500)
         self.eval_interval_steps = config.pop("eval_interval_steps", 1000)
@@ -81,7 +81,7 @@ class Config:
     """ User config class for training, testing or infering """
 
     def __init__(self, path: str):
-        config = load_yaml(preprocess_paths(path))
+        config = load_yaml(file_util.preprocess_paths(path))
         self.speech_config = config.pop("speech_config", {})
         self.decoder_config = config.pop("decoder_config", {})
         self.model_config = config.pop("model_config", {})

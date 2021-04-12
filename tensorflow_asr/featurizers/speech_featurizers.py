@@ -23,10 +23,10 @@ import soundfile as sf
 import tensorflow as tf
 import tensorflow_io as tfio
 
-from ..utils.utils import log10, has_tpu
-from .gammatone import fft_weights
+from ..utils import math_util, env_util
+from .methods import gammatone
 
-tpu = has_tpu()
+tpu = env_util.has_tpu()
 
 
 # def tf_resample(signal, rate_in, rate_out):
@@ -398,16 +398,16 @@ class NumpySpeechFeaturizer(SpeechFeaturizer):
     def compute_log_gammatone_spectrogram(self, signal: np.ndarray) -> np.ndarray:
         S = self.stft(signal)
 
-        gammatone = fft_weights(self.nfft, self.sample_rate,
-                                self.num_feature_bins, width=1.0,
-                                fmin=0, fmax=int(self.sample_rate / 2),
-                                maxlen=(self.nfft / 2 + 1))
+        gtone = gammatone.fft_weights(self.nfft, self.sample_rate,
+                                      self.num_feature_bins, width=1.0,
+                                      fmin=0, fmax=int(self.sample_rate / 2),
+                                      maxlen=(self.nfft / 2 + 1))
 
-        gammatone = gammatone.numpy().astype(np.float32)
+        gtone = gtone.numpy().astype(np.float32)
 
-        gammatone_spectrogram = np.dot(S.T, gammatone)
+        gtone_spectrogram = np.dot(S.T, gtone)
 
-        return self.power_to_db(gammatone_spectrogram)
+        return self.power_to_db(gtone_spectrogram)
 
 
 class TFSpeechFeaturizer(SpeechFeaturizer):
@@ -438,8 +438,8 @@ class TFSpeechFeaturizer(SpeechFeaturizer):
         else:
             ref_value = np.abs(ref)
 
-        log_spec = 10.0 * log10(tf.maximum(amin, magnitude))
-        log_spec -= 10.0 * log10(tf.maximum(amin, ref_value))
+        log_spec = 10.0 * math_util.log10(tf.maximum(amin, magnitude))
+        log_spec -= 10.0 * math_util.log10(tf.maximum(amin, ref_value))
 
         if top_db is not None:
             if top_db < 0:
@@ -507,11 +507,11 @@ class TFSpeechFeaturizer(SpeechFeaturizer):
     def compute_log_gammatone_spectrogram(self, signal: np.ndarray) -> np.ndarray:
         S = self.stft(signal)
 
-        gammatone = fft_weights(self.nfft, self.sample_rate,
-                                self.num_feature_bins, width=1.0,
-                                fmin=0, fmax=int(self.sample_rate / 2),
-                                maxlen=(self.nfft / 2 + 1))
+        gtone = gammatone.fft_weights(self.nfft, self.sample_rate,
+                                      self.num_feature_bins, width=1.0,
+                                      fmin=0, fmax=int(self.sample_rate / 2),
+                                      maxlen=(self.nfft / 2 + 1))
 
-        gammatone_spectrogram = tf.tensordot(S, gammatone, 1)
+        gtone_spectrogram = tf.tensordot(S, gtone, 1)
 
-        return self.power_to_db(gammatone_spectrogram)
+        return self.power_to_db(gtone_spectrogram)

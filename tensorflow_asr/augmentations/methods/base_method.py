@@ -12,5 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from .asr_dataset import ASRDatasetKeras, ASRTFRecordDatasetKeras, ASRSliceDatasetKeras
-__all__ = ['ASRDatasetKeras', 'ASRTFRecordDatasetKeras', 'ASRSliceDatasetKeras']
+import tensorflow as tf
+
+
+class AugmentationMethod:
+    @tf.function
+    def augment(self, *args, **kwargs):
+        raise NotImplementedError()
