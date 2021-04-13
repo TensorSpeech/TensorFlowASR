@@ -35,13 +35,15 @@ parser.add_argument("--tbs", type=int, default=None, help="Train batch size per 
 
 parser.add_argument("--ebs", type=int, default=None, help="Evaluation batch size per replica")
 
+parser.add_argument("--spx", type=int, default=1, help="Steps per execution for maximizing performance")
+
+parser.add_argument("--metadata_prefix", type=str, default=None, help="Path to file containing metadata")
+
 parser.add_argument("--devices", type=int, nargs="*", default=[0], help="Devices' ids to apply distributed training")
 
 parser.add_argument("--mxp", default=False, action="store_true", help="Enable mixed precision")
 
-parser.add_argument("--subwords", type=str, default=None, help="Path to file that stores generated subwords")
-
-parser.add_argument("--subwords_corpus", nargs="*", type=str, default=[], help="Transcript files for generating subwords")
+parser.add_argument("--subword", default=False, action="store_true", help="Use subword")
 
 args = parser.parse_args()
 
@@ -50,51 +52,56 @@ tf.config.optimizer.set_experimental_options({"auto_mixed_precision": args.mxp})
 strategy = setup_strategy(args.devices)
 
 from tensorflow_asr.configs.config import Config
-from tensorflow_asr.datasets.asr_dataset import ASRTFRecordDataset, ASRSliceDataset
+from tensorflow_asr.datasets.keras import ASRTFRecordDatasetKeras, ASRSliceDatasetKeras
 from tensorflow_asr.featurizers.speech_featurizers import TFSpeechFeaturizer
-from tensorflow_asr.featurizers.text_featurizers import SubwordFeaturizer
-from tensorflow_asr.runners.transducer_runners import TransducerTrainer
-from tensorflow_asr.models.streaming_transducer import StreamingTransducer
+from tensorflow_asr.featurizers.text_featurizers import SubwordFeaturizer, CharFeaturizer
+from tensorflow_asr.models.keras.streaming_transducer import StreamingTransducer
 
 config = Config(args.config)
 speech_featurizer = TFSpeechFeaturizer(config.speech_config)
 
-if args.subwords and os.path.exists(args.subwords):
-    print("Loading subwords ...")
-    text_featurizer = SubwordFeaturizer.load_from_file(config.decoder_config, args.subwords)
+if args.subword:
+    print("Use subwords ...")
+    text_featurizer = SubwordFeaturizer(config.decoder_config)
 else:
-    print("Generating subwords ...")
-    text_featurizer = SubwordFeaturizer.build_from_corpus(
-        config.decoder_config,
-        corpus_files=args.subwords_corpus
-    )
-    text_featurizer.save_to_file(args.subwords)
+    print("Use characters ...")
+    text_featurizer = CharFeaturizer(config.decoder_config)
 
 if args.tfrecords:
-    train_dataset = ASRTFRecordDataset(
+    train_dataset = ASRTFRecordDatasetKeras(
         speech_featurizer=speech_featurizer, text_featurizer=text_featurizer,
-        **vars(config.learning_config.train_dataset_config)
+        **vars(config.learning_config.train_dataset_config),
+        indefinite=True
     )
-    eval_dataset = ASRTFRecordDataset(
+    eval_dataset = ASRTFRecordDatasetKeras(
         speech_featurizer=speech_featurizer, text_featurizer=text_featurizer,
         **vars(config.learning_config.eval_dataset_config)
     )
+    # Update metadata calculated from both train and eval datasets
+    train_dataset.load_metadata(args.metadata_prefix)
+    eval_dataset.load_metadata(args.metadata_prefix)
+    # Use dynamic length
+    speech_featurizer.reset_length()
+    text_featurizer.reset_length()
 else:
-    train_dataset = ASRSliceDataset(
+    train_dataset = ASRSliceDatasetKeras(
         speech_featurizer=speech_featurizer, text_featurizer=text_featurizer,
-        **vars(config.learning_config.train_dataset_config)
+        **vars(config.learning_config.train_dataset_config),
+        indefinite=True
     )
-    eval_dataset = ASRSliceDataset(
+    eval_dataset = ASRSliceDatasetKeras(
         speech_featurizer=speech_featurizer, text_featurizer=text_featurizer,
-        **vars(config.learning_config.eval_dataset_config)
+        **vars(config.learning_config.eval_dataset_config),
+        indefinite=True
     )
 
-streaming_transducer_trainer = TransducerTrainer(
-    config=config.learning_config.running_config,
-    text_featurizer=text_featurizer, strategy=strategy
-)
+global_batch_size = config.learning_config.running_config.batch_size
+global_batch_size *= strategy.num_replicas_in_sync
 
-with streaming_transducer_trainer.strategy.scope():
+train_data_loader = train_dataset.create(global_batch_size)
+eval_data_loader = eval_dataset.create(global_batch_size)
+
+with strategy.scope():
     # build model
     streaming_transducer = StreamingTransducer(
         **config.model_config,
@@ -105,7 +112,21 @@ with streaming_transducer_trainer.strategy.scope():
 
     optimizer = tf.keras.optimizers.get(config.learning_config.optimizer_config)
 
-streaming_transducer_trainer.compile(model=streaming_transducer, optimizer=optimizer,
-                                     max_to_keep=args.max_ckpts)
+    streaming_transducer.compile(
+        optimizer=optimizer,
+        experimental_steps_per_execution=args.spx,
+        global_batch_size=global_batch_size,
+        blank=text_featurizer.blank
+    )
 
-streaming_transducer_trainer.fit(train_dataset, eval_dataset, train_bs=args.tbs, eval_bs=args.ebs)
+callbacks = [
+    tf.keras.callbacks.ModelCheckpoint(**config.learning_config.running_config.checkpoint),
+    tf.keras.callbacks.experimental.BackupAndRestore(config.learning_config.running_config.states_dir),
+    tf.keras.callbacks.TensorBoard(**config.learning_config.running_config.tensorboard)
+]
+
+streaming_transducer.fit(
+    train_data_loader, epochs=config.learning_config.running_config.num_epochs,
+    validation_data=eval_data_loader, callbacks=callbacks,
+    steps_per_epoch=train_dataset.total_steps, validation_steps=eval_dataset.total_steps
+)

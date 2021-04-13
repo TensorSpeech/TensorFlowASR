@@ -15,7 +15,7 @@
 import os
 import math
 import argparse
-from tensorflow_asr.utils import setup_environment, setup_strategy
+from tensorflow_asr.utils import setup_environment, setup_tpu
 
 setup_environment()
 import tensorflow as tf
@@ -28,38 +28,36 @@ parser = argparse.ArgumentParser(prog="Conformer Training")
 
 parser.add_argument("--config", type=str, default=DEFAULT_YAML, help="The file path of model configuration file")
 
-parser.add_argument("--max_ckpts", type=int, default=10, help="Max number of checkpoints to keep")
-
-parser.add_argument("--tfrecords", default=False, action="store_true", help="Whether to use tfrecords")
-
 parser.add_argument("--sentence_piece", default=False, action="store_true", help="Whether to use `SentencePiece` model")
 
-parser.add_argument("--tbs", type=int, default=None, help="Train batch size per replica")
+parser.add_argument("--bs", type=int, default=None, help="Batch size per replica")
 
-parser.add_argument("--ebs", type=int, default=None, help="Evaluation batch size per replica")
+parser.add_argument("--spx", type=int, default=50, help="Steps per execution for maximizing TPU performance")
 
-parser.add_argument("--spx", type=int, default=1, help="Steps per execution for maximizing performance")
+parser.add_argument("--tpu_address", type=str, default=None, help="TPU address. Leave None on Colab")
 
 parser.add_argument("--metadata_prefix", type=str, default=None, help="Path to file containing metadata")
 
-parser.add_argument("--devices", type=int, nargs="*", default=[0], help="Devices' ids to apply distributed training")
+parser.add_argument("--compute_lengths", default=False, action="store_true", help="Whether to compute lengths")
 
 parser.add_argument("--mxp", default=False, action="store_true", help="Enable mixed precision")
 
-parser.add_argument("--subwords", type=str, default=None, help="Path to file that stores generated subwords")
+parser.add_argument("--subwords", default=False, action="store_true", help="Use subwords")
 
-parser.add_argument("--subwords_corpus", nargs="*", type=str, default=[], help="Transcript files for generating subwords")
+parser.add_argument("--saved", type=str, default=None, help="Path to saved model")
+
+parser.add_argument("--validation", default=False, action="store_true", help="Enable validation dataset")
 
 args = parser.parse_args()
 
 tf.config.optimizer.set_experimental_options({"auto_mixed_precision": args.mxp})
 
-strategy = setup_strategy(args.devices)
+strategy = setup_tpu(args.tpu_address)
 
 from tensorflow_asr.configs.config import Config
-from tensorflow_asr.datasets.keras import ASRTFRecordDatasetKeras, ASRSliceDatasetKeras
+from tensorflow_asr.datasets.keras import ASRTFRecordDatasetKeras
 from tensorflow_asr.featurizers.speech_featurizers import TFSpeechFeaturizer
-from tensorflow_asr.featurizers.text_featurizers import SubwordFeaturizer, SentencePieceFeaturizer
+from tensorflow_asr.featurizers.text_featurizers import SubwordFeaturizer, SentencePieceFeaturizer, CharFeaturizer
 from tensorflow_asr.models.keras.conformer import Conformer
 from tensorflow_asr.optimizers.schedules import TransformerSchedule
 
@@ -68,56 +66,54 @@ speech_featurizer = TFSpeechFeaturizer(config.speech_config)
 
 if args.sentence_piece:
     print("Loading SentencePiece model ...")
-    text_featurizer = SentencePieceFeaturizer.load_from_file(config.decoder_config, args.subwords)
-elif args.subwords and os.path.exists(args.subwords):
+    text_featurizer = SentencePieceFeaturizer(config.decoder_config)
+elif args.subwords:
     print("Loading subwords ...")
-    text_featurizer = SubwordFeaturizer.load_from_file(config.decoder_config, args.subwords)
+    text_featurizer = SubwordFeaturizer(config.decoder_config)
 else:
-    print("Generating subwords ...")
-    text_featurizer = SubwordFeaturizer.build_from_corpus(
-        config.decoder_config,
-        corpus_files=args.subwords_corpus
-    )
-    text_featurizer.save_to_file(args.subwords)
+    print("Use characters...")
+    text_featurizer = CharFeaturizer(config.decoder_config)
 
-if args.tfrecords:
-    train_dataset = ASRTFRecordDatasetKeras(
-        speech_featurizer=speech_featurizer, text_featurizer=text_featurizer,
-        **vars(config.learning_config.train_dataset_config),
-        indefinite=True
-    )
+train_dataset = ASRTFRecordDatasetKeras(
+    speech_featurizer=speech_featurizer, text_featurizer=text_featurizer,
+    **vars(config.learning_config.train_dataset_config),
+    indefinite=True
+)
+
+if args.validation:
     eval_dataset = ASRTFRecordDatasetKeras(
         speech_featurizer=speech_featurizer, text_featurizer=text_featurizer,
-        **vars(config.learning_config.eval_dataset_config)
-    )
-    # Update metadata calculated from both train and eval datasets
-    train_dataset.load_metadata(args.metadata_prefix)
-    eval_dataset.load_metadata(args.metadata_prefix)
-    # Use dynamic length
-    speech_featurizer.reset_length()
-    text_featurizer.reset_length()
-else:
-    train_dataset = ASRSliceDatasetKeras(
-        speech_featurizer=speech_featurizer, text_featurizer=text_featurizer,
-        **vars(config.learning_config.train_dataset_config),
-        indefinite=True
-    )
-    eval_dataset = ASRSliceDatasetKeras(
-        speech_featurizer=speech_featurizer, text_featurizer=text_featurizer,
-        **vars(config.learning_config.train_dataset_config),
+        **vars(config.learning_config.eval_dataset_config),
         indefinite=True
     )
 
-global_batch_size = config.learning_config.running_config.batch_size
+if args.compute_lengths:
+    train_dataset.update_lengths(args.metadata_prefix)
+    if args.validation:
+        eval_dataset.update_lengths(args.metadata_prefix)
+
+# Update metadata calculated from both train and eval datasets
+train_dataset.load_metadata(args.metadata_prefix)
+if args.validation:
+    eval_dataset.load_metadata(args.metadata_prefix)
+
+batch_size = args.bs if args.bs is not None else config.learning_config.running_config.batch_size
+global_batch_size = batch_size
 global_batch_size *= strategy.num_replicas_in_sync
 
 train_data_loader = train_dataset.create(global_batch_size)
-eval_data_loader = eval_dataset.create(global_batch_size)
+eval_data_loader = eval_dataset.create(global_batch_size) if args.validation else None
+validation_steps = eval_dataset.total_steps if args.validation else None
 
 with strategy.scope():
     # build model
     conformer = Conformer(**config.model_config, vocabulary_size=text_featurizer.num_classes)
-    conformer._build(speech_featurizer.shape)
+    conformer._build(speech_featurizer.shape, prediction_shape=text_featurizer.prepand_shape, batch_size=global_batch_size)
+
+    if args.saved:
+        conformer.load_weights(args.saved, by_name=True, skip_mismatch=True)
+        print('Load pretrained weights successfully')
+
     conformer.summary(line_length=120)
 
     optimizer = tf.keras.optimizers.Adam(
@@ -147,5 +143,5 @@ callbacks = [
 conformer.fit(
     train_data_loader, epochs=config.learning_config.running_config.num_epochs,
     validation_data=eval_data_loader, callbacks=callbacks,
-    steps_per_epoch=train_dataset.total_steps, validation_steps=eval_dataset.total_steps
+    steps_per_epoch=train_dataset.total_steps, validation_steps=validation_steps
 )
