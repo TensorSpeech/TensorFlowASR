@@ -196,7 +196,7 @@ model_config:
 
 learning_config:
   augmentations:
-    after:
+    feature_augment:
       time_masking:
         num_masks: 10
         mask_factor: 100

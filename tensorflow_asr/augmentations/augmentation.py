@@ -27,8 +27,8 @@ class Augmentation:
     def __init__(self, config: dict = None):
         if not config: config = {}
         self.prob = float(config.pop("prob", 0.5))
-        self.before = self.parse(config.pop("before", {}))
-        self.after = self.parse(config.pop("after", {}))
+        self.signal_augmentations = self.parse(config.pop("signal_augment", {}))
+        self.feature_augmentations = self.parse(config.pop("feature_augment", {}))
 
     def _augment(self, inputs, augmentations):
         outputs = inputs
@@ -39,11 +39,11 @@ class Augmentation:
 
     @tf.function
     def signal_augment(self, inputs):
-        return self._augment(inputs, self.before)
+        return self._augment(inputs, self.signal_augmentations)
 
     @tf.function
     def feature_augment(self, inputs):
-        return self._augment(inputs, self.after)
+        return self._augment(inputs, self.feature_augmentations)
 
     @staticmethod
     def parse(config: dict) -> list:
