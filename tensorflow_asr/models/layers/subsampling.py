@@ -14,7 +14,7 @@
 
 import tensorflow as tf
 
-from ...utils.utils import merge_two_last_dims, shape_list
+from ...utils import shape_util, math_util
 
 
 class TimeReduction(tf.keras.layers.Layer):
@@ -27,7 +27,7 @@ class TimeReduction(tf.keras.layers.Layer):
         return tf.cast(new_time, dtype=tf.int32) - time
 
     def call(self, inputs, **kwargs):
-        shape = shape_list(inputs)
+        shape = shape_util.shape_list(inputs)
         outputs = tf.pad(inputs, [[0, 0], [0, self.padding(shape[1])], [0, 0]])
         outputs = tf.reshape(outputs, [shape[0], -1, shape[-1] * self.time_reduction_factor])
         return outputs
@@ -95,7 +95,7 @@ class VggSubsampling(tf.keras.layers.Layer):
         outputs = tf.nn.relu(outputs)
         outputs = self.maxpool2(outputs, training=training)
 
-        return merge_two_last_dims(outputs)
+        return math_util.merge_two_last_dims(outputs)
 
     def get_config(self):
         conf = super(VggSubsampling, self).get_config()
@@ -137,7 +137,7 @@ class Conv2dSubsampling(tf.keras.layers.Layer):
         outputs = tf.nn.relu(outputs)
         outputs = self.conv2(outputs, training=training)
         outputs = tf.nn.relu(outputs)
-        return merge_two_last_dims(outputs)
+        return math_util.merge_two_last_dims(outputs)
 
     def get_config(self):
         conf = super(Conv2dSubsampling, self).get_config()

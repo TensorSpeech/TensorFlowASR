@@ -25,10 +25,10 @@ def log10(x):
     return numerator / denominator
 
 
-def get_num_batches(samples, batch_size, drop_remainders=True):
-    if samples is None or batch_size is None: return None
-    if drop_remainders: return math.floor(float(samples) / float(batch_size))
-    return math.ceil(float(samples) / float(batch_size))
+def get_num_batches(nsamples, batch_size, drop_remainders=True):
+    if nsamples is None or batch_size is None: return None
+    if drop_remainders: return math.floor(float(nsamples) / float(batch_size))
+    return math.ceil(float(nsamples) / float(batch_size))
 
 
 def nan_to_zero(input_tensor):

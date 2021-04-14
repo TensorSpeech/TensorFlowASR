@@ -12,8 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from . import load_yaml
-from ..augmentations.augments import Augmentation
+from ..augmentations.augmentation import Augmentation
 from ..utils import file_util
 
 
@@ -42,14 +41,14 @@ class DatasetConfig:
         if not config: config = {}
         self.stage = config.pop("stage", None)
         self.data_paths = file_util.preprocess_paths(config.pop("data_paths", None))
-        self.tfrecords_dir = file_util.preprocess_paths(config.pop("tfrecords_dir", None))
+        self.tfrecords_dir = file_util.preprocess_paths(config.pop("tfrecords_dir", None), isdir=True)
         self.tfrecords_shards = config.pop("tfrecords_shards", 16)
         self.shuffle = config.pop("shuffle", False)
         self.cache = config.pop("cache", False)
         self.drop_remainder = config.pop("drop_remainder", True)
         self.buffer_size = config.pop("buffer_size", 100)
         self.use_tf = config.pop("use_tf", False)
-        self.augmentations = Augmentation(config.pop("augmentation_config", {}), use_tf=self.use_tf)
+        self.augmentations = Augmentation(config.pop("augmentation_config", {}))
         for k, v in config.items(): setattr(self, k, v)
 
 
@@ -59,10 +58,6 @@ class RunningConfig:
         self.batch_size = config.pop("batch_size", 1)
         self.accumulation_steps = config.pop("accumulation_steps", 1)
         self.num_epochs = config.pop("num_epochs", 20)
-        self.outdir = file_util.preprocess_paths(config.pop("outdir", None))
-        self.log_interval_steps = config.pop("log_interval_steps", 500)
-        self.save_interval_steps = config.pop("save_interval_steps", 500)
-        self.eval_interval_steps = config.pop("eval_interval_steps", 1000)
         for k, v in config.items(): setattr(self, k, v)
 
 
@@ -81,7 +76,7 @@ class Config:
     """ User config class for training, testing or infering """
 
     def __init__(self, path: str):
-        config = load_yaml(file_util.preprocess_paths(path))
+        config = file_util.load_yaml(file_util.preprocess_paths(path))
         self.speech_config = config.pop("speech_config", {})
         self.decoder_config = config.pop("decoder_config", {})
         self.model_config = config.pop("model_config", {})

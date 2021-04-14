@@ -24,14 +24,14 @@ speech_config:
   normalize_per_feature: False
 
 decoder_config:
-  vocabulary: null
+  vocabulary: ./vocabularies/librispeech/librispeech_train_10_1008.subwords
   target_vocab_size: 1000
   max_subword_length: 10
   blank_at_zero: True
-  beam_width: 5
+  beam_width: 0
   norm_score: True
   corpus_files:
-    - /media/nlhuy/Data/ML/Datasets/ASR/Raw/LibriSpeech/train-clean-100/transcripts.tsv
+    - /mnt/h/ML/Datasets/ASR/Raw/LibriSpeech/train-clean-100/transcripts.tsv
 
 model_config:
   name: conformer
@@ -40,7 +40,7 @@ model_config:
     filters: 144
     kernel_size: 3
     strides: 2
-  encoder_positional_encoding: sinusoid_concat_v2
+  encoder_positional_encoding: sinusoid_concat
   encoder_dmodel: 144
   encoder_num_blocks: 16
   encoder_head_size: 36
@@ -75,11 +75,10 @@ learning_config:
           num_masks: 1
           mask_factor: 27
     data_paths:
-      - /mnt/Data/ML/Datasets/ASR/Raw/LibriSpeech/train-clean-100/transcripts.tsv
-    tfrecords_dir: /mnt/Miscellanea/Datasets/Speech/LibriSpeech/tfrecords
+      - /mnt/h/ML/Datasets/ASR/Raw/LibriSpeech/train-clean-100/transcripts.tsv
+    tfrecords_dir: null
     shuffle: True
     cache: True
-    cache_percent: 0.2
     buffer_size: 100
     drop_remainder: True
     stage: train
@@ -87,7 +86,7 @@ learning_config:
   eval_dataset_config:
     use_tf: True
     data_paths: null
-    tfrecords_dir: /mnt/Miscellanea/Datasets/Speech/LibriSpeech/tfrecords
+    tfrecords_dir: null
     shuffle: False
     cache: True
     buffer_size: 100
@@ -97,7 +96,7 @@ learning_config:
   test_dataset_config:
     use_tf: True
     data_paths: null
-    tfrecords_dir: /mnt/Miscellanea/Datasets/Speech/LibriSpeech/tfrecords
+    tfrecords_dir: null
     shuffle: False
     cache: True
     buffer_size: 100
@@ -106,26 +105,21 @@ learning_config:
 
   optimizer_config:
     warmup_steps: 40000
-    beta1: 0.9
-    beta2: 0.98
+    beta_1: 0.9
+    beta_2: 0.98
     epsilon: 1e-9
 
   running_config:
     batch_size: 2
-    accumulation_steps: 4
     num_epochs: 50
-    outdir: /mnt/Miscellanea/Models/local/conformer
-    log_interval_steps: 300
-    eval_interval_steps: 500
-    save_interval_steps: 1000
     checkpoint:
-      filepath: /mnt/Miscellanea/Models/local/conformer/checkpoints/{epoch:02d}.h5
+      filepath: /mnt/e/Models/local/conformer/checkpoints/{epoch:02d}.h5
       save_best_only: True
       save_weights_only: False
       save_freq: epoch
-    states_dir: /mnt/Miscellanea/Models/local/conformer/states
+    states_dir: /mnt/e/Models/local/conformer/states
     tensorboard:
-      log_dir: /mnt/Miscellanea/Models/local/conformer/tensorboard
+      log_dir: /mnt/e/Models/local/conformer/tensorboard
       histogram_freq: 1
       write_graph: True
       write_images: True

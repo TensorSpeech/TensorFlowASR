@@ -13,7 +13,7 @@
 # limitations under the License.
 
 import tensorflow as tf
-from ...utils.utils import shape_list
+from ...utils.shape_util import shape_list
 
 
 class PositionalEncoding(tf.keras.layers.Layer):

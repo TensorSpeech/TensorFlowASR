@@ -60,12 +60,15 @@ class ASRDataset(BaseDataset):
             self.speech_featurizer.update_length(input_length)
             self.text_featurizer.update_length(label_length)
 
-    def save_metadata(self, metadata_prefix: str = None):
-        if metadata_prefix is None: return
-        metadata_path = file_util.preprocess_paths(metadata_prefix) + ".metadata.json"
-        if tf.io.gfile.exists(metadata_path):
-            with tf.io.gfile.GFile(metadata_path, "r") as f:
-                content = json.loads(f.read())
+    def save_metadata(self, metadata: str = None):
+        if metadata is None: return
+        metadata = file_util.preprocess_paths(metadata)
+        if tf.io.gfile.exists(metadata):
+            with tf.io.gfile.GFile(metadata, "r") as f:
+                try:
+                    content = json.loads(f.read())
+                except json.JSONDecodeError:
+                    raise ValueError(f'File {metadata} is currently not in json format. Please update the file')
         else:
             content = {}
         content[self.stage] = {
@@ -73,17 +76,20 @@ class ASRDataset(BaseDataset):
             "max_label_length": self.text_featurizer.max_length,
             "num_entries": self.total_steps
         }
-        with tf.io.gfile.GFile(metadata_path, "w") as f:
+        with tf.io.gfile.GFile(metadata, "w") as f:
             f.write(json.dumps(content, indent=2))
-        print(f"metadata written to {metadata_path}")
+        print(f"Metadata written to {metadata}")
 
-    def load_metadata(self, metadata_prefix: str = None):
-        if metadata_prefix is None: return
-        metadata_path = file_util.preprocess_paths(metadata_prefix) + ".metadata.json"
-        if tf.io.gfile.exists(metadata_path):
-            print(f"Loading metadata from {metadata_path} ...")
-            with tf.io.gfile.GFile(metadata_path, "r") as f:
-                content = json.loads(f.read()).get(self.stage, {})
+    def load_metadata(self, metadata: str = None):
+        if metadata is None: return
+        metadata = file_util.preprocess_paths(metadata)
+        if tf.io.gfile.exists(metadata):
+            print(f"Loading metadata from {metadata} ...")
+            with tf.io.gfile.GFile(metadata, "r") as f:
+                try:
+                    content = json.loads(f.read()).get(self.stage, {})
+                except json.JSONDecodeError:
+                    raise ValueError(f'File {metadata} must be in json format')
                 self.speech_featurizer.update_length(int(content.get("max_input_length", 0)))
                 self.text_featurizer.update_length(int(content.get("max_label_length", 0)))
                 self.total_steps = int(content.get("num_entries", 0))
@@ -123,19 +129,17 @@ class ASRDataset(BaseDataset):
         with tf.device("/CPU:0"):
             def fn(_path: bytes, _audio: bytes, _indices: bytes):
                 signal = read_raw_audio(_audio, sample_rate=self.speech_featurizer.sample_rate)
-
                 signal = self.augmentations.signal_augment(signal)
-
                 features = self.speech_featurizer.extract(signal.numpy())
-
                 features = self.augmentations.feature_augment(features)
+                features = tf.convert_to_tensor(features, tf.float32)
+                input_length = tf.cast(tf.shape(features)[0], tf.int32)
 
                 label = tf.strings.to_number(tf.strings.split(_indices), out_type=tf.int32)
                 label_length = tf.cast(tf.shape(label)[0], tf.int32)
+
                 prediction = self.text_featurizer.prepand_blank(label)
                 prediction_length = tf.cast(tf.shape(prediction)[0], tf.int32)
-                features = tf.convert_to_tensor(features, tf.float32)
-                input_length = tf.cast(tf.shape(features)[0], tf.int32)
 
                 return _path, features, input_length, label, label_length, prediction, prediction_length
 
@@ -147,19 +151,16 @@ class ASRDataset(BaseDataset):
     def tf_preprocess(self, path: tf.Tensor, audio: tf.Tensor, indices: tf.Tensor):
         with tf.device("/CPU:0"):
             signal = tf_read_raw_audio(audio, self.speech_featurizer.sample_rate)
-
             signal = self.augmentations.signal_augment(signal)
-
             features = self.speech_featurizer.tf_extract(signal)
-
             features = self.augmentations.feature_augment(features)
+            input_length = tf.cast(tf.shape(features)[0], tf.int32)
 
             label = tf.strings.to_number(tf.strings.split(indices), out_type=tf.int32)
             label_length = tf.cast(tf.shape(label)[0], tf.int32)
+
             prediction = self.text_featurizer.prepand_blank(label)
             prediction_length = tf.cast(tf.shape(prediction)[0], tf.int32)
-            features = tf.convert_to_tensor(features, tf.float32)
-            input_length = tf.cast(tf.shape(features)[0], tf.int32)
 
             return path, features, input_length, label, label_length, prediction, prediction_length
 
@@ -190,6 +191,7 @@ class ASRDataset(BaseDataset):
 
     def process(self, dataset, batch_size):
         dataset = dataset.map(self.parse, num_parallel_calls=AUTOTUNE)
+        self.total_steps = math_util.get_num_batches(self.total_steps, batch_size, drop_remainders=self.drop_remainder)
 
         if self.cache:
             dataset = dataset.cache()
@@ -197,7 +199,7 @@ class ASRDataset(BaseDataset):
         if self.shuffle:
             dataset = dataset.shuffle(self.buffer_size, reshuffle_each_iteration=True)
 
-        if self.indefinite:
+        if self.indefinite and self.total_steps:
             dataset = dataset.repeat()
 
         # PADDED BATCH the dataset
@@ -232,7 +234,6 @@ class ASRDataset(BaseDataset):
 
         # PREFETCH to improve speed of input length
         dataset = dataset.prefetch(AUTOTUNE)
-        self.total_steps = math_util.get_num_batches(self.total_steps, batch_size, drop_remainders=self.drop_remainder)
         return dataset
 
     def create(self, batch_size: int):

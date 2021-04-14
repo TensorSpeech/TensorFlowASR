@@ -15,7 +15,7 @@
 import os
 import argparse
 from tensorflow_asr.configs.config import Config
-from tensorflow_asr.utils.utils import preprocess_paths
+from tensorflow_asr.utils.file_util import preprocess_paths
 from tensorflow_asr.datasets.asr_dataset import ASRDataset
 from tensorflow_asr.featurizers.speech_featurizers import TFSpeechFeaturizer
 from tensorflow_asr.featurizers.text_featurizers import SubwordFeaturizer, SentencePieceFeaturizer

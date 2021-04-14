@@ -15,7 +15,7 @@ import abc
 
 import tensorflow as tf
 
-from ..augmentations.augments import Augmentation
+from ..augmentations.augmentation import Augmentation
 
 BUFFER_SIZE = 100
 TFRECORD_SHARDS = 16
