@@ -68,6 +68,9 @@ We need to replace the datasets path here, according to your machine. Thats all
     3) if you want error in a seperate file then 
          `_nohup python3 /Desktop/TensorFlowASR/examples/contextnet/train_contextnet.py > logging.out 2>&1 &_`
 
+14) For testing run this script 
+    1) `python3 /Desktop/TensorFlowASR/examples/contextnet/test_contextnet.py --saved /Desktop/TensorFlowASR/examples/contextnet/latest.h5`
+
 
 ## Contact
 
