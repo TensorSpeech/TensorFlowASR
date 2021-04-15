@@ -12,11 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import List
+from typing import Dict, List
 import tensorflow as tf
 
 from ..encoders.contextnet import ContextNetEncoder, L2
 from .transducer import Transducer
+from ...utils import math_util
 
 
 class ContextNet(Transducer):
@@ -95,11 +96,7 @@ class ContextNet(Transducer):
     # -------------------------------- GREEDY -------------------------------------
 
     @tf.function
-    def recognize(self,
-                  features: tf.Tensor,
-                  input_length: tf.Tensor,
-                  parallel_iterations: int = 10,
-                  swap_memory: bool = True):
+    def recognize(self, inputs: Dict[str, tf.Tensor]):
         """
         RNN Transducer Greedy decoding
         Args:
@@ -108,12 +105,9 @@ class ContextNet(Transducer):
         Returns:
             tf.Tensor: a batch of decoded transcripts
         """
-        encoded = self.encoder([features, input_length], training=False)
-        return self._perform_greedy_batch(
-            encoded, input_length,
-            parallel_iterations=parallel_iterations,
-            swap_memory=swap_memory
-        )
+        encoded = self.encoder([inputs["inputs"], inputs["inputs_length"]], training=False)
+        encoded_length = math_util.get_reduced_length(inputs["inputs_length"], self.time_reduction_factor)
+        return self._perform_greedy_batch(encoded=encoded, encoded_length=encoded_length)
 
     def recognize_tflite(self, signal, predicted, prediction_states):
         """
@@ -161,12 +155,7 @@ class ContextNet(Transducer):
     # -------------------------------- BEAM SEARCH -------------------------------------
 
     @tf.function
-    def recognize_beam(self,
-                       features: tf.Tensor,
-                       input_length: tf.Tensor,
-                       lm: bool = False,
-                       parallel_iterations: int = 10,
-                       swap_memory: bool = True):
+    def recognize_beam(self, inputs: Dict[str, tf.Tensor], lm: bool = False):
         """
         RNN Transducer Beam Search
         Args:
@@ -176,9 +165,6 @@ class ContextNet(Transducer):
         Returns:
             tf.Tensor: a batch of decoded transcripts
         """
-        encoded = self.encoder([features, input_length], training=False)
-        return self._perform_beam_search_batch(
-            encoded, input_length, lm,
-            parallel_iterations=parallel_iterations,
-            swap_memory=swap_memory
-        )
+        encoded = self.encoder([inputs["inputs"], inputs["inputs_length"]], training=False)
+        encoded_length = math_util.get_reduced_length(inputs["inputs_length"], self.time_reduction_factor)
+        return self._perform_beam_search_batch(encoded=encoded, encoded_length=encoded_length, lm=lm)

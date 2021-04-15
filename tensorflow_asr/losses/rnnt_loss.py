@@ -37,13 +37,11 @@ class RnntLoss(tf.keras.losses.Loss):
         self.global_batch_size = global_batch_size
 
     def call(self, y_true, y_pred):
-        logits, logits_length = y_pred.values()
-        labels, labels_length = y_true.values()
         loss = rnnt_loss(
-            logits=logits,
-            logit_length=logits_length,
-            labels=labels,
-            label_length=labels_length,
+            logits=y_pred["logits"],
+            logit_length=y_pred["logits_length"],
+            labels=y_true["labels"],
+            label_length=y_true["labels_length"],
             blank=self.blank,
             name=self.name
         )

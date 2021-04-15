@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Optional, Union
+from typing import Dict, Union
 import numpy as np
 import tensorflow as tf
 
@@ -69,19 +69,18 @@ class CtcModel(BaseModel):
         self.text_featurizer = text_featurizer
 
     def call(self, inputs, training=False, **kwargs):
-        inputs, inputs_length, _, _ = inputs.values()
-        logits = self.encoder(inputs, training=training, **kwargs)
+        logits = self.encoder(inputs["inputs"], training=training, **kwargs)
         logits = self.decoder(logits, training=training, **kwargs)
         return data_util.create_logits(
             logits=logits,
-            logits_length=math_util.get_reduced_length(inputs_length, self.time_reduction_factor)
+            logits_length=math_util.get_reduced_length(inputs["inputs_length"], self.time_reduction_factor)
         )
 
     # -------------------------------- GREEDY -------------------------------------
 
     @tf.function
-    def recognize(self, features: tf.Tensor, input_length: Optional[tf.Tensor]):
-        logits = self(features, training=False)
+    def recognize(self, inputs: Dict[str, tf.Tensor]):
+        logits = self(inputs["inputs"], training=False)
         probs = tf.nn.softmax(logits)
 
         def map_fn(prob): return tf.numpy_function(self._perform_greedy, inp=[prob], Tout=tf.string)
@@ -119,8 +118,8 @@ class CtcModel(BaseModel):
     # -------------------------------- BEAM SEARCH -------------------------------------
 
     @tf.function
-    def recognize_beam(self, features: tf.Tensor, input_length: Optional[tf.Tensor], lm: bool = False):
-        logits = self(features, training=False)
+    def recognize_beam(self, inputs: Dict[str, tf.Tensor], lm: bool = False):
+        logits = self(inputs["inputs"], training=False)
         probs = tf.nn.softmax(logits)
 
         def map_fn(prob): return tf.numpy_function(self._perform_beam_search, inp=[prob, lm], Tout=tf.string)

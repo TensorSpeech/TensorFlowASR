@@ -13,6 +13,7 @@
 # limitations under the License.
 """ http://arxiv.org/abs/1811.06621 """
 
+from typing import Dict
 import tensorflow as tf
 
 from ..layers.subsampling import TimeReduction
@@ -256,11 +257,7 @@ class RnnTransducer(Transducer):
     # -------------------------------- GREEDY -------------------------------------
 
     @tf.function
-    def recognize(self,
-                  features: tf.Tensor,
-                  input_length: tf.Tensor,
-                  parallel_iterations: int = 10,
-                  swap_memory: bool = True):
+    def recognize(self, inputs: Dict[str, tf.Tensor]):
         """
         RNN Transducer Greedy decoding
         Args:
@@ -269,10 +266,10 @@ class RnnTransducer(Transducer):
         Returns:
             tf.Tensor: a batch of decoded transcripts
         """
-        batch_size, _, _, _ = shape_util.shape_list(features)
-        encoded, _ = self.encoder.recognize(features, self.encoder.get_initial_state(batch_size))
-        return self._perform_greedy_batch(encoded, input_length,
-                                          parallel_iterations=parallel_iterations, swap_memory=swap_memory)
+        batch_size, _, _, _ = shape_util.shape_list(inputs["inputs"])
+        encoded, _ = self.encoder.recognize(inputs["inputs"], self.encoder.get_initial_state(batch_size))
+        encoded_length = math_util.get_reduced_length(inputs["inputs_length"], self.time_reduction_factor)
+        return self._perform_greedy_batch(encoded=encoded, encoded_length=encoded_length)
 
     def recognize_tflite(self, signal, predicted, encoder_states, prediction_states):
         """
@@ -321,12 +318,7 @@ class RnnTransducer(Transducer):
     # -------------------------------- BEAM SEARCH -------------------------------------
 
     @tf.function
-    def recognize_beam(self,
-                       features: tf.Tensor,
-                       input_length: tf.Tensor,
-                       lm: bool = False,
-                       parallel_iterations: int = 10,
-                       swap_memory: bool = True):
+    def recognize_beam(self, inputs: Dict[str, tf.Tensor], lm: bool = False):
         """
         RNN Transducer Beam Search
         Args:
@@ -336,10 +328,10 @@ class RnnTransducer(Transducer):
         Returns:
             tf.Tensor: a batch of decoded transcripts
         """
-        batch_size, _, _, _ = shape_util.shape_list(features)
-        encoded, _ = self.encoder.recognize(features, self.encoder.get_initial_state(batch_size))
-        return self._perform_beam_search_batch(encoded, input_length, lm,
-                                               parallel_iterations=parallel_iterations, swap_memory=swap_memory)
+        batch_size, _, _, _ = shape_util.shape_list(inputs["inputs"])
+        encoded, _ = self.encoder.recognize(inputs["inputs"], self.encoder.get_initial_state(batch_size))
+        encoded_length = math_util.get_reduced_length(inputs["inputs_length"], self.time_reduction_factor)
+        return self._perform_beam_search_batch(encoded=encoded, encoded_length=encoded_length, lm=lm)
 
     # -------------------------------- TFLITE -------------------------------------
 

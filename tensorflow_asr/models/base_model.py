@@ -111,9 +111,12 @@ class BaseModel(tf.keras.Model):
             [tf.Tensor]: stacked tensor of shape [B, 3] with each row is the text [truth, greedy, beam_search]
         """
         inputs, y_true = batch
-        labels = self.text_featurizer.iextract(y_true)
+        labels = self.text_featurizer.iextract(y_true["labels"])
         greedy_decoding = self.recognize(inputs)
-        beam_search_decoding = self.recognize_beam(inputs)
+        if self.text_featurizer.decoder_config.beam_width == 0:
+            beam_search_decoding = tf.map_fn(lambda _: tf.convert_to_tensor("", dtype=tf.string), labels)
+        else:
+            beam_search_decoding = self.recognize_beam(inputs)
         return tf.stack([labels, greedy_decoding, beam_search_decoding], axis=-1)
 
     def recognize(self, features, input_lengths, **kwargs):

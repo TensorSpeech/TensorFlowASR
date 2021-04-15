@@ -12,15 +12,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import warnings
 import tensorflow as tf
 
 
 def setup_environment():  # Set memory growth and only log ERRORs
     """ Setting tensorflow running environment """
-    import warnings
     warnings.simplefilter("ignore")
     tf.get_logger().setLevel("ERROR")
-    tf.config.optimizer.set_experimental_options({"auto_mixed_precision": True})
 
 
 def setup_devices(devices, cpu=False):

@@ -14,6 +14,7 @@
 """ https://arxiv.org/pdf/1811.06621.pdf """
 
 import collections
+from typing import Dict
 import tensorflow as tf
 
 from ..base_model import BaseModel
@@ -347,13 +348,12 @@ class Transducer(BaseModel):
         super().compile(loss=loss, optimizer=optimizer, run_eagerly=run_eagerly, **kwargs)
 
     def call(self, inputs, training=False, **kwargs):
-        inputs, inputs_length, predictions, predictions_length = inputs.values()
-        enc = self.encoder(inputs, training=training, **kwargs)
-        pred = self.predict_net([predictions, predictions_length], training=training, **kwargs)
+        enc = self.encoder(inputs["inputs"], training=training, **kwargs)
+        pred = self.predict_net([inputs["predictions"], inputs["predictions_length"]], training=training, **kwargs)
         logits = self.joint_net([enc, pred], training=training, **kwargs)
         return data_util.create_logits(
             logits=logits,
-            logits_length=math_util.get_reduced_length(inputs_length, self.time_reduction_factor)
+            logits_length=math_util.get_reduced_length(inputs["inputs_length"], self.time_reduction_factor)
         )
 
     # -------------------------------- INFERENCES -------------------------------------
@@ -400,11 +400,7 @@ class Transducer(BaseModel):
     # -------------------------------- GREEDY -------------------------------------
 
     @tf.function
-    def recognize(self,
-                  features: tf.Tensor,
-                  input_length: tf.Tensor,
-                  parallel_iterations: int = 10,
-                  swap_memory: bool = True):
+    def recognize(self, inputs: Dict[str, tf.Tensor]):
         """
         RNN Transducer Greedy decoding
         Args:
@@ -414,9 +410,9 @@ class Transducer(BaseModel):
         Returns:
             tf.Tensor: a batch of decoded transcripts
         """
-        encoded = self.encoder(features, training=False)
-        return self._perform_greedy_batch(encoded, input_length,
-                                          parallel_iterations=parallel_iterations, swap_memory=swap_memory)
+        encoded = self.encoder(inputs["inputs"], training=False)
+        encoded_length = math_util.get_reduced_length(inputs["inputs_length"], self.time_reduction_factor)
+        return self._perform_greedy_batch(encoded=encoded, encoded_length=encoded_length)
 
     def recognize_tflite(self, signal, predicted, states):
         """
@@ -600,12 +596,7 @@ class Transducer(BaseModel):
     # -------------------------------- BEAM SEARCH -------------------------------------
 
     @tf.function
-    def recognize_beam(self,
-                       features: tf.Tensor,
-                       input_length: tf.Tensor,
-                       lm: bool = False,
-                       parallel_iterations: int = 10,
-                       swap_memory: bool = True):
+    def recognize_beam(self, inputs: Dict[str, tf.Tensor], lm: bool = False):
         """
         RNN Transducer Beam Search
         Args:
@@ -615,9 +606,9 @@ class Transducer(BaseModel):
         Returns:
             tf.Tensor: a batch of decoded transcripts
         """
-        encoded = self.encoder(features, training=False)
-        return self._perform_beam_search_batch(encoded, input_length, lm,
-                                               parallel_iterations=parallel_iterations, swap_memory=swap_memory)
+        encoded = self.encoder(inputs["inputs"], training=False)
+        encoded_length = math_util.get_reduced_length(inputs["inputs_length"], self.time_reduction_factor)
+        return self._perform_beam_search_batch(encoded=encoded, encoded_length=encoded_length, lm=lm)
 
     def _perform_beam_search_batch(self,
                                    encoded: tf.Tensor,

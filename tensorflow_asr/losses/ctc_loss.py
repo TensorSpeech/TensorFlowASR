@@ -21,13 +21,11 @@ class CtcLoss(tf.keras.losses.Loss):
         self.global_batch_size = global_batch_size
 
     def call(self, y_true, y_pred):
-        logits, logits_length = y_pred.values()
-        labels, labels_length = y_true.values()
         loss = ctc_loss(
-            y_pred=logits,
-            input_length=logits_length,
-            y_true=labels,
-            label_length=labels_length,
+            y_pred=y_pred["logits"],
+            input_length=y_pred["logits_length"],
+            y_true=y_true["labels"],
+            label_length=y_true["labels_length"],
             blank=self.blank,
             name=self.name
         )
