@@ -144,6 +144,7 @@ class ConvModule(tf.keras.layers.Layer):
                  depth_multiplier=1,
                  kernel_regularizer=L2,
                  bias_regularizer=L2,
+                 streaming=False,
                  name="conv_module",
                  **kwargs):
         super(ConvModule, self).__init__(name=name, **kwargs)
@@ -157,7 +158,8 @@ class ConvModule(tf.keras.layers.Layer):
         self.glu = GLU(name=f"{name}_glu")
         self.dw_conv = tf.keras.layers.DepthwiseConv2D(
             kernel_size=(kernel_size, 1), strides=1,
-            padding="same", name=f"{name}_dw_conv",
+            padding="same" if not streaming else "causal",
+            name=f"{name}_dw_conv",
             depth_multiplier=depth_multiplier,
             depthwise_regularizer=kernel_regularizer,
             bias_regularizer=bias_regularizer
@@ -218,6 +220,7 @@ class ConformerBlock(tf.keras.layers.Layer):
                  depth_multiplier=1,
                  kernel_regularizer=L2,
                  bias_regularizer=L2,
+                 streaming=False,
                  name="conformer_block",
                  **kwargs):
         super(ConformerBlock, self).__init__(name=name, **kwargs)
@@ -239,7 +242,8 @@ class ConformerBlock(tf.keras.layers.Layer):
             dropout=dropout, name=f"{name}_conv_module",
             depth_multiplier=depth_multiplier,
             kernel_regularizer=kernel_regularizer,
-            bias_regularizer=bias_regularizer
+            bias_regularizer=bias_regularizer,
+            streaming=streaming
         )
         self.ffm2 = FFModule(
             input_dim=input_dim, dropout=dropout,
@@ -287,6 +291,7 @@ class ConformerEncoder(tf.keras.Model):
                  dropout=0.0,
                  kernel_regularizer=L2,
                  bias_regularizer=L2,
+                 streaming=False,
                  name="conformer_encoder",
                  **kwargs):
         super(ConformerEncoder, self).__init__(name=name, **kwargs)
@@ -339,6 +344,7 @@ class ConformerEncoder(tf.keras.Model):
                 depth_multiplier=depth_multiplier,
                 kernel_regularizer=kernel_regularizer,
                 bias_regularizer=bias_regularizer,
+                streaming=streaming,
                 name=f"{name}_block_{i}"
             )
             self.conformer_blocks.append(conformer_block)
