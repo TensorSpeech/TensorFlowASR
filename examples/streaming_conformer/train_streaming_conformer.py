@@ -75,19 +75,19 @@ else:
         **vars(config.learning_config.eval_dataset_config)
     )
 
-streaming_transducer_trainer = TransducerTrainer(
+streaming_conformer_trainer = TransducerTrainer(
     config=config.learning_config.running_config,
     text_featurizer=text_featurizer, strategy=strategy
 )
 
-with streaming_transducer_trainer.strategy.scope():
+with streaming_conformer_trainer.strategy.scope():
     # build model
-    streaming_transducer = StreamingConformer(
+    streaming_conformer = StreamingConformer(
         **config.model_config,
         vocabulary_size=text_featurizer.num_classes
     )
-    streaming_transducer._build(speech_featurizer.shape)
-    streaming_transducer.summary(line_length=150)
+    streaming_conformer._build(speech_featurizer.shape)
+    streaming_conformer.summary(line_length=150)
 
     optimizer_config = config.learning_config.optimizer_config
     optimizer = tf.keras.optimizers.Adam(
@@ -101,7 +101,7 @@ with streaming_transducer_trainer.strategy.scope():
         epsilon=optimizer_config["epsilon"]
     )
 
-streaming_transducer_trainer.compile(model=streaming_transducer, optimizer=optimizer,
+streaming_conformer_trainer.compile(model=streaming_conformer, optimizer=optimizer,
                                      max_to_keep=args.max_ckpts)
 
-streaming_transducer_trainer.fit(train_dataset, eval_dataset, train_bs=args.tbs, eval_bs=args.ebs)
+streaming_conformer_trainer.fit(train_dataset, eval_dataset, train_bs=args.tbs, eval_bs=args.ebs)
