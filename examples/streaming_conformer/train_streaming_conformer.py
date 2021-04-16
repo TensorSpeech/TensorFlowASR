@@ -13,11 +13,14 @@
 # limitations under the License.
 
 import os
+import math
 import argparse
 from tensorflow_asr.utils import setup_environment, setup_strategy
 
 setup_environment()
 import tensorflow as tf
+physical_devices = tf.config.list_physical_devices('GPU')
+tf.config.experimental.set_memory_growth(physical_devices[0], True)
 
 DEFAULT_YAML = os.path.join(os.path.abspath(os.path.dirname(__file__)), "config.yml")
 
@@ -46,11 +49,12 @@ tf.config.optimizer.set_experimental_options({"auto_mixed_precision": args.mxp})
 strategy = setup_strategy(args.devices)
 
 from tensorflow_asr.configs.config import Config
-from tensorflow_asr.datasets.asr_dataset import ASRTFRecordDataset, ASRSliceDataset
+from tensorflow_asr.datasets.asr_dataset import ASRMaskedSliceDataset
 from tensorflow_asr.featurizers.speech_featurizers import TFSpeechFeaturizer
 from tensorflow_asr.featurizers.text_featurizers import CharFeaturizer
-from tensorflow_asr.runners.transducer_runners import TransducerTrainer
-from tensorflow_asr.models.streaming_conformer import StreamingConformer
+from tensorflow_asr.runners.masked_transducer_runners import MaskedTransducerTrainer
+from tensorflow_asr.models.streaming_conformer_transducer import StreamingConformer
+from tensorflow_asr.optimizers.schedules import TransformerSchedule
 
 config = Config(args.config)
 speech_featurizer = TFSpeechFeaturizer(config.speech_config)
@@ -66,16 +70,16 @@ if args.tfrecords:
         **vars(config.learning_config.eval_dataset_config)
     )
 else:
-    train_dataset = ASRSliceDataset(
+    train_dataset = ASRMaskedSliceDataset(
         speech_featurizer=speech_featurizer, text_featurizer=text_featurizer,
         **vars(config.learning_config.train_dataset_config)
     )
-    eval_dataset = ASRSliceDataset(
+    eval_dataset = ASRMaskedSliceDataset(
         speech_featurizer=speech_featurizer, text_featurizer=text_featurizer,
         **vars(config.learning_config.eval_dataset_config)
     )
 
-streaming_conformer_trainer = TransducerTrainer(
+streaming_conformer_trainer = MaskedTransducerTrainer(
     config=config.learning_config.running_config,
     text_featurizer=text_featurizer, strategy=strategy
 )
@@ -92,9 +96,9 @@ with streaming_conformer_trainer.strategy.scope():
     optimizer_config = config.learning_config.optimizer_config
     optimizer = tf.keras.optimizers.Adam(
         TransformerSchedule(
-            d_model=conformer.dmodel,
+            d_model=streaming_conformer.dmodel,
             warmup_steps=optimizer_config["warmup_steps"],
-            max_lr=(0.05 / math.sqrt(conformer.dmodel))
+            max_lr=(0.05 / math.sqrt(streaming_conformer.dmodel))
         ),
         beta_1=optimizer_config["beta1"],
         beta_2=optimizer_config["beta2"],
