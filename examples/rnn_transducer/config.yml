@@ -64,8 +64,8 @@ learning_config:
           num_masks: 1
           mask_factor: 27
     data_paths:
-      - /mnt/Miscellanea/Datasets/Speech/LibriSpeech/train-clean-100/transcripts.tsv
-    tfrecords_dir: /mnt/Miscellanea/Datasets/Speech/LibriSpeech/tfrecords
+      - /mnt/h/ML/Datasets/ASR/Raw/LibriSpeech/train-clean-100/transcripts.tsv
+    tfrecords_dir: null
     shuffle: True
     cache: True
     buffer_size: 100
@@ -74,10 +74,8 @@ learning_config:
 
   eval_dataset_config:
     use_tf: True
-    data_paths:
-      - /mnt/Miscellanea/Datasets/Speech/LibriSpeech/dev-clean/transcripts.tsv
-      - /mnt/Miscellanea/Datasets/Speech/LibriSpeech/dev-other/transcripts.tsv
-    tfrecords_dir: /mnt/Miscellanea/Datasets/Speech/LibriSpeech/tfrecords
+    data_paths: null
+    tfrecords_dir: null
     shuffle: False
     cache: True
     buffer_size: 100
@@ -87,8 +85,8 @@ learning_config:
   test_dataset_config:
     use_tf: True
     data_paths:
-      - /mnt/Miscellanea/Datasets/Speech/LibriSpeech/test-clean/transcripts.tsv
-    tfrecords_dir: /mnt/Miscellanea/Datasets/Speech/LibriSpeech/tfrecords
+      - /mnt/h/ML/Datasets/ASR/Raw/LibriSpeech/test-clean/transcripts.tsv
+    tfrecords_dir: null
     shuffle: False
     cache: True
     buffer_size: 100
@@ -102,20 +100,15 @@ learning_config:
 
   running_config:
     batch_size: 2
-    accumulation_steps: 1
     num_epochs: 20
-    outdir: /mnt/Miscellanea/Models/local/streaming_transducer
-    log_interval_steps: 300
-    eval_interval_steps: 500
-    save_interval_steps: 1000
     checkpoint:
-      filepath: /mnt/Miscellanea/Models/local/streaming_transducer/checkpoints/{epoch:02d}.h5
+      filepath: /mnt/e/Models/local/rnn_transducer/checkpoints/{epoch:02d}.h5
       save_best_only: True
-      save_weights_only: False
+      save_weights_only: True
       save_freq: epoch
-    states_dir: /mnt/Miscellanea/Models/local/streaming_transducer/states
+    states_dir: /mnt/e/Models/local/rnn_transducer/states
     tensorboard:
-      log_dir: /mnt/Miscellanea/Models/local/streaming_transducer/tensorboard
+      log_dir: /mnt/e/Models/local/rnn_transducer/tensorboard
       histogram_freq: 1
       write_graph: True
       write_images: True

@@ -228,7 +228,7 @@ learning_config:
   test_dataset_config:
     use_tf: True
     data_paths:
-      - /mnt/e/Datasets/Speech/LibriSpeech/test-clean/transcripts.tsv
+      - /mnt/h/ML/Datasets/ASR/Raw/LibriSpeech/test-clean/transcripts.tsv
     tfrecords_dir: null
     shuffle: False
     cache: True
@@ -248,7 +248,7 @@ learning_config:
     checkpoint:
       filepath: /mnt/e/Models/local/contextnet/checkpoints/{epoch:02d}.h5
       save_best_only: True
-      save_weights_only: False
+      save_weights_only: True
       save_freq: epoch
     states_dir: /mnt/e/Models/local/contextnet/states
     tensorboard:

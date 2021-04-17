@@ -357,7 +357,7 @@ class Jasper(CtcModel):
                 strides=1, padding="same",
                 kernel_regularizer=kernel_regularizer,
                 bias_regularizer=bias_regularizer,
-                name=f"{self.name}_logits"
+                name=f"{name}_logits"
             ),
             vocabulary_size=vocabulary_size,
             name=name,

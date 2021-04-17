@@ -49,6 +49,8 @@ def setup_strategy(devices):
         tf.distribute.Strategy: MirroredStrategy for training one or multiple gpus
     """
     setup_devices(devices)
+    if has_tpu():
+        return setup_tpu()
     return tf.distribute.MirroredStrategy()
 
 
