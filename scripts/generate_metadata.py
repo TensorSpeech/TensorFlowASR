@@ -15,7 +15,7 @@
 import os
 import argparse
 from tensorflow_asr.configs.config import Config
-from tensorflow_asr.utils.utils import preprocess_paths
+from tensorflow_asr.utils.file_util import preprocess_paths
 from tensorflow_asr.datasets.asr_dataset import ASRDataset
 from tensorflow_asr.featurizers.speech_featurizers import TFSpeechFeaturizer
 from tensorflow_asr.featurizers.text_featurizers import SubwordFeaturizer, SentencePieceFeaturizer
@@ -28,7 +28,7 @@ parser.add_argument("--config", type=str, default=None, help="The file path of m
 
 parser.add_argument("--sentence_piece", default=False, action="store_true", help="Whether to use `SentencePiece` model")
 
-parser.add_argument("--metadata_prefix", type=str, default=None, help="Path to file containing metadata")
+parser.add_argument("--metadata", type=str, default=None, help="Path to file containing metadata")
 
 parser.add_argument("--subwords", type=str, default=None, help="Path to file that stores generated subwords")
 
@@ -57,4 +57,4 @@ dataset = ASRDataset(
     stage=args.stage, shuffle=False,
 )
 
-dataset.update_metadata(args.metadata_prefix)
+dataset.update_metadata(args.metadata)

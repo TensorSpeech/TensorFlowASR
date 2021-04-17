@@ -17,11 +17,9 @@ from tqdm.auto import tqdm
 
 parser = argparse.ArgumentParser(prog="Create vocabulary file from transcripts")
 
-parser.add_argument("--output", type=str,
-                    default=None, help="The output .txt vocabulary file path")
+parser.add_argument("--output", type=str, default=None, help="The output .txt vocabulary file path")
 
-parser.add_argument("transcripts", nargs="+", type=str,
-                    default=None, help="Transcript .tsv files")
+parser.add_argument("transcripts", nargs="+", type=str, default=None, help="Transcript .tsv files")
 
 args = parser.parse_args()
 

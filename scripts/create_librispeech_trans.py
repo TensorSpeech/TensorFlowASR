@@ -19,7 +19,7 @@ import librosa
 from tqdm.auto import tqdm
 import unicodedata
 
-from tensorflow_asr.utils.utils import preprocess_paths
+from tensorflow_asr.utils.file_util import preprocess_paths
 
 parser = argparse.ArgumentParser(prog="Setup LibriSpeech Transcripts")
 
@@ -31,7 +31,7 @@ args = parser.parse_args()
 
 assert args.dir and args.output
 
-args.dir = preprocess_paths(args.dir)
+args.dir = preprocess_paths(args.dir, isdir=True)
 args.output = preprocess_paths(args.output)
 
 transcripts = []

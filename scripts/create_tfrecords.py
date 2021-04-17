@@ -15,7 +15,7 @@
 import os
 import argparse
 from tensorflow_asr.configs.config import Config
-from tensorflow_asr.utils.utils import preprocess_paths
+from tensorflow_asr.utils.file_util import preprocess_paths
 from tensorflow_asr.datasets.asr_dataset import ASRTFRecordDataset
 from tensorflow_asr.featurizers.text_featurizers import SubwordFeaturizer, SentencePieceFeaturizer
 
@@ -40,7 +40,7 @@ parser.add_argument("transcripts", nargs="+", type=str, default=None, help="Path
 args = parser.parse_args()
 
 transcripts = preprocess_paths(args.transcripts)
-tfrecords_dir = preprocess_paths(args.tfrecords_dir)
+tfrecords_dir = preprocess_paths(args.tfrecords_dir, isdir=True)
 
 config = Config(args.config)
 
