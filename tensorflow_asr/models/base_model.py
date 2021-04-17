@@ -19,6 +19,10 @@ from ..utils import file_util, env_util
 
 
 class BaseModel(tf.keras.Model):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._metrics = {}
+
     def save(self,
              filepath,
              overwrite=True,
@@ -66,7 +70,10 @@ class BaseModel(tf.keras.Model):
 
     @property
     def metrics(self):
-        return [self.loss_metric]
+        return self._metrics.values()
+
+    def add_metric(self, metric: tf.keras.metrics.Metric):
+        self._metrics.append({metric.name: metric})
 
     def _build(self, *args, **kwargs):
         raise NotImplementedError()
@@ -76,7 +83,8 @@ class BaseModel(tf.keras.Model):
         if not env_util.has_tpu():
             optimizer = mxp.experimental.LossScaleOptimizer(tf.keras.optimizers.get(optimizer), "dynamic")
             self.use_loss_scale = True
-        self.loss_metric = tf.keras.metrics.Mean(name="loss", dtype=tf.float32)
+        loss_metric = tf.keras.metrics.Mean(name="loss", dtype=tf.float32)
+        self._metrics = {loss_metric.name: loss_metric}
         super().compile(optimizer=optimizer, loss=loss, run_eagerly=run_eagerly, **kwargs)
 
     # -------------------------------- STEP FUNCTIONS -------------------------------------
@@ -92,14 +100,14 @@ class BaseModel(tf.keras.Model):
         if self.use_loss_scale:
             gradients = self.optimizer.get_unscaled_gradients(gradients)
         self.optimizer.apply_gradients(zip(gradients, self.trainable_variables))
-        self.loss_metric.update_state(loss)
+        self._metrics["loss"].update_state(loss)
         return {m.name: m.result() for m in self.metrics}
 
     def test_step(self, batch):
         inputs, y_true = batch
         y_pred = self(inputs, training=False)
         loss = self.loss(y_true, y_pred)
-        self.loss_metric.update_state(loss)
+        self._metrics["loss"].update_state(loss)
         return {m.name: m.result() for m in self.metrics}
 
     def predict_step(self, batch):

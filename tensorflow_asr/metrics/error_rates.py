@@ -30,4 +30,4 @@ class ErrorRate(tf.keras.metrics.Metric):
         self.denominator.assign_add(d)
 
     def result(self):
-        return tf.math.divide_no_nan(self.numerator, self.denominator) * 100
+        return tf.math.divide_no_nan(self.numerator, self.denominator)

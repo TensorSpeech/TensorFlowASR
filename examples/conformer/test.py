@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import os
+from tqdm import tqdm
 import argparse
 from tensorflow_asr.utils import env_util, file_util
 
@@ -58,6 +59,7 @@ from tensorflow_asr.datasets.asr_dataset import ASRTFRecordDataset, ASRSliceData
 from tensorflow_asr.featurizers.speech_featurizers import TFSpeechFeaturizer
 from tensorflow_asr.featurizers.text_featurizers import SubwordFeaturizer, SentencePieceFeaturizer, CharFeaturizer
 from tensorflow_asr.models.transducer.conformer import Conformer
+from tensorflow_asr.utils import app_util
 
 config = Config(args.config)
 speech_featurizer = TFSpeechFeaturizer(config.speech_config)
@@ -97,13 +99,20 @@ conformer.add_featurizers(speech_featurizer, text_featurizer)
 batch_size = args.bs or config.learning_config.running_config.batch_size
 test_data_loader = test_dataset.create(batch_size)
 
-results = conformer.predict(test_data_loader)
-
 with file_util.save_file(file_util.preprocess_paths(args.output)) as filepath:
-    print(f"Saving result to {args.output} ...")
-    with open(filepath, "w") as openfile:
-        openfile.write("PATH\tDURATION\tGROUNDTRUTH\tGREEDY\tBEAMSEARCH\n")
-        for i, entry in test_dataset.entries:
-            groundtruth, greedy, beamsearch = results[i]
-            path, duration, _ = entry
-            openfile.write(f"{path}\t{duration}\t{groundtruth}\t{greedy}\t{beamsearch}\n")
+    overwrite = False
+    if tf.io.gfile.exists(filepath):
+        overwrite = input("Overwrite existing result file? (y/n): ").lower() == "y"
+    if overwrite:
+        results = conformer.predict(test_data_loader, verbose=1)
+        print(f"Saving result to {args.output} ...")
+        with open(filepath, "w") as openfile:
+            openfile.write("PATH\tDURATION\tGROUNDTRUTH\tGREEDY\tBEAMSEARCH\n")
+            progbar = tqdm(total=test_dataset.total_steps, unit="batch")
+            for i, pred in enumerate(results):
+                groundtruth, greedy, beamsearch = [x.decode('utf-8') for x in pred]
+                path, duration, _ = test_dataset.entries[i]
+                openfile.write(f"{path}\t{duration}\t{groundtruth}\t{greedy}\t{beamsearch}\n")
+                progbar.update(1)
+            progbar.close()
+    app_util.evaluate_results(filepath)
