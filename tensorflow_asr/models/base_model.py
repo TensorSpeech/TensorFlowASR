@@ -95,10 +95,12 @@ class BaseModel(tf.keras.Model):
             y_pred = self(inputs, training=True)
             loss = self.loss(y_true, y_pred)
             if self.use_loss_scale:
-                loss = self.optimizer.get_scaled_loss(loss)
-        gradients = tape.gradient(loss, self.trainable_weights)
+                scaled_loss = self.optimizer.get_scaled_loss(loss)
         if self.use_loss_scale:
+            gradients = tape.gradient(scaled_loss, self.trainable_weights)
             gradients = self.optimizer.get_unscaled_gradients(gradients)
+        else:
+            gradients = tape.gradient(loss, self.trainable_weights)
         self.optimizer.apply_gradients(zip(gradients, self.trainable_variables))
         self._metrics["loss"].update_state(loss)
         return {m.name: m.result() for m in self.metrics}
@@ -126,6 +128,8 @@ class BaseModel(tf.keras.Model):
         else:
             beam_search_decoding = self.recognize_beam(inputs)
         return tf.stack([labels, greedy_decoding, beam_search_decoding], axis=-1)
+
+    # -------------------------------- INFERENCE FUNCTIONS -------------------------------------
 
     def recognize(self, features, input_lengths, **kwargs):
         pass

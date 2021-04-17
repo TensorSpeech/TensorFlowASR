@@ -38,10 +38,6 @@ class CtcModel(BaseModel):
             self.decoder = decoder
         self.time_reduction_factor = 1
 
-    @property
-    def metrics(self):
-        return [self.loss_metric]
-
     def _build(self, input_shape, batch_size=None):
         inputs = tf.keras.Input(input_shape, batch_size=batch_size, dtype=tf.float32)
         inputs_length = tf.keras.Input(shape=[], batch_size=batch_size, dtype=tf.int32)

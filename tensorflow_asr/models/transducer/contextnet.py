@@ -17,7 +17,7 @@ import tensorflow as tf
 
 from ..encoders.contextnet import ContextNetEncoder, L2
 from .transducer import Transducer
-from ...utils import math_util
+from ...utils import math_util, data_util
 
 
 class ContextNet(Transducer):
@@ -80,11 +80,13 @@ class ContextNet(Transducer):
         for block in self.encoder.blocks: self.time_reduction_factor *= block.time_reduction_factor
 
     def call(self, inputs, training=False, **kwargs):
-        features, input_length, prediction, prediction_length = inputs
-        enc = self.encoder([features, input_length], training=training, **kwargs)
-        pred = self.predict_net([prediction, prediction_length], training=training, **kwargs)
-        outputs = self.joint_net([enc, pred], training=training, **kwargs)
-        return outputs
+        enc = self.encoder([inputs["inputs"], inputs["inputs_length"]], training=training, **kwargs)
+        pred = self.predict_net([inputs["predictions"], inputs["predictions_length"]], training=training, **kwargs)
+        logits = self.joint_net([enc, pred], training=training, **kwargs)
+        return data_util.create_logits(
+            logits=logits,
+            logits_length=math_util.get_reduced_length(inputs["inputs_length"], self.time_reduction_factor)
+        )
 
     def encoder_inference(self, features: tf.Tensor, input_length: tf.Tensor):
         with tf.name_scope(f"{self.name}_encoder"):
