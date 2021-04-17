@@ -22,13 +22,13 @@ import tensorflow as tf
 from tensorflow_asr.configs.config import Config
 from tensorflow_asr.featurizers.speech_featurizers import TFSpeechFeaturizer
 from tensorflow_asr.featurizers.text_featurizers import SubwordFeaturizer, CharFeaturizer
-from tensorflow_asr.models.conformer import Conformer
+from tensorflow_asr.models.transducer.conformer import Conformer
 
 DEFAULT_YAML = os.path.join(os.path.abspath(os.path.dirname(__file__)), "config.yml")
 
 tf.keras.backend.clear_session()
 
-parser = argparse.ArgumentParser(prog="Conformer Testing")
+parser = argparse.ArgumentParser(prog="Conformer TFLite")
 
 parser.add_argument("--config", type=str, default=DEFAULT_YAML, help="The file path of model configuration file")
 

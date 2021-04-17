@@ -13,17 +13,18 @@
 # limitations under the License.
 
 import os
+from tqdm import tqdm
 import argparse
-from tensorflow_asr.utils import setup_environment, setup_devices
+from tensorflow_asr.utils import env_util, file_util
 
-setup_environment()
+env_util.setup_environment()
 import tensorflow as tf
 
 DEFAULT_YAML = os.path.join(os.path.abspath(os.path.dirname(__file__)), "config.yml")
 
 tf.keras.backend.clear_session()
 
-parser = argparse.ArgumentParser(prog="Conformer Testing")
+parser = argparse.ArgumentParser(prog="RnnTransducer Testing")
 
 parser.add_argument("--config", type=str, default=DEFAULT_YAML, help="The file path of model configuration file")
 
@@ -33,63 +34,85 @@ parser.add_argument("--tfrecords", default=False, action="store_true", help="Whe
 
 parser.add_argument("--mxp", default=False, action="store_true", help="Enable mixed precision")
 
+parser.add_argument("--bs", type=int, default=None, help="Test batch size")
+
+parser.add_argument("--sentence_piece", default=False, action="store_true", help="Whether to use `SentencePiece` model")
+
+parser.add_argument("--subwords", default=False, action="store_true", help="Use subwords")
+
 parser.add_argument("--device", type=int, default=0, help="Device's id to run test on")
 
 parser.add_argument("--cpu", default=False, action="store_true", help="Whether to only use cpu")
 
-parser.add_argument("--subwords", type=str, default=None, help="Path to file that stores generated subwords")
-
-parser.add_argument("--output_name", type=str, default="test", help="Result filename name prefix")
+parser.add_argument("--output", type=str, default="test.tsv", help="Result filepath")
 
 args = parser.parse_args()
 
+assert args.saved
+
 tf.config.optimizer.set_experimental_options({"auto_mixed_precision": args.mxp})
 
-setup_devices([args.device], cpu=args.cpu)
+env_util.setup_devices([args.device], cpu=args.cpu)
 
 from tensorflow_asr.configs.config import Config
 from tensorflow_asr.datasets.asr_dataset import ASRTFRecordDataset, ASRSliceDataset
 from tensorflow_asr.featurizers.speech_featurizers import TFSpeechFeaturizer
-from tensorflow_asr.featurizers.text_featurizers import SubwordFeaturizer
-from tensorflow_asr.runners.base_runners import BaseTester
-from tensorflow_asr.models.streaming_transducer import StreamingTransducer
+from tensorflow_asr.featurizers.text_featurizers import SubwordFeaturizer, SentencePieceFeaturizer, CharFeaturizer
+from tensorflow_asr.models.transducer.rnn_transducer import RnnTransducer
+from tensorflow_asr.utils import app_util
 
 config = Config(args.config)
 speech_featurizer = TFSpeechFeaturizer(config.speech_config)
 
-if args.subwords and os.path.exists(args.subwords):
-    print("Loading subwords ...")
-    text_featurizer = SubwordFeaturizer.load_from_file(config.decoder_config, args.subwords)
+if args.sentence_piece:
+    print("Use SentencePiece ...")
+    text_featurizer = SentencePieceFeaturizer(config.decoder_config)
+elif args.subwords:
+    print("Use subwords ...")
+    text_featurizer = SubwordFeaturizer(config.decoder_config)
 else:
-    raise ValueError("subwords must be set")
+    print("Use characters ...")
+    text_featurizer = CharFeaturizer(config.decoder_config)
 
 tf.random.set_seed(0)
-assert args.saved
 
 if args.tfrecords:
     test_dataset = ASRTFRecordDataset(
-        speech_featurizer=speech_featurizer, text_featurizer=text_featurizer,
+        speech_featurizer=speech_featurizer,
+        text_featurizer=text_featurizer,
         **vars(config.learning_config.test_dataset_config)
     )
 else:
     test_dataset = ASRSliceDataset(
-        speech_featurizer=speech_featurizer, text_featurizer=text_featurizer,
+        speech_featurizer=speech_featurizer,
+        text_featurizer=text_featurizer,
         **vars(config.learning_config.test_dataset_config)
     )
 
 # build model
-streaming_transducer = StreamingTransducer(
-    vocabulary_size=text_featurizer.num_classes,
-    **config.model_config
-)
-streaming_transducer._build(speech_featurizer.shape)
-streaming_transducer.load_weights(args.saved)
-streaming_transducer.summary(line_length=150)
-streaming_transducer.add_featurizers(speech_featurizer, text_featurizer)
+rnn_transducer = RnnTransducer(**config.model_config, vocabulary_size=text_featurizer.num_classes)
+rnn_transducer._build(speech_featurizer.shape)
+rnn_transducer.load_weights(args.saved)
+rnn_transducer.summary(line_length=100)
+rnn_transducer.add_featurizers(speech_featurizer, text_featurizer)
 
-streaming_transducer_tester = BaseTester(
-    config=config.learning_config.running_config,
-    output_name=args.output_name
-)
-streaming_transducer_tester.compile(streaming_transducer)
-streaming_transducer_tester.run(test_dataset)
+batch_size = args.bs or config.learning_config.running_config.batch_size
+test_data_loader = test_dataset.create(batch_size)
+
+with file_util.save_file(file_util.preprocess_paths(args.output)) as filepath:
+    overwrite = False
+    if tf.io.gfile.exists(filepath):
+        overwrite = input("Overwrite existing result file? (y/n): ").lower() == "y"
+    if overwrite:
+        results = rnn_transducer.predict(test_data_loader, verbose=1)
+        print(f"Saving result to {args.output} ...")
+        with open(filepath, "w") as openfile:
+            openfile.write("PATH\tDURATION\tGROUNDTRUTH\tGREEDY\tBEAMSEARCH\n")
+            progbar = tqdm(total=test_dataset.total_steps, unit="batch")
+            for i, pred in enumerate(results):
+                groundtruth, greedy, beamsearch = [x.decode('utf-8') for x in pred]
+                path, duration, _ = test_dataset.entries[i]
+                openfile.write(f"{path}\t{duration}\t{groundtruth}\t{greedy}\t{beamsearch}\n")
+                progbar.update(1)
+            progbar.close()
+    app_util.evaluate_results(filepath)

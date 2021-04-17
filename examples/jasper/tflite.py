@@ -22,13 +22,13 @@ import tensorflow as tf
 from tensorflow_asr.configs.config import Config
 from tensorflow_asr.featurizers.speech_featurizers import TFSpeechFeaturizer
 from tensorflow_asr.featurizers.text_featurizers import SubwordFeaturizer, CharFeaturizer
-from tensorflow_asr.models.transducer.contextnet import ContextNet
+from tensorflow_asr.models.ctc.jasper import Jasper
 
 DEFAULT_YAML = os.path.join(os.path.abspath(os.path.dirname(__file__)), "config.yml")
 
 tf.keras.backend.clear_session()
 
-parser = argparse.ArgumentParser(prog="ContextNet TFLite")
+parser = argparse.ArgumentParser(prog="Jasper TFLite")
 
 parser.add_argument("--config", type=str, default=DEFAULT_YAML, help="The file path of model configuration file")
 
@@ -51,13 +51,13 @@ else:
     text_featurizer = CharFeaturizer(config.decoder_config)
 
 # build model
-contextnet = ContextNet(**config.model_config, vocabulary_size=text_featurizer.num_classes)
-contextnet._build(speech_featurizer.shape)
-contextnet.load_weights(args.saved)
-contextnet.summary(line_length=100)
-contextnet.add_featurizers(speech_featurizer, text_featurizer)
+jasper = Jasper(**config.model_config, vocabulary_size=text_featurizer.num_classes)
+jasper._build(speech_featurizer.shape)
+jasper.load_weights(args.saved)
+jasper.summary(line_length=100)
+jasper.add_featurizers(speech_featurizer, text_featurizer)
 
-concrete_func = contextnet.make_tflite_function().get_concrete_function()
+concrete_func = jasper.make_tflite_function().get_concrete_function()
 converter = tf.lite.TFLiteConverter.from_concrete_functions([concrete_func])
 converter.experimental_new_converter = True
 converter.optimizations = [tf.lite.Optimize.DEFAULT]

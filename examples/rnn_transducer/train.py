@@ -13,23 +13,26 @@
 # limitations under the License.
 
 import os
+import math
 import argparse
-from tensorflow_asr.utils import setup_environment, setup_strategy
+from tensorflow_asr.utils import env_util
 
-setup_environment()
+env_util.setup_environment()
 import tensorflow as tf
 
 DEFAULT_YAML = os.path.join(os.path.abspath(os.path.dirname(__file__)), "config.yml")
 
 tf.keras.backend.clear_session()
 
-parser = argparse.ArgumentParser(prog="Conformer Training")
+parser = argparse.ArgumentParser(prog="RnnTransducer Training")
 
 parser.add_argument("--config", type=str, default=DEFAULT_YAML, help="The file path of model configuration file")
 
-parser.add_argument("--max_ckpts", type=int, default=10, help="Max number of checkpoints to keep")
-
 parser.add_argument("--tfrecords", default=False, action="store_true", help="Whether to use tfrecords")
+
+parser.add_argument("--sentence_piece", default=False, action="store_true", help="Whether to use `SentencePiece` model")
+
+parser.add_argument("--subwords", default=False, action="store_true", help="Use subwords")
 
 parser.add_argument("--tbs", type=int, default=None, help="Train batch size per replica")
 
@@ -37,65 +40,74 @@ parser.add_argument("--ebs", type=int, default=None, help="Evaluation batch size
 
 parser.add_argument("--spx", type=int, default=1, help="Steps per execution for maximizing performance")
 
-parser.add_argument("--metadata_prefix", type=str, default=None, help="Path to file containing metadata")
+parser.add_argument("--metadata", type=str, default=None, help="Path to file containing metadata")
+
+parser.add_argument("--static_length", default=False, action="store_true", help="Use static lengths")
 
 parser.add_argument("--devices", type=int, nargs="*", default=[0], help="Devices' ids to apply distributed training")
 
 parser.add_argument("--mxp", default=False, action="store_true", help="Enable mixed precision")
 
-parser.add_argument("--subword", default=False, action="store_true", help="Use subword")
-
 args = parser.parse_args()
 
 tf.config.optimizer.set_experimental_options({"auto_mixed_precision": args.mxp})
 
-strategy = setup_strategy(args.devices)
+strategy = env_util.setup_strategy(args.devices)
 
 from tensorflow_asr.configs.config import Config
-from tensorflow_asr.datasets.keras import ASRTFRecordDatasetKeras, ASRSliceDatasetKeras
-from tensorflow_asr.featurizers.speech_featurizers import TFSpeechFeaturizer
-from tensorflow_asr.featurizers.text_featurizers import SubwordFeaturizer, CharFeaturizer
-from tensorflow_asr.models.keras.streaming_transducer import StreamingTransducer
+from tensorflow_asr.datasets import asr_dataset
+from tensorflow_asr.featurizers import speech_featurizers, text_featurizers
+from tensorflow_asr.models.transducer.rnn_transducer import RnnTransducer
+from tensorflow_asr.optimizers.schedules import TransformerSchedule
 
 config = Config(args.config)
-speech_featurizer = TFSpeechFeaturizer(config.speech_config)
+speech_featurizer = speech_featurizers.TFSpeechFeaturizer(config.speech_config)
 
-if args.subword:
-    print("Use subwords ...")
-    text_featurizer = SubwordFeaturizer(config.decoder_config)
+if args.sentence_piece:
+    print("Loading SentencePiece model ...")
+    text_featurizer = text_featurizers.SentencePieceFeaturizer(config.decoder_config)
+elif args.subwords:
+    print("Loading subwords ...")
+    text_featurizer = text_featurizers.SubwordFeaturizer(config.decoder_config)
 else:
     print("Use characters ...")
-    text_featurizer = CharFeaturizer(config.decoder_config)
+    text_featurizer = text_featurizers.CharFeaturizer(config.decoder_config)
 
 if args.tfrecords:
-    train_dataset = ASRTFRecordDatasetKeras(
-        speech_featurizer=speech_featurizer, text_featurizer=text_featurizer,
+    train_dataset = asr_dataset.ASRTFRecordDataset(
+        speech_featurizer=speech_featurizer,
+        text_featurizer=text_featurizer,
         **vars(config.learning_config.train_dataset_config),
         indefinite=True
     )
-    eval_dataset = ASRTFRecordDatasetKeras(
-        speech_featurizer=speech_featurizer, text_featurizer=text_featurizer,
-        **vars(config.learning_config.eval_dataset_config)
+    eval_dataset = asr_dataset.ASRTFRecordDataset(
+        speech_featurizer=speech_featurizer,
+        text_featurizer=text_featurizer,
+        **vars(config.learning_config.eval_dataset_config),
+        indefinite=True
     )
-    # Update metadata calculated from both train and eval datasets
-    train_dataset.load_metadata(args.metadata_prefix)
-    eval_dataset.load_metadata(args.metadata_prefix)
-    # Use dynamic length
-    speech_featurizer.reset_length()
-    text_featurizer.reset_length()
 else:
-    train_dataset = ASRSliceDatasetKeras(
-        speech_featurizer=speech_featurizer, text_featurizer=text_featurizer,
+    train_dataset = asr_dataset.ASRSliceDataset(
+        speech_featurizer=speech_featurizer,
+        text_featurizer=text_featurizer,
         **vars(config.learning_config.train_dataset_config),
         indefinite=True
     )
-    eval_dataset = ASRSliceDatasetKeras(
-        speech_featurizer=speech_featurizer, text_featurizer=text_featurizer,
+    eval_dataset = asr_dataset.ASRSliceDataset(
+        speech_featurizer=speech_featurizer,
+        text_featurizer=text_featurizer,
         **vars(config.learning_config.eval_dataset_config),
         indefinite=True
     )
 
-global_batch_size = config.learning_config.running_config.batch_size
+train_dataset.load_metadata(args.metadata)
+eval_dataset.load_metadata(args.metadata)
+
+if not args.static_length:
+    speech_featurizer.reset_length()
+    text_featurizer.reset_length()
+
+global_batch_size = args.tbs or config.learning_config.running_config.batch_size
 global_batch_size *= strategy.num_replicas_in_sync
 
 train_data_loader = train_dataset.create(global_batch_size)
@@ -103,16 +115,20 @@ eval_data_loader = eval_dataset.create(global_batch_size)
 
 with strategy.scope():
     # build model
-    streaming_transducer = StreamingTransducer(
-        **config.model_config,
-        vocabulary_size=text_featurizer.num_classes
+    rnn_transducer = RnnTransducer(**config.model_config, vocabulary_size=text_featurizer.num_classes)
+    rnn_transducer._build(speech_featurizer.shape)
+    rnn_transducer.summary(line_length=100)
+
+    optimizer = tf.keras.optimizers.Adam(
+        TransformerSchedule(
+            d_model=rnn_transducer.dmodel,
+            warmup_steps=config.learning_config.optimizer_config.pop("warmup_steps", 10000),
+            max_lr=(0.05 / math.sqrt(rnn_transducer.dmodel))
+        ),
+        **config.learning_config.optimizer_config
     )
-    streaming_transducer._build(speech_featurizer.shape)
-    streaming_transducer.summary(line_length=150)
 
-    optimizer = tf.keras.optimizers.get(config.learning_config.optimizer_config)
-
-    streaming_transducer.compile(
+    rnn_transducer.compile(
         optimizer=optimizer,
         experimental_steps_per_execution=args.spx,
         global_batch_size=global_batch_size,
@@ -125,8 +141,11 @@ callbacks = [
     tf.keras.callbacks.TensorBoard(**config.learning_config.running_config.tensorboard)
 ]
 
-streaming_transducer.fit(
-    train_data_loader, epochs=config.learning_config.running_config.num_epochs,
-    validation_data=eval_data_loader, callbacks=callbacks,
-    steps_per_epoch=train_dataset.total_steps, validation_steps=eval_dataset.total_steps
+rnn_transducer.fit(
+    train_data_loader,
+    epochs=config.learning_config.running_config.num_epochs,
+    validation_data=eval_data_loader,
+    callbacks=callbacks,
+    steps_per_epoch=train_dataset.total_steps,
+    validation_steps=eval_dataset.total_steps
 )
