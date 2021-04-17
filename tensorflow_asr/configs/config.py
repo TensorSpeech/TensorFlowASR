@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from typing import Union
 from ..augmentations.augmentation import Augmentation
 from ..utils import file_util
 
@@ -75,8 +76,8 @@ class LearningConfig:
 class Config:
     """ User config class for training, testing or infering """
 
-    def __init__(self, path: str):
-        config = file_util.load_yaml(file_util.preprocess_paths(path))
+    def __init__(self, data: Union[str, dict]):
+        config = data if isinstance(data, dict) else file_util.load_yaml(file_util.preprocess_paths(data))
         self.speech_config = config.pop("speech_config", {})
         self.decoder_config = config.pop("decoder_config", {})
         self.model_config = config.pop("model_config", {})

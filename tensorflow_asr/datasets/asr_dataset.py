@@ -14,6 +14,7 @@
 
 import os
 import json
+from typing import Union
 import tqdm
 import numpy as np
 import tensorflow as tf
@@ -80,24 +81,27 @@ class ASRDataset(BaseDataset):
             f.write(json.dumps(content, indent=2))
         print(f"Metadata written to {metadata}")
 
-    def load_metadata(self, metadata: str = None):
+    def load_metadata(self, metadata: Union[str, dict] = None):
         if metadata is None: return
-        metadata = file_util.preprocess_paths(metadata)
-        if tf.io.gfile.exists(metadata):
-            print(f"Loading metadata from {metadata} ...")
-            with tf.io.gfile.GFile(metadata, "r") as f:
-                try:
-                    content = json.loads(f.read()).get(self.stage, {})
-                except json.JSONDecodeError:
-                    raise ValueError(f'File {metadata} must be in json format')
-                self.speech_featurizer.update_length(int(content.get("max_input_length", 0)))
-                self.text_featurizer.update_length(int(content.get("max_label_length", 0)))
-                self.total_steps = int(content.get("num_entries", 0))
+        if isinstance(metadata, dict):
+            content = metadata
+        else:
+            metadata = file_util.preprocess_paths(metadata)
+            if tf.io.gfile.exists(metadata):
+                print(f"Loading metadata from {metadata} ...")
+                with tf.io.gfile.GFile(metadata, "r") as f:
+                    try:
+                        content = json.loads(f.read()).get(self.stage, {})
+                    except json.JSONDecodeError:
+                        raise ValueError(f'File {metadata} must be in json format')
+        self.speech_featurizer.update_length(int(content.get("max_input_length", 0)))
+        self.text_featurizer.update_length(int(content.get("max_label_length", 0)))
+        self.total_steps = int(content.get("num_entries", 0))
 
-    def update_metadata(self, metadata_prefix: str = None):
-        self.load_metadata(metadata_prefix)
+    def update_metadata(self, metadata: str = None):
+        self.load_metadata(metadata)
         self.compute_metadata()
-        self.save_metadata(metadata_prefix)
+        self.save_metadata(metadata)
 
     # -------------------------------- ENTRIES -------------------------------------
 
