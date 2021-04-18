@@ -19,7 +19,7 @@ import tensorflow as tf
 DEFAULT_YAML = os.path.join(os.path.abspath(os.path.dirname(__file__)), "config.yml")
 
 from tensorflow_asr.configs.config import Config
-from tensorflow_asr.models.streaming_transducer import StreamingTransducer
+from tensorflow_asr.models.transducer.rnn_transducer import RnnTransducer
 from tensorflow_asr.featurizers.text_featurizers import CharFeaturizer
 from tensorflow_asr.featurizers.speech_featurizers import TFSpeechFeaturizer
 
@@ -31,7 +31,7 @@ def test_streaming_transducer():
 
     speech_featurizer = TFSpeechFeaturizer(config.speech_config)
 
-    model = StreamingTransducer(vocabulary_size=text_featurizer.num_classes, **config.model_config)
+    model = RnnTransducer(vocabulary_size=text_featurizer.num_classes, **config.model_config)
 
     model._build(speech_featurizer.shape)
     model.summary(line_length=150)

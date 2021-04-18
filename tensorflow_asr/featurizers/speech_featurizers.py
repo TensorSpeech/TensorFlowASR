@@ -15,7 +15,6 @@
 import os
 import io
 import abc
-import six
 import math
 import numpy as np
 import librosa
@@ -217,6 +216,7 @@ class SpeechFeaturizer(metaclass=abc.ABCMeta):
         self.num_feature_bins = speech_config.get("num_feature_bins", 80)
         self.feature_type = speech_config.get("feature_type", "log_mel_spectrogram")
         self.preemphasis = speech_config.get("preemphasis", None)
+        self.top_db = speech_config.get("top_db", 80.0)
         # Normalization
         self.normalize_signal = speech_config.get("normalize_signal", True)
         self.normalize_feature = speech_config.get("normalize_feature", True)
@@ -426,25 +426,14 @@ class TFSpeechFeaturizer(SpeechFeaturizer):
         framed_signals *= window
         return tf.square(tf.abs(tf.signal.rfft(framed_signals, [self.nfft])))
 
-    def power_to_db(self, S, ref=1.0, amin=1e-10, top_db=80.0):
-        if amin <= 0:
-            raise ValueError('amin must be strictly positive')
+    def power_to_db(self, S, amin=1e-10):
+        log_spec = 10.0 * math_util.log10(tf.maximum(amin, S))
+        log_spec -= 10.0 * math_util.log10(tf.maximum(amin, 1.0))
 
-        magnitude = S
-
-        if six.callable(ref):
-            # User supplied a function to calculate reference power
-            ref_value = ref(magnitude)
-        else:
-            ref_value = np.abs(ref)
-
-        log_spec = 10.0 * math_util.log10(tf.maximum(amin, magnitude))
-        log_spec -= 10.0 * math_util.log10(tf.maximum(amin, ref_value))
-
-        if top_db is not None:
-            if top_db < 0:
+        if self.top_db is not None:
+            if self.top_db < 0:
                 raise ValueError('top_db must be non-negative')
-            log_spec = tf.maximum(log_spec, tf.reduce_max(log_spec) - top_db)
+            log_spec = tf.maximum(log_spec, tf.reduce_max(log_spec) - self.top_db)
 
         return log_spec
 
