@@ -100,9 +100,9 @@ batch_size = args.bs or config.learning_config.running_config.batch_size
 test_data_loader = test_dataset.create(batch_size)
 
 with file_util.save_file(file_util.preprocess_paths(args.output)) as filepath:
-    overwrite = False
+    overwrite = True
     if tf.io.gfile.exists(filepath):
-        overwrite = input("Overwrite existing result file? (y/n): ").lower() == "y"
+        overwrite = input(f"Overwrite existing result file {filepath} ? (y/n): ").lower() == "y"
     if overwrite:
         results = deepspeech2.predict(test_data_loader, verbose=1)
         print(f"Saving result to {args.output} ...")
