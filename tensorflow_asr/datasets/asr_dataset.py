@@ -385,6 +385,7 @@ class ASRMaskedSliceDataset(ASRSliceDataset):
                  buffer_size: int = BUFFER_SIZE,
                  history_window_size: int = 3,
                  input_chunk_duration: int = 250,
+                 time_reduction_factor: int = 4,
                  **kwargs):
         super(ASRMaskedSliceDataset, self).__init__(
             data_paths=data_paths, augmentations=augmentations,
@@ -396,13 +397,13 @@ class ASRMaskedSliceDataset(ASRSliceDataset):
         self.text_featurizer = text_featurizer
         self.history_window_size = history_window_size
         self.input_chunk_size = input_chunk_duration * self.speech_featurizer.sample_rate // 1000
+        self.time_reduction_factor = time_reduction_factor
 
     def calculate_mask(self, num_frames):
         frame_step = self.speech_featurizer.frame_step
         frames_per_chunk = self.input_chunk_size // frame_step
 
-        time_reduction_factor = 4 # TODO: Get time_reduction_factor from config or model.
-        num_frames = tf.cast(tf.math.ceil(num_frames / time_reduction_factor), tf.int32)
+        num_frames = tf.cast(tf.math.ceil(num_frames / self.time_reduction_factor), tf.int32)
 
         def _calculate_mask(num_frames, frames_per_chunk, history_window_size):
             mask = np.zeros((num_frames, num_frames), dtype=np.int32)

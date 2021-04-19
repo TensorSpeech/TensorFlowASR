@@ -107,11 +107,8 @@ if not args.static_length:
 global_batch_size = args.tbs or config.learning_config.running_config.batch_size
 global_batch_size *= strategy.num_replicas_in_sync
 
-global_eval_batch_size = args.ebs or global_batch_size
+global_eval_batch_size = args.ebs  or global_batch_size
 global_eval_batch_size *= strategy.num_replicas_in_sync
-
-train_data_loader = train_dataset.create(global_batch_size)
-eval_data_loader = eval_dataset.create(global_eval_batch_size)
 
 with strategy.scope():
     # build model
@@ -134,6 +131,9 @@ with strategy.scope():
         global_batch_size=global_batch_size,
         blank=text_featurizer.blank
     )
+
+train_data_loader = train_dataset.create(global_batch_size, time_reduction_factor=streaming_conformer.time_reduction_factor)
+eval_data_loader = eval_dataset.create(global_eval_batch_size, time_reduction_factor=streaming_conformer.time_reduction_factor)
 
 callbacks = [
     tf.keras.callbacks.ModelCheckpoint(**config.learning_config.running_config.checkpoint),
