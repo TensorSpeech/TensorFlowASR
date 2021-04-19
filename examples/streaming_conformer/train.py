@@ -107,7 +107,7 @@ if not args.static_length:
 global_batch_size = args.tbs or config.learning_config.running_config.batch_size
 global_batch_size *= strategy.num_replicas_in_sync
 
-global_eval_batch_size = args.ebs or config.learning_config.running_config.eval_batch_size
+global_eval_batch_size = args.ebs or global_batch_size
 global_eval_batch_size *= strategy.num_replicas_in_sync
 
 train_data_loader = train_dataset.create(global_batch_size)
