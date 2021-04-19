@@ -78,6 +78,7 @@ else:
     print("Use characters ...")
     text_featurizer = text_featurizers.CharFeaturizer(config.decoder_config)
 
+time_reduction_factor = config.model_config['encoder_subsampling']['strides'] * 2
 if args.tfrecords:
     train_dataset = ASRTFRecordDataset(
         speech_featurizer=speech_featurizer, text_featurizer=text_featurizer,
@@ -90,10 +91,12 @@ if args.tfrecords:
 else:
     train_dataset = ASRMaskedSliceDataset(
         speech_featurizer=speech_featurizer, text_featurizer=text_featurizer,
+        time_reduction_factor=time_reduction_factor,
         **vars(config.learning_config.train_dataset_config)
     )
     eval_dataset = ASRMaskedSliceDataset(
         speech_featurizer=speech_featurizer, text_featurizer=text_featurizer,
+        time_reduction_factor=time_reduction_factor,
         **vars(config.learning_config.eval_dataset_config)
     )
 
@@ -109,6 +112,9 @@ global_batch_size *= strategy.num_replicas_in_sync
 
 global_eval_batch_size = args.ebs  or global_batch_size
 global_eval_batch_size *= strategy.num_replicas_in_sync
+
+train_data_loader = train_dataset.create(global_batch_size)
+eval_data_loader = eval_dataset.create(global_eval_batch_size)
 
 with strategy.scope():
     # build model
@@ -131,9 +137,6 @@ with strategy.scope():
         global_batch_size=global_batch_size,
         blank=text_featurizer.blank
     )
-
-train_data_loader = train_dataset.create(global_batch_size, time_reduction_factor=streaming_conformer.time_reduction_factor)
-eval_data_loader = eval_dataset.create(global_eval_batch_size, time_reduction_factor=streaming_conformer.time_reduction_factor)
 
 callbacks = [
     tf.keras.callbacks.ModelCheckpoint(**config.learning_config.running_config.checkpoint),
