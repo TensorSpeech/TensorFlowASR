@@ -21,6 +21,7 @@ TensorFlowASR implements some automatic speech recognition architectures such as
 
 ## What's New?
 
+- (04/17/2021) Refactor repository with new version 1.x
 - (02/16/2021) Supported for TPU training
 - (12/27/2020) Supported _naive_ token level timestamp, see [demo](./examples/demonstration/conformer.py) with flag `--timestamp`
 - (12/17/2020) Supported ContextNet [http://arxiv.org/abs/2005.03191](http://arxiv.org/abs/2005.03191)
