@@ -19,6 +19,7 @@ from ..layers.subsampling import VggSubsampling, Conv2dSubsampling
 from ..layers.positional_encoding import PositionalEncoding, PositionalEncodingConcat
 from ..layers.multihead_attention import MultiHeadAttention, RelPositionMultiHeadAttention
 from ...utils import shape_util
+from ..layers.DepthwiseConv1D import DepthwiseConv1D
 
 L2 = tf.keras.regularizers.l2(1e-6)
 
@@ -155,14 +156,14 @@ class ConvModule(tf.keras.layers.Layer):
             bias_regularizer=bias_regularizer
         )
         self.glu = GLU(name=f"{name}_glu")
-        self.dw_conv = tf.keras.layers.SeparableConv1D(
-            filters=input_dim,
+        self.dw_conv = DepthwiseConv1D(
             kernel_size=(kernel_size), strides=1,
             padding="same" if not streaming else "causal",
             name=f"{name}_dw_conv",
             depth_multiplier=depth_multiplier,
             depthwise_regularizer=kernel_regularizer,
-            bias_regularizer=bias_regularizer
+            bias_regularizer=bias_regularizer,
+            data_format='channels_last',
         )
         self.bn = tf.keras.layers.BatchNormalization(
             name=f"{name}_bn",
