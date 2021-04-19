@@ -143,20 +143,23 @@ class ConvModule(tf.keras.layers.Layer):
                  depth_multiplier=1,
                  kernel_regularizer=L2,
                  bias_regularizer=L2,
+                 streaming=False,
                  name="conv_module",
                  **kwargs):
         super(ConvModule, self).__init__(name=name, **kwargs)
         self.ln = tf.keras.layers.LayerNormalization()
-        self.pw_conv_1 = tf.keras.layers.Conv2D(
+        self.pw_conv_1 = tf.keras.layers.Conv1D(
             filters=2 * input_dim, kernel_size=1, strides=1,
             padding="valid", name=f"{name}_pw_conv_1",
             kernel_regularizer=kernel_regularizer,
             bias_regularizer=bias_regularizer
         )
         self.glu = GLU(name=f"{name}_glu")
-        self.dw_conv = tf.keras.layers.DepthwiseConv2D(
-            kernel_size=(kernel_size, 1), strides=1,
-            padding="same", name=f"{name}_dw_conv",
+        self.dw_conv = tf.keras.layers.SeparableConv1D(
+            filters=input_dim,
+            kernel_size=(kernel_size), strides=1,
+            padding="same" if not streaming else "causal",
+            name=f"{name}_dw_conv",
             depth_multiplier=depth_multiplier,
             depthwise_regularizer=kernel_regularizer,
             bias_regularizer=bias_regularizer
@@ -167,7 +170,7 @@ class ConvModule(tf.keras.layers.Layer):
             beta_regularizer=bias_regularizer
         )
         self.swish = tf.keras.layers.Activation(tf.nn.swish, name=f"{name}_swish_activation")
-        self.pw_conv_2 = tf.keras.layers.Conv2D(
+        self.pw_conv_2 = tf.keras.layers.Conv1D(
             filters=input_dim, kernel_size=1, strides=1,
             padding="valid", name=f"{name}_pw_conv_2",
             kernel_regularizer=kernel_regularizer,
@@ -178,8 +181,7 @@ class ConvModule(tf.keras.layers.Layer):
 
     def call(self, inputs, training=False, **kwargs):
         outputs = self.ln(inputs, training=training)
-        B, T, E = shape_util.shape_list(outputs)
-        outputs = tf.reshape(outputs, [B, T, 1, E])
+        B, T, E = shape_list(outputs)
         outputs = self.pw_conv_1(outputs, training=training)
         outputs = self.glu(outputs)
         outputs = self.dw_conv(outputs, training=training)
@@ -217,6 +219,7 @@ class ConformerBlock(tf.keras.layers.Layer):
                  depth_multiplier=1,
                  kernel_regularizer=L2,
                  bias_regularizer=L2,
+                 streaming=False,
                  name="conformer_block",
                  **kwargs):
         super(ConformerBlock, self).__init__(name=name, **kwargs)
@@ -238,7 +241,8 @@ class ConformerBlock(tf.keras.layers.Layer):
             dropout=dropout, name=f"{name}_conv_module",
             depth_multiplier=depth_multiplier,
             kernel_regularizer=kernel_regularizer,
-            bias_regularizer=bias_regularizer
+            bias_regularizer=bias_regularizer,
+            streaming=streaming
         )
         self.ffm2 = FFModule(
             input_dim=input_dim, dropout=dropout,
@@ -286,6 +290,7 @@ class ConformerEncoder(tf.keras.Model):
                  dropout=0.0,
                  kernel_regularizer=L2,
                  bias_regularizer=L2,
+                 streaming=False,
                  name="conformer_encoder",
                  **kwargs):
         super(ConformerEncoder, self).__init__(name=name, **kwargs)
@@ -338,6 +343,7 @@ class ConformerEncoder(tf.keras.Model):
                 depth_multiplier=depth_multiplier,
                 kernel_regularizer=kernel_regularizer,
                 bias_regularizer=bias_regularizer,
+                streaming=streaming,
                 name=f"{name}_block_{i}"
             )
             self.conformer_blocks.append(conformer_block)
