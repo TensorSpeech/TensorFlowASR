@@ -443,8 +443,33 @@ class ASRMaskedSliceDataset(ASRSliceDataset):
 
     # -------------------------------- CREATION -------------------------------------
 
+    def parse(self, path: tf.Tensor, audio: tf.Tensor, indices: tf.Tensor):
+        """
+        Returns:
+            path, features, input_lengths, labels, label_lengths, pred_inp, mask
+        """
+        if self.use_tf: data = self.tf_preprocess(path, audio, indices)
+        else: data = self.preprocess(path, audio, indices)
+
+        _, features, input_length, label, label_length, prediction, prediction_length, mask = data
+
+        return (
+            data_util.create_inputs(
+                inputs=features,
+                inputs_length=input_length,
+                predictions=prediction,
+                predictions_length=prediction_length,
+                mask = mask
+            ),
+            data_util.create_labels(
+                labels=label,
+                labels_length=label_length
+            )
+        )
+
     def process(self, dataset: tf.data.Dataset, batch_size: int):
         dataset = dataset.map(self.parse, num_parallel_calls=AUTOTUNE)
+        self.total_steps = math_util.get_num_batches(self.total_steps, batch_size, drop_remainders=self.drop_remainder)
 
         if self.cache:
             dataset = dataset.cache()
@@ -452,29 +477,53 @@ class ASRMaskedSliceDataset(ASRSliceDataset):
         if self.shuffle:
             dataset = dataset.shuffle(self.buffer_size, reshuffle_each_iteration=True)
 
-        if self.indefinite:
+        if self.indefinite and self.total_steps:
             dataset = dataset.repeat()
 
         # PADDED BATCH the dataset
         dataset = dataset.padded_batch(
             batch_size=batch_size,
             padded_shapes=(
-                tf.TensorShape([]),
-                tf.TensorShape(self.speech_featurizer.shape),
-                tf.TensorShape([]),
-                tf.TensorShape(self.text_featurizer.shape),
-                tf.TensorShape([]),
-                tf.TensorShape(self.text_featurizer.prepand_shape),
-                tf.TensorShape([]),
-                tf.TensorShape([self.speech_featurizer.shape[0], self.speech_featurizer.shape[0]])
+                data_util.create_inputs(
+                    inputs=tf.TensorShape(self.speech_featurizer.shape),
+                    inputs_length=tf.TensorShape([]),
+                    predictions=tf.TensorShape(self.text_featurizer.prepand_shape),
+                    predictions_length=tf.TensorShape([]),
+                    mask=tf.TensorShape([self.speech_featurizer.shape[0], self.speech_featurizer.shape[0]])
+                ),
+                data_util.create_labels(
+                    labels=tf.TensorShape(self.text_featurizer.shape),
+                    labels_length=tf.TensorShape([])
+                ),
             ),
-            padding_values=(None, 0., 0, self.text_featurizer.blank, 0, self.text_featurizer.blank, 0, 0),
-            drop_remainder=self.drop_remainder
+            padding_values=(
+                data_util.create_inputs(
+                    inputs= 0.,
+                    inputs_length=0,
+                    predictions=self.text_featurizer.blank,
+                    predictions_length=0,
+                    mask=0
+                ),
+                data_util.create_labels(
+                    labels=self.text_featurizer.blank,
+                    labels_length=0
+                )
+            ),
+            drop_remainder = self.drop_remainder
         )
 
         # PREFETCH to improve speed of input length
         dataset = dataset.prefetch(AUTOTUNE)
-        self.total_steps = get_num_batches(self.total_steps, batch_size, drop_remainders=self.drop_remainder)
         return dataset
+
+    def create(self, batch_size: int):
+        self.read_entries()
+        if not self.total_steps or self.total_steps == 0: return None
+        dataset = tf.data.Dataset.from_generator(
+            self.generator,
+            output_types=(tf.string, tf.string, tf.string),
+            output_shapes=(tf.TensorShape([]), tf.TensorShape([]), tf.TensorShape([]))
+        )
+        return self.process(dataset, batch_size)
 
 # TODO: Create masked TFRecords dataset
