@@ -14,10 +14,9 @@
 
 import os
 import argparse
-from tensorflow_asr.utils import setup_environment, setup_devices
-from tensorflow_asr.utils.utils import get_reduced_length
+from tensorflow_asr.utils import env_util, math_util
 
-setup_environment()
+env_util.setup_environment()
 import tensorflow as tf
 
 parser = argparse.ArgumentParser(prog="Conformer non streaming")
@@ -42,13 +41,13 @@ parser.add_argument("--sentence_piece", default=False, action="store_true", help
 
 args = parser.parse_args()
 
-setup_devices([args.device], cpu=args.cpu)
+env_util.setup_devices([args.device], cpu=args.cpu)
 
 from tensorflow_asr.configs.config import Config
 from tensorflow_asr.featurizers.speech_featurizers import read_raw_audio
 from tensorflow_asr.featurizers.speech_featurizers import TFSpeechFeaturizer
 from tensorflow_asr.featurizers.text_featurizers import CharFeaturizer, SubwordFeaturizer, SentencePieceFeaturizer
-from tensorflow_asr.models.conformer import Conformer
+from tensorflow_asr.models.transducer.conformer import Conformer
 
 config = Config(args.config)
 speech_featurizer = TFSpeechFeaturizer(config.speech_config)
@@ -71,7 +70,7 @@ conformer.add_featurizers(speech_featurizer, text_featurizer)
 
 signal = read_raw_audio(args.filename)
 features = speech_featurizer.tf_extract(signal)
-input_length = get_reduced_length(tf.shape(features)[0], conformer.time_reduction_factor)
+input_length = math_util.get_reduced_length(tf.shape(features)[0], conformer.time_reduction_factor)
 
 if args.beam_width:
     transcript = conformer.recognize_beam(features[None, ...], input_length[None, ...])

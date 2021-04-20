@@ -23,8 +23,7 @@ import tensorflow as tf
 import tensorflow_datasets as tds
 
 from ..configs.config import DecoderConfig
-from ..utils.utils import preprocess_paths
-from . import wordpiece
+from ..utils import file_util
 
 ENGLISH_CHARACTERS = [" ", "a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m",
                       "n", "o", "p", "q", "r", "s", "t", "u", "v", "w", "x", "y", "z", "'"]
@@ -251,13 +250,13 @@ class SubwordFeaturizer(TextFeaturizer):
     @classmethod
     def load_from_file(cls, decoder_config: dict, filename: str = None):
         dconf = DecoderConfig(decoder_config.copy())
-        filename = dconf.vocabulary if filename is None else preprocess_paths(filename)
+        filename = dconf.vocabulary if filename is None else file_util.preprocess_paths(filename)
         filename_prefix = os.path.splitext(filename)[0]
         subwords = tds.deprecated.text.SubwordTextEncoder.load_from_file(filename_prefix)
         return cls(decoder_config, subwords)
 
     def save_to_file(self, filename: str = None):
-        filename = self.decoder_config.vocabulary if filename is None else preprocess_paths(filename)
+        filename = self.decoder_config.vocabulary if filename is None else file_util.preprocess_paths(filename)
         filename_prefix = os.path.splitext(filename)[0]
         return self.subwords.save_to_file(filename_prefix)
 
@@ -325,114 +324,6 @@ class SubwordFeaturizer(TextFeaturizer):
             return tf.gather_nd(upoints, tf.where(tf.not_equal(upoints, 0)))
 
 
-class TFSubwordFeaturizer(TextFeaturizer):
-    """
-    Extract text feature based on char-level granularity.
-    By looking up the vocabulary table, each line of transcript will be
-    converted to a sequence of integer indexes.
-    """
-
-    def __init__(self, decoder_config: dict, subwords=None):
-        """
-        decoder_config = {
-            "target_vocab_size": int,
-            "max_subword_length": 4,
-            "max_corpus_chars": None,
-            "reserved_tokens": None,
-            "beam_width": int,
-            "lm_config": {
-                ...
-            }
-        }
-        """
-        super(TFSubwordFeaturizer, self).__init__(decoder_config)
-        self.subwords = self.__load_subwords() if subwords is None else subwords
-        self.blank = 0  # subword treats blank as 0
-        self.num_classes = self.subwords.vocab_size
-
-    def __load_subwords(self):
-        return wordpiece.WordpieceTokenizer(self.decoder_config.vocabulary, token_out_type=tf.int32)
-
-    @classmethod
-    def build_from_corpus(cls, decoder_config: dict, corpus_files: list = None, output_file: str = None):
-        dconf = DecoderConfig(decoder_config.copy())
-        corpus_files = dconf.corpus_files if corpus_files is None or len(corpus_files) == 0 else corpus_files
-        filename = dconf.vocabulary if output_file is None else preprocess_paths(output_file)
-
-        def corpus_generator():
-            for file in corpus_files:
-                with open(file, "r", encoding="utf-8") as f:
-                    lines = f.read().splitlines()
-                    lines = lines[1:]
-                for line in lines:
-                    line = line.split("\t")
-                    yield line[-1]
-
-        wordpiece.build_from_corpus(
-            corpus_generator(),
-            output_file_path=filename,
-            target_vocab_size=dconf.target_vocab_size,
-            max_subword_length=dconf.max_subword_length,
-            max_corpus_chars=dconf.max_corpus_chars,
-            reserved_tokens=dconf.reserved_tokens
-        )
-
-        subwords = wordpiece.WordpieceTokenizer(filename, token_out_type=tf.int32)
-        return cls(decoder_config, subwords)
-
-    @classmethod
-    def load_from_file(cls, decoder_config: dict, filename: str = None):
-        dconf = DecoderConfig(decoder_config.copy())
-        filename = dconf.vocabulary if filename is None else preprocess_paths(filename)
-        subwords = wordpiece.WordpieceTokenizer(filename, token_out_type=tf.int32)
-        return cls(decoder_config, subwords)
-
-    def extract(self, text: tf.Tensor) -> tf.Tensor:
-        """
-        Convert string to a list of integers
-        Args:
-            text: string (sequence of characters)
-
-        Returns:
-            sequence of ints in tf.Tensor
-        """
-        indices = self.subwords.tokenize(text)
-        indices = indices.merge_dims(0, -1)
-        return indices.to_tensor()
-
-    def iextract(self, indices: tf.Tensor) -> tf.Tensor:
-        """
-        Convert list of indices to string
-        Args:
-            indices: tf.Tensor with dim [B, None]
-
-        Returns:
-            transcripts: tf.Tensor of dtype tf.string with dim [B]
-        """
-        with tf.device("/CPU:0"):  # string data is not supported on GPU
-            indices = self.normalize_indices(indices)
-            text = self.subwords.detokenize(indices)
-            return tf.strings.reduce_join(text, separator=" ", axis=-1)
-
-    @tf.function(
-        input_signature=[
-            tf.TensorSpec([None], dtype=tf.int32)
-        ]
-    )
-    def indices2upoints(self, indices: tf.Tensor) -> tf.Tensor:
-        """
-        Transform Predicted Indices to Unicode Code Points (for using tflite)
-        Args:
-            indices: tf.Tensor of Classes in shape [None]
-
-        Returns:
-            unicode code points transcript with dtype tf.int32 and shape [None]
-        """
-        with tf.name_scope("indices2upoints"):
-            text = self.iextract(tf.expand_dims(indices, axis=0))
-            return tf.reshape(text, shape=[-1])
-
-
 class SentencePieceFeaturizer(TextFeaturizer):
     """
     Extract text feature based on sentence piece package.
@@ -444,12 +335,18 @@ class SentencePieceFeaturizer(TextFeaturizer):
 
     def __init__(self, decoder_config: dict, model=None):
         super(SentencePieceFeaturizer, self).__init__(decoder_config)
-        self.model = model
+        self.model = self.__load_model() if model is None else model
         self.blank = 0  # treats blank as 0 (pad)
         self.upoints = None
         # vocab size
         self.num_classes = self.model.get_piece_size()
         self.upoints = None
+
+    def __load_model(self):
+        filename_prefix = os.path.splitext(self.decoder_config.vocabulary)[0]
+        processor = sp.SentencePieceProcessor()
+        processor.load(filename_prefix + ".model")
+        return processor
 
     def __init_upoints(self):
         text = [""]
@@ -512,7 +409,7 @@ class SentencePieceFeaturizer(TextFeaturizer):
     @classmethod
     def load_from_file(cls, decoder_config: dict, filename: str = None):
         if filename is not None:
-            filename_prefix = os.path.splitext(preprocess_paths(filename))[0]
+            filename_prefix = os.path.splitext(file_util.preprocess_paths(filename))[0]
         else:
             filename_prefix = decoder_config.get("output_path_prefix", None)
         processor = sp.SentencePieceProcessor()

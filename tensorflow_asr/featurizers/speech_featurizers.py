@@ -15,7 +15,6 @@
 import os
 import io
 import abc
-import six
 import math
 import numpy as np
 import librosa
@@ -23,10 +22,10 @@ import soundfile as sf
 import tensorflow as tf
 import tensorflow_io as tfio
 
-from ..utils.utils import log10, has_tpu
-from .gammatone import fft_weights
+from ..utils import math_util, env_util
+from .methods import gammatone
 
-tpu = has_tpu()
+tpu = env_util.has_tpu()
 
 
 # def tf_resample(signal, rate_in, rate_out):
@@ -94,16 +93,16 @@ def merge_slices(slices: np.ndarray) -> np.ndarray:
     return np.reshape(slices, [-1])
 
 
-def normalize_audio_feature(audio_feature: np.ndarray, per_feature=False):
+def normalize_audio_feature(audio_feature: np.ndarray, per_frame=False):
     """ Mean and variance normalization """
-    axis = 0 if per_feature else None
+    axis = 1 if per_frame else None
     mean = np.mean(audio_feature, axis=axis)
-    std_dev = np.std(audio_feature, axis=axis) + 1e-9
+    std_dev = np.std(np.variance(audio_feature, axis=axis) + 1e-9)
     normalized = (audio_feature - mean) / std_dev
     return normalized
 
 
-def tf_normalize_audio_features(audio_feature: tf.Tensor, per_feature=False):
+def tf_normalize_audio_features(audio_feature: tf.Tensor, per_frame=False):
     """
     TF Mean and variance features normalization
     Args:
@@ -112,10 +111,12 @@ def tf_normalize_audio_features(audio_feature: tf.Tensor, per_feature=False):
     Returns:
         normalized audio features with shape [T, F]
     """
-    axis = 0 if per_feature else None
-    mean = tf.reduce_mean(audio_feature, axis=axis)
-    std_dev = tf.math.reduce_std(audio_feature, axis=axis) + 1e-9
+    axis = 1 if per_frame else None
+    mean = tf.reduce_mean(audio_feature, axis=axis, keepdims=True)
+    std_dev = tf.math.sqrt(tf.math.reduce_variance(audio_feature, axis=axis, keepdims=True) + 1e-9)
     return (audio_feature - mean) / std_dev
+    # audio_feature, _ = tf.linalg.normalize(audio_feature, axis=axis)
+    # return audio_feature
 
 
 def normalize_signal(signal: np.ndarray):
@@ -217,10 +218,11 @@ class SpeechFeaturizer(metaclass=abc.ABCMeta):
         self.num_feature_bins = speech_config.get("num_feature_bins", 80)
         self.feature_type = speech_config.get("feature_type", "log_mel_spectrogram")
         self.preemphasis = speech_config.get("preemphasis", None)
+        self.top_db = speech_config.get("top_db", 80.0)
         # Normalization
         self.normalize_signal = speech_config.get("normalize_signal", True)
         self.normalize_feature = speech_config.get("normalize_feature", True)
-        self.normalize_per_feature = speech_config.get("normalize_per_feature", False)
+        self.normalize_per_frame = speech_config.get("normalize_per_frame", False)
         self.center = speech_config.get("center", True)
         # Length
         self.max_length = 0
@@ -315,7 +317,7 @@ class NumpySpeechFeaturizer(SpeechFeaturizer):
         original_features = features.copy()
 
         if self.normalize_feature:
-            features = normalize_audio_feature(features, per_feature=self.normalize_per_feature)
+            features = normalize_audio_feature(features, per_frame=self.normalize_per_frame)
 
         features = np.expand_dims(features, axis=-1)
 
@@ -398,16 +400,16 @@ class NumpySpeechFeaturizer(SpeechFeaturizer):
     def compute_log_gammatone_spectrogram(self, signal: np.ndarray) -> np.ndarray:
         S = self.stft(signal)
 
-        gammatone = fft_weights(self.nfft, self.sample_rate,
-                                self.num_feature_bins, width=1.0,
-                                fmin=0, fmax=int(self.sample_rate / 2),
-                                maxlen=(self.nfft / 2 + 1))
+        gtone = gammatone.fft_weights(self.nfft, self.sample_rate,
+                                      self.num_feature_bins, width=1.0,
+                                      fmin=0, fmax=int(self.sample_rate / 2),
+                                      maxlen=(self.nfft / 2 + 1))
 
-        gammatone = gammatone.numpy().astype(np.float32)
+        gtone = gtone.numpy().astype(np.float32)
 
-        gammatone_spectrogram = np.dot(S.T, gammatone)
+        gtone_spectrogram = np.dot(S.T, gtone)
 
-        return self.power_to_db(gammatone_spectrogram)
+        return self.power_to_db(gtone_spectrogram)
 
 
 class TFSpeechFeaturizer(SpeechFeaturizer):
@@ -426,25 +428,14 @@ class TFSpeechFeaturizer(SpeechFeaturizer):
         framed_signals *= window
         return tf.square(tf.abs(tf.signal.rfft(framed_signals, [self.nfft])))
 
-    def power_to_db(self, S, ref=1.0, amin=1e-10, top_db=80.0):
-        if amin <= 0:
-            raise ValueError('amin must be strictly positive')
+    def power_to_db(self, S, amin=1e-10):
+        log_spec = 10.0 * math_util.log10(tf.maximum(amin, S))
+        log_spec -= 10.0 * math_util.log10(tf.maximum(amin, 1.0))
 
-        magnitude = S
-
-        if six.callable(ref):
-            # User supplied a function to calculate reference power
-            ref_value = ref(magnitude)
-        else:
-            ref_value = np.abs(ref)
-
-        log_spec = 10.0 * log10(tf.maximum(amin, magnitude))
-        log_spec -= 10.0 * log10(tf.maximum(amin, ref_value))
-
-        if top_db is not None:
-            if top_db < 0:
+        if self.top_db is not None:
+            if self.top_db < 0:
                 raise ValueError('top_db must be non-negative')
-            log_spec = tf.maximum(log_spec, tf.reduce_max(log_spec) - top_db)
+            log_spec = tf.maximum(log_spec, tf.reduce_max(log_spec) - self.top_db)
 
         return log_spec
 
@@ -480,7 +471,7 @@ class TFSpeechFeaturizer(SpeechFeaturizer):
         features = tf.expand_dims(features, axis=-1)
 
         if self.normalize_feature:
-            features = tf_normalize_audio_features(features, per_feature=self.normalize_per_feature)
+            features = tf_normalize_audio_features(features, per_frame=self.normalize_per_frame)
 
         return features
 
@@ -507,11 +498,11 @@ class TFSpeechFeaturizer(SpeechFeaturizer):
     def compute_log_gammatone_spectrogram(self, signal: np.ndarray) -> np.ndarray:
         S = self.stft(signal)
 
-        gammatone = fft_weights(self.nfft, self.sample_rate,
-                                self.num_feature_bins, width=1.0,
-                                fmin=0, fmax=int(self.sample_rate / 2),
-                                maxlen=(self.nfft / 2 + 1))
+        gtone = gammatone.fft_weights(self.nfft, self.sample_rate,
+                                      self.num_feature_bins, width=1.0,
+                                      fmin=0, fmax=int(self.sample_rate / 2),
+                                      maxlen=(self.nfft / 2 + 1))
 
-        gammatone_spectrogram = tf.tensordot(S, gammatone, 1)
+        gtone_spectrogram = tf.tensordot(S, gtone, 1)
 
-        return self.power_to_db(gammatone_spectrogram)
+        return self.power_to_db(gtone_spectrogram)
