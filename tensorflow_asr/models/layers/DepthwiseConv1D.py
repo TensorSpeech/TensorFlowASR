@@ -3,10 +3,6 @@
   Slight modifications have been made to support causal padding.
 """
 
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
-
 from tensorflow.python.framework import tensor_shape
 from tensorflow.python.keras import backend
 from tensorflow.python.keras import constraints
@@ -14,16 +10,13 @@ from tensorflow.python.keras import initializers
 from tensorflow.python.keras import regularizers
 from tensorflow.python.keras.engine.input_spec import InputSpec
 from tensorflow.python.keras.layers.convolutional import Conv1D
-# imports for backwards namespace compatibility
-# pylint: disable=unused-import
-# pylint: enable=unused-import
+
 from tensorflow.python.keras.utils import conv_utils
 from tensorflow.python.keras.utils import tf_utils
 from tensorflow.python.ops import array_ops
 from tensorflow.python.util.tf_export import keras_export
 
 
-@keras_export('keras.layers.DepthwiseConv1D')
 class DepthwiseConv1D(Conv1D):
   """Depthwise separable 1D convolution.
   Depthwise Separable convolutions consist of performing
