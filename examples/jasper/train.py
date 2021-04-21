@@ -112,7 +112,7 @@ eval_data_loader = eval_dataset.create(global_batch_size)
 with strategy.scope():
     # build model
     jasper = Jasper(**config.model_config, vocabulary_size=text_featurizer.num_classes)
-    jasper._build(speech_featurizer.shape, batch_size=global_batch_size)
+    jasper.make(speech_featurizer.shape, batch_size=global_batch_size)
     jasper.summary(line_length=100)
     jasper.compile(
         optimizer=config.learning_config.optimizer_config,

@@ -157,7 +157,7 @@ def make_erb_filters(fs, centre_freqs, width=1.0):
     filter arrays contains the coefficients for four second order filters. The
     transfer function for these four filters share the same denominator (poles)
     but have different numerators (zeros). All of these coefficients are
-    assembled into one vector that the ERBFilterBank can take apart to implement
+    maked into one vector that the ERBFilterBank can take apart to implement
     the filter.
 
     The filter bank contains "numChannels" channels that extend from

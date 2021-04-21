@@ -112,7 +112,7 @@ eval_data_loader = eval_dataset.create(global_batch_size)
 with strategy.scope():
     # build model
     deepspeech2 = DeepSpeech2(**config.model_config, vocabulary_size=text_featurizer.num_classes)
-    deepspeech2._build(speech_featurizer.shape, batch_size=global_batch_size)
+    deepspeech2.make(speech_featurizer.shape, batch_size=global_batch_size)
     deepspeech2.summary(line_length=100)
     deepspeech2.compile(
         optimizer=config.learning_config.optimizer_config,

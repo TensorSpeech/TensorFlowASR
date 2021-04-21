@@ -52,7 +52,7 @@ else:
 
 # build model
 jasper = Jasper(**config.model_config, vocabulary_size=text_featurizer.num_classes)
-jasper._build(speech_featurizer.shape)
+jasper.make(speech_featurizer.shape)
 jasper.load_weights(args.saved)
 jasper.summary(line_length=100)
 jasper.add_featurizers(speech_featurizer, text_featurizer)
