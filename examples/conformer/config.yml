@@ -24,7 +24,7 @@ speech_config:
   normalize_per_feature: False
 
 decoder_config:
-  vocabulary: ./vocabularies/librispeech/sentencepiece_librispeech_960_8000.model
+  vocabulary: ./vocabularies/librispeech/librispeech_train_10_1008.subwords
   target_vocab_size: 1000
   max_subword_length: 10
   blank_at_zero: True

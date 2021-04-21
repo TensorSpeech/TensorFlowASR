@@ -114,7 +114,11 @@ eval_data_loader = eval_dataset.create(global_batch_size)
 with strategy.scope():
     # build model
     conformer = Conformer(**config.model_config, vocabulary_size=text_featurizer.num_classes)
-    conformer._build(speech_featurizer.shape)
+    conformer._build(
+        speech_featurizer.shape,
+        prediction_shape=text_featurizer.prepand_shape,
+        batch_size=global_batch_size
+    )
     conformer.summary(line_length=100)
 
     optimizer = tf.keras.optimizers.Adam(
@@ -145,5 +149,5 @@ conformer.fit(
     validation_data=eval_data_loader,
     callbacks=callbacks,
     steps_per_epoch=train_dataset.total_steps,
-    validation_steps=eval_dataset.total_steps
+    validation_steps=eval_dataset.total_steps if eval_data_loader else None
 )

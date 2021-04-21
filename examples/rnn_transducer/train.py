@@ -112,7 +112,11 @@ eval_data_loader = eval_dataset.create(global_batch_size)
 with strategy.scope():
     # build model
     rnn_transducer = RnnTransducer(**config.model_config, vocabulary_size=text_featurizer.num_classes)
-    rnn_transducer._build(speech_featurizer.shape)
+    rnn_transducer._build(
+        speech_featurizer.shape,
+        prediction_shape=text_featurizer.prepand_shape,
+        batch_size=global_batch_size
+    )
     rnn_transducer.summary(line_length=100)
     rnn_transducer.compile(
         optimizer=config.learning_config.optimizer_config,
@@ -133,5 +137,5 @@ rnn_transducer.fit(
     validation_data=eval_data_loader,
     callbacks=callbacks,
     steps_per_epoch=train_dataset.total_steps,
-    validation_steps=eval_dataset.total_steps
+    validation_steps=eval_dataset.total_steps if eval_data_loader else None
 )
