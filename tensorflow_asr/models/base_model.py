@@ -80,7 +80,7 @@ class BaseModel(tf.keras.Model):
 
     def compile(self, loss, optimizer, run_eagerly=None, **kwargs):
         self.use_loss_scale = False
-        if not env_util.has_tpu():
+        if not env_util.has_devices("TPU"):
             optimizer = mxp.experimental.LossScaleOptimizer(tf.keras.optimizers.get(optimizer), "dynamic")
             self.use_loss_scale = True
         loss_metric = tf.keras.metrics.Mean(name="loss", dtype=tf.float32)
