@@ -17,8 +17,6 @@ import tensorflow as tf
 from tensorflow.python.ops.gen_array_ops import matrix_diag_part_v2
 from ..utils import env_util
 
-use_cpu = not env_util.has_gpu_or_tpu()
-
 LOG_0 = float("-inf")
 
 try:
@@ -58,7 +56,7 @@ def rnnt_loss(logits, labels, label_length, logit_length, blank=0, name=None):
 
 
 def rnnt_loss_warprnnt(logits, labels, label_length, logit_length, blank=0):
-    if not tf.config.list_physical_devices('GPU'):
+    if not env_util.has_devices(["GPU", "TPU"]):
         logits = tf.nn.log_softmax(logits)
     loss = warp_rnnt_loss(
         acts=tf.cast(logits, tf.float32),
@@ -227,7 +225,8 @@ def compute_rnnt_loss_and_grad_helper(logits, labels, label_length, logit_length
     a = tf.tile(tf.reshape(tf.range(target_max_len - 1, dtype=tf.int64), shape=(1, 1, target_max_len - 1, 1)),
                 multiples=[batch_size, 1, 1, 1])
     b = tf.cast(tf.reshape(labels - 1, shape=(batch_size, 1, target_max_len - 1, 1)), dtype=tf.int64)
-    if use_cpu: b = tf.where(tf.equal(b, -1), tf.zeros_like(b), b)  # for cpu testing (index -1 on cpu will raise errors)
+    if not env_util.has_devices(["GPU", "TPU"]):
+        b = tf.where(tf.equal(b, -1), tf.zeros_like(b), b)  # for cpu testing (index -1 on cpu will raise errors)
     c = tf.concat([a, b], axis=3)
     d = tf.tile(c, multiples=(1, input_max_len, 1, 1))
     e = tf.tile(tf.reshape(tf.range(input_max_len, dtype=tf.int64), shape=(1, input_max_len, 1, 1)),

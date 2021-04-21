@@ -12,17 +12,21 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import logging
+from typing import Union, List
 import warnings
 import tensorflow as tf
+
+logger = tf.get_logger()
 
 
 def setup_environment():  # Set memory growth and only log ERRORs
     """ Setting tensorflow running environment """
     warnings.simplefilter("ignore")
-    tf.get_logger().setLevel("ERROR")
+    logger.setLevel(logging.WARN)
 
 
-def setup_devices(devices, cpu=False):
+def setup_devices(devices: List[int], cpu: bool = False):
     """Setting visible devices
 
     Args:
@@ -39,7 +43,7 @@ def setup_devices(devices, cpu=False):
             print("Run on", len(visible_gpus), "Physical GPUs")
 
 
-def setup_strategy(devices):
+def setup_strategy(devices: List[int]):
     """Setting mirrored strategy for training
 
     Args:
@@ -49,8 +53,11 @@ def setup_strategy(devices):
         tf.distribute.Strategy: MirroredStrategy for training one or multiple gpus
     """
     setup_devices(devices)
-    if has_tpu():
+    try:
         return setup_tpu()
+    except (ValueError, tf.errors.NotFoundError) as e:
+        logger.warn(e)
+        pass
     return tf.distribute.MirroredStrategy()
 
 
@@ -58,21 +65,14 @@ def setup_tpu(tpu_address=None):
     if tpu_address is None:
         resolver = tf.distribute.cluster_resolver.TPUClusterResolver()
     else:
-        resolver = tf.distribute.cluster_resolver.TPUClusterResolver(tpu='grpc://' + tpu_address)
+        resolver = tf.distribute.cluster_resolver.TPUClusterResolver(tpu="grpc://" + tpu_address)
     tf.config.experimental_connect_to_cluster(resolver)
     tf.tpu.experimental.initialize_tpu_system(resolver)
-    print("All TPUs: ", tf.config.list_logical_devices('TPU'))
+    print("All TPUs: ", tf.config.list_logical_devices("TPU"))
     return tf.distribute.experimental.TPUStrategy(resolver)
 
 
-def has_gpu_or_tpu():
-    gpus = tf.config.list_logical_devices("GPU")
-    tpus = tf.config.list_logical_devices("TPU")
-    if len(gpus) == 0 and len(tpus) == 0: return False
-    return True
-
-
-def has_tpu():
-    tpus = tf.config.list_logical_devices("TPU")
-    if len(tpus) == 0: return False
-    return True
+def has_devices(devices: Union[List[str], str]):
+    if isinstance(devices, list):
+        return all([len(tf.config.list_logical_devices(d)) != 0 for d in devices])
+    return len(tf.config.list_logical_devices(devices)) != 0
