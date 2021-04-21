@@ -25,8 +25,6 @@ import tensorflow_io as tfio
 from ..utils import math_util, env_util
 from .methods import gammatone
 
-tpu = env_util.has_tpu()
-
 
 # def tf_resample(signal, rate_in, rate_out):
 #     if rate_in == rate_out: return signal
@@ -59,7 +57,7 @@ def read_raw_audio(audio, sample_rate=16000):
 
 def tf_read_raw_audio(audio: tf.Tensor, sample_rate=16000):
     wave, rate = tf.audio.decode_wav(audio, desired_channels=1, desired_samples=-1)
-    if not tpu:
+    if not env_util.has_devices("TPU"):
         resampled = tfio.audio.resample(wave, rate_in=tf.cast(rate, dtype=tf.int64), rate_out=sample_rate)
         return tf.reshape(resampled, shape=[-1])  # reshape for using tf.signal
     return tf.reshape(wave, shape=[-1])  # reshape for using tf.signal
