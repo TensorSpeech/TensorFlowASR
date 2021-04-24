@@ -109,6 +109,7 @@ class RnnTransducerEncoder(tf.keras.Model):
         super().__init__(**kwargs)
 
         self.reshape = Reshape(name=f"{self.name}_reshape")
+        self.fnorm = tf.keras.layers.LayerNormalization(axis=-1, name=f"{self.name}_feature_norm")
 
         self.blocks = [
             RnnTransducerBlock(
@@ -147,6 +148,7 @@ class RnnTransducerEncoder(tf.keras.Model):
 
     def call(self, inputs, training=False, **kwargs):
         outputs = self.reshape(inputs)
+        outputs = self.fnorm(outputs, training=training)
         for block in self.blocks:
             outputs = block(outputs, training=training, **kwargs)
         return outputs
@@ -163,6 +165,7 @@ class RnnTransducerEncoder(tf.keras.Model):
             tf.Tensor: new states with shape [num_lstms, 1 or 2, 1, P]
         """
         outputs = self.reshape(inputs)
+        outputs = self.fnorm(outputs, training=False)
         new_states = []
         for i, block in enumerate(self.blocks):
             outputs, block_states = block.recognize(outputs, states=tf.unstack(states[i], axis=0))
@@ -171,6 +174,7 @@ class RnnTransducerEncoder(tf.keras.Model):
 
     def get_config(self):
         conf = self.reshape.get_config()
+        conf.update(self.fnorm.get_config())
         for block in self.blocks: conf.update(block.get_config())
         return conf
 
