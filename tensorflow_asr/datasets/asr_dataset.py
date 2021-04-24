@@ -305,8 +305,8 @@ class ASRTFRecordDataset(ASRDataset):
         print(f"Created {shard_path}")
 
     def create_tfrecords(self):
-        if not tf.io.gfile.exists(self.tfrecords_dir):
-            tf.io.gfile.makedirs(self.tfrecords_dir)
+        if not self.tfrecords_dir:
+            return False
 
         if tf.io.gfile.glob(os.path.join(self.tfrecords_dir, f"{self.stage}*.tfrecord")):
             print(f"TFRecords're already existed: {self.stage}")
