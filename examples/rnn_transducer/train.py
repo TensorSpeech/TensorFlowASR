@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import os
+import math
 import argparse
 from tensorflow_asr.utils import env_util
 
@@ -55,6 +56,7 @@ from tensorflow_asr.configs.config import Config
 from tensorflow_asr.datasets import asr_dataset
 from tensorflow_asr.featurizers import speech_featurizers, text_featurizers
 from tensorflow_asr.models.transducer.rnn_transducer import RnnTransducer
+from tensorflow_asr.optimizers.schedules import TransformerSchedule
 
 config = Config(args.config)
 speech_featurizer = speech_featurizers.TFSpeechFeaturizer(config.speech_config)
@@ -118,8 +120,16 @@ with strategy.scope():
         batch_size=global_batch_size
     )
     rnn_transducer.summary(line_length=100)
+    optimizer = tf.keras.optimizers.Adam(
+        TransformerSchedule(
+            d_model=rnn_transducer.dmodel,
+            warmup_steps=config.learning_config.optimizer_config.pop("warmup_steps", 10000),
+            max_lr=(0.05 / math.sqrt(rnn_transducer.dmodel))
+        ),
+        **config.learning_config.optimizer_config
+    )
     rnn_transducer.compile(
-        optimizer=config.learning_config.optimizer_config,
+        optimizer=optimizer,
         experimental_steps_per_execution=args.spx,
         global_batch_size=global_batch_size,
         blank=text_featurizer.blank

@@ -241,6 +241,7 @@ class RnnTransducer(Transducer):
             **kwargs
         )
         self.time_reduction_factor = self.encoder.time_reduction_factor
+        self.dmodel = encoder_dmodel
 
     def encoder_inference(self, features: tf.Tensor, states: tf.Tensor):
         """Infer function for encoder (or encoders)
