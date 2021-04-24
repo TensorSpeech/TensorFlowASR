@@ -95,7 +95,7 @@ def normalize_audio_feature(audio_feature: np.ndarray, per_frame=False):
     """ Mean and variance normalization """
     axis = 1 if per_frame else None
     mean = np.mean(audio_feature, axis=axis)
-    std_dev = np.std(audio_feature, axis=axis) + 1e-9
+    std_dev = np.sqrt(np.variance(audio_feature, axis=axis) + 1e-9)
     normalized = (audio_feature - mean) / std_dev
     return normalized
 
@@ -111,7 +111,7 @@ def tf_normalize_audio_features(audio_feature: tf.Tensor, per_frame=False):
     """
     axis = 1 if per_frame else None
     mean = tf.reduce_mean(audio_feature, axis=axis, keepdims=True)
-    std_dev = tf.math.reduce_std(audio_feature, axis=axis, keepdims=True) + 1e-9
+    std_dev = tf.math.sqrt(tf.math.reduce_variance(audio_feature, axis=axis, keepdims=True) + 1e-9)
     return (audio_feature - mean) / std_dev
 
 
