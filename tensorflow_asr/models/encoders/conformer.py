@@ -19,7 +19,7 @@ from ..layers.subsampling import VggSubsampling, Conv2dSubsampling
 from ..layers.positional_encoding import PositionalEncoding, PositionalEncodingConcat
 from ..layers.multihead_attention import MultiHeadAttention, RelPositionMultiHeadAttention
 from ...utils import shape_util
-from ..layers.DepthwiseConv1D import DepthwiseConv1D
+from ..layers.depthwise_conv1d import DepthwiseConv1D
 
 L2 = tf.keras.regularizers.l2(1e-6)
 
@@ -186,7 +186,7 @@ class ConvModule(tf.keras.layers.Layer):
         outputs = self.dw_conv(outputs, training=training)
         outputs = self.bn(outputs, training=training)
         outputs = self.swish(outputs)
-        outputs = self.pw_conv_2(outputs, training=training)
+        outputs = self.pw_conv_2(outputs, training=training)f
         outputs = self.do(outputs, training=training)
         outputs = self.res_add([inputs, outputs])
         return outputs
