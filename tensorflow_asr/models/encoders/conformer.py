@@ -162,8 +162,7 @@ class ConvModule(tf.keras.layers.Layer):
             name=f"{name}_dw_conv",
             depth_multiplier=depth_multiplier,
             depthwise_regularizer=kernel_regularizer,
-            bias_regularizer=bias_regularizer,
-            data_format='channels_last',
+            bias_regularizer=bias_regularizer
         )
         self.bn = tf.keras.layers.BatchNormalization(
             name=f"{name}_bn",
