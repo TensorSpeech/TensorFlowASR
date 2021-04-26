@@ -181,14 +181,12 @@ class ConvModule(tf.keras.layers.Layer):
 
     def call(self, inputs, training=False, **kwargs):
         outputs = self.ln(inputs, training=training)
-        B, T, E = shape_util.shape_list(outputs)
         outputs = self.pw_conv_1(outputs, training=training)
         outputs = self.glu(outputs)
         outputs = self.dw_conv(outputs, training=training)
         outputs = self.bn(outputs, training=training)
         outputs = self.swish(outputs)
         outputs = self.pw_conv_2(outputs, training=training)
-        outputs = tf.reshape(outputs, [B, T, E])
         outputs = self.do(outputs, training=training)
         outputs = self.res_add([inputs, outputs])
         return outputs
