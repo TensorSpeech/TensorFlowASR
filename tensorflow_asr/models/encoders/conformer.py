@@ -186,7 +186,7 @@ class ConvModule(tf.keras.layers.Layer):
         outputs = self.dw_conv(outputs, training=training)
         outputs = self.bn(outputs, training=training)
         outputs = self.swish(outputs)
-        outputs = self.pw_conv_2(outputs, training=training)f
+        outputs = self.pw_conv_2(outputs, training=training)
         outputs = self.do(outputs, training=training)
         outputs = self.res_add([inputs, outputs])
         return outputs
