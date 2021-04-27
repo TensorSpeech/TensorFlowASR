@@ -107,7 +107,7 @@ class StreamingConformer(Conformer):
         self.dmodel = encoder_dmodel
         self.time_reduction_factor = self.encoder.conv_subsampling.time_reduction_factor
 
-    def _build(self, input_shape, prediction_shape=[None], batch_size=None):
+    def make(self, input_shape, prediction_shape=[None], batch_size=None):
         inputs = tf.keras.Input(shape=input_shape, batch_size=batch_size, dtype=tf.float32)
         inputs_length = tf.keras.Input(shape=[], batch_size=batch_size, dtype=tf.int32)
         predictions = tf.keras.Input(shape=prediction_shape, batch_size=batch_size, dtype=tf.int32)

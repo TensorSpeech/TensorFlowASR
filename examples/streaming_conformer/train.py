@@ -119,7 +119,7 @@ eval_data_loader = eval_dataset.create(global_eval_batch_size)
 with strategy.scope():
     # build model
     streaming_conformer = StreamingConformer(**config.model_config, vocabulary_size=text_featurizer.num_classes)
-    streaming_conformer._build(speech_featurizer.shape)
+    streaming_conformer.make(speech_featurizer.shape)
     streaming_conformer.summary(line_length=150)
 
     optimizer = tf.keras.optimizers.Adam(
