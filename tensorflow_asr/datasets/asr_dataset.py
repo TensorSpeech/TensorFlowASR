@@ -334,8 +334,24 @@ class ASRTFRecordDataset(ASRDataset):
             "indices": tf.io.FixedLenFeature([], tf.string)
         }
         example = tf.io.parse_single_example(record, feature_description)
-        if self.use_tf: return self.tf_preprocess(**example)
-        return self.preprocess(**example)
+        if self.use_tf: data = self.tf_preprocess(**example)
+        else: data = self.preprocess(**example)
+
+        _, features, input_length, label, label_length, prediction, prediction_length, mask = data
+
+        return (
+            data_util.create_inputs(
+                inputs=features,
+                inputs_length=input_length,
+                predictions=prediction,
+                predictions_length=prediction_length,
+                mask=mask
+            ),
+            data_util.create_labels(
+                labels=label,
+                labels_length=label_length
+            )
+        )
 
     def create(self, batch_size: int):
         have_data = self.create_tfrecords()
@@ -527,4 +543,120 @@ class ASRMaskedSliceDataset(ASRSliceDataset):
         )
         return self.process(dataset, batch_size)
 
-# TODO: Create masked TFRecords dataset
+class ASRMaskedTFRecordDataset(ASRMaskedSliceDataset):
+    """ Dataset for ASR using TFRecords with rolling mask """
+    def __init__(self,
+                 data_paths: list,
+                 tfrecords_dir: str,
+                 speech_featurizer: SpeechFeaturizer,
+                 text_featurizer: TextFeaturizer,
+                 stage: str,
+                 augmentations: Augmentation = Augmentation(None),
+                 tfrecords_shards: int = TFRECORD_SHARDS,
+                 cache: bool = False,
+                 shuffle: bool = False,
+                 use_tf: bool = False,
+                 indefinite: bool = False,
+                 drop_remainder: bool = True,
+                 buffer_size: int = BUFFER_SIZE,
+                 history_window_size: int = 3,
+                 input_chunk_duration: int = 250,
+                 time_reduction_factor: int = 4,
+                 **kwargs):
+        super(ASRMaskedTFRecordDataset, self).__init__(
+            stage=stage, speech_featurizer=speech_featurizer, text_featurizer=text_featurizer,
+            data_paths=data_paths, augmentations=augmentations, cache=cache, shuffle=shuffle, buffer_size=buffer_size,
+            drop_remainder=drop_remainder, use_tf=use_tf, indefinite=indefinite, history_window_size = history_window_size,
+            input_chunk_duration = input_chunk_duration, time_reduction_factor = time_reduction_factor,
+        )
+        if not self.stage: raise ValueError("stage must be defined, either 'train', 'eval' or 'test'")
+        self.tfrecords_dir = tfrecords_dir
+        if tfrecords_shards <= 0: raise ValueError("tfrecords_shards must be positive")
+        self.tfrecords_shards = tfrecords_shards
+        if not tf.io.gfile.exists(self.tfrecords_dir): tf.io.gfile.makedirs(self.tfrecords_dir)
+
+    @staticmethod
+    def write_tfrecord_file(splitted_entries):
+        shard_path, entries = splitted_entries
+
+        def parse(record):
+            def fn(path, indices):
+                audio = load_and_convert_to_wav(path.decode("utf-8")).numpy()
+                feature = {
+                    "path": feature_util.bytestring_feature([path]),
+                    "audio": feature_util.bytestring_feature([audio]),
+                    "indices": feature_util.bytestring_feature([indices])
+                }
+                example = tf.train.Example(features=tf.train.Features(feature=feature))
+                return example.SerializeToString()
+            return tf.numpy_function(fn, inp=[record[0], record[2]], Tout=tf.string)
+
+        dataset = tf.data.Dataset.from_tensor_slices(entries)
+        dataset = dataset.map(parse, num_parallel_calls=AUTOTUNE)
+        writer = tf.data.experimental.TFRecordWriter(shard_path, compression_type="ZLIB")
+        print(f"Processing {shard_path} ...")
+        writer.write(dataset)
+        print(f"Created {shard_path}")
+
+    def create_tfrecords(self):
+        if not tf.io.gfile.exists(self.tfrecords_dir):
+            tf.io.gfile.makedirs(self.tfrecords_dir)
+
+        if tf.io.gfile.glob(os.path.join(self.tfrecords_dir, f"{self.stage}*.tfrecord")):
+            print(f"TFRecords're already existed: {self.stage}")
+            return True
+
+        print(f"Creating {self.stage}.tfrecord ...")
+
+        self.read_entries()
+        if not self.total_steps or self.total_steps == 0: return False
+
+        def get_shard_path(shard_id):
+            return os.path.join(self.tfrecords_dir, f"{self.stage}_{shard_id}.tfrecord")
+
+        shards = [get_shard_path(idx) for idx in range(1, self.tfrecords_shards + 1)]
+
+        splitted_entries = np.array_split(self.entries, self.tfrecords_shards)
+        for entries in zip(shards, splitted_entries):
+            self.write_tfrecord_file(entries)
+
+        return True
+
+    def parse(self, record: tf.Tensor):
+        feature_description = {
+            "path": tf.io.FixedLenFeature([], tf.string),
+            "audio": tf.io.FixedLenFeature([], tf.string),
+            "indices": tf.io.FixedLenFeature([], tf.string)
+        }
+        example = tf.io.parse_single_example(record, feature_description)
+        if self.use_tf: data = self.tf_preprocess(**example)
+        else: data = self.preprocess(**example)
+
+        _, features, input_length, label, label_length, prediction, prediction_length, mask = data
+
+        return (
+            data_util.create_inputs(
+                inputs=features,
+                inputs_length=input_length,
+                predictions=prediction,
+                predictions_length=prediction_length,
+                mask=mask
+            ),
+            data_util.create_labels(
+                labels=label,
+                labels_length=label_length
+            )
+        )
+
+    def create(self, batch_size: int):
+        have_data = self.create_tfrecords()
+        if not have_data: return None
+
+        pattern = os.path.join(self.tfrecords_dir, f"{self.stage}*.tfrecord")
+        files_ds = tf.data.Dataset.list_files(pattern)
+        ignore_order = tf.data.Options()
+        ignore_order.experimental_deterministic = False
+        files_ds = files_ds.with_options(ignore_order)
+        dataset = tf.data.TFRecordDataset(files_ds, compression_type="ZLIB", num_parallel_reads=AUTOTUNE)
+
+        return self.process(dataset, batch_size)
