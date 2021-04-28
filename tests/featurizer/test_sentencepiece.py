@@ -46,7 +46,7 @@ def test_featurizer():
         "preemphasis": 0.97,
         "normalize_signal": True,
         "normalize_feature": True,
-        "normalize_per_feature": False}
+        "normalize_per_frame": False}
 
     text_featurizer_sentencepiece = SentencePieceFeaturizer.load_from_file(config, None)
     subwords_path = os.path.join(os.path.abspath(os.path.dirname(__file__)),
@@ -99,7 +99,7 @@ def test_iextract():
         "preemphasis": 0.97,
         "normalize_signal": True,
         "normalize_feature": True,
-        "normalize_per_feature": False}
+        "normalize_per_frame": False}
 
     text_featurizer_sentencepiece = SentencePieceFeaturizer.load_from_file(config, None)
     speech_featurizer = TFSpeechFeaturizer(config_speech)
@@ -124,7 +124,7 @@ def test_iextract():
     print(file_path)
     with open(file_path, "r") as f:
         lines = f.read().splitlines()
-    m=re.search(r"[0-9]+-[0-9]+-[0-9]+\s+([\w\s]+)",lines[0])
+    m = re.search(r"[0-9]+-[0-9]+-[0-9]+\s+([\w\s]+)", lines[0])
     transcript = m.groups(1)[0].lower()
 
     assert(labels == transcript)

@@ -21,7 +21,9 @@ speech_config:
   preemphasis: 0.97
   normalize_signal: True
   normalize_feature: True
-  normalize_per_feature: False
+  normalize_per_frame: True
+  center: False
+  top_db: null
 
 decoder_config:
   vocabulary: null

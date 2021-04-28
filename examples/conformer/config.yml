@@ -21,7 +21,7 @@ speech_config:
   preemphasis: 0.97
   normalize_signal: True
   normalize_feature: True
-  normalize_per_feature: False
+  normalize_per_frame: False
 
 decoder_config:
   vocabulary: ./vocabularies/librispeech/librispeech_train_4_1030.subwords
