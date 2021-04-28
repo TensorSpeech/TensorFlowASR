@@ -95,7 +95,7 @@ def normalize_audio_feature(audio_feature: np.ndarray, per_frame=False):
     """ Mean and variance normalization """
     axis = 1 if per_frame else None
     mean = np.mean(audio_feature, axis=axis)
-    std_dev = np.sqrt(np.variance(audio_feature, axis=axis) + 1e-9)
+    std_dev = np.sqrt(np.var(audio_feature, axis=axis) + 1e-9)
     normalized = (audio_feature - mean) / std_dev
     return normalized
 
