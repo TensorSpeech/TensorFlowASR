@@ -21,7 +21,9 @@ speech_config:
   preemphasis: 0.97
   normalize_signal: True
   normalize_feature: True
-  normalize_per_feature: False
+  normalize_per_frame: True
+  center: False
+  top_db: null
 
 decoder_config:
   vocabulary: null
@@ -41,6 +43,7 @@ model_config:
   encoder_rnn_units: 1024
   encoder_nlayers: 8
   encoder_layer_norm: True
+  encoder_feature_norm: True
   prediction_embed_dim: 320
   prediction_embed_dropout: 0.0
   prediction_num_rnns: 2
