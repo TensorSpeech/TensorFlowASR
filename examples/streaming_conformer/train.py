@@ -59,7 +59,7 @@ tf.config.optimizer.set_experimental_options({"auto_mixed_precision": args.mxp})
 strategy = env_util.setup_strategy(args.devices)
 
 from tensorflow_asr.configs.config import Config
-from tensorflow_asr.datasets.asr_dataset import ASRMaskedSliceDataset
+from tensorflow_asr.datasets.asr_dataset import ASRMaskedSliceDataset, ASRMaskedTFRecordDataset
 from tensorflow_asr.featurizers import speech_featurizers, text_featurizers
 from tensorflow_asr.featurizers.text_featurizers import CharFeaturizer
 from tensorflow_asr.models.transducer.streaming_conformer import StreamingConformer
@@ -80,11 +80,11 @@ else:
 
 time_reduction_factor = config.model_config['encoder_subsampling']['strides'] * 2
 if args.tfrecords:
-    train_dataset = ASRTFRecordDataset(
+    train_dataset = ASRMaskedTFRecordDataset(
         speech_featurizer=speech_featurizer, text_featurizer=text_featurizer,
         **vars(config.learning_config.train_dataset_config)
     )
-    eval_dataset = ASRTFRecordDataset(
+    eval_dataset = ASRMaskedTFRecordDataset(
         speech_featurizer=speech_featurizer, text_featurizer=text_featurizer,
         **vars(config.learning_config.eval_dataset_config)
     )
@@ -110,7 +110,7 @@ if not args.static_length:
 global_batch_size = args.tbs or config.learning_config.running_config.batch_size
 global_batch_size *= strategy.num_replicas_in_sync
 
-global_eval_batch_size = args.ebs  or global_batch_size
+global_eval_batch_size = args.ebs or global_batch_size
 global_eval_batch_size *= strategy.num_replicas_in_sync
 
 train_data_loader = train_dataset.create(global_batch_size)
