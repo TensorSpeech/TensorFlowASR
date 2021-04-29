@@ -30,8 +30,6 @@ parser.add_argument("--config", type=str, default=DEFAULT_YAML, help="The file p
 
 parser.add_argument("--saved", type=str, default=None, help="Path to saved model")
 
-parser.add_argument("--tfrecords", default=False, action="store_true", help="Whether to use tfrecords as dataset")
-
 parser.add_argument("--mxp", default=False, action="store_true", help="Enable mixed precision")
 
 parser.add_argument("--bs", type=int, default=None, help="Test batch size")
@@ -55,7 +53,7 @@ tf.config.optimizer.set_experimental_options({"auto_mixed_precision": args.mxp})
 env_util.setup_devices([args.device], cpu=args.cpu)
 
 from tensorflow_asr.configs.config import Config
-from tensorflow_asr.datasets.asr_dataset import ASRTFRecordDataset, ASRSliceDataset
+from tensorflow_asr.datasets.asr_dataset import ASRSliceDataset
 from tensorflow_asr.featurizers.speech_featurizers import TFSpeechFeaturizer
 from tensorflow_asr.featurizers.text_featurizers import SubwordFeaturizer, SentencePieceFeaturizer, CharFeaturizer
 from tensorflow_asr.models.ctc.deepspeech2 import DeepSpeech2
@@ -76,22 +74,15 @@ else:
 
 tf.random.set_seed(0)
 
-if args.tfrecords:
-    test_dataset = ASRTFRecordDataset(
-        speech_featurizer=speech_featurizer,
-        text_featurizer=text_featurizer,
-        **vars(config.learning_config.test_dataset_config)
-    )
-else:
-    test_dataset = ASRSliceDataset(
-        speech_featurizer=speech_featurizer,
-        text_featurizer=text_featurizer,
-        **vars(config.learning_config.test_dataset_config)
-    )
+test_dataset = ASRSliceDataset(
+    speech_featurizer=speech_featurizer,
+    text_featurizer=text_featurizer,
+    **vars(config.learning_config.test_dataset_config)
+)
 
 # build model
 deepspeech2 = DeepSpeech2(**config.model_config, vocabulary_size=text_featurizer.num_classes)
-deepspeech2._build(speech_featurizer.shape)
+deepspeech2.make(speech_featurizer.shape)
 deepspeech2.load_weights(args.saved)
 deepspeech2.summary(line_length=100)
 deepspeech2.add_featurizers(speech_featurizer, text_featurizer)
@@ -100,9 +91,9 @@ batch_size = args.bs or config.learning_config.running_config.batch_size
 test_data_loader = test_dataset.create(batch_size)
 
 with file_util.save_file(file_util.preprocess_paths(args.output)) as filepath:
-    overwrite = False
+    overwrite = True
     if tf.io.gfile.exists(filepath):
-        overwrite = input("Overwrite existing result file? (y/n): ").lower() == "y"
+        overwrite = input(f"Overwrite existing result file {filepath} ? (y/n): ").lower() == "y"
     if overwrite:
         results = deepspeech2.predict(test_data_loader, verbose=1)
         print(f"Saving result to {args.output} ...")

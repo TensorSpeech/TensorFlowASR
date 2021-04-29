@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import os
+import math
 import argparse
 from tensorflow_asr.utils import env_util
 
@@ -33,9 +34,7 @@ parser.add_argument("--sentence_piece", default=False, action="store_true", help
 
 parser.add_argument("--subwords", default=False, action="store_true", help="Use subwords")
 
-parser.add_argument("--tbs", type=int, default=None, help="Train batch size per replica")
-
-parser.add_argument("--ebs", type=int, default=None, help="Evaluation batch size per replica")
+parser.add_argument("--bs", type=int, default=None, help="Batch size per replica")
 
 parser.add_argument("--spx", type=int, default=1, help="Steps per execution for maximizing performance")
 
@@ -57,6 +56,7 @@ from tensorflow_asr.configs.config import Config
 from tensorflow_asr.datasets import asr_dataset
 from tensorflow_asr.featurizers import speech_featurizers, text_featurizers
 from tensorflow_asr.models.transducer.rnn_transducer import RnnTransducer
+from tensorflow_asr.optimizers.schedules import TransformerSchedule
 
 config = Config(args.config)
 speech_featurizer = speech_featurizers.TFSpeechFeaturizer(config.speech_config)
@@ -105,7 +105,7 @@ if not args.static_length:
     speech_featurizer.reset_length()
     text_featurizer.reset_length()
 
-global_batch_size = args.tbs or config.learning_config.running_config.batch_size
+global_batch_size = args.bs or config.learning_config.running_config.batch_size
 global_batch_size *= strategy.num_replicas_in_sync
 
 train_data_loader = train_dataset.create(global_batch_size)
@@ -114,10 +114,22 @@ eval_data_loader = eval_dataset.create(global_batch_size)
 with strategy.scope():
     # build model
     rnn_transducer = RnnTransducer(**config.model_config, vocabulary_size=text_featurizer.num_classes)
-    rnn_transducer._build(speech_featurizer.shape)
+    rnn_transducer.make(
+        speech_featurizer.shape,
+        prediction_shape=text_featurizer.prepand_shape,
+        batch_size=global_batch_size
+    )
     rnn_transducer.summary(line_length=100)
+    optimizer = tf.keras.optimizers.Adam(
+        TransformerSchedule(
+            d_model=rnn_transducer.dmodel,
+            warmup_steps=config.learning_config.optimizer_config.pop("warmup_steps", 10000),
+            max_lr=(0.05 / math.sqrt(rnn_transducer.dmodel))
+        ),
+        **config.learning_config.optimizer_config
+    )
     rnn_transducer.compile(
-        optimizer=config.learning_config.optimizer_config,
+        optimizer=optimizer,
         experimental_steps_per_execution=args.spx,
         global_batch_size=global_batch_size,
         blank=text_featurizer.blank
@@ -135,5 +147,5 @@ rnn_transducer.fit(
     validation_data=eval_data_loader,
     callbacks=callbacks,
     steps_per_epoch=train_dataset.total_steps,
-    validation_steps=eval_dataset.total_steps
+    validation_steps=eval_dataset.total_steps if eval_data_loader else None
 )

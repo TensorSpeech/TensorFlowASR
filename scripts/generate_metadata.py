@@ -36,7 +36,7 @@ parser.add_argument("transcripts", nargs="+", type=str, default=None, help="Path
 
 args = parser.parse_args()
 
-assert args.metadata_prefix is not None, "metadata_prefix must be defined"
+assert args.metadata is not None, "metadata must be defined"
 
 transcripts = preprocess_paths(args.transcripts)
 

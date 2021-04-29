@@ -65,8 +65,8 @@ class RowConv1D(tf.keras.layers.Conv1D):
         self.input_spec = tf.keras.layers.InputSpec(ndim=self.rank + 2,
                                                     axes={channel_axis: input_channel})
 
-        self._build_conv_op_input_shape = input_shape
-        self._build_input_channel = input_channel
+        self.make_conv_op_input_shape = input_shape
+        self.make_input_channel = input_channel
         self._padding_op = self._get_padding_op()
         self._conv_op_data_format = conv_utils.convert_data_format(
             self.data_format, self.rank + 2)

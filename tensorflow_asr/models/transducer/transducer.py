@@ -304,7 +304,7 @@ class Transducer(BaseModel):
         )
         self.time_reduction_factor = 1
 
-    def _build(self, input_shape, prediction_shape=[None], batch_size=None):
+    def make(self, input_shape, prediction_shape=[None], batch_size=None):
         inputs = tf.keras.Input(shape=input_shape, batch_size=batch_size, dtype=tf.float32)
         inputs_length = tf.keras.Input(shape=[], batch_size=batch_size, dtype=tf.int32)
         predictions = tf.keras.Input(shape=prediction_shape, batch_size=batch_size, dtype=tf.int32)
@@ -615,7 +615,7 @@ class Transducer(BaseModel):
                                    encoded_length: tf.Tensor,
                                    lm: bool = False,
                                    parallel_iterations: int = 10,
-                                   swap_memory: bool = False):
+                                   swap_memory: bool = True):
         with tf.name_scope(f"{self.name}_perform_beam_search_batch"):
             total_batch = tf.shape(encoded)[0]
             batch = tf.constant(0, dtype=tf.int32)
@@ -648,7 +648,7 @@ class Transducer(BaseModel):
                              encoded_length: tf.Tensor,
                              lm: bool = False,
                              parallel_iterations: int = 10,
-                             swap_memory: bool = False):
+                             swap_memory: bool = True):
         with tf.name_scope(f"{self.name}_beam_search"):
             beam_width = tf.cond(
                 tf.less(self.text_featurizer.decoder_config.beam_width, self.text_featurizer.num_classes),

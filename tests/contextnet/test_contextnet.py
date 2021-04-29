@@ -33,7 +33,7 @@ def test_contextnet():
 
     model = ContextNet(vocabulary_size=text_featurizer.num_classes, **config.model_config)
 
-    model._build(speech_featurizer.shape)
+    model.make(speech_featurizer.shape)
     model.summary(line_length=150)
 
     model.add_featurizers(

@@ -22,6 +22,7 @@ class BaseModel(tf.keras.Model):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self._metrics = {}
+        self.use_loss_scale = False
 
     def save(self,
              filepath,
@@ -75,12 +76,12 @@ class BaseModel(tf.keras.Model):
     def add_metric(self, metric: tf.keras.metrics.Metric):
         self._metrics.append({metric.name: metric})
 
-    def _build(self, *args, **kwargs):
+    def make(self, *args, **kwargs):
+        """ Custom function for building model (uses self.build so cannot overwrite that function) """
         raise NotImplementedError()
 
     def compile(self, loss, optimizer, run_eagerly=None, **kwargs):
-        self.use_loss_scale = False
-        if not env_util.has_tpu():
+        if not env_util.has_devices("TPU"):
             optimizer = mxp.experimental.LossScaleOptimizer(tf.keras.optimizers.get(optimizer), "dynamic")
             self.use_loss_scale = True
         loss_metric = tf.keras.metrics.Mean(name="loss", dtype=tf.float32)
@@ -90,6 +91,14 @@ class BaseModel(tf.keras.Model):
     # -------------------------------- STEP FUNCTIONS -------------------------------------
 
     def train_step(self, batch):
+        """
+        Args:
+            batch ([tf.Tensor]): a batch of training data
+
+        Returns:
+            Dict[tf.Tensor]: a dict of validation metrics with keys are the name of metric
+
+        """
         inputs, y_true = batch
         with tf.GradientTape() as tape:
             y_pred = self(inputs, training=True)
@@ -106,6 +115,14 @@ class BaseModel(tf.keras.Model):
         return {m.name: m.result() for m in self.metrics}
 
     def test_step(self, batch):
+        """
+        Args:
+            batch ([tf.Tensor]: a batch of validation data
+
+        Returns:
+            Dict[tf.Tensor]: a dict of validation metrics with keys are the name of metric prefixed with "val_"
+
+        """
         inputs, y_true = batch
         y_pred = self(inputs, training=False)
         loss = self.loss(y_true, y_pred)
@@ -131,8 +148,10 @@ class BaseModel(tf.keras.Model):
 
     # -------------------------------- INFERENCE FUNCTIONS -------------------------------------
 
-    def recognize(self, features, input_lengths, **kwargs):
-        pass
+    def recognize(self, *args, **kwargs):
+        """ Greedy decoding function that used in self.predict_step """
+        raise NotImplementedError()
 
-    def recognize_beam(self, features, input_lengths, **kwargs):
-        pass
+    def recognize_beam(self, *args, **kwargs):
+        """ Beam search decoding function that used in self.predict_step """
+        raise NotImplementedError()

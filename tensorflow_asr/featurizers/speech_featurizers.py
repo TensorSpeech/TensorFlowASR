@@ -25,8 +25,6 @@ import tensorflow_io as tfio
 from ..utils import math_util, env_util
 from .methods import gammatone
 
-tpu = env_util.has_tpu()
-
 
 # def tf_resample(signal, rate_in, rate_out):
 #     if rate_in == rate_out: return signal
@@ -59,7 +57,7 @@ def read_raw_audio(audio, sample_rate=16000):
 
 def tf_read_raw_audio(audio: tf.Tensor, sample_rate=16000):
     wave, rate = tf.audio.decode_wav(audio, desired_channels=1, desired_samples=-1)
-    if not tpu:
+    if not env_util.has_devices("TPU"):
         resampled = tfio.audio.resample(wave, rate_in=tf.cast(rate, dtype=tf.int64), rate_out=sample_rate)
         return tf.reshape(resampled, shape=[-1])  # reshape for using tf.signal
     return tf.reshape(wave, shape=[-1])  # reshape for using tf.signal
@@ -97,7 +95,7 @@ def normalize_audio_feature(audio_feature: np.ndarray, per_frame=False):
     """ Mean and variance normalization """
     axis = 1 if per_frame else None
     mean = np.mean(audio_feature, axis=axis)
-    std_dev = np.std(np.variance(audio_feature, axis=axis) + 1e-9)
+    std_dev = np.sqrt(np.var(audio_feature, axis=axis) + 1e-9)
     normalized = (audio_feature - mean) / std_dev
     return normalized
 
@@ -115,8 +113,6 @@ def tf_normalize_audio_features(audio_feature: tf.Tensor, per_frame=False):
     mean = tf.reduce_mean(audio_feature, axis=axis, keepdims=True)
     std_dev = tf.math.sqrt(tf.math.reduce_variance(audio_feature, axis=axis, keepdims=True) + 1e-9)
     return (audio_feature - mean) / std_dev
-    # audio_feature, _ = tf.linalg.normalize(audio_feature, axis=axis)
-    # return audio_feature
 
 
 def normalize_signal(signal: np.ndarray):
@@ -207,7 +203,7 @@ class SpeechFeaturizer(metaclass=abc.ABCMeta):
             "pitch": bool,
             "normalize_signal": bool,
             "normalize_feature": bool,
-            "normalize_per_feature": bool
+            "normalize_per_frame": bool
         }
         """
         # Samples
@@ -324,21 +320,21 @@ class NumpySpeechFeaturizer(SpeechFeaturizer):
         if self.delta:
             delta = librosa.feature.delta(original_features.T).T
             if self.normalize_feature:
-                delta = normalize_audio_feature(delta, per_feature=self.normalize_per_feature)
+                delta = normalize_audio_feature(delta, per_frame=self.normalize_per_frame)
             features = np.concatenate([features, np.expand_dims(delta, axis=-1)], axis=-1)
 
         if self.delta_delta:
             delta_delta = librosa.feature.delta(original_features.T, order=2).T
             if self.normalize_feature:
                 delta_delta = normalize_audio_feature(
-                    delta_delta, per_feature=self.normalize_per_feature)
+                    delta_delta, per_frame=self.normalize_per_frame)
             features = np.concatenate([features, np.expand_dims(delta_delta, axis=-1)], axis=-1)
 
         if self.pitch:
             pitches = self.compute_pitch(signal)
             if self.normalize_feature:
                 pitches = normalize_audio_feature(
-                    pitches, per_feature=self.normalize_per_feature)
+                    pitches, per_frame=self.normalize_per_frame)
             features = np.concatenate([features, np.expand_dims(pitches, axis=-1)], axis=-1)
 
         return features

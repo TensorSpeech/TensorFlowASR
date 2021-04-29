@@ -335,12 +335,18 @@ class SentencePieceFeaturizer(TextFeaturizer):
 
     def __init__(self, decoder_config: dict, model=None):
         super(SentencePieceFeaturizer, self).__init__(decoder_config)
-        self.model = model
+        self.model = self.__load_model() if model is None else model
         self.blank = 0  # treats blank as 0 (pad)
         self.upoints = None
         # vocab size
         self.num_classes = self.model.get_piece_size()
         self.upoints = None
+
+    def __load_model(self):
+        filename_prefix = os.path.splitext(self.decoder_config.vocabulary)[0]
+        processor = sp.SentencePieceProcessor()
+        processor.load(filename_prefix + ".model")
+        return processor
 
     def __init_upoints(self):
         text = [""]
