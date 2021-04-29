@@ -415,11 +415,17 @@ class ASRMaskedSliceDataset(ASRSliceDataset):
         self.input_chunk_size = input_chunk_duration * self.speech_featurizer.sample_rate // 1000
         self.time_reduction_factor = time_reduction_factor
 
-    def calculate_mask(self, num_frames):
-        frame_step = self.speech_featurizer.frame_step
-        frames_per_chunk = self.input_chunk_size // frame_step
+        self.base_mask = tf.constant(0, dtype=tf.int32)
+        self.use_base_mask = False
 
-        num_frames = tf.cast(tf.math.ceil(num_frames / self.time_reduction_factor), tf.int32)
+        # If max input length is known, pre-compute mask
+        if self.speech_featurizer.max_length:
+            num_frames = 1 + (self.speech_featurizer.max_length - self.speech_featurizer.frame_length) // self.speech_featurizer.frame_step
+            self.base_mask = self.calculate_mask(num_frames)
+            self.use_base_mask = True
+
+    def _recalculate_mask(self, num_frames):
+        frames_per_chunk = self.input_chunk_size // self.speech_featurizer.frame_step
 
         def _calculate_mask(num_frames, frames_per_chunk, history_window_size):
             mask = np.zeros((num_frames, num_frames), dtype=np.int32)
@@ -436,16 +442,73 @@ class ASRMaskedSliceDataset(ASRSliceDataset):
                         mask[i, base_index + j] = 1
             return mask
 
-        return tf.numpy_function(
-            _calculate_mask, inp=[num_frames, frames_per_chunk, self.history_window_size], Tout=tf.int32
-        )
+        @tf.function(autograph=True)
+        def _calculate_mask_tf(num_frames, frames_per_chunk, history_window_size):
+            chunk_ids = tf.range(num_frames) // frames_per_chunk
+            num_chunks = tf.cast(tf.math.ceil(num_frames / frames_per_chunk), dtype=tf.int32)
+
+            # Create first `frames_per_chunk` rows
+            current = tf.ones((frames_per_chunk), dtype=tf.int32)
+            trailing = tf.ones(((num_chunks - 1) * frames_per_chunk), dtype=tf.int32)
+            tmp_row = tf.concat((current, trailing), axis=0)
+            row = tf.slice(tmp_row, [0], [num_frames])
+            mask = tf.expand_dims(row, axis=0)
+
+            for i in range(1, frames_per_chunk):
+                mask = tf.concat((mask, [row]), axis=0)
+
+            # Create the following rows
+            for i in range(frames_per_chunk, num_frames):
+                tf.autograph.experimental.set_loop_options(
+                    shape_invariants=[(mask, tf.TensorShape([None, None]))]
+                )
+                curr_chunk_id = chunk_ids[i]
+                hist_i = tf.math.maximum(i - history_window_size, 0)
+                hist_chunk_id = chunk_ids[hist_i]
+
+                # Build the left-most part
+                leading_chunk_id = hist_chunk_id - 1
+                num_leading_chunks = tf.math.maximum(leading_chunk_id + 1, 0)
+                leftmost_row = tf.zeros((num_leading_chunks * frames_per_chunk), dtype=tf.int32)
+
+                # Build the current visible chunks
+                num_hist_chunks = curr_chunk_id - hist_chunk_id
+                num_visible_chunks = num_hist_chunks + 1
+                curr_chunk_row = tf.ones((num_visible_chunks * frames_per_chunk), dtype=tf.int32)
+
+                # Build the trailing 0s
+                num_trailing_chunks = tf.math.maximum((num_chunks - curr_chunk_id) - 1, 0)
+                trailing_chunk_row = tf.zeros((num_trailing_chunks * frames_per_chunk), dtype=tf.int32)
+
+                # Merge chunks, clip to output size
+                tmp_row = tf.concat([leftmost_row, curr_chunk_row, trailing_chunk_row], axis=0)
+                row = tf.slice(tmp_row, [0], [num_frames])
+
+                mask = tf.concat((mask, [row]), axis=0)
+            return mask
+
+        if self.use_tf:
+            mask = _calculate_mask_tf(num_frames, frames_per_chunk, self.history_window_size)
+        else:
+            mask = tf.numpy_function(
+                _calculate_mask, inp=[num_frames, frames_per_chunk, self.history_window_size], Tout=tf.int32
+            )
+            mask.set_shape((None, None))
+
+        return mask
+
+    def calculate_mask(self, num_frames):
+        num_frames = tf.cast(tf.math.ceil(num_frames / self.time_reduction_factor), tf.int32)
+
+        if self.use_base_mask:
+            return tf.slice(self.base_mask, [0, 0], [num_frames, num_frames])
+        return self._recalculate_mask(num_frames)
 
     def preprocess(self, path: tf.Tensor, audio: tf.Tensor, indices: tf.Tensor):
         preprocessed_inputs = super(ASRMaskedSliceDataset, self).preprocess(path, audio, indices)
 
         input_length = preprocessed_inputs[2]
         mask = self.calculate_mask(input_length)
-        mask.set_shape((None, None))
 
         return (*preprocessed_inputs, mask)
 
@@ -454,7 +517,6 @@ class ASRMaskedSliceDataset(ASRSliceDataset):
 
         input_length = preprocessed_inputs[2]
         mask = self.calculate_mask(input_length)
-        mask.set_shape((None, None))
 
         return (*preprocessed_inputs, mask)
 
@@ -542,6 +604,7 @@ class ASRMaskedSliceDataset(ASRSliceDataset):
             output_shapes=(tf.TensorShape([]), tf.TensorShape([]), tf.TensorShape([]))
         )
         return self.process(dataset, batch_size)
+
 
 class ASRMaskedTFRecordDataset(ASRMaskedSliceDataset):
     """ Dataset for ASR using TFRecords with rolling mask """
