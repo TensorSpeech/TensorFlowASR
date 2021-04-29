@@ -21,10 +21,10 @@ speech_config:
   preemphasis: 0.97
   normalize_signal: True
   normalize_feature: True
-  normalize_per_feature: False
+  normalize_per_frame: False
 
 decoder_config:
-  vocabulary: ./vocabularies/librispeech/librispeech_train_10_1008.subwords
+  vocabulary: ./vocabularies/librispeech/librispeech_train_4_1030.subwords
   target_vocab_size: 1000
   max_subword_length: 10
   blank_at_zero: True
@@ -40,7 +40,7 @@ model_config:
     filters: 144
     kernel_size: 3
     strides: 2
-  encoder_positional_encoding: sinusoid_concat
+  encoder_positional_encoding: sinusoid
   encoder_dmodel: 144
   encoder_num_blocks: 16
   encoder_head_size: 36
@@ -76,7 +76,7 @@ learning_config:
           mask_factor: 27
     data_paths:
       - /mnt/h/ML/Datasets/ASR/Raw/LibriSpeech/train-clean-100/transcripts.tsv
-    tfrecords_dir: null
+    tfrecords_dir: /mnt/h/ML/Datasets/ASR/Raw/LibriSpeech/tfrecords_1030
     shuffle: True
     cache: True
     buffer_size: 100
@@ -86,7 +86,7 @@ learning_config:
   eval_dataset_config:
     use_tf: True
     data_paths: null
-    tfrecords_dir: null
+    tfrecords_dir: /mnt/h/ML/Datasets/ASR/Raw/LibriSpeech/tfrecords_1030
     shuffle: False
     cache: True
     buffer_size: 100

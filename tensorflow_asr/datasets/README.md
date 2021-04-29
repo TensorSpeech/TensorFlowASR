@@ -20,38 +20,26 @@ An ASR dataset is some `.tsv` files in format: `PATH\tDURATION\tTRANSCRIPT`. You
 ```python
 class ASRTFRecordDataset(ASRDataset):
     """ Dataset for ASR using TFRecords """
-    def __init__(self,
-                 data_paths: list,
-                 tfrecords_dir: str,
-                 speech_featurizer: SpeechFeaturizer,
-                 text_featurizer: TextFeaturizer,
-                 stage: str,
-                 augmentations: dict = None,
-                 cache: bool = False,
-                 shuffle: bool = False)
 
 class ASRSliceDataset(ASRDataset):
     """ Dataset for ASR using Slice """
-    def __init__(self,
-                 stage: str,
-                 speech_featurizer: SpeechFeaturizer,
-                 text_featurizer: TextFeaturizer,
-                 data_paths: list,
-                 augmentations: dict = None,
-                 cache: bool = False,
-                 shuffle: bool = False)
 ```
 
-**Outputs when iterating in train step**
+**Outputs when iterating dataset**
 
 ```python
-(features, input_lengths, labels, label_lengths, prediction, prediction_length)
+(
+    {
+        "inputs": ...,
+        "inputs_length": ...,
+        "predictions": ...,
+        "predictions_length": ...,
+    },
+    {
+        "labels": ...,
+        "labels_length": ...
+    }
+)
 ```
 
-Where `prediction` and `prediction_length` are the label prepanded by blank and its length for training *Transducer*
-
-**Outputs when iterating in test step**
-
-```python
-(path, features, input_lengths, labels)
-```
+Where `predictions` and `predictions_length` are the label prepanded by blank and its length for training *Transducer*

@@ -1,6 +1,6 @@
 import os
 import argparse
-from tensorflow_asr.utils import setup_environment, setup_strategy
+from tensorflow_asr.utils.env_util import setup_environment, setup_strategy
 
 setup_environment()
 import tensorflow as tf

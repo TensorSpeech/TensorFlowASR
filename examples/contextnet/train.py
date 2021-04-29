@@ -34,9 +34,7 @@ parser.add_argument("--sentence_piece", default=False, action="store_true", help
 
 parser.add_argument("--subwords", default=False, action="store_true", help="Use subwords")
 
-parser.add_argument("--tbs", type=int, default=None, help="Train batch size per replica")
-
-parser.add_argument("--ebs", type=int, default=None, help="Evaluation batch size per replica")
+parser.add_argument("--bs", type=int, default=None, help="Batch size per replica")
 
 parser.add_argument("--spx", type=int, default=1, help="Steps per execution for maximizing performance")
 
@@ -107,7 +105,7 @@ if not args.static_length:
     speech_featurizer.reset_length()
     text_featurizer.reset_length()
 
-global_batch_size = args.tbs or config.learning_config.running_config.batch_size
+global_batch_size = args.bs or config.learning_config.running_config.batch_size
 global_batch_size *= strategy.num_replicas_in_sync
 
 train_data_loader = train_dataset.create(global_batch_size)
@@ -116,7 +114,11 @@ eval_data_loader = eval_dataset.create(global_batch_size)
 with strategy.scope():
     # build model
     contextnet = ContextNet(**config.model_config, vocabulary_size=text_featurizer.num_classes)
-    contextnet._build(speech_featurizer.shape)
+    contextnet.make(
+        speech_featurizer.shape,
+        prediction_shape=text_featurizer.prepand_shape,
+        batch_size=global_batch_size
+    )
     contextnet.summary(line_length=100)
 
     optimizer = tf.keras.optimizers.Adam(
@@ -147,5 +149,5 @@ contextnet.fit(
     validation_data=eval_data_loader,
     callbacks=callbacks,
     steps_per_epoch=train_dataset.total_steps,
-    validation_steps=eval_dataset.total_steps
+    validation_steps=eval_dataset.total_steps if eval_data_loader else None
 )

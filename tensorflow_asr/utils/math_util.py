@@ -103,7 +103,7 @@ def pad_prediction_tfarray(tfarray: tf.TensorArray, blank: int or tf.Tensor) -> 
     with tf.name_scope("pad_prediction_tfarray"):
         index = tf.constant(0, dtype=tf.int32)
         total = tfarray.size()
-        max_length = find_max_length_prediction_tfarray(tfarray)
+        max_length = find_max_length_prediction_tfarray(tfarray) + 1
 
         def condition(index, _): return tf.less(index, total)
 

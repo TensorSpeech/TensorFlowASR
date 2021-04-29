@@ -42,7 +42,7 @@ class ASRDataset(BaseDataset):
                  use_tf: bool = False,
                  buffer_size: int = BUFFER_SIZE,
                  **kwargs):
-        super(ASRDataset, self).__init__(
+        super().__init__(
             data_paths=data_paths, augmentations=augmentations,
             cache=cache, shuffle=shuffle, stage=stage, buffer_size=buffer_size,
             drop_remainder=drop_remainder, use_tf=use_tf, indefinite=indefinite
@@ -83,6 +83,7 @@ class ASRDataset(BaseDataset):
 
     def load_metadata(self, metadata: Union[str, dict] = None):
         if metadata is None: return
+        content = None
         if isinstance(metadata, dict):
             content = metadata
         else:
@@ -94,6 +95,8 @@ class ASRDataset(BaseDataset):
                         content = json.loads(f.read()).get(self.stage, {})
                     except json.JSONDecodeError:
                         raise ValueError(f'File {metadata} must be in json format')
+        if not content:
+            return
         self.speech_featurizer.update_length(int(content.get("max_input_length", 0)))
         self.text_featurizer.update_length(int(content.get("max_label_length", 0)))
         self.total_steps = int(content.get("num_entries", 0))
@@ -173,11 +176,8 @@ class ASRDataset(BaseDataset):
         Returns:
             path, features, input_lengths, labels, label_lengths, pred_inp
         """
-        if self.use_tf: data = self.tf_preprocess(path, audio, indices)
-        else: data = self.preprocess(path, audio, indices)
-
+        data = self.tf_preprocess(path, audio, indices) if self.use_tf else self.preprocess(path, audio, indices)
         _, features, input_length, label, label_length, prediction, prediction_length = data
-
         return (
             data_util.create_inputs(
                 inputs=features,
@@ -223,7 +223,7 @@ class ASRDataset(BaseDataset):
             ),
             padding_values=(
                 data_util.create_inputs(
-                    inputs= 0.,
+                    inputs=0.0,
                     inputs_length=0,
                     predictions=self.text_featurizer.blank,
                     predictions_length=0
@@ -233,7 +233,7 @@ class ASRDataset(BaseDataset):
                     labels_length=0
                 )
             ),
-            drop_remainder = self.drop_remainder
+            drop_remainder=self.drop_remainder
         )
 
         # PREFETCH to improve speed of input length
@@ -269,16 +269,17 @@ class ASRTFRecordDataset(ASRDataset):
                  drop_remainder: bool = True,
                  buffer_size: int = BUFFER_SIZE,
                  **kwargs):
-        super(ASRTFRecordDataset, self).__init__(
+        super().__init__(
             stage=stage, speech_featurizer=speech_featurizer, text_featurizer=text_featurizer,
             data_paths=data_paths, augmentations=augmentations, cache=cache, shuffle=shuffle, buffer_size=buffer_size,
             drop_remainder=drop_remainder, use_tf=use_tf, indefinite=indefinite
         )
-        if not self.stage: raise ValueError("stage must be defined, either 'train', 'eval' or 'test'")
+        if not self.stage:
+            raise ValueError("stage must be defined, either 'train', 'eval' or 'test'")
         self.tfrecords_dir = tfrecords_dir
-        if tfrecords_shards <= 0: raise ValueError("tfrecords_shards must be positive")
+        if tfrecords_shards <= 0:
+            raise ValueError("tfrecords_shards must be positive")
         self.tfrecords_shards = tfrecords_shards
-        if not tf.io.gfile.exists(self.tfrecords_dir): tf.io.gfile.makedirs(self.tfrecords_dir)
 
     @staticmethod
     def write_tfrecord_file(splitted_entries):
@@ -304,8 +305,8 @@ class ASRTFRecordDataset(ASRDataset):
         print(f"Created {shard_path}")
 
     def create_tfrecords(self):
-        if not tf.io.gfile.exists(self.tfrecords_dir):
-            tf.io.gfile.makedirs(self.tfrecords_dir)
+        if not self.tfrecords_dir:
+            return False
 
         if tf.io.gfile.glob(os.path.join(self.tfrecords_dir, f"{self.stage}*.tfrecord")):
             print(f"TFRecords're already existed: {self.stage}")
@@ -334,24 +335,7 @@ class ASRTFRecordDataset(ASRDataset):
             "indices": tf.io.FixedLenFeature([], tf.string)
         }
         example = tf.io.parse_single_example(record, feature_description)
-        if self.use_tf: data = self.tf_preprocess(**example)
-        else: data = self.preprocess(**example)
-
-        _, features, input_length, label, label_length, prediction, prediction_length, mask = data
-
-        return (
-            data_util.create_inputs(
-                inputs=features,
-                inputs_length=input_length,
-                predictions=prediction,
-                predictions_length=prediction_length,
-                mask=mask
-            ),
-            data_util.create_labels(
-                labels=label,
-                labels_length=label_length
-            )
-        )
+        return super().parse(**example)
 
     def create(self, batch_size: int):
         have_data = self.create_tfrecords()
@@ -538,7 +522,7 @@ class ASRMaskedSliceDataset(ASRSliceDataset):
                 inputs_length=input_length,
                 predictions=prediction,
                 predictions_length=prediction_length,
-                mask = mask
+                mask=mask
             ),
             data_util.create_labels(
                 labels=label,
