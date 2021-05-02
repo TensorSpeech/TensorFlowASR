@@ -83,7 +83,7 @@ test_dataset = ASRSliceDataset(
 # build model
 conformer = Conformer(**config.model_config, vocabulary_size=text_featurizer.num_classes)
 conformer.make(speech_featurizer.shape)
-conformer.load_weights(args.saved)
+conformer.load_weights(args.saved, by_name=True)
 conformer.summary(line_length=100)
 conformer.add_featurizers(speech_featurizer, text_featurizer)
 

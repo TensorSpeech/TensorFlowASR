@@ -103,18 +103,12 @@ class RnnTransducerEncoder(tf.keras.Model):
                  rnn_type: str = "lstm",
                  rnn_units: int = 2048,
                  layer_norm: bool = True,
-                 feature_norm: bool = False,
                  kernel_regularizer=None,
                  bias_regularizer=None,
                  **kwargs):
         super().__init__(**kwargs)
 
         self.reshape = Reshape(name=f"{self.name}_reshape")
-
-        if feature_norm:
-            self.fnorm = tf.keras.layers.LayerNormalization(axis=-1, name=f"{self.name}_feature_norm")
-        else:
-            self.fnorm = None
 
         self.blocks = [
             RnnTransducerBlock(
@@ -153,8 +147,6 @@ class RnnTransducerEncoder(tf.keras.Model):
 
     def call(self, inputs, training=False, **kwargs):
         outputs = self.reshape(inputs)
-        if self.fnorm is not None:
-            outputs = self.fnorm(outputs, training=training)
         for block in self.blocks:
             outputs = block(outputs, training=training, **kwargs)
         return outputs
@@ -171,8 +163,6 @@ class RnnTransducerEncoder(tf.keras.Model):
             tf.Tensor: new states with shape [num_lstms, 1 or 2, 1, P]
         """
         outputs = self.reshape(inputs)
-        if self.fnorm is not None:
-            outputs = self.fnorm(outputs, training=False)
         new_states = []
         for i, block in enumerate(self.blocks):
             outputs, block_states = block.recognize(outputs, states=tf.unstack(states[i], axis=0))
@@ -196,7 +186,6 @@ class RnnTransducer(Transducer):
                  encoder_rnn_type: str = "lstm",
                  encoder_rnn_units: int = 2048,
                  encoder_layer_norm: bool = True,
-                 encoder_feature_norm: bool = False,
                  encoder_trainable: bool = True,
                  prediction_embed_dim: int = 320,
                  prediction_embed_dropout: float = 0,
@@ -224,7 +213,6 @@ class RnnTransducer(Transducer):
                 rnn_type=encoder_rnn_type,
                 rnn_units=encoder_rnn_units,
                 layer_norm=encoder_layer_norm,
-                feature_norm=encoder_feature_norm,
                 kernel_regularizer=kernel_regularizer,
                 bias_regularizer=bias_regularizer,
                 trainable=encoder_trainable,

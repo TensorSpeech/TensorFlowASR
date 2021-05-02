@@ -16,6 +16,7 @@ import os
 import io
 import abc
 import math
+from typing import Union
 import numpy as np
 import librosa
 import soundfile as sf
@@ -39,7 +40,7 @@ def load_and_convert_to_wav(path: str) -> tf.Tensor:
     return tf.audio.encode_wav(tf.expand_dims(wave, axis=-1), sample_rate=rate)
 
 
-def read_raw_audio(audio, sample_rate=16000):
+def read_raw_audio(audio: Union[str, bytes, np.ndarray], sample_rate=16000) -> np.ndarray:
     if isinstance(audio, str):
         wave, _ = librosa.load(os.path.expanduser(audio), sr=sample_rate, mono=True)
     elif isinstance(audio, bytes):
@@ -55,7 +56,7 @@ def read_raw_audio(audio, sample_rate=16000):
     return wave
 
 
-def tf_read_raw_audio(audio: tf.Tensor, sample_rate=16000):
+def tf_read_raw_audio(audio: tf.Tensor, sample_rate=16000) -> tf.Tensor:
     wave, rate = tf.audio.decode_wav(audio, desired_channels=1, desired_samples=-1)
     if not env_util.has_devices("TPU"):
         resampled = tfio.audio.resample(wave, rate_in=tf.cast(rate, dtype=tf.int64), rate_out=sample_rate)
@@ -91,7 +92,7 @@ def merge_slices(slices: np.ndarray) -> np.ndarray:
     return np.reshape(slices, [-1])
 
 
-def normalize_audio_feature(audio_feature: np.ndarray, per_frame=False):
+def normalize_audio_feature(audio_feature: np.ndarray, per_frame=False) -> np.ndarray:
     """ Mean and variance normalization """
     axis = 1 if per_frame else None
     mean = np.mean(audio_feature, axis=axis)
@@ -100,7 +101,7 @@ def normalize_audio_feature(audio_feature: np.ndarray, per_frame=False):
     return normalized
 
 
-def tf_normalize_audio_features(audio_feature: tf.Tensor, per_frame=False):
+def tf_normalize_audio_features(audio_feature: tf.Tensor, per_frame=False) -> tf.Tensor:
     """
     TF Mean and variance features normalization
     Args:
@@ -115,13 +116,13 @@ def tf_normalize_audio_features(audio_feature: tf.Tensor, per_frame=False):
     return (audio_feature - mean) / std_dev
 
 
-def normalize_signal(signal: np.ndarray):
+def normalize_signal(signal: np.ndarray) -> np.ndarray:
     """ Normailize signal to [-1, 1] range """
     gain = 1.0 / (np.max(np.abs(signal)) + 1e-9)
     return signal * gain
 
 
-def tf_normalize_signal(signal: tf.Tensor):
+def tf_normalize_signal(signal: tf.Tensor) -> tf.Tensor:
     """
     TF Normailize signal to [-1, 1] range
     Args:
@@ -134,7 +135,7 @@ def tf_normalize_signal(signal: tf.Tensor):
     return signal * gain
 
 
-def preemphasis(signal: np.ndarray, coeff=0.97):
+def preemphasis(signal: np.ndarray, coeff=0.97) -> np.ndarray:
     if not coeff or coeff <= 0.0:
         return signal
     return np.append(signal[0], signal[1:] - coeff * signal[:-1])
@@ -156,7 +157,7 @@ def tf_preemphasis(signal: tf.Tensor, coeff=0.97):
     return tf.concat([s0, s1], axis=-1)
 
 
-def depreemphasis(signal: np.ndarray, coeff=0.97):
+def depreemphasis(signal: np.ndarray, coeff=0.97) -> np.ndarray:
     if not coeff or coeff <= 0.0: return signal
     x = np.zeros(signal.shape[0], dtype=np.float32)
     x[0] = signal[0]
@@ -165,7 +166,7 @@ def depreemphasis(signal: np.ndarray, coeff=0.97):
     return x
 
 
-def tf_depreemphasis(signal: tf.Tensor, coeff=0.97):
+def tf_depreemphasis(signal: tf.Tensor, coeff=0.97) -> tf.Tensor:
     """
     TF Depreemphasis
     Args:

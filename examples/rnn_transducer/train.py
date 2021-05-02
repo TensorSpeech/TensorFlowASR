@@ -46,6 +46,8 @@ parser.add_argument("--devices", type=int, nargs="*", default=[0], help="Devices
 
 parser.add_argument("--mxp", default=False, action="store_true", help="Enable mixed precision")
 
+parser.add_argument("--pretrained", type=str, default=None, help="Path to pretrained model")
+
 args = parser.parse_args()
 
 tf.config.optimizer.set_experimental_options({"auto_mixed_precision": args.mxp})
@@ -119,6 +121,8 @@ with strategy.scope():
         prediction_shape=text_featurizer.prepand_shape,
         batch_size=global_batch_size
     )
+    if args.pretrained:
+        rnn_transducer.load_weights(args.pretrained, by_name=True, skip_mismatch=True)
     rnn_transducer.summary(line_length=100)
     optimizer = tf.keras.optimizers.Adam(
         TransformerSchedule(

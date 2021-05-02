@@ -53,7 +53,7 @@ else:
 # build model
 contextnet = ContextNet(**config.model_config, vocabulary_size=text_featurizer.num_classes)
 contextnet.make(speech_featurizer.shape)
-contextnet.load_weights(args.saved)
+contextnet.load_weights(args.saved, by_name=True)
 contextnet.summary(line_length=100)
 contextnet.add_featurizers(speech_featurizer, text_featurizer)
 

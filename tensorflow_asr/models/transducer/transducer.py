@@ -539,7 +539,9 @@ class Transducer(BaseModel):
 
             time, hypothesis = tf.while_loop(
                 condition, body,
-                loop_vars=[time, hypothesis], parallel_iterations=parallel_iterations, swap_memory=swap_memory
+                loop_vars=[time, hypothesis],
+                parallel_iterations=parallel_iterations,
+                swap_memory=swap_memory
             )
 
             return Hypothesis(index=hypothesis.index, prediction=hypothesis.prediction.stack(), states=hypothesis.states)
@@ -588,7 +590,9 @@ class Transducer(BaseModel):
 
             time, hypothesis = tf.while_loop(
                 condition, body,
-                loop_vars=[time, hypothesis], parallel_iterations=parallel_iterations, swap_memory=swap_memory
+                loop_vars=[time, hypothesis],
+                parallel_iterations=parallel_iterations,
+                swap_memory=swap_memory
             )
 
             return Hypothesis(index=hypothesis.index, prediction=hypothesis.prediction.stack(), states=hypothesis.states)

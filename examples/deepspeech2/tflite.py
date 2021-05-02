@@ -53,7 +53,7 @@ else:
 # build model
 deepspeech2 = DeepSpeech2(**config.model_config, vocabulary_size=text_featurizer.num_classes)
 deepspeech2.make(speech_featurizer.shape)
-deepspeech2.load_weights(args.saved)
+deepspeech2.load_weights(args.saved, by_name=True)
 deepspeech2.summary(line_length=100)
 deepspeech2.add_featurizers(speech_featurizer, text_featurizer)
 

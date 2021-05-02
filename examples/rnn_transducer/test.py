@@ -83,7 +83,7 @@ test_dataset = ASRSliceDataset(
 # build model
 rnn_transducer = RnnTransducer(**config.model_config, vocabulary_size=text_featurizer.num_classes)
 rnn_transducer.make(speech_featurizer.shape)
-rnn_transducer.load_weights(args.saved)
+rnn_transducer.load_weights(args.saved, by_name=True)
 rnn_transducer.summary(line_length=100)
 rnn_transducer.add_featurizers(speech_featurizer, text_featurizer)
 
