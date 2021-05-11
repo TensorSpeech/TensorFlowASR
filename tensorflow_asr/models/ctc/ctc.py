@@ -76,8 +76,8 @@ class CtcModel(BaseModel):
 
     @tf.function
     def recognize(self, inputs: Dict[str, tf.Tensor]):
-        logits = self(inputs["inputs"], training=False)
-        probs = tf.nn.softmax(logits)
+        logits = self(inputs, training=False)
+        probs = tf.nn.softmax(logits["logits"])
 
         def map_fn(prob): return tf.numpy_function(self._perform_greedy, inp=[prob], Tout=tf.string)
 
@@ -102,7 +102,8 @@ class CtcModel(BaseModel):
         input_length = shape_util.shape_list(features)[1]
         input_length = math_util.get_reduced_length(input_length, self.time_reduction_factor)
         input_length = tf.expand_dims(input_length, axis=0)
-        logits = self(features, training=False)
+        logits = self.encoder(features, training=False)
+        logits = self.decoder(logits, training=False)
         probs = tf.nn.softmax(logits)
         decoded = tf.keras.backend.ctc_decode(
             y_pred=probs, input_length=input_length, greedy=True
@@ -115,8 +116,8 @@ class CtcModel(BaseModel):
 
     @tf.function
     def recognize_beam(self, inputs: Dict[str, tf.Tensor], lm: bool = False):
-        logits = self(inputs["inputs"], training=False)
-        probs = tf.nn.softmax(logits)
+        logits = self(inputs, training=False)
+        probs = tf.nn.softmax(logits["logits"])
 
         def map_fn(prob): return tf.numpy_function(self._perform_beam_search, inp=[prob, lm], Tout=tf.string)
 
@@ -148,7 +149,8 @@ class CtcModel(BaseModel):
         input_length = shape_util.shape_list(features)[1]
         input_length = math_util.get_reduced_length(input_length, self.time_reduction_factor)
         input_length = tf.expand_dims(input_length, axis=0)
-        logits = self(features, training=False)
+        logits = self.encoder(features, training=False)
+        logits = self.decoder(logits, training=False)
         probs = tf.nn.softmax(logits)
         decoded = tf.keras.backend.ctc_decode(
             y_pred=probs, input_length=input_length, greedy=False,
