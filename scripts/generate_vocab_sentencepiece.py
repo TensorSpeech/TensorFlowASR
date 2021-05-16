@@ -2,7 +2,7 @@ import os
 import argparse
 from tensorflow_asr.utils.env_util import setup_environment, setup_strategy
 
-setup_environment()
+logger = setup_environment()
 import tensorflow as tf
 
 DEFAULT_YAML = os.path.join(os.path.abspath(os.path.dirname(__file__)), "config.yml")

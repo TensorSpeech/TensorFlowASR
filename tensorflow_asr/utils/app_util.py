@@ -19,6 +19,8 @@ from .metric_util import wer, cer
 from ..metrics.error_rates import ErrorRate
 from .file_util import read_file
 
+logger = tf.get_logger()
+
 
 def evaluate_results(filepath: str):
     logger.info(f"Evaluating result from {filepath} ...")

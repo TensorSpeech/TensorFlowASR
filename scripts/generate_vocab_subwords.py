@@ -18,7 +18,7 @@ args = parser.parse_args()
 
 config = Config(args.config)
 
-logger.info("Generating subwords ...")
+print("Generating subwords ...")
 
 text_featurizer = SubwordFeaturizer.build_from_corpus(config.decoder_config, args.corpus)
 text_featurizer.save_to_file(args.output_file)

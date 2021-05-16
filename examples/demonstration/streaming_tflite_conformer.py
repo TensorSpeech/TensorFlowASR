@@ -39,7 +39,7 @@ parser.add_argument('-l', '--list-devices', action='store_true',
 args, remaining = parser.parse_known_args()
 
 if args.list_devices:
-    logger.info(sd.query_devices())
+    print(sd.query_devices())
     parser.exit(0)
 
 parser.add_argument('filename', metavar='FILENAME',
@@ -113,7 +113,7 @@ def recognizer(Q):
             data = Q.get()
             text, lastid, states = recognize(data, lastid, states)
             transcript += text
-            logger.info(transcript, flush=True)
+            print(transcript, flush=True)
         except queue.Empty:
             pass
 
@@ -126,14 +126,14 @@ def send(q, Q, E):
     def callback(outdata, frames, time, status):
         assert frames == args.blocksize
         if status.output_underflow:
-            logger.info('Output underflow: increase blocksize?', file=sys.stderr)
+            print('Output underflow: increase blocksize?', file=sys.stderr)
             raise sd.CallbackAbort
         assert not status
         try:
             data = q.get_nowait()
             Q.put(np.frombuffer(data, dtype=np.float32))
         except queue.Empty as e:
-            logger.info('Buffer is empty: increase buffersize?', file=sys.stderr)
+            print('Buffer is empty: increase buffersize?', file=sys.stderr)
             raise sd.CallbackAbort from e
         if len(data) < len(outdata):
             outdata[:len(data)] = data
