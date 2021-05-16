@@ -37,13 +37,13 @@ def setup_devices(devices: List[int], cpu: bool = False):
         cpus = tf.config.list_physical_devices("CPU")
         tf.config.set_visible_devices(cpus, "CPU")
         tf.config.set_visible_devices([], "GPU")
-        logger.info("Run on", len(cpus), "Physical CPUs")
+        logger.info(f"Run on {len(cpus)} Physical CPUs")
     else:
         gpus = tf.config.list_physical_devices("GPU")
         if gpus:
             visible_gpus = [gpus[i] for i in devices]
             tf.config.set_visible_devices(visible_gpus, "GPU")
-            logger.info("Run on", len(visible_gpus), "Physical GPUs")
+            logger.info(f"Run on {len(visible_gpus)} Physical GPUs")
 
 
 def setup_tpu(tpu_address=None):
@@ -53,7 +53,7 @@ def setup_tpu(tpu_address=None):
         resolver = tf.distribute.cluster_resolver.TPUClusterResolver(tpu="grpc://" + tpu_address)
     tf.config.experimental_connect_to_cluster(resolver)
     tf.tpu.experimental.initialize_tpu_system(resolver)
-    logger.info("All TPUs: ", tf.config.list_logical_devices("TPU"))
+    logger.info(f"All TPUs: {tf.config.list_logical_devices('TPU')}")
     return tf.distribute.experimental.TPUStrategy(resolver)
 
 
