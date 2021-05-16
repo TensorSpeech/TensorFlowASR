@@ -72,7 +72,7 @@ def prepare_split(dataset_dir, split, opus=False):
 
 
 def make_alphabet_file(filepath, chars_list, lang):
-    print(f"Writing alphabet to {filepath}...")
+    logger.info(f"Writing alphabet to {filepath}...")
     with open(filepath, 'w', encoding='utf8') as outfile:
         outfile.write(f"# Alphabet file for language {lang}\n")
         outfile.write("Automatically generated. Do not edit\n#\n")
@@ -104,7 +104,7 @@ if __name__ == "__main__":
         extract=True
     )
 
-    print(f"Dataset extracted to {dataset_dir}. Preparing...")
+    logger.info(f"Dataset extracted to {dataset_dir}. Preparing...")
 
     for split in splits:
         prepare_split(dataset_dir=dataset_dir, split=split, opus=args.opus)

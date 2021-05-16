@@ -16,7 +16,7 @@ import os
 import argparse
 from tensorflow_asr.utils import env_util, file_util
 
-env_util.setup_environment()
+logger = env_util.setup_environment()
 import tensorflow as tf
 
 from tensorflow_asr.configs.config import Config

@@ -26,7 +26,7 @@ from tensorflow_asr.featurizers.text_featurizers import SentencePieceFeaturizer
 
 config = Config(args.config)
 
-print("Generating subwords ...")
+logger.info("Generating subwords ...")
 text_featurizer = SentencePieceFeaturizer.build_from_corpus(
     config.decoder_config
 )

@@ -22,7 +22,7 @@ with open("requirements.txt", "r") as fr:
 
 setuptools.setup(
     name="TensorFlowASR",
-    version="1.0.0",
+    version="1.0.1",
     author="Huy Le Nguyen",
     author_email="nlhuy.cs.16@gmail.com",
     description="Almost State-of-the-art Automatic Speech Recognition using Tensorflow 2",

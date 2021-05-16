@@ -17,14 +17,16 @@ import tensorflow as tf
 from tensorflow.python.ops.gen_array_ops import matrix_diag_part_v2
 from ..utils import env_util
 
+logger = tf.get_logger()
+
 LOG_0 = float("-inf")
 
 try:
     from warprnnt_tensorflow import rnnt_loss as warp_rnnt_loss
     use_warprnnt = True
-    print("Use RNNT loss in WarpRnnt")
+    logger.info("Use RNNT loss in WarpRnnt")
 except ImportError:
-    print("Use RNNT loss in TensorFlow")
+    logger.info("Use RNNT loss in TensorFlow")
     use_warprnnt = False
 
 

@@ -17,7 +17,7 @@ import math
 import argparse
 from tensorflow_asr.utils import env_util
 
-env_util.setup_environment()
+logger = env_util.setup_environment()
 import tensorflow as tf
 
 DEFAULT_YAML = os.path.join(os.path.abspath(os.path.dirname(__file__)), "config.yml")
@@ -64,13 +64,13 @@ config = Config(args.config)
 speech_featurizer = speech_featurizers.TFSpeechFeaturizer(config.speech_config)
 
 if args.sentence_piece:
-    print("Loading SentencePiece model ...")
+    logger.info("Loading SentencePiece model ...")
     text_featurizer = text_featurizers.SentencePieceFeaturizer(config.decoder_config)
 elif args.subwords:
-    print("Loading subwords ...")
+    logger.info("Loading subwords ...")
     text_featurizer = text_featurizers.SubwordFeaturizer(config.decoder_config)
 else:
-    print("Use characters ...")
+    logger.info("Use characters ...")
     text_featurizer = text_featurizers.CharFeaturizer(config.decoder_config)
 
 if args.tfrecords:

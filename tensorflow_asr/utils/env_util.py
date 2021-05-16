@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import logging
 from typing import Union, List
 import warnings
 import tensorflow as tf
@@ -19,10 +20,11 @@ import tensorflow as tf
 logger = tf.get_logger()
 
 
-def setup_environment():  # Set memory growth and only log ERRORs
+def setup_environment():
     """ Setting tensorflow running environment """
     warnings.simplefilter("ignore")
-    logger.setLevel("WARN")
+    logger.setLevel(logging.INFO)
+    return logger
 
 
 def setup_devices(devices: List[int], cpu: bool = False):
@@ -34,12 +36,25 @@ def setup_devices(devices: List[int], cpu: bool = False):
     if cpu:
         cpus = tf.config.list_physical_devices("CPU")
         tf.config.set_visible_devices(cpus, "CPU")
+        tf.config.set_visible_devices([], "GPU")
+        logger.info("Run on", len(cpus), "Physical CPUs")
     else:
         gpus = tf.config.list_physical_devices("GPU")
         if gpus:
             visible_gpus = [gpus[i] for i in devices]
             tf.config.set_visible_devices(visible_gpus, "GPU")
-            print("Run on", len(visible_gpus), "Physical GPUs")
+            logger.info("Run on", len(visible_gpus), "Physical GPUs")
+
+
+def setup_tpu(tpu_address=None):
+    if tpu_address is None:
+        resolver = tf.distribute.cluster_resolver.TPUClusterResolver()
+    else:
+        resolver = tf.distribute.cluster_resolver.TPUClusterResolver(tpu="grpc://" + tpu_address)
+    tf.config.experimental_connect_to_cluster(resolver)
+    tf.tpu.experimental.initialize_tpu_system(resolver)
+    logger.info("All TPUs: ", tf.config.list_logical_devices("TPU"))
+    return tf.distribute.experimental.TPUStrategy(resolver)
 
 
 def setup_strategy(devices: List[int], tpu_address: str = None):
@@ -59,17 +74,6 @@ def setup_strategy(devices: List[int], tpu_address: str = None):
         pass
     setup_devices(devices)
     return tf.distribute.MirroredStrategy()
-
-
-def setup_tpu(tpu_address=None):
-    if tpu_address is None:
-        resolver = tf.distribute.cluster_resolver.TPUClusterResolver()
-    else:
-        resolver = tf.distribute.cluster_resolver.TPUClusterResolver(tpu="grpc://" + tpu_address)
-    tf.config.experimental_connect_to_cluster(resolver)
-    tf.tpu.experimental.initialize_tpu_system(resolver)
-    print("All TPUs: ", tf.config.list_logical_devices("TPU"))
-    return tf.distribute.experimental.TPUStrategy(resolver)
 
 
 def has_devices(devices: Union[List[str], str]):

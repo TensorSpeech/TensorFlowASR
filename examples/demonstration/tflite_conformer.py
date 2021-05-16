@@ -59,4 +59,4 @@ tflitemodel.set_tensor(
 tflitemodel.invoke()
 hyp = tflitemodel.get_tensor(output_details[0]["index"])
 
-print("".join([chr(u) for u in hyp]))
+logger.info("".join([chr(u) for u in hyp]))

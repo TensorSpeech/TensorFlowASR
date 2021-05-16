@@ -16,6 +16,8 @@ import os
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 import tensorflow as tf
 
+logger = tf.get_logger()
+
 DEFAULT_YAML = os.path.join(os.path.abspath(os.path.dirname(__file__)), "config.yml")
 
 from tensorflow_asr.configs.config import Config
@@ -45,7 +47,7 @@ def test_jasper():
     converter.target_spec.supported_ops = [tf.lite.OpsSet.TFLITE_BUILTINS, tf.lite.OpsSet.SELECT_TF_OPS]
     converter.convert()
 
-    print("Converted successfully with beam search")
+    logger.info("Converted successfully with beam search")
 
     concrete_func = model.make_tflite_function(greedy=True).get_concrete_function()
     converter = tf.lite.TFLiteConverter.from_concrete_functions([concrete_func])
@@ -54,4 +56,4 @@ def test_jasper():
     converter.target_spec.supported_ops = [tf.lite.OpsSet.TFLITE_BUILTINS, tf.lite.OpsSet.SELECT_TF_OPS]
     converter.convert()
 
-    print("Converted successfully with greedy")
+    logger.info("Converted successfully with greedy")

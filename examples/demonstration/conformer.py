@@ -16,7 +16,7 @@ import os
 import argparse
 from tensorflow_asr.utils import env_util, math_util
 
-env_util.setup_environment()
+logger = env_util.setup_environment()
 import tensorflow as tf
 
 parser = argparse.ArgumentParser(prog="Conformer non streaming")
@@ -52,10 +52,10 @@ from tensorflow_asr.models.transducer.conformer import Conformer
 config = Config(args.config)
 speech_featurizer = TFSpeechFeaturizer(config.speech_config)
 if args.sentence_piece:
-    print("Loading SentencePiece model ...")
+    logger.info("Loading SentencePiece model ...")
     text_featurizer = SentencePieceFeaturizer.load_from_file(config.decoder_config, args.subwords)
 elif args.subwords and os.path.exists(args.subwords):
-    print("Loading subwords ...")
+    logger.info("Loading subwords ...")
     text_featurizer = SubwordFeaturizer.load_from_file(config.decoder_config, args.subwords)
 else:
     text_featurizer = CharFeaturizer(config.decoder_config)
@@ -74,14 +74,14 @@ input_length = math_util.get_reduced_length(tf.shape(features)[0], conformer.tim
 
 if args.beam_width:
     transcript = conformer.recognize_beam(features[None, ...], input_length[None, ...])
-    print("Transcript:", transcript[0].numpy().decode("UTF-8"))
+    logger.info("Transcript:", transcript[0].numpy().decode("UTF-8"))
 elif args.timestamp:
     transcript, stime, etime, _, _ = conformer.recognize_tflite_with_timestamp(
         signal, tf.constant(text_featurizer.blank, dtype=tf.int32), conformer.predict_net.get_initial_state())
-    print("Transcript:", transcript)
-    print("Start time:", stime)
-    print("End time:", etime)
+    logger.info("Transcript:", transcript)
+    logger.info("Start time:", stime)
+    logger.info("End time:", etime)
 else:
     transcript, _, _ = conformer.recognize_tflite(
         signal, tf.constant(text_featurizer.blank, dtype=tf.int32), conformer.predict_net.get_initial_state())
-    print("Transcript:", tf.strings.unicode_encode(transcript, "UTF-8").numpy().decode("UTF-8"))
+    logger.info("Transcript:", tf.strings.unicode_encode(transcript, "UTF-8").numpy().decode("UTF-8"))

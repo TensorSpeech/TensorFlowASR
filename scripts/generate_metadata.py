@@ -45,10 +45,10 @@ config = Config(args.config)
 speech_featurizer = TFSpeechFeaturizer(config.speech_config)
 
 if args.sentence_piece:
-    print("Loading SentencePiece model ...")
+    logger.info("Loading SentencePiece model ...")
     text_featurizer = SentencePieceFeaturizer.load_from_file(config.decoder_config, args.subwords)
 elif args.subwords and os.path.exists(args.subwords):
-    print("Loading subwords ...")
+    logger.info("Loading subwords ...")
     text_featurizer = SubwordFeaturizer.load_from_file(config.decoder_config, args.subwords)
 
 dataset = ASRDataset(

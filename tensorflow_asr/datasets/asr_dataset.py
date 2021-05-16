@@ -25,6 +25,8 @@ from ..featurizers.speech_featurizers import load_and_convert_to_wav, read_raw_a
 from ..featurizers.text_featurizers import TextFeaturizer
 from ..utils import feature_util, file_util, math_util, data_util
 
+logger = tf.get_logger()
+
 
 class ASRDataset(BaseDataset):
     """ Dataset for ASR using Generator """
@@ -79,7 +81,7 @@ class ASRDataset(BaseDataset):
         }
         with tf.io.gfile.GFile(metadata, "w") as f:
             f.write(json.dumps(content, indent=2))
-        print(f"Metadata written to {metadata}")
+        logger.info(f"Metadata written to {metadata}")
 
     def load_metadata(self, metadata: Union[str, dict] = None):
         if metadata is None: return
@@ -89,7 +91,7 @@ class ASRDataset(BaseDataset):
         else:
             metadata = file_util.preprocess_paths(metadata)
             if tf.io.gfile.exists(metadata):
-                print(f"Loading metadata from {metadata} ...")
+                logger.info(f"Loading metadata from {metadata} ...")
                 with tf.io.gfile.GFile(metadata, "r") as f:
                     try:
                         content = json.loads(f.read()).get(self.stage, {})
@@ -112,7 +114,7 @@ class ASRDataset(BaseDataset):
         if hasattr(self, "entries") and len(self.entries) > 0: return
         self.entries = []
         for file_path in self.data_paths:
-            print(f"Reading {file_path} ...")
+            logger.info(f"Reading {file_path} ...")
             with tf.io.gfile.GFile(file_path, "r") as f:
                 temp_lines = f.read().splitlines()
                 # Skip the header of tsv file
@@ -300,19 +302,19 @@ class ASRTFRecordDataset(ASRDataset):
         dataset = tf.data.Dataset.from_tensor_slices(entries)
         dataset = dataset.map(parse, num_parallel_calls=AUTOTUNE)
         writer = tf.data.experimental.TFRecordWriter(shard_path, compression_type="ZLIB")
-        print(f"Processing {shard_path} ...")
+        logger.info(f"Processing {shard_path} ...")
         writer.write(dataset)
-        print(f"Created {shard_path}")
+        logger.info(f"Created {shard_path}")
 
     def create_tfrecords(self):
         if not self.tfrecords_dir:
             return False
 
         if tf.io.gfile.glob(os.path.join(self.tfrecords_dir, f"{self.stage}*.tfrecord")):
-            print(f"TFRecords're already existed: {self.stage}")
+            logger.info(f"TFRecords're already existed: {self.stage}")
             return True
 
-        print(f"Creating {self.stage}.tfrecord ...")
+        logger.info(f"Creating {self.stage}.tfrecord ...")
 
         self.read_entries()
         if not self.total_steps or self.total_steps == 0: return False

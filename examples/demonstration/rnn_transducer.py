@@ -15,7 +15,7 @@
 import argparse
 from tensorflow_asr.utils import env_util, math_util, data_util
 
-env_util.setup_environment()
+logger = env_util.setup_environment()
 import tensorflow as tf
 
 parser = argparse.ArgumentParser(prog="Rnn Transducer non streaming")
@@ -51,10 +51,10 @@ from tensorflow_asr.models.transducer.rnn_transducer import RnnTransducer
 config = Config(args.config)
 speech_featurizer = TFSpeechFeaturizer(config.speech_config)
 if args.sentence_piece:
-    print("Loading SentencePiece model ...")
+    logger.info("Loading SentencePiece model ...")
     text_featurizer = SentencePieceFeaturizer(config.decoder_config)
 elif args.subwords:
-    print("Loading subwords ...")
+    logger.info("Loading subwords ...")
     text_featurizer = SubwordFeaturizer(config.decoder_config)
 else:
     text_featurizer = CharFeaturizer(config.decoder_config)
@@ -78,7 +78,7 @@ if args.beam_width:
             inputs_length=input_length[None, ...]
         )
     )
-    print("Transcript:", transcript[0].numpy().decode("UTF-8"))
+    logger.info("Transcript:", transcript[0].numpy().decode("UTF-8"))
 elif args.timestamp:
     transcript, stime, etime, _, _, _ = rnnt.recognize_tflite_with_timestamp(
         signal=signal,
@@ -86,9 +86,9 @@ elif args.timestamp:
         encoder_states=rnnt.encoder.get_initial_state(),
         prediction_states=rnnt.predict_net.get_initial_state()
     )
-    print("Transcript:", transcript)
-    print("Start time:", stime)
-    print("End time:", etime)
+    logger.info("Transcript:", transcript)
+    logger.info("Start time:", stime)
+    logger.info("End time:", etime)
 else:
     transcript = rnnt.recognize(
         data_util.create_inputs(
@@ -96,4 +96,4 @@ else:
             inputs_length=input_length[None, ...]
         )
     )
-    print("Transcript:", transcript[0].numpy().decode("UTF-8"))
+    logger.info("Transcript:", transcript[0].numpy().decode("UTF-8"))

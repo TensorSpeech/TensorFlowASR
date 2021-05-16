@@ -21,7 +21,7 @@ from .file_util import read_file
 
 
 def evaluate_results(filepath: str):
-    print(f"Evaluating result from {filepath} ...")
+    logger.info(f"Evaluating result from {filepath} ...")
     metrics = {
         "greedy_wer": ErrorRate(wer, name="greedy_wer", dtype=tf.float32),
         "greedy_cer": ErrorRate(cer, name="greedy_cer", dtype=tf.float32),
@@ -42,4 +42,4 @@ def evaluate_results(filepath: str):
         metrics["beamsearch_wer"].update_state(decode=beamsearch, target=groundtruth)
         metrics["beamsearch_cer"].update_state(decode=beamsearch, target=groundtruth)
     for key, value in metrics.items():
-        print(f"{key}: {value.result().numpy()}")
+        logger.info(f"{key}: {value.result().numpy()}")

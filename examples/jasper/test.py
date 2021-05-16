@@ -17,7 +17,7 @@ from tqdm import tqdm
 import argparse
 from tensorflow_asr.utils import env_util, file_util
 
-env_util.setup_environment()
+logger = env_util.setup_environment()
 import tensorflow as tf
 
 DEFAULT_YAML = os.path.join(os.path.abspath(os.path.dirname(__file__)), "config.yml")
@@ -63,13 +63,13 @@ config = Config(args.config)
 speech_featurizer = TFSpeechFeaturizer(config.speech_config)
 
 if args.sentence_piece:
-    print("Use SentencePiece ...")
+    logger.info("Use SentencePiece ...")
     text_featurizer = SentencePieceFeaturizer(config.decoder_config)
 elif args.subwords:
-    print("Use subwords ...")
+    logger.info("Use subwords ...")
     text_featurizer = SubwordFeaturizer(config.decoder_config)
 else:
-    print("Use characters ...")
+    logger.info("Use characters ...")
     text_featurizer = CharFeaturizer(config.decoder_config)
 
 tf.random.set_seed(0)
@@ -96,7 +96,7 @@ with file_util.save_file(file_util.preprocess_paths(args.output)) as filepath:
         overwrite = input(f"Overwrite existing result file {filepath} ? (y/n): ").lower() == "y"
     if overwrite:
         results = jasper.predict(test_data_loader, verbose=1)
-        print(f"Saving result to {args.output} ...")
+        logger.info(f"Saving result to {args.output} ...")
         with open(filepath, "w") as openfile:
             openfile.write("PATH\tDURATION\tGROUNDTRUTH\tGREEDY\tBEAMSEARCH\n")
             progbar = tqdm(total=test_dataset.total_steps, unit="batch")

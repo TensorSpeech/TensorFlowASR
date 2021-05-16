@@ -47,10 +47,10 @@ config = Config(args.config)
 speech_featurizer = speech_featurizers.TFSpeechFeaturizer(config.speech_config)
 
 if args.sentence_piece:
-    print("Loading SentencePiece model ...")
+    logger.info("Loading SentencePiece model ...")
     text_featurizer = text_featurizers.SentencePieceFeaturizer.load_from_file(config.decoder_config, args.subwords)
 elif args.subwords and os.path.exists(args.subwords):
-    print("Loading subwords ...")
+    logger.info("Loading subwords ...")
     text_featurizer = text_featurizers.SubwordFeaturizer.load_from_file(config.decoder_config, args.subwords)
 else:
     text_featurizer = text_featurizers.CharFeaturizer(config.decoder_config)
