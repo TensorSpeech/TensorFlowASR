@@ -482,7 +482,7 @@ class ASRMaskedSliceDataset(ASRSliceDataset):
         return mask
 
     def calculate_mask(self, num_frames):
-        num_frames = tf.cast(tf.math.ceil(num_frames / self.time_reduction_factor), tf.int32)
+        num_frames = math_util.get_reduced_length(num_frames, self.time_reduction_factor)
 
         if self.use_base_mask:
             return tf.slice(self.base_mask, [0, 0], [num_frames, num_frames])
