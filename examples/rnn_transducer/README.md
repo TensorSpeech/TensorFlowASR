@@ -38,6 +38,7 @@ TFLite Conversion, see `python examples/streamingTransducer/tflite_*.py --help`
 
 **Error Rates**
 
-| **Test-clean** | Test batch size |      WER (%)      |      CER (%)      |
-| :------------: | :-------------: | :---------------: | :---------------: |
-|    _Greedy_    |        8        | 13.13907504081726 | 6.023869663476944 |
+| **Test-clean** | Test batch size | Epoch |      WER (%)      |      CER (%)      |
+| :------------: | :-------------: | :---: | :---------------: | :---------------: |
+|    _Greedy_    |        8        |  21   | 13.13907504081726 | 6.023869663476944 |
+|    _Greedy_    |        8        |  25   | 12.79481202363968 | 5.671864375472069 |
