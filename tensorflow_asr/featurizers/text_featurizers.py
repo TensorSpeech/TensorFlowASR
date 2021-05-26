@@ -131,7 +131,7 @@ class CharFeaturizer(TextFeaturizer):
             self.tokens.append(line[0])
             index += 1
         if self.blank is None: self.blank = len(self.tokens)  # blank not at zero
-        # self.vocab_array = self.tokens.copy()
+        self.non_blank_tokens = self.tokens.copy()
         self.tokens.insert(self.blank, "")  # add blank token to tokens
         self.num_classes = len(self.tokens)
         self.tokens = tf.convert_to_tensor(self.tokens, dtype=tf.string)
@@ -211,12 +211,14 @@ class SubwordFeaturizer(TextFeaturizer):
         self.blank = 0  # subword treats blank as 0
         self.num_classes = self.subwords.vocab_size
         # create upoints
-        self.__init_upoints()
+        self.__init_vocabulary()
 
-    def __init_upoints(self):
-        self.tokens = [""]
+    def __init_vocabulary(self):
+        self.tokens = []
         for idx in np.arange(1, self.num_classes, dtype=np.int32):
             self.tokens.append(self.subwords.decode([idx]))
+        self.non_blank_tokens = self.tokens.copy()
+        self.tokens.insert(0, "")
         self.upoints = tf.strings.unicode_decode(self.tokens, "UTF-8")
         self.upoints = self.upoints.to_tensor()  # [num_classes, max_subword_length]
 
@@ -337,10 +339,9 @@ class SentencePieceFeaturizer(TextFeaturizer):
         super(SentencePieceFeaturizer, self).__init__(decoder_config)
         self.model = self.__load_model() if model is None else model
         self.blank = 0  # treats blank as 0 (pad)
-        self.upoints = None
         # vocab size
         self.num_classes = self.model.get_piece_size()
-        self.upoints = None
+        self.__init_vocabulary()
 
     def __load_model(self):
         filename_prefix = os.path.splitext(self.decoder_config.vocabulary)[0]
@@ -348,11 +349,13 @@ class SentencePieceFeaturizer(TextFeaturizer):
         processor.load(filename_prefix + ".model")
         return processor
 
-    def __init_upoints(self):
-        text = [""]
+    def __init_vocabulary(self):
+        self.tokens = []
         for idx in range(1, self.num_classes):
-            text.append(self.model.decode_ids([idx]))
-        self.upoints = tf.strings.unicode_decode(text, "UTF-8")
+            self.tokens.append(self.model.decode_ids([idx]))
+        self.non_blank_tokens = self.tokens.copy()
+        self.tokens.insert(0, "")
+        self.upoints = tf.strings.unicode_decode(self.tokens, "UTF-8")
         self.upoints = self.upoints.to_tensor()  # [num_classes, max_subword_length]
 
     @classmethod
@@ -473,8 +476,6 @@ class SentencePieceFeaturizer(TextFeaturizer):
         Returns:
             unicode code points transcript with dtype tf.int32 and shape [None]
         """
-        if self.upoints is None:
-            self.__init_upoints()
         with tf.name_scope("indices2upoints"):
             indices = self.normalize_indices(indices)
             upoints = tf.gather_nd(self.upoints, tf.expand_dims(indices, axis=-1))

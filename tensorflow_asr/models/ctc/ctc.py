@@ -85,7 +85,7 @@ class CtcModel(BaseModel):
 
     def _perform_greedy(self, probs: np.ndarray):
         from ctc_decoders import ctc_greedy_decoder
-        decoded = ctc_greedy_decoder(probs, vocabulary=self.text_featurizer.tokens)
+        decoded = ctc_greedy_decoder(probs, vocabulary=self.text_featurizer.non_blank_tokens)
         return tf.convert_to_tensor(decoded, dtype=tf.string)
 
     def recognize_tflite(self, signal):
@@ -127,7 +127,7 @@ class CtcModel(BaseModel):
         from ctc_decoders import ctc_beam_search_decoder
         decoded = ctc_beam_search_decoder(
             probs_seq=probs,
-            vocabulary=self.text_featurizer.tokens,
+            vocabulary=self.text_featurizer.non_blank_tokens,
             beam_size=self.text_featurizer.decoder_config.beam_width,
             ext_scoring_func=self.text_featurizer.scorer if lm else None
         )

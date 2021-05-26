@@ -24,8 +24,8 @@ speech_config:
   normalize_per_frame: False
 
 decoder_config:
-  vocabulary: ./vocabularies/librispeech/librispeech_train_10_1008.subwords
-  blank_at_zero: True
+  vocabulary: null
+  blank_at_zero: False
   beam_width: 500
   lm_config:
     model_path: null
