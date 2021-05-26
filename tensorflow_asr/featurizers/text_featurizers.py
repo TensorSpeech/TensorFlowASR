@@ -131,7 +131,7 @@ class CharFeaturizer(TextFeaturizer):
             self.tokens.append(line[0])
             index += 1
         if self.blank is None: self.blank = len(self.tokens)  # blank not at zero
-        self.vocab_array = self.tokens.copy()
+        # self.vocab_array = self.tokens.copy()
         self.tokens.insert(self.blank, "")  # add blank token to tokens
         self.num_classes = len(self.tokens)
         self.tokens = tf.convert_to_tensor(self.tokens, dtype=tf.string)
@@ -214,10 +214,10 @@ class SubwordFeaturizer(TextFeaturizer):
         self.__init_upoints()
 
     def __init_upoints(self):
-        text = [""]
+        self.tokens = [""]
         for idx in np.arange(1, self.num_classes, dtype=np.int32):
-            text.append(self.subwords.decode([idx]))
-        self.upoints = tf.strings.unicode_decode(text, "UTF-8")
+            self.tokens.append(self.subwords.decode([idx]))
+        self.upoints = tf.strings.unicode_decode(self.tokens, "UTF-8")
         self.upoints = self.upoints.to_tensor()  # [num_classes, max_subword_length]
 
     def __load_subwords(self):
