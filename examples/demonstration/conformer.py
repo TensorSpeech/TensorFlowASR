@@ -48,6 +48,7 @@ from tensorflow_asr.featurizers.speech_featurizers import read_raw_audio
 from tensorflow_asr.featurizers.speech_featurizers import TFSpeechFeaturizer
 from tensorflow_asr.featurizers.text_featurizers import CharFeaturizer, SubwordFeaturizer, SentencePieceFeaturizer
 from tensorflow_asr.models.transducer.conformer import Conformer
+from tensorflow_asr.utils.data_util import create_inputs
 
 config = Config(args.config)
 speech_featurizer = TFSpeechFeaturizer(config.speech_config)
@@ -73,7 +74,8 @@ features = speech_featurizer.tf_extract(signal)
 input_length = math_util.get_reduced_length(tf.shape(features)[0], conformer.time_reduction_factor)
 
 if args.beam_width:
-    transcript = conformer.recognize_beam(features[None, ...], input_length[None, ...])
+    inputs = create_inputs(features[None, ...], input_length[None, ...])
+    transcript = conformer.recognize_beam(inputs)
     logger.info(f"Transcript: {transcript[0].numpy().decode('UTF-8')}")
 elif args.timestamp:
     transcript, stime, etime, _, _ = conformer.recognize_tflite_with_timestamp(
