@@ -34,7 +34,7 @@ parser.add_argument("--config", type=str, default=DEFAULT_YAML, help="The file p
 
 parser.add_argument("--saved", type=str, default=None, help="Path to saved model")
 
-parser.add_argument("--subwords", type=str, default=None, help="Use subwords")
+parser.add_argument("--subwords", action="store_true", help="Use subwords")
 
 parser.add_argument("output", type=str, default=None, help="TFLite file path to be exported")
 
