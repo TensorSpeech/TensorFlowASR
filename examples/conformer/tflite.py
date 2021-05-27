@@ -36,6 +36,9 @@ parser.add_argument("--saved", type=str, default=None, help="Path to saved model
 
 parser.add_argument("--subwords", action="store_true", help="Use subwords")
 
+parser.add_argument("--vocabulary", type=str, default=None, required=False,
+                    help="Path to vocabulary. Overrides path in config, if given.")
+
 parser.add_argument("output", type=str, default=None, help="TFLite file path to be exported")
 
 args = parser.parse_args()
@@ -44,6 +47,9 @@ assert args.saved and args.output
 
 config = Config(args.config)
 speech_featurizer = TFSpeechFeaturizer(config.speech_config)
+
+if args.vocabulary is not None:
+    config.decoder_config["vocabulary"] = args.vocabulary
 
 if args.subwords:
     text_featurizer = SubwordFeaturizer(config.decoder_config)
