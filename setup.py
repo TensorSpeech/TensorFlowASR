@@ -37,7 +37,7 @@ setuptools.setup(
         "tf2.4": ["tensorflow>=2.4.0,<2.5", "tensorflow-text>=2.4.0,<2.5", "tensorflow-io>=0.17.0,<0.18"],
         "tf2.4-gpu": ["tensorflow-gpu>=2.4.0,<2.5", "tensorflow-text>=2.4.0,<2.5", "tensorflow-io>=0.17.0,<0.18"],
         "tf2.5": ["tensorflow>=2.5.0,<2.6", "tensorflow-text>=2.5.0,<2.6", "tensorflow-io>=0.18.0,<0.19"],
-        "tf2.5-gpu": ["tensorflow-gpu>=2.5.0,<2.6", "tensorflow-tex>=2.5.0,<2.6", "tensorflow-io>=0.18.0,<0.19"]
+        "tf2.5-gpu": ["tensorflow-gpu>=2.5.0,<2.6", "tensorflow-text>=2.5.0,<2.6", "tensorflow-io>=0.18.0,<0.19"]
     },
     classifiers=[
         "Programming Language :: Python :: 3.6",
