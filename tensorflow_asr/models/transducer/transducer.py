@@ -604,14 +604,14 @@ class Transducer(BaseModel):
         """
         RNN Transducer Beam Search
         Args:
-            features (tf.Tensor): a batch of padded extracted features
+            inputs (Dict[str, tf.Tensor]): Input dictionary containing "inputs" and "inputs_length"
             lm (bool, optional): whether to use language model. Defaults to False.
 
         Returns:
             tf.Tensor: a batch of decoded transcripts
         """
         encoded = self.encoder(inputs["inputs"], training=False)
-        encoded_length = math_util.get_reduced_length(inputs["inputs_length"], self.time_reduction_factor)
+        encoded_length = inputs["inputs_length"]
         return self._perform_beam_search_batch(encoded=encoded, encoded_length=encoded_length, lm=lm)
 
     def _perform_beam_search_batch(self,
