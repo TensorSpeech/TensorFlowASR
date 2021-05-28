@@ -604,7 +604,7 @@ class Transducer(BaseModel):
         """
         RNN Transducer Beam Search
         Args:
-            features (tf.Tensor): a batch of padded extracted features
+            inputs (Dict[str, tf.Tensor]): Input dictionary containing "inputs" and "inputs_length"
             lm (bool, optional): whether to use language model. Defaults to False.
 
         Returns:

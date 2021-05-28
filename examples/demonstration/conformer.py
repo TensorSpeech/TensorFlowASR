@@ -48,6 +48,7 @@ from tensorflow_asr.featurizers.speech_featurizers import read_raw_audio
 from tensorflow_asr.featurizers.speech_featurizers import TFSpeechFeaturizer
 from tensorflow_asr.featurizers.text_featurizers import CharFeaturizer, SubwordFeaturizer, SentencePieceFeaturizer
 from tensorflow_asr.models.transducer.conformer import Conformer
+from tensorflow_asr.utils.data_util import create_inputs
 
 config = Config(args.config)
 speech_featurizer = TFSpeechFeaturizer(config.speech_config)
@@ -70,18 +71,20 @@ conformer.add_featurizers(speech_featurizer, text_featurizer)
 
 signal = read_raw_audio(args.filename)
 features = speech_featurizer.tf_extract(signal)
-input_length = math_util.get_reduced_length(tf.shape(features)[0], conformer.time_reduction_factor)
+input_length = tf.shape(features)[0]
 
 if args.beam_width:
-    transcript = conformer.recognize_beam(features[None, ...], input_length[None, ...])
-    logger.info("Transcript:", transcript[0].numpy().decode("UTF-8"))
+    inputs = create_inputs(features[None, ...], input_length[None, ...])
+    transcript = conformer.recognize_beam(inputs)
+    logger.info(f"Transcript: {transcript[0].numpy().decode('UTF-8')}")
 elif args.timestamp:
     transcript, stime, etime, _, _ = conformer.recognize_tflite_with_timestamp(
         signal, tf.constant(text_featurizer.blank, dtype=tf.int32), conformer.predict_net.get_initial_state())
-    logger.info("Transcript:", transcript)
-    logger.info("Start time:", stime)
-    logger.info("End time:", etime)
+    logger.info(f"Transcript: {transcript}")
+    logger.info(f"Start time: {stime}")
+    logger.info(f"End time: {etime}")
 else:
-    transcript, _, _ = conformer.recognize_tflite(
+    code_points, _, _ = conformer.recognize_tflite(
         signal, tf.constant(text_featurizer.blank, dtype=tf.int32), conformer.predict_net.get_initial_state())
-    logger.info("Transcript:", tf.strings.unicode_encode(transcript, "UTF-8").numpy().decode("UTF-8"))
+    transcript = tf.strings.unicode_encode(code_points, 'UTF-8').numpy().decode('UTF-8')
+    logger.info(f"Transcript: {transcript}")
