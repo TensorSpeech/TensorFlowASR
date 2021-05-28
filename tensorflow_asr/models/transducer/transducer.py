@@ -611,7 +611,7 @@ class Transducer(BaseModel):
             tf.Tensor: a batch of decoded transcripts
         """
         encoded = self.encoder(inputs["inputs"], training=False)
-        encoded_length = inputs["inputs_length"]
+        encoded_length = math_util.get_reduced_length(inputs["inputs_length"], self.time_reduction_factor)
         return self._perform_beam_search_batch(encoded=encoded, encoded_length=encoded_length, lm=lm)
 
     def _perform_beam_search_batch(self,

@@ -71,7 +71,7 @@ conformer.add_featurizers(speech_featurizer, text_featurizer)
 
 signal = read_raw_audio(args.filename)
 features = speech_featurizer.tf_extract(signal)
-input_length = math_util.get_reduced_length(tf.shape(features)[0], conformer.time_reduction_factor)
+input_length = tf.shape(features)[0]
 
 if args.beam_width:
     inputs = create_inputs(features[None, ...], input_length[None, ...])
