@@ -16,13 +16,15 @@ import tensorflow as tf
 
 
 class PointWiseFFN(tf.keras.layers.Layer):
-    def __init__(self,
-                 size,
-                 output_size,
-                 activation="relu",
-                 dropout=0.1,
-                 name="point_wise_ffn",
-                 **kwargs):
+    def __init__(
+        self,
+        size,
+        output_size,
+        activation="relu",
+        dropout=0.1,
+        name="point_wise_ffn",
+        **kwargs,
+    ):
         super(PointWiseFFN, self).__init__(name=name, **kwargs)
         self.ffn1 = tf.keras.layers.Dense(units=size, activation=activation)
         self.do1 = tf.keras.layers.Dropout(dropout)

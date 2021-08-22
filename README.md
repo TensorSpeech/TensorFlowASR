@@ -87,12 +87,14 @@ For tensorflow 2.4.x, run `pip3 install -U 'TensorFlowASR[tf2.4]'` or `pip3 inst
 
 For tensorflow 2.5.x, run `pip3 install -U 'TensorFlowASR[tf2.5]'` or `pip3 install -U 'TensorFlowASR[tf2.5-gpu]'`
 
+For tensorflow 2.6.x, run `pip3 install -U 'TensorFlowASR[tf2.6]'` or `pip3 install -U 'TensorFlowASR[tf2.6-gpu]'`
+
 ### Installing from source
 
 ```bash
 git clone https://github.com/TensorSpeech/TensorFlowASR.git
 cd TensorFlowASR
-pip3 install '.[tf2.3]' # or '.[tf2.3-gpu]' or '.[tf2.4]' or '.[tf2.4-gpu]' or '.[tf2.5]' or '.[tf2.5-gpu]'
+pip3 install -e '.[tf2.6]' # see other options in setup.py file
 ```
 
 For anaconda3:

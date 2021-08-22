@@ -15,23 +15,20 @@
 import tensorflow as tf
 from tensorflow.keras import mixed_precision as mxp
 
-from ..utils import file_util, env_util
+from ..utils import env_util, file_util
 
 
 class BaseModel(tf.keras.Model):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self._metrics = {}
-        self.use_loss_scale = False
-
-    def save(self,
-             filepath,
-             overwrite=True,
-             include_optimizer=True,
-             save_format=None,
-             signatures=None,
-             options=None,
-             save_traces=True):
+    def save(
+        self,
+        filepath,
+        overwrite=True,
+        include_optimizer=True,
+        save_format=None,
+        signatures=None,
+        options=None,
+        save_traces=True,
+    ):
         with file_util.save_file(filepath) as path:
             super().save(
                 filepath=path,
@@ -40,52 +37,54 @@ class BaseModel(tf.keras.Model):
                 save_format=save_format,
                 signatures=signatures,
                 options=options,
-                save_traces=save_traces
+                save_traces=save_traces,
             )
 
-    def save_weights(self,
-                     filepath,
-                     overwrite=True,
-                     save_format=None,
-                     options=None):
+    def save_weights(
+        self,
+        filepath,
+        overwrite=True,
+        save_format=None,
+        options=None,
+    ):
         with file_util.save_file(filepath) as path:
-            super().save_weights(
-                filepath=path,
-                overwrite=overwrite,
-                save_format=save_format,
-                options=options
-            )
+            super().save_weights(filepath=path, overwrite=overwrite, save_format=save_format, options=options)
 
-    def load_weights(self,
-                     filepath,
-                     by_name=False,
-                     skip_mismatch=False,
-                     options=None):
+    def load_weights(
+        self,
+        filepath,
+        by_name=False,
+        skip_mismatch=False,
+        options=None,
+    ):
         with file_util.read_file(filepath) as path:
-            super().load_weights(
-                filepath=path,
-                by_name=by_name,
-                skip_mismatch=skip_mismatch,
-                options=options
-            )
+            super().load_weights(filepath=path, by_name=by_name, skip_mismatch=skip_mismatch, options=options)
 
-    @property
-    def metrics(self):
-        return self._metrics.values()
-
-    def add_metric(self, metric: tf.keras.metrics.Metric):
-        self._metrics.append({metric.name: metric})
+    def add_metric(
+        self,
+        metric: tf.keras.metrics.Metric,
+    ):
+        if not hasattr(self, "_metrics"):
+            self._metrics = {}
+        self._metrics[metric.name] = metric
 
     def make(self, *args, **kwargs):
-        """ Custom function for building model (uses self.build so cannot overwrite that function) """
+        """Custom function for building model (uses self.build so cannot overwrite that function)"""
         raise NotImplementedError()
 
-    def compile(self, loss, optimizer, run_eagerly=None, **kwargs):
+    def compile(
+        self,
+        loss,
+        optimizer,
+        run_eagerly=None,
+        **kwargs,
+    ):
+        self.use_loss_scale = False
         if not env_util.has_devices("TPU"):
             optimizer = mxp.experimental.LossScaleOptimizer(tf.keras.optimizers.get(optimizer), "dynamic")
             self.use_loss_scale = True
         loss_metric = tf.keras.metrics.Mean(name="loss", dtype=tf.float32)
-        self._metrics = {loss_metric.name: loss_metric}
+        self.add_metric(loss_metric)
         super().compile(optimizer=optimizer, loss=loss, run_eagerly=run_eagerly, **kwargs)
 
     # -------------------------------- STEP FUNCTIONS -------------------------------------
@@ -112,7 +111,7 @@ class BaseModel(tf.keras.Model):
             gradients = tape.gradient(loss, self.trainable_weights)
         self.optimizer.apply_gradients(zip(gradients, self.trainable_variables))
         self._metrics["loss"].update_state(loss)
-        return {m.name: m.result() for m in self.metrics}
+        return {m.name: m.result() for m in self._metrics.values()}
 
     def test_step(self, batch):
         """
@@ -127,7 +126,7 @@ class BaseModel(tf.keras.Model):
         y_pred = self(inputs, training=False)
         loss = self.loss(y_true, y_pred)
         self._metrics["loss"].update_state(loss)
-        return {m.name: m.result() for m in self.metrics}
+        return {m.name: m.result() for m in self._metrics.values()}
 
     def predict_step(self, batch):
         """
@@ -149,9 +148,9 @@ class BaseModel(tf.keras.Model):
     # -------------------------------- INFERENCE FUNCTIONS -------------------------------------
 
     def recognize(self, *args, **kwargs):
-        """ Greedy decoding function that used in self.predict_step """
+        """Greedy decoding function that used in self.predict_step"""
         raise NotImplementedError()
 
     def recognize_beam(self, *args, **kwargs):
-        """ Beam search decoding function that used in self.predict_step """
+        """Beam search decoding function that used in self.predict_step"""
         raise NotImplementedError()

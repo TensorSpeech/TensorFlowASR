@@ -13,38 +13,41 @@
 # limitations under the License.
 
 from typing import Dict, List
+
 import tensorflow as tf
 
-from ..encoders.contextnet import ContextNetEncoder, L2
+from ...utils import data_util, math_util
+from ..encoders.contextnet import L2, ContextNetEncoder
 from .transducer import Transducer
-from ...utils import math_util, data_util
 
 
 class ContextNet(Transducer):
-    def __init__(self,
-                 vocabulary_size: int,
-                 encoder_blocks: List[dict],
-                 encoder_alpha: float = 0.5,
-                 encoder_trainable: bool = True,
-                 prediction_embed_dim: int = 512,
-                 prediction_embed_dropout: int = 0,
-                 prediction_num_rnns: int = 1,
-                 prediction_rnn_units: int = 320,
-                 prediction_rnn_type: str = "lstm",
-                 prediction_rnn_implementation: int = 2,
-                 prediction_layer_norm: bool = True,
-                 prediction_projection_units: int = 0,
-                 prediction_trainable: bool = True,
-                 joint_dim: int = 1024,
-                 joint_activation: str = "tanh",
-                 prejoint_linear: bool = True,
-                 postjoint_linear: bool = False,
-                 joint_mode: str = "add",
-                 joint_trainable: bool = True,
-                 kernel_regularizer=L2,
-                 bias_regularizer=L2,
-                 name: str = "contextnet",
-                 **kwargs):
+    def __init__(
+        self,
+        vocabulary_size: int,
+        encoder_blocks: List[dict],
+        encoder_alpha: float = 0.5,
+        encoder_trainable: bool = True,
+        prediction_embed_dim: int = 512,
+        prediction_embed_dropout: int = 0,
+        prediction_num_rnns: int = 1,
+        prediction_rnn_units: int = 320,
+        prediction_rnn_type: str = "lstm",
+        prediction_rnn_implementation: int = 2,
+        prediction_layer_norm: bool = True,
+        prediction_projection_units: int = 0,
+        prediction_trainable: bool = True,
+        joint_dim: int = 1024,
+        joint_activation: str = "tanh",
+        prejoint_linear: bool = True,
+        postjoint_linear: bool = False,
+        joint_mode: str = "add",
+        joint_trainable: bool = True,
+        kernel_regularizer=L2,
+        bias_regularizer=L2,
+        name: str = "contextnet",
+        **kwargs,
+    ):
         super(ContextNet, self).__init__(
             encoder=ContextNetEncoder(
                 blocks=encoder_blocks,
@@ -52,7 +55,7 @@ class ContextNet(Transducer):
                 kernel_regularizer=kernel_regularizer,
                 bias_regularizer=bias_regularizer,
                 trainable=encoder_trainable,
-                name=f"{name}_encoder"
+                name=f"{name}_encoder",
             ),
             vocabulary_size=vocabulary_size,
             embed_dim=prediction_embed_dim,
@@ -73,22 +76,31 @@ class ContextNet(Transducer):
             kernel_regularizer=kernel_regularizer,
             bias_regularizer=bias_regularizer,
             name=name,
-            **kwargs
+            **kwargs,
         )
         self.dmodel = self.encoder.blocks[-1].dmodel
         self.time_reduction_factor = 1
-        for block in self.encoder.blocks: self.time_reduction_factor *= block.time_reduction_factor
+        for block in self.encoder.blocks:
+            self.time_reduction_factor *= block.time_reduction_factor
 
-    def call(self, inputs, training=False, **kwargs):
+    def call(
+        self,
+        inputs,
+        training=False,
+        **kwargs,
+    ):
         enc = self.encoder([inputs["inputs"], inputs["inputs_length"]], training=training, **kwargs)
         pred = self.predict_net([inputs["predictions"], inputs["predictions_length"]], training=training, **kwargs)
         logits = self.joint_net([enc, pred], training=training, **kwargs)
         return data_util.create_logits(
-            logits=logits,
-            logits_length=math_util.get_reduced_length(inputs["inputs_length"], self.time_reduction_factor)
+            logits=logits, logits_length=math_util.get_reduced_length(inputs["inputs_length"], self.time_reduction_factor)
         )
 
-    def encoder_inference(self, features: tf.Tensor, input_length: tf.Tensor):
+    def encoder_inference(
+        self,
+        features: tf.Tensor,
+        input_length: tf.Tensor,
+    ):
         with tf.name_scope(f"{self.name}_encoder"):
             input_length = tf.expand_dims(tf.shape(features)[0], axis=0)
             outputs = tf.expand_dims(features, axis=0)
@@ -98,7 +110,10 @@ class ContextNet(Transducer):
     # -------------------------------- GREEDY -------------------------------------
 
     @tf.function
-    def recognize(self, inputs: Dict[str, tf.Tensor]):
+    def recognize(
+        self,
+        inputs: Dict[str, tf.Tensor],
+    ):
         """
         RNN Transducer Greedy decoding
         Args:
@@ -111,7 +126,12 @@ class ContextNet(Transducer):
         encoded_length = math_util.get_reduced_length(inputs["inputs_length"], self.time_reduction_factor)
         return self._perform_greedy_batch(encoded=encoded, encoded_length=encoded_length)
 
-    def recognize_tflite(self, signal, predicted, prediction_states):
+    def recognize_tflite(
+        self,
+        signal,
+        predicted,
+        prediction_states,
+    ):
         """
         Function to convert to tflite using greedy decoding (default streaming mode)
         Args:
@@ -131,7 +151,12 @@ class ContextNet(Transducer):
         transcript = self.text_featurizer.indices2upoints(hypothesis.prediction)
         return transcript, hypothesis.index, hypothesis.states
 
-    def recognize_tflite_with_timestamp(self, signal, predicted, states):
+    def recognize_tflite_with_timestamp(
+        self,
+        signal,
+        predicted,
+        states,
+    ):
         features = self.speech_featurizer.tf_extract(signal)
         encoded = self.encoder_inference(features, tf.shape(features)[0])
         hypothesis = self._perform_greedy(encoded, tf.shape(encoded)[0], predicted, states)
@@ -157,7 +182,11 @@ class ContextNet(Transducer):
     # -------------------------------- BEAM SEARCH -------------------------------------
 
     @tf.function
-    def recognize_beam(self, inputs: Dict[str, tf.Tensor], lm: bool = False):
+    def recognize_beam(
+        self,
+        inputs: Dict[str, tf.Tensor],
+        lm: bool = False,
+    ):
         """
         RNN Transducer Beam Search
         Args:

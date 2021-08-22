@@ -13,15 +13,16 @@
 # limitations under the License.
 
 import logging
-from typing import Union, List
 import warnings
+from typing import List, Union
+
 import tensorflow as tf
 
 logger = tf.get_logger()
 
 
 def setup_environment():
-    """ Setting tensorflow running environment """
+    """Setting tensorflow running environment"""
     warnings.simplefilter("ignore")
     logger.setLevel(logging.INFO)
     return logger
@@ -50,7 +51,9 @@ def setup_tpu(tpu_address=None):
     if tpu_address is None:
         resolver = tf.distribute.cluster_resolver.TPUClusterResolver()
     else:
-        resolver = tf.distribute.cluster_resolver.TPUClusterResolver(tpu="grpc://" + tpu_address)
+        resolver = tf.distribute.cluster_resolver.TPUClusterResolver(
+            tpu="grpc://" + tpu_address
+        )
     tf.config.experimental_connect_to_cluster(resolver)
     tf.tpu.experimental.initialize_tpu_system(resolver)
     logger.info(f"All TPUs: {tf.config.list_logical_devices('TPU')}")

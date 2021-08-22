@@ -13,24 +13,27 @@
 # limitations under the License.
 
 import typing
+
 import tensorflow as tf
 
 
 class MultiHeadAttention(tf.keras.layers.Layer):
-    def __init__(self,
-                 num_heads,
-                 head_size,
-                 output_size: int = None,
-                 dropout: float = 0.0,
-                 use_projection_bias: bool = True,
-                 return_attn_coef: bool = False,
-                 kernel_initializer: typing.Union[str, typing.Callable] = "glorot_uniform",
-                 kernel_regularizer: typing.Union[str, typing.Callable] = None,
-                 kernel_constraint: typing.Union[str, typing.Callable] = None,
-                 bias_initializer: typing.Union[str, typing.Callable] = "zeros",
-                 bias_regularizer: typing.Union[str, typing.Callable] = None,
-                 bias_constraint: typing.Union[str, typing.Callable] = None,
-                 **kwargs):
+    def __init__(
+        self,
+        num_heads,
+        head_size,
+        output_size: int = None,
+        dropout: float = 0.0,
+        use_projection_bias: bool = True,
+        return_attn_coef: bool = False,
+        kernel_initializer: typing.Union[str, typing.Callable] = "glorot_uniform",
+        kernel_regularizer: typing.Union[str, typing.Callable] = None,
+        kernel_constraint: typing.Union[str, typing.Callable] = None,
+        bias_initializer: typing.Union[str, typing.Callable] = "zeros",
+        bias_regularizer: typing.Union[str, typing.Callable] = None,
+        bias_constraint: typing.Union[str, typing.Callable] = None,
+        **kwargs,
+    ):
         super(MultiHeadAttention, self).__init__(**kwargs)
 
         if output_size is not None and output_size < 1:
@@ -52,15 +55,14 @@ class MultiHeadAttention(tf.keras.layers.Layer):
         self.dropout = tf.keras.layers.Dropout(dropout, name="dropout")
         self._droput_rate = dropout
 
-    def build(self, input_shape):
+    def build(
+        self,
+        input_shape,
+    ):
         num_query_features = input_shape[0][-1]
         num_key_features = input_shape[1][-1]
-        num_value_features = (
-            input_shape[2][-1] if len(input_shape) > 2 else num_key_features
-        )
-        output_size = (
-            self.output_size if self.output_size is not None else num_value_features
-        )
+        num_value_features = input_shape[2][-1] if len(input_shape) > 2 else num_key_features
+        output_size = self.output_size if self.output_size is not None else num_value_features
         self.query_kernel = self.add_weight(
             name="query_kernel",
             shape=[self.num_heads, num_query_features, self.head_size],
@@ -100,12 +102,17 @@ class MultiHeadAttention(tf.keras.layers.Layer):
         else:
             self.projection_bias = None
 
-    def call_qkv(self, query, key, value, training=False):
+    def call_qkv(
+        self,
+        query,
+        key,
+        value,
+        training=False,
+    ):
         # verify shapes
         if key.shape[-2] != value.shape[-2]:
             raise ValueError(
-                "the number of elements in 'key' must be equal to "
-                "the same as the number of elements in 'value'"
+                "the number of elements in 'key' must be equal to " "the same as the number of elements in 'value'"
             )
         # Linear transformations
         query = tf.einsum("...NI,HIO->...NHO", query, self.query_kernel)
@@ -114,20 +121,23 @@ class MultiHeadAttention(tf.keras.layers.Layer):
 
         return query, key, value
 
-    def call_attention(self, query, key, value, logits, training=False, mask=None):
+    def call_attention(
+        self,
+        query,
+        key,
+        value,
+        logits,
+        training=False,
+        mask=None,
+    ):
         # mask = attention mask with shape [B, Tquery, Tkey] with 1 is for positions we want to attend, 0 for masked
         if mask is not None:
             if len(mask.shape) < 2:
                 raise ValueError("'mask' must have at least 2 dimensions")
             if query.shape[-3] != mask.shape[-2]:
-                raise ValueError(
-                    "mask's second to last dimension must be equal to "
-                    "the number of elements in 'query'"
-                )
+                raise ValueError("mask's second to last dimension must be equal to " "the number of elements in 'query'")
             if key.shape[-3] != mask.shape[-1]:
-                raise ValueError(
-                    "mask's last dimension must be equal to the number of elements in 'key'"
-                )
+                raise ValueError("mask's last dimension must be equal to the number of elements in 'key'")
         # apply mask
         if mask is not None:
             mask = tf.cast(mask, tf.float32)
@@ -155,7 +165,13 @@ class MultiHeadAttention(tf.keras.layers.Layer):
 
         return output, attn_coef
 
-    def call(self, inputs, training=False, mask=None, **kwargs):
+    def call(
+        self,
+        inputs,
+        training=False,
+        mask=None,
+        **kwargs,
+    ):
         query, key, value = inputs
 
         query, key, value = self.call_qkv(query, key, value, training=training)
@@ -168,21 +184,19 @@ class MultiHeadAttention(tf.keras.layers.Layer):
         # Calculate dot product attention
         logits = tf.einsum("...NHO,...MHO->...HNM", query, key)
 
-        output, attn_coef = self.call_attention(query, key, value, logits,
-                                                training=training, mask=mask)
+        output, attn_coef = self.call_attention(query, key, value, logits, training=training, mask=mask)
 
         if self.return_attn_coef:
             return output, attn_coef
         else:
             return output
 
-    def compute_output_shape(self, input_shape):
-        num_value_features = (
-            input_shape[2][-1] if len(input_shape) > 2 else input_shape[1][-1]
-        )
-        output_size = (
-            self.output_size if self.output_size is not None else num_value_features
-        )
+    def compute_output_shape(
+        self,
+        input_shape,
+    ):
+        num_value_features = input_shape[2][-1] if len(input_shape) > 2 else input_shape[1][-1]
+        output_size = self.output_size if self.output_size is not None else num_value_features
 
         output_shape = input_shape[0][:-1] + (output_size,)
 
@@ -221,28 +235,31 @@ class MultiHeadAttention(tf.keras.layers.Layer):
 
 
 class RelPositionMultiHeadAttention(MultiHeadAttention):
-    def build(self, input_shape):
+    def build(
+        self,
+        input_shape,
+    ):
         num_pos_features = input_shape[-1][-1]
         self.pos_kernel = self.add_weight(
             name="pos_kernel",
             shape=[self.num_heads, num_pos_features, self.head_size],
             initializer=self.kernel_initializer,
             regularizer=self.kernel_regularizer,
-            constraint=self.kernel_constraint
+            constraint=self.kernel_constraint,
         )
         self.pos_bias_u = self.add_weight(
             name="pos_bias_u",
             shape=[self.num_heads, self.head_size],
             regularizer=self.kernel_regularizer,
             initializer=self.kernel_initializer,
-            constraint=self.kernel_constraint
+            constraint=self.kernel_constraint,
         )
         self.pos_bias_v = self.add_weight(
             name="pos_bias_v",
             shape=[self.num_heads, self.head_size],
             regularizer=self.kernel_regularizer,
             initializer=self.kernel_initializer,
-            constraint=self.kernel_constraint
+            constraint=self.kernel_constraint,
         )
         super(RelPositionMultiHeadAttention, self).build(input_shape[:-1])
 
@@ -254,7 +271,13 @@ class RelPositionMultiHeadAttention(MultiHeadAttention):
         x = tf.reshape(x[:, :, 1:, :], x_shape)
         return x
 
-    def call(self, inputs, training=False, mask=None, **kwargs):
+    def call(
+        self,
+        inputs,
+        training=False,
+        mask=None,
+        **kwargs,
+    ):
         query, key, value, pos = inputs
 
         query, key, value = self.call_qkv(query, key, value, training=training)
@@ -268,13 +291,12 @@ class RelPositionMultiHeadAttention(MultiHeadAttention):
         logits_with_v = tf.einsum("...NHO,...MHO->...HNM", query_with_v, pos)
         logits_with_v = self.relative_shift(logits_with_v)
 
-        logits = logits_with_u + logits_with_v[:, :, :, :tf.shape(logits_with_u)[3]]
+        logits = logits_with_u + logits_with_v[:, :, :, : tf.shape(logits_with_u)[3]]
 
         depth = tf.constant(self.head_size, dtype=tf.float32)
         logits /= tf.sqrt(depth)
 
-        output, attn_coef = self.call_attention(query, key, value, logits,
-                                                training=training, mask=mask)
+        output, attn_coef = self.call_attention(query, key, value, logits, training=training, mask=mask)
 
         if self.return_attn_coef:
             return output, attn_coef

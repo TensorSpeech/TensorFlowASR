@@ -12,23 +12,25 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from tqdm import tqdm
 import tensorflow as tf
+from tqdm import tqdm
 
-from .metric_util import wer, cer
 from ..metrics.error_rates import ErrorRate
 from .file_util import read_file
+from .metric_util import cer, wer
 
 logger = tf.get_logger()
 
 
-def evaluate_results(filepath: str):
+def evaluate_results(
+    filepath: str,
+):
     logger.info(f"Evaluating result from {filepath} ...")
     metrics = {
         "greedy_wer": ErrorRate(wer, name="greedy_wer", dtype=tf.float32),
         "greedy_cer": ErrorRate(cer, name="greedy_cer", dtype=tf.float32),
         "beamsearch_wer": ErrorRate(wer, name="beamsearch_wer", dtype=tf.float32),
-        "beamsearch_cer": ErrorRate(cer, name="beamsearch_cer", dtype=tf.float32)
+        "beamsearch_cer": ErrorRate(cer, name="beamsearch_cer", dtype=tf.float32),
     }
     with read_file(filepath) as path:
         with open(path, "r", encoding="utf-8") as openfile:
