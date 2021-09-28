@@ -68,7 +68,8 @@ class PositionalEncoding(tf.keras.layers.Layer):
 
     def get_config(self):
         conf = super().get_config()
-        return conf.update({"alpha": self.alpha, "beta": self.beta})
+        conf.update({"alpha": self.alpha, "beta": self.beta})
+        return conf
 
 
 class PositionalEncodingConcat(PositionalEncoding):
