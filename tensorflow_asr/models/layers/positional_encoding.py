@@ -14,7 +14,7 @@
 
 import tensorflow as tf
 
-from ...utils.shape_util import shape_list
+from tensorflow_asr.utils.shape_util import shape_list
 
 
 class PositionalEncoding(tf.keras.layers.Layer):

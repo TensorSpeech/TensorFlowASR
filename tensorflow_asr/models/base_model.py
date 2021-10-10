@@ -15,7 +15,7 @@
 import tensorflow as tf
 from tensorflow.keras import mixed_precision as mxp
 
-from ..utils import env_util, file_util
+from tensorflow_asr.utils import env_util, file_util
 
 
 class BaseModel(tf.keras.Model):

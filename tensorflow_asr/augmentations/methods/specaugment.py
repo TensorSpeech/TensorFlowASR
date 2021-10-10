@@ -13,9 +13,8 @@
 # limitations under the License.
 
 import tensorflow as tf
-
-from ...utils import shape_util
-from .base_method import AugmentationMethod
+from tensorflow_asr.augmentations.methods.base_method import AugmentationMethod
+from tensorflow_asr.utils import shape_util
 
 
 class FreqMasking(AugmentationMethod):
@@ -37,11 +36,14 @@ class FreqMasking(AugmentationMethod):
             f = tf.random.uniform([], minval=0, maxval=self.mask_factor, dtype=tf.int32)
             f = tf.minimum(f, F)
             f0 = tf.random.uniform([], minval=0, maxval=(F - f), dtype=tf.int32)
-            mask = tf.concat([
-                tf.ones([T, f0, V], dtype=spectrogram.dtype),
-                tf.zeros([T, f, V], dtype=spectrogram.dtype),
-                tf.ones([T, F - f0 - f, V], dtype=spectrogram.dtype)
-            ], axis=1)
+            mask = tf.concat(
+                [
+                    tf.ones([T, f0, V], dtype=spectrogram.dtype),
+                    tf.zeros([T, f, V], dtype=spectrogram.dtype),
+                    tf.ones([T, F - f0 - f, V], dtype=spectrogram.dtype),
+                ],
+                axis=1,
+            )
             spectrogram = spectrogram * mask
         return spectrogram
 
@@ -66,10 +68,13 @@ class TimeMasking(AugmentationMethod):
             t = tf.random.uniform([], minval=0, maxval=self.mask_factor, dtype=tf.int32)
             t = tf.minimum(t, tf.cast(tf.cast(T, dtype=tf.float32) * self.p_upperbound, dtype=tf.int32))
             t0 = tf.random.uniform([], minval=0, maxval=(T - t), dtype=tf.int32)
-            mask = tf.concat([
-                tf.ones([t0, F, V], dtype=spectrogram.dtype),
-                tf.zeros([t, F, V], dtype=spectrogram.dtype),
-                tf.ones([T - t0 - t, F, V], dtype=spectrogram.dtype)
-            ], axis=0)
+            mask = tf.concat(
+                [
+                    tf.ones([t0, F, V], dtype=spectrogram.dtype),
+                    tf.zeros([t, F, V], dtype=spectrogram.dtype),
+                    tf.ones([T - t0 - t, F, V], dtype=spectrogram.dtype),
+                ],
+                axis=0,
+            )
             spectrogram = spectrogram * mask
         return spectrogram

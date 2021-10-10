@@ -105,7 +105,7 @@ conda activate tfasr
 pip install -U tensorflow-gpu # upgrade to latest version of tensorflow
 git clone https://github.com/TensorSpeech/TensorFlowASR.git
 cd TensorFlowASR
-pip3 install '.[tf2.3]' # or '.[tf2.3-gpu]' or '.[tf2.4]' or '.[tf2.4-gpu]' or '.[tf2.5]' or '.[tf2.5-gpu]' 
+pip3 install -e '.[tf2.3]' # or '.[tf2.3-gpu]' or '.[tf2.4]' or '.[tf2.4-gpu]' or '.[tf2.5]' or '.[tf2.5-gpu]' 
 ```
 
 ### Running in a container

@@ -14,11 +14,11 @@
 
 import tensorflow as tf
 
-from ...utils import shape_util
-from ..activations.glu import GLU
-from ..layers.multihead_attention import MultiHeadAttention, RelPositionMultiHeadAttention
-from ..layers.positional_encoding import PositionalEncoding, PositionalEncodingConcat
-from ..layers.subsampling import Conv2dSubsampling, VggSubsampling
+from tensorflow_asr.utils import shape_util
+from tensorflow_asr.models.activations.glu import GLU
+from tensorflow_asr.models.layers.multihead_attention import MultiHeadAttention, RelPositionMultiHeadAttention
+from tensorflow_asr.models.layers.positional_encoding import PositionalEncoding, PositionalEncodingConcat
+from tensorflow_asr.models.layers.subsampling import Conv2dSubsampling, VggSubsampling
 
 L2 = tf.keras.regularizers.l2(1e-6)
 

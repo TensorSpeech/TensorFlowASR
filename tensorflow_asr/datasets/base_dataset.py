@@ -12,10 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import abc
-
 import tensorflow as tf
 
-from ..augmentations.augmentation import Augmentation
+from tensorflow_asr.augmentations.augmentation import Augmentation
 
 BUFFER_SIZE = 100
 TFRECORD_SHARDS = 16
@@ -23,22 +22,24 @@ AUTOTUNE = tf.data.experimental.AUTOTUNE
 
 
 class BaseDataset(metaclass=abc.ABCMeta):
-    """ Based dataset for all models """
+    """Based dataset for all models"""
 
-    def __init__(self,
-                 data_paths: list,
-                 augmentations: Augmentation = Augmentation(None),
-                 cache: bool = False,
-                 shuffle: bool = False,
-                 buffer_size: int = BUFFER_SIZE,
-                 indefinite: bool = False,
-                 drop_remainder: bool = True,
-                 use_tf: bool = False,
-                 stage: str = "train",
-                 **kwargs):
+    def __init__(
+        self,
+        data_paths: list,
+        augmentations: Augmentation = Augmentation(None),
+        cache: bool = False,
+        shuffle: bool = False,
+        buffer_size: int = BUFFER_SIZE,
+        indefinite: bool = False,
+        drop_remainder: bool = True,
+        use_tf: bool = False,
+        stage: str = "train",
+        **kwargs
+    ):
         self.data_paths = data_paths or []
         if not isinstance(self.data_paths, list):
-            raise ValueError('data_paths must be a list of string paths')
+            raise ValueError("data_paths must be a list of string paths")
         self.augmentations = augmentations  # apply augmentation
         self.cache = cache  # whether to cache transformed dataset to memory
         self.shuffle = shuffle  # whether to shuffle tf.data.Dataset

@@ -12,13 +12,21 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import os
+
 import setuptools
 
-with open("README.md", "r") as fh:
+readme_path = os.path.join(os.path.dirname(__file__), "README.md")
+
+with open(readme_path, "r", encoding="utf-8") as fh:
     long_description = fh.read()
 
-with open("requirements.txt", "r") as fr:
+requirements_path = os.path.join(os.path.dirname(__file__), "requirements.txt")
+
+with open(requirements_path, "r") as fr:
     requirements = fr.read().splitlines()
+    print(requirements)
+
 
 setuptools.setup(
     name="TensorFlowASR",

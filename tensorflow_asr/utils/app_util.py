@@ -15,9 +15,9 @@
 import tensorflow as tf
 from tqdm import tqdm
 
-from ..metrics.error_rates import ErrorRate
-from .file_util import read_file
-from .metric_util import cer, wer
+from tensorflow_asr.metrics.error_rates import ErrorRate
+from tensorflow_asr.utils.file_util import read_file
+from tensorflow_asr.utils.metric_util import cer, wer
 
 logger = tf.get_logger()
 

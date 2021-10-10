@@ -17,15 +17,14 @@ import io
 import math
 import os
 from typing import Union
-
 import librosa
 import numpy as np
 import soundfile as sf
 import tensorflow as tf
 import tensorflow_io as tfio
 
-from ..utils import env_util, math_util
-from .methods import gammatone
+from tensorflow_asr.utils import env_util, math_util
+from tensorflow_asr.featurizers.methods import gammatone
 
 # def tf_resample(signal, rate_in, rate_out):
 #     if rate_in == rate_out: return signal

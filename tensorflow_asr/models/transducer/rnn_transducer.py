@@ -14,12 +14,11 @@
 """ http://arxiv.org/abs/1811.06621 """
 
 from typing import Dict
-
 import tensorflow as tf
 
-from ...utils import layer_util, math_util, shape_util
-from ..layers.subsampling import TimeReduction
-from .transducer import Transducer
+from tensorflow_asr.utils import layer_util, math_util, shape_util
+from tensorflow_asr.models.layers.subsampling import TimeReduction
+from tensorflow_asr.models.transducer.base_transducer import Transducer
 
 
 class Reshape(tf.keras.layers.Layer):

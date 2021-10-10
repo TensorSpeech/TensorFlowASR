@@ -16,7 +16,7 @@
 import tensorflow as tf
 from tensorflow.python.ops.gen_array_ops import matrix_diag_part_v2
 
-from ..utils import env_util
+from tensorflow_asr.utils import env_util
 
 logger = tf.get_logger()
 
