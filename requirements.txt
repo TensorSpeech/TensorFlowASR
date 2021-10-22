@@ -27,7 +27,7 @@ matplotlib==3.4.3
 mccabe==0.6.1
 mypy-extensions==0.4.3
 nlpaug==1.1.7
-nltk==3.6.2
+nltk==3.6.5
 numba==0.53.1
 numpy==1.19.5
 packaging==21.0
