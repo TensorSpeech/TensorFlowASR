@@ -100,7 +100,7 @@ class VggSubsampling(tf.keras.layers.Layer):
             bias_regularizer=bias_regularizer,
         )
         self.maxpool2 = tf.keras.layers.MaxPool2D(pool_size=strides, padding="same", name=f"{name}_maxpool_2")
-        self.time_reduction_factor = self.maxpool1.pool_size[0] + self.maxpool2.pool_size[0]
+        self.time_reduction_factor = self.maxpool1.pool_size[0] * self.maxpool2.pool_size[0]
 
     def call(
         self,
@@ -165,7 +165,7 @@ class Conv2dSubsampling(tf.keras.layers.Layer):
             kernel_regularizer=kernel_regularizer,
             bias_regularizer=bias_regularizer,
         )
-        self.time_reduction_factor = self.conv1.strides[0] + self.conv2.strides[0]
+        self.time_reduction_factor = self.conv1.strides[0] * self.conv2.strides[0]
 
     def call(
         self,
