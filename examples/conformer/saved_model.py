@@ -27,38 +27,23 @@ tf.keras.backend.clear_session()
 parser = argparse.ArgumentParser(prog="Conformer Testing")
 
 parser.add_argument(
-    "--config",
-    type=str,
-    default=DEFAULT_YAML,
-    help="The file path of model configuration file",
+    "--config", type=str, default=DEFAULT_YAML, help="The file path of model configuration file",
 )
 
 parser.add_argument(
-    "--h5",
-    type=str,
-    default=None,
-    help="Path to saved h5 weights",
+    "--h5", type=str, default=None, help="Path to saved h5 weights",
 )
 
 parser.add_argument(
-    "--sentence_piece",
-    default=False,
-    action="store_true",
-    help="Whether to use `SentencePiece` model",
+    "--sentence_piece", default=False, action="store_true", help="Whether to use `SentencePiece` model",
 )
 
 parser.add_argument(
-    "--subwords",
-    default=False,
-    action="store_true",
-    help="Use subwords",
+    "--subwords", default=False, action="store_true", help="Use subwords",
 )
 
 parser.add_argument(
-    "--output_dir",
-    type=str,
-    default=None,
-    help="Output directory for saved model",
+    "--output_dir", type=str, default=None, help="Output directory for saved model",
 )
 
 args = parser.parse_args()

@@ -38,8 +38,8 @@ TensorFlowASR implements some automatic speech recognition architectures such as
   - [Baselines](#baselines)
   - [Publications](#publications)
 - [Installation](#installation)
+  - [Installing from source (recommended)](#installing-from-source-recommended)
   - [Installing via PyPi](#installing-via-pypi)
-  - [Installing from source](#installing-from-source)
   - [Running in a container](#running-in-a-container)
 - [Setup training and testing](#setup-training-and-testing)
 - [TFLite Convertion](#tflite-convertion)
@@ -59,42 +59,33 @@ TensorFlowASR implements some automatic speech recognition architectures such as
 
 ### Baselines
 
-- **CTCModel** (End2end models using CTC Loss for training, currently supported DeepSpeech2, Jasper)
 - **Transducer Models** (End2end models using RNNT Loss for training, currently supported Conformer, ContextNet, Streaming Transducer)
+- **CTCModel** (End2end models using CTC Loss for training, currently supported DeepSpeech2, Jasper)
 
 ### Publications
 
-- **Deep Speech 2** (Reference: [https://arxiv.org/abs/1512.02595](https://arxiv.org/abs/1512.02595))
-  See [examples/deepspeech2](./examples/deepspeech2)
-- **Jasper** (Reference: [https://arxiv.org/abs/1904.03288](https://arxiv.org/abs/1904.03288))
-  See [examples/jasper](./examples/jasper)
 - **Conformer Transducer** (Reference: [https://arxiv.org/abs/2005.08100](https://arxiv.org/abs/2005.08100))
   See [examples/conformer](./examples/conformer)
 - **Streaming Transducer** (Reference: [https://arxiv.org/abs/1811.06621](https://arxiv.org/abs/1811.06621))
   See [examples/streaming_transducer](./examples/streaming_transducer)
 - **ContextNet** (Reference: [http://arxiv.org/abs/2005.03191](http://arxiv.org/abs/2005.03191))
   See [examples/contextnet](./examples/contextnet)
+- **Deep Speech 2** (Reference: [https://arxiv.org/abs/1512.02595](https://arxiv.org/abs/1512.02595))
+  See [examples/deepspeech2](./examples/deepspeech2)
+- **Jasper** (Reference: [https://arxiv.org/abs/1904.03288](https://arxiv.org/abs/1904.03288))
+  See [examples/jasper](./examples/jasper)
 
 ## Installation
 
 For training and testing, you should use `git clone` for installing necessary packages from other authors (`ctc_decoders`, `rnnt_loss`, etc.)
 
-### Installing via PyPi
-
-For tensorflow 2.3.x, run `pip3 install -U 'TensorFlowASR[tf2.3]'` or `pip3 install -U 'TensorFlowASR[tf2.3-gpu]'`
-
-For tensorflow 2.4.x, run `pip3 install -U 'TensorFlowASR[tf2.4]'` or `pip3 install -U 'TensorFlowASR[tf2.4-gpu]'`
-
-For tensorflow 2.5.x, run `pip3 install -U 'TensorFlowASR[tf2.5]'` or `pip3 install -U 'TensorFlowASR[tf2.5-gpu]'`
-
-For tensorflow 2.6.x, run `pip3 install -U 'TensorFlowASR[tf2.6]'` or `pip3 install -U 'TensorFlowASR[tf2.6-gpu]'`
-
-### Installing from source
+### Installing from source (recommended)
 
 ```bash
 git clone https://github.com/TensorSpeech/TensorFlowASR.git
 cd TensorFlowASR
-pip3 install -e '.[tf2.6]' # see other options in setup.py file
+# Tensorflow 2.x (with 2.x >= 2.3)
+pip3 install -e ".[tf2.x]" # or ".[tf2.x-gpu]"
 ```
 
 For anaconda3:
@@ -105,8 +96,17 @@ conda activate tfasr
 pip install -U tensorflow-gpu # upgrade to latest version of tensorflow
 git clone https://github.com/TensorSpeech/TensorFlowASR.git
 cd TensorFlowASR
-pip3 install -e '.[tf2.3]' # or '.[tf2.3-gpu]' or '.[tf2.4]' or '.[tf2.4-gpu]' or '.[tf2.5]' or '.[tf2.5-gpu]' 
+# Tensorflow 2.x (with 2.x >= 2.3)
+pip3 install -e ".[tf2.x]" # or ".[tf2.x-gpu]"
 ```
+
+### Installing via PyPi
+
+```bash
+# Tensorflow 2.x (with 2.x >= 2.3)
+pip3 install -U "TensorFlowASR[tf2.x]" # or pip3 install -U "TensorFlowASR[tf2.x-gpu]"
+```
+
 
 ### Running in a container
 
