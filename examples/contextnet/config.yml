@@ -247,7 +247,7 @@ learning_config:
     num_epochs: 20
     checkpoint:
       filepath: /mnt/e/Models/local/contextnet/checkpoints/{epoch:02d}.h5
-      save_best_only: True
+      save_best_only: False
       save_weights_only: True
       save_freq: epoch
     states_dir: /mnt/e/Models/local/contextnet/states
