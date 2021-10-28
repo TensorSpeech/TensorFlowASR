@@ -31,7 +31,7 @@ decoder_config:
   beam_width: 0
   norm_score: True
   corpus_files:
-    - /mnt/h/ML/Datasets/ASR/Raw/LibriSpeech/train-clean-100/transcripts.tsv
+    - /mnt/Data/MLDL/Datasets/ASR/Raw/LibriSpeech/train-clean-100/transcripts.tsv
 
 model_config:
   name: conformer
@@ -75,8 +75,8 @@ learning_config:
           num_masks: 1
           mask_factor: 27
     data_paths:
-      - /mnt/h/ML/Datasets/ASR/Raw/LibriSpeech/train-clean-100/transcripts.tsv
-    tfrecords_dir: /mnt/h/ML/Datasets/ASR/Raw/LibriSpeech/tfrecords_1030
+      - /mnt/Data/MLDL/Datasets/ASR/Raw/LibriSpeech/train-clean-100/transcripts.tsv
+    tfrecords_dir: /mnt/Data/MLDL/Datasets/ASR/Raw/LibriSpeech/tfrecords_1030
     shuffle: True
     cache: True
     buffer_size: 100
@@ -86,7 +86,7 @@ learning_config:
   eval_dataset_config:
     use_tf: True
     data_paths: null
-    tfrecords_dir: /mnt/h/ML/Datasets/ASR/Raw/LibriSpeech/tfrecords_1030
+    tfrecords_dir: /mnt/Data/MLDL/Datasets/ASR/Raw/LibriSpeech/tfrecords_1030
     shuffle: False
     cache: True
     buffer_size: 100
@@ -113,13 +113,13 @@ learning_config:
     batch_size: 2
     num_epochs: 50
     checkpoint:
-      filepath: /mnt/e/Models/local/conformer/checkpoints/{epoch:02d}.h5
-      save_best_only: True
+      filepath: /mnt/Miscellanea/Models/local/conformer/checkpoints/{epoch:02d}.h5
+      save_best_only: False
       save_weights_only: True
       save_freq: epoch
-    states_dir: /mnt/e/Models/local/conformer/states
+    states_dir: /mnt/Miscellanea/Models/local/conformer/states
     tensorboard:
-      log_dir: /mnt/e/Models/local/conformer/tensorboard
+      log_dir: /mnt/Miscellanea/Models/local/conformer/tensorboard
       histogram_freq: 1
       write_graph: True
       write_images: True

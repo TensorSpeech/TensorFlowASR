@@ -13,11 +13,10 @@
 # limitations under the License.
 
 from typing import Tuple
-
 import tensorflow as tf
 from nltk.metrics import distance
 
-from . import math_util
+from tensorflow_asr.utils import math_util
 
 
 def execute_wer(
@@ -37,9 +36,7 @@ def execute_wer(
 
         dis += distance.edit_distance("".join(new_decode), "".join(new_target))
         length += len(tar.split())
-    return tf.convert_to_tensor(dis, tf.float32), tf.convert_to_tensor(
-        length, tf.float32
-    )
+    return tf.convert_to_tensor(dis, tf.float32), tf.convert_to_tensor(length, tf.float32)
 
 
 def wer(
@@ -55,9 +52,7 @@ def wer(
     Returns:
         tuple: a tuple of tf.Tensor of (edit distances, number of words) of each text
     """
-    return tf.numpy_function(
-        execute_wer, inp=[decode, target], Tout=[tf.float32, tf.float32]
-    )
+    return tf.numpy_function(execute_wer, inp=[decode, target], Tout=[tf.float32, tf.float32])
 
 
 def execute_cer(decode, target):
@@ -68,9 +63,7 @@ def execute_cer(decode, target):
     for dec, tar in zip(decode, target):
         dis += distance.edit_distance(dec, tar)
         length += len(tar)
-    return tf.convert_to_tensor(dis, tf.float32), tf.convert_to_tensor(
-        length, tf.float32
-    )
+    return tf.convert_to_tensor(dis, tf.float32), tf.convert_to_tensor(length, tf.float32)
 
 
 def cer(
@@ -86,9 +79,7 @@ def cer(
     Returns:
         tuple: a tuple of tf.Tensor of (edit distances, number of characters) of each text
     """
-    return tf.numpy_function(
-        execute_cer, inp=[decode, target], Tout=[tf.float32, tf.float32]
-    )
+    return tf.numpy_function(execute_cer, inp=[decode, target], Tout=[tf.float32, tf.float32])
 
 
 def tf_cer(
@@ -106,8 +97,6 @@ def tf_cer(
     """
     decode = tf.strings.bytes_split(decode)  # [B, N]
     target = tf.strings.bytes_split(target)  # [B, M]
-    distances = tf.edit_distance(
-        decode.to_sparse(), target.to_sparse(), normalize=False
-    )  # [B]
+    distances = tf.edit_distance(decode.to_sparse(), target.to_sparse(), normalize=False)  # [B]
     lengths = tf.cast(target.row_lengths(axis=1), dtype=tf.float32)  # [B]
     return tf.reduce_sum(distances), tf.reduce_sum(lengths)

@@ -14,7 +14,7 @@
 
 import tensorflow as tf
 
-from ...utils import math_util, shape_util
+from tensorflow_asr.utils import math_util, shape_util
 
 
 class TimeReduction(tf.keras.layers.Layer):

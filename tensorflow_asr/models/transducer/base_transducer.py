@@ -15,15 +15,14 @@
 
 import collections
 from typing import Dict
-
 import tensorflow as tf
 
-from ...featurizers.speech_featurizers import SpeechFeaturizer
-from ...featurizers.text_featurizers import TextFeaturizer
-from ...losses.rnnt_loss import RnntLoss
-from ...utils import data_util, layer_util, math_util, shape_util
-from ..base_model import BaseModel
-from ..layers.embedding import Embedding
+from tensorflow_asr.featurizers.speech_featurizers import SpeechFeaturizer
+from tensorflow_asr.featurizers.text_featurizers import TextFeaturizer
+from tensorflow_asr.losses.rnnt_loss import RnntLoss
+from tensorflow_asr.utils import data_util, layer_util, math_util, shape_util
+from tensorflow_asr.models.base_model import BaseModel
+from tensorflow_asr.models.layers.embedding import Embedding
 
 Hypothesis = collections.namedtuple("Hypothesis", ("index", "prediction", "states"))
 

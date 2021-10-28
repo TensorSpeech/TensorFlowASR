@@ -16,7 +16,7 @@
 import numpy as np
 import tensorflow as tf
 
-from ...utils.shape_util import shape_list
+from tensorflow_asr.utils.shape_util import shape_list
 
 pi = tf.constant(np.pi, dtype=tf.complex64)
 
@@ -26,13 +26,14 @@ DEFAULT_HIGH_FREQ = 44100 / 4
 
 
 def fft_weights(
-        nfft,
-        fs,
-        nfilts,
-        width,
-        fmin,
-        fmax,
-        maxlen):
+    nfft,
+    fs,
+    nfilts,
+    width,
+    fmin,
+    fmax,
+    maxlen,
+):
     """
     :param nfft: the source FFT size
     :param sr: sampling rate (Hz)
@@ -57,8 +58,7 @@ def fft_weights(
     | (c) 2004-2009 Dan Ellis dpwe@ee.columbia.edu  based on rastamat/audspec.m
     | (c) 2012 Jason Heeris (Python implementation)
     """
-    ucirc = tf.exp(1j * 2 * pi * tf.cast(tf.range(0, nfft / 2 + 1),
-                                         tf.complex64) / nfft)[None, ...]
+    ucirc = tf.exp(1j * 2 * pi * tf.cast(tf.range(0, nfft / 2 + 1), tf.complex64) / nfft)[None, ...]
 
     # Common ERB filter code factored out
     cf_array = erb_space(fmin, fmax, nfilts)[::-1]
@@ -81,20 +81,26 @@ def fft_weights(
     GTord = 4
 
     weights = (
-        tf.abs(ucirc + A11 * fs) * tf.abs(ucirc + A12 * fs)
-        * tf.abs(ucirc + A13 * fs) * tf.abs(ucirc + A14 * fs)
+        tf.abs(ucirc + A11 * fs)
+        * tf.abs(ucirc + A12 * fs)
+        * tf.abs(ucirc + A13 * fs)
+        * tf.abs(ucirc + A14 * fs)
         * tf.abs(fs * (pole - ucirc) * (tf.math.conj(pole) - ucirc)) ** (-GTord)
         / tf.cast(gain[..., None], tf.float32)
     )
 
     weights = tf.pad(weights, [[0, 0], [0, nfft - shape_list(weights)[-1]]])
 
-    weights = weights[:, 0:int(maxlen)]
+    weights = weights[:, 0 : int(maxlen)]
 
     return tf.transpose(weights, perm=[1, 0])
 
 
-def erb_point(low_freq, high_freq, fraction):
+def erb_point(
+    low_freq,
+    high_freq,
+    fraction,
+):
     """
     Calculates a single point on an ERB scale between ``low_freq`` and
     ``high_freq``, determined by ``fraction``. When ``fraction`` is ``1``,
@@ -114,24 +120,18 @@ def erb_point(low_freq, high_freq, fraction):
     # All of the following expressions are derived in Apple TR #35, "An
     # Efficient Implementation of the Patterson-Holdsworth Cochlear Filter
     # Bank." See pages 33-34.
-    erb_point = (
-        -ear_q * min_bw
-        + tf.exp(
-            fraction * (
-                -tf.math.log(high_freq + ear_q * min_bw)
-                + tf.math.log(low_freq + ear_q * min_bw)
-            )
-        ) *
-        (high_freq + ear_q * min_bw)
-    )
+    erb_point = -ear_q * min_bw + tf.exp(
+        fraction * (-tf.math.log(high_freq + ear_q * min_bw) + tf.math.log(low_freq + ear_q * min_bw))
+    ) * (high_freq + ear_q * min_bw)
 
     return tf.cast(erb_point, tf.complex64)
 
 
 def erb_space(
-        low_freq=DEFAULT_LOW_FREQ,
-        high_freq=DEFAULT_HIGH_FREQ,
-        num=DEFAULT_FILTER_NUM):
+    low_freq=DEFAULT_LOW_FREQ,
+    high_freq=DEFAULT_HIGH_FREQ,
+    num=DEFAULT_FILTER_NUM,
+):
     """
     This function computes an array of ``num`` frequencies uniformly spaced
     between ``high_freq`` and ``low_freq`` on an ERB scale.
@@ -140,14 +140,14 @@ def erb_space(
     "Suggested formulae for calculating auditory-filter bandwidths and
     excitation patterns," J. Acoust. Soc. Am. 74, 750-753.
     """
-    return erb_point(
-        low_freq,
-        high_freq,
-        tf.range(1, num + 1, dtype=tf.float32) / num
-    )
+    return erb_point(low_freq, high_freq, tf.range(1, num + 1, dtype=tf.float32) / num)
 
 
-def make_erb_filters(fs, centre_freqs, width=1.0):
+def make_erb_filters(
+    fs,
+    centre_freqs,
+    width=1.0,
+):
     """
     This function computes the filter coefficients for a bank of
     Gammatone filters. These filters were defined by Patterson and Holdworth for
@@ -232,22 +232,19 @@ def make_erb_filters(fs, centre_freqs, width=1.0):
 
     gain_arg = tf.exp(1j * arg - B * T)
 
-    gain = tf.cast(tf.abs(
-        (vec - gain_arg * k11)
-        * (vec - gain_arg * k12)
-        * (vec - gain_arg * k13)
-        * (vec - gain_arg * k14)
-        * (T * tf.exp(B * T)
-           / (-1 / tf.exp(B * T) + 1 + vec * (1 - tf.exp(B * T)))
-           )**4
-    ), tf.complex64)
+    gain = tf.cast(
+        tf.abs(
+            (vec - gain_arg * k11)
+            * (vec - gain_arg * k12)
+            * (vec - gain_arg * k13)
+            * (vec - gain_arg * k14)
+            * (T * tf.exp(B * T) / (-1 / tf.exp(B * T) + 1 + vec * (1 - tf.exp(B * T)))) ** 4
+        ),
+        tf.complex64,
+    )
 
     allfilts = tf.ones_like(centre_freqs, dtype=tf.complex64)
 
-    fcoefs = tf.stack([
-        A0 * allfilts, A11, A12, A13, A14, A2 * allfilts,
-        B0 * allfilts, B1, B2,
-        gain
-    ], axis=1)
+    fcoefs = tf.stack([A0 * allfilts, A11, A12, A13, A14, A2 * allfilts, B0 * allfilts, B1, B2, gain], axis=1)
 
     return tf.transpose(fcoefs, perm=[1, 0])

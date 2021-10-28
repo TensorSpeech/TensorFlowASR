@@ -26,40 +26,15 @@ tf.keras.backend.clear_session()
 
 parser = argparse.ArgumentParser(prog="Conformer Testing")
 
-parser.add_argument(
-    "--config",
-    type=str,
-    default=DEFAULT_YAML,
-    help="The file path of model configuration file",
-)
+parser.add_argument("--config", type=str, default=DEFAULT_YAML, help="The file path of model configuration file")
 
-parser.add_argument(
-    "--h5",
-    type=str,
-    default=None,
-    help="Path to saved h5 weights",
-)
+parser.add_argument("--h5", type=str, default=None, help="Path to saved h5 weights")
 
-parser.add_argument(
-    "--sentence_piece",
-    default=False,
-    action="store_true",
-    help="Whether to use `SentencePiece` model",
-)
+parser.add_argument("--sentence_piece", default=False, action="store_true", help="Whether to use `SentencePiece` model")
 
-parser.add_argument(
-    "--subwords",
-    default=False,
-    action="store_true",
-    help="Use subwords",
-)
+parser.add_argument("--subwords", default=False, action="store_true", help="Use subwords")
 
-parser.add_argument(
-    "--output_dir",
-    type=str,
-    default=None,
-    help="Output directory for saved model",
-)
+parser.add_argument("--output_dir", type=str, default=None, help="Output directory for saved model")
 
 args = parser.parse_args()
 
@@ -94,23 +69,14 @@ conformer.summary(line_length=100)
 conformer.add_featurizers(speech_featurizer, text_featurizer)
 
 
-class aModule(tf.Module):
-    def __init__(self, model):
-        super().__init__()
-        self.model = model
-
-    @tf.function(
-        input_signature=[
-            {
-                "inputs": tf.TensorSpec(shape=[None, None, 80, 1], dtype=tf.float32, name="inputs"),
-                "inputs_length": tf.TensorSpec(shape=[None], dtype=tf.int32, name="inputs_length"),
-            }
-        ]
-    )
-    def pred(self, input_batch):
-        result = self.model.recognize(input_batch)
-        return {"ASR": result}
+# TODO: Support saved model conversion
+# class ConformerModule(tf.Module):
+#     def __init__(self, model: Conformer, name=None):
+#         super().__init__(name=name)
+#         self.model = model
+#         self.pred = model.make_tflite_function()
 
 
-module = aModule(conformer)
-tf.saved_model.save(module, args.output_dir, signatures={"serving_default": module.pred})
+# model = ConformerModule(model=conformer)
+# tf.saved_model.save(model, args.output_dir)
+conformer.save(args.output_dir, include_optimizer=False, save_format="tf")

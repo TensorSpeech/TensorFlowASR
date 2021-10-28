@@ -17,14 +17,13 @@ import codecs
 import os
 import unicodedata
 from multiprocessing import cpu_count
-
 import numpy as np
 import sentencepiece as sp
 import tensorflow as tf
 import tensorflow_datasets as tds
 
-from ..configs.config import DecoderConfig
-from ..utils import file_util
+from tensorflow_asr.configs.config import DecoderConfig
+from tensorflow_asr.utils import file_util
 
 ENGLISH_CHARACTERS = [
     " ",

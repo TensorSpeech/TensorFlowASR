@@ -13,11 +13,10 @@
 # limitations under the License.
 
 import math
-
 import numpy as np
 import tensorflow as tf
 
-from . import shape_util
+from tensorflow_asr.utils import shape_util
 
 
 def log10(x):
@@ -41,9 +40,7 @@ def get_num_batches(
 def nan_to_zero(
     input_tensor: tf.Tensor,
 ):
-    return tf.where(
-        tf.math.is_nan(input_tensor), tf.zeros_like(input_tensor), input_tensor
-    )
+    return tf.where(tf.math.is_nan(input_tensor), tf.zeros_like(input_tensor), input_tensor)
 
 
 def bytes_to_string(
@@ -71,9 +68,7 @@ def count_non_blank(
     axis=None,
 ):
     return tf.reduce_sum(
-        tf.where(
-            tf.not_equal(tensor, blank), x=tf.ones_like(tensor), y=tf.zeros_like(tensor)
-        ),
+        tf.where(tf.not_equal(tensor, blank), x=tf.ones_like(tensor), y=tf.zeros_like(tensor)),
         axis=axis,
     )
 
@@ -112,9 +107,7 @@ def merge_repeated(
         ),
     )
 
-    return tf.pad(
-        result, [[U - shape_util.shape_list(result)[0], 0]], constant_values=blank
-    )
+    return tf.pad(result, [[U - shape_util.shape_list(result)[0], 0]], constant_values=blank)
 
 
 def find_max_length_prediction_tfarray(
@@ -134,9 +127,7 @@ def find_max_length_prediction_tfarray(
             max_length = tf.where(tf.greater(length, max_length), length, max_length)
             return index + 1, max_length
 
-        index, max_length = tf.while_loop(
-            condition, body, loop_vars=[index, max_length], swap_memory=False
-        )
+        index, max_length = tf.while_loop(condition, body, loop_vars=[index, max_length], swap_memory=False)
         return max_length
 
 
@@ -163,7 +154,5 @@ def pad_prediction_tfarray(
             tfarray = tfarray.write(index, prediction)
             return index + 1, tfarray
 
-        index, tfarray = tf.while_loop(
-            condition, body, loop_vars=[index, tfarray], swap_memory=False
-        )
+        index, tfarray = tf.while_loop(condition, body, loop_vars=[index, tfarray], swap_memory=False)
         return tfarray

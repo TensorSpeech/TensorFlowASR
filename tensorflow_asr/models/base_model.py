@@ -15,7 +15,7 @@
 import tensorflow as tf
 from tensorflow.keras import mixed_precision as mxp
 
-from ..utils import env_util, file_util
+from tensorflow_asr.utils import env_util, file_util
 
 
 class BaseModel(tf.keras.Model):
@@ -41,50 +41,42 @@ class BaseModel(tf.keras.Model):
             )
 
     def save_weights(
-        self,
-        filepath,
-        overwrite=True,
-        save_format=None,
-        options=None,
+        self, filepath, overwrite=True, save_format=None, options=None,
     ):
         with file_util.save_file(filepath) as path:
             super().save_weights(filepath=path, overwrite=overwrite, save_format=save_format, options=options)
 
     def load_weights(
-        self,
-        filepath,
-        by_name=False,
-        skip_mismatch=False,
-        options=None,
+        self, filepath, by_name=False, skip_mismatch=False, options=None,
     ):
         with file_util.read_file(filepath) as path:
             super().load_weights(filepath=path, by_name=by_name, skip_mismatch=skip_mismatch, options=options)
 
+    @property
+    def metrics(self):
+        if not hasattr(self, "_tfasr_metrics"):
+            self._tfasr_metrics = {}
+        return list(self._tfasr_metrics.values())
+
     def add_metric(
-        self,
-        metric: tf.keras.metrics.Metric,
+        self, metric: tf.keras.metrics.Metric,
     ):
-        if not hasattr(self, "_metrics"):
-            self._metrics = {}
-        self._metrics[metric.name] = metric
+        if not hasattr(self, "_tfasr_metrics"):
+            self._tfasr_metrics = {}
+        self._tfasr_metrics[metric.name] = metric
 
     def make(self, *args, **kwargs):
         """Custom function for building model (uses self.build so cannot overwrite that function)"""
         raise NotImplementedError()
 
     def compile(
-        self,
-        loss,
-        optimizer,
-        run_eagerly=None,
-        **kwargs,
+        self, loss, optimizer, run_eagerly=None, **kwargs,
     ):
         self.use_loss_scale = False
         if not env_util.has_devices("TPU"):
             optimizer = mxp.experimental.LossScaleOptimizer(tf.keras.optimizers.get(optimizer), "dynamic")
             self.use_loss_scale = True
-        loss_metric = tf.keras.metrics.Mean(name="loss", dtype=tf.float32)
-        self.add_metric(loss_metric)
+        self.add_metric(metric=tf.keras.metrics.Mean(name="loss", dtype=tf.float32))
         super().compile(optimizer=optimizer, loss=loss, run_eagerly=run_eagerly, **kwargs)
 
     # -------------------------------- STEP FUNCTIONS -------------------------------------
@@ -110,8 +102,8 @@ class BaseModel(tf.keras.Model):
         else:
             gradients = tape.gradient(loss, self.trainable_weights)
         self.optimizer.apply_gradients(zip(gradients, self.trainable_variables))
-        self._metrics["loss"].update_state(loss)
-        return {m.name: m.result() for m in self._metrics.values()}
+        self._tfasr_metrics["loss"].update_state(loss)
+        return {m.name: m.result() for m in self.metrics}
 
     def test_step(self, batch):
         """
@@ -125,8 +117,8 @@ class BaseModel(tf.keras.Model):
         inputs, y_true = batch
         y_pred = self(inputs, training=False)
         loss = self.loss(y_true, y_pred)
-        self._metrics["loss"].update_state(loss)
-        return {m.name: m.result() for m in self._metrics.values()}
+        self._tfasr_metrics["loss"].update_state(loss)
+        return {m.name: m.result() for m in self.metrics}
 
     def predict_step(self, batch):
         """
