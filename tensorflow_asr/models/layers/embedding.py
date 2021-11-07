@@ -50,7 +50,7 @@ class Embedding(tf.keras.layers.Layer):
 
     def recognize_tflite(self, inputs):
         outputs = tf.cast(tf.expand_dims(inputs, axis=-1), dtype=tf.int32)
-        return tf.gather_nd(self.embeddings, outputs)
+        return tf.gather_nd(self.embeddings, outputs)  # https://github.com/tensorflow/tensorflow/issues/42410
 
     def get_config(self):
         conf = super(Embedding, self).get_config()
