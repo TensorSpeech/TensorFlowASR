@@ -27,29 +27,24 @@ from tensorflow_asr.models.transducer.conformer import Conformer
 DEFAULT_YAML = os.path.join(os.path.abspath(os.path.dirname(__file__)), "config.yml")
 
 tf.keras.backend.clear_session()
+tf.compat.v1.enable_control_flow_v2()
 
 parser = argparse.ArgumentParser(prog="Conformer TFLite")
 
 parser.add_argument("--config", type=str, default=DEFAULT_YAML, help="The file path of model configuration file")
 
-parser.add_argument("--saved", type=str, default=None, help="Path to saved model")
+parser.add_argument("--h5", type=str, default=None, help="Path to saved model")
 
-parser.add_argument("--subwords", action="store_true", help="Use subwords")
-
-parser.add_argument("--vocabulary", type=str, default=None, required=False,
-                    help="Path to vocabulary. Overrides path in config, if given.")
+parser.add_argument("--subwords", default=False, action="store_true", help="Use subwords")
 
 parser.add_argument("output", type=str, default=None, help="TFLite file path to be exported")
 
 args = parser.parse_args()
 
-assert args.saved and args.output
+assert args.h5 and args.output
 
 config = Config(args.config)
 speech_featurizer = TFSpeechFeaturizer(config.speech_config)
-
-if args.vocabulary is not None:
-    config.decoder_config["vocabulary"] = args.vocabulary
 
 if args.subwords:
     text_featurizer = SubwordFeaturizer(config.decoder_config)
@@ -59,7 +54,7 @@ else:
 # build model
 conformer = Conformer(**config.model_config, vocabulary_size=text_featurizer.num_classes)
 conformer.make(speech_featurizer.shape)
-conformer.load_weights(args.saved, by_name=True)
+conformer.load_weights(args.h5, by_name=True)
 conformer.summary(line_length=100)
 conformer.add_featurizers(speech_featurizer, text_featurizer)
 

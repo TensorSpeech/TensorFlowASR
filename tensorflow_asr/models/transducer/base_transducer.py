@@ -104,7 +104,7 @@ class TransducerPrediction(tf.keras.Model):
                 outputs = rnn["projection"](outputs, training=training)
         return outputs
 
-    def recognize(self, inputs, states):
+    def recognize(self, inputs, states, tflite: bool = False):
         """Recognize function for prediction network
 
         Args:
@@ -115,7 +115,10 @@ class TransducerPrediction(tf.keras.Model):
             tf.Tensor: outputs with shape [1, 1, P]
             tf.Tensor: new states with shape [num_lstms, 2, 1, P]
         """
-        outputs = self.embed(inputs, training=False)
+        if tflite:
+            outputs = self.embed.recognize_tflite(inputs)
+        else:
+            outputs = self.embed(inputs, training=False)
         outputs = self.do(outputs, training=False)
         new_states = []
         for i, rnn in enumerate(self.rnns):
@@ -390,6 +393,7 @@ class Transducer(BaseModel):
         encoded: tf.Tensor,
         predicted: tf.Tensor,
         states: tf.Tensor,
+        tflite: bool = False,
     ):
         """Infer function for decoder
 
@@ -404,7 +408,7 @@ class Transducer(BaseModel):
         with tf.name_scope(f"{self.name}_decoder"):
             encoded = tf.reshape(encoded, [1, 1, -1])  # [E] => [1, 1, E]
             predicted = tf.reshape(predicted, [1, 1])  # [] => [1, 1]
-            y, new_states = self.predict_net.recognize(predicted, states)  # [1, 1, P], states
+            y, new_states = self.predict_net.recognize(predicted, states, tflite=tflite)  # [1, 1, P], states
             ytu = tf.nn.log_softmax(self.joint_net([encoded, y], training=False))  # [1, 1, V]
             ytu = tf.reshape(ytu, shape=[-1])  # [1, 1, V] => [V]
             return ytu, new_states
@@ -455,7 +459,7 @@ class Transducer(BaseModel):
         """
         features = self.speech_featurizer.tf_extract(signal)
         encoded = self.encoder_inference(features)
-        hypothesis = self._perform_greedy(encoded, tf.shape(encoded)[0], predicted, states)
+        hypothesis = self._perform_greedy(encoded, tf.shape(encoded)[0], predicted, states, tflite=True)
         transcript = self.text_featurizer.indices2upoints(hypothesis.prediction)
         return transcript, hypothesis.index, hypothesis.states
 
@@ -467,7 +471,7 @@ class Transducer(BaseModel):
     ):
         features = self.speech_featurizer.tf_extract(signal)
         encoded = self.encoder_inference(features)
-        hypothesis = self._perform_greedy(encoded, tf.shape(encoded)[0], predicted, states)
+        hypothesis = self._perform_greedy(encoded, tf.shape(encoded)[0], predicted, states, tflite=True)
         indices = self.text_featurizer.normalize_indices(hypothesis.prediction)
         upoints = tf.gather_nd(self.text_featurizer.upoints, tf.expand_dims(indices, axis=-1))  # [None, max_subword_length]
 
@@ -540,6 +544,7 @@ class Transducer(BaseModel):
         states: tf.Tensor,
         parallel_iterations: int = 10,
         swap_memory: bool = False,
+        tflite: bool = False,
     ):
         with tf.name_scope(f"{self.name}_greedy"):
             time = tf.constant(0, dtype=tf.int32)
@@ -566,6 +571,7 @@ class Transducer(BaseModel):
                     encoded=tf.gather_nd(encoded, tf.reshape(_time, shape=[1])),
                     predicted=_hypothesis.index,
                     states=_hypothesis.states,
+                    tflite=tflite,
                 )
                 _predict = tf.argmax(ytu, axis=-1, output_type=tf.int32)  # => argmax []
 
@@ -605,6 +611,7 @@ class Transducer(BaseModel):
         states: tf.Tensor,
         parallel_iterations: int = 10,
         swap_memory: bool = False,
+        tflite: bool = False,
     ):
         """Ref: https://arxiv.org/pdf/1801.00841.pdf"""
         with tf.name_scope(f"{self.name}_greedy_v2"):
@@ -632,6 +639,7 @@ class Transducer(BaseModel):
                     encoded=tf.gather_nd(encoded, tf.reshape(_time, shape=[1])),
                     predicted=_hypothesis.index,
                     states=_hypothesis.states,
+                    tflite=tflite,
                 )
                 _predict = tf.argmax(ytu, axis=-1, output_type=tf.int32)  # => argmax []
 
@@ -736,6 +744,7 @@ class Transducer(BaseModel):
         lm: bool = False,
         parallel_iterations: int = 10,
         swap_memory: bool = True,
+        tflite: bool = False,
     ):
         with tf.name_scope(f"{self.name}_beam_search"):
             beam_width = tf.cond(
@@ -834,7 +843,9 @@ class Transducer(BaseModel):
                     )
                     A_i = tf.cond(tf.equal(A_i, 0), true_fn=lambda: A_i, false_fn=lambda: A_i - 1)
 
-                    ytu, new_states = self.decoder_inference(encoded=encoded_t, predicted=y_hat_index, states=y_hat_states)
+                    ytu, new_states = self.decoder_inference(
+                        encoded=encoded_t, predicted=y_hat_index, states=y_hat_states, tflite=tflite
+                    )
 
                     def predict_condition(pred, A, A_i, B):
                         return tf.less(pred, self.text_featurizer.num_classes)
