@@ -32,10 +32,7 @@ class Embedding(tf.keras.layers.Layer):
         self.regularizer = tf.keras.regularizers.get(regularizer)
         self.initializer = tf.keras.initializers.get(initializer)
 
-    def build(
-        self,
-        input_shape,
-    ):
+    def build(self, input_shape):
         self.embeddings = self.add_weight(
             name="embeddings",
             dtype=tf.float32,
@@ -47,12 +44,13 @@ class Embedding(tf.keras.layers.Layer):
         )
         self.built = True
 
-    def call(
-        self,
-        inputs,
-    ):
+    def call(self, inputs):
+        outputs = tf.cast(inputs, dtype=tf.int32)
+        return tf.nn.embedding_lookup(self.embeddings, outputs)
+
+    def recognize_tflite(self, inputs):
         outputs = tf.cast(tf.expand_dims(inputs, axis=-1), dtype=tf.int32)
-        return tf.gather_nd(self.embeddings, outputs)
+        return tf.gather_nd(self.embeddings, outputs)  # https://github.com/tensorflow/tensorflow/issues/42410
 
     def get_config(self):
         conf = super(Embedding, self).get_config()

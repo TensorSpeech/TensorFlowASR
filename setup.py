@@ -12,23 +12,34 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import os
+from setuptools import find_packages, setup
+from typing import List
+from collections import defaultdict
 
-import setuptools
 
-readme_path = os.path.join(os.path.dirname(__file__), "README.md")
+def parse_requirements(lines: List[str]):
+    extras_requires = defaultdict(list)
+    extra = "requires"
+    for line in lines:
+        line = line.strip()
+        if line.startswith("# extra="):
+            extra = line.split("=")[1].strip()
+            continue
+        if line and line[0] != "#":
+            lib_package = line.split("#")[0].strip()  # split comments
+            extras_requires[extra].append(lib_package)
+    install_requires = extras_requires.pop("requires")
+    return install_requires, extras_requires
 
-with open(readme_path, "r", encoding="utf-8") as fh:
+
+with open("requirements.txt", "r", encoding="utf-8") as fr:
+    install_requires, extras_requires = parse_requirements(fr.readlines())
+
+with open("README.md", "r", encoding="utf-8") as fh:
     long_description = fh.read()
 
-requirements_path = os.path.join(os.path.dirname(__file__), "requirements.txt")
 
-with open(requirements_path, "r") as fr:
-    requirements = fr.read().splitlines()
-    print(requirements)
-
-
-setuptools.setup(
+setup(
     name="TensorFlowASR",
     version="1.0.2",
     author="Huy Le Nguyen",
@@ -37,26 +48,18 @@ setuptools.setup(
     long_description=long_description,
     long_description_content_type="text/markdown",
     url="https://github.com/TensorSpeech/TensorFlowASR",
-    packages=setuptools.find_packages(include=["tensorflow_asr*"]),
-    install_requires=requirements,
-    extras_require={
-        "tf2.3": ["tensorflow~=2.3.0", "tensorflow-text~=2.3.0", "tensorflow-io~=0.16.0"],
-        "tf2.3-gpu": ["tensorflow-gpu~=2.3.0", "tensorflow-text~=2.3.0", "tensorflow-io~=0.16.0"],
-        "tf2.4": ["tensorflow~=2.4.0", "tensorflow-text~=2.4.0", "tensorflow-io~=0.17.0"],
-        "tf2.4-gpu": ["tensorflow-gpu~=2.4.0", "tensorflow-text~=2.4.0", "tensorflow-io~=0.17.0"],
-        "tf2.5": ["tensorflow~=2.5.0", "tensorflow-text~=2.5.0", "tensorflow-io~=0.18.0"],
-        "tf2.5-gpu": ["tensorflow-gpu~=2.5.0", "tensorflow-text~=2.5.0", "tensorflow-io~=0.18.0"],
-        "tf2.6": ["tensorflow~=2.6.0", "tensorflow-text~=2.6.0rc0", "tensorflow-io~=0.20.0"],
-        "tf2.6-gpu": ["tensorflow-gpu~=2.6.0", "tensorflow-text~=2.6.0rc0", "tensorflow-io~=0.20.0"],
-    },
+    packages=find_packages(include=("tensorflow_asr", "tensorflow_asr.*")),
+    install_requires=install_requires,
+    extras_require=extras_requires,
     classifiers=[
         "Programming Language :: Python :: 3.6",
         "Programming Language :: Python :: 3.7",
         "Programming Language :: Python :: 3.8",
+        "Programming Language :: Python :: 3.9",
         "Intended Audience :: Science/Research",
         "Operating System :: POSIX :: Linux",
         "License :: OSI Approved :: Apache Software License",
         "Topic :: Software Development :: Libraries :: Python Modules",
     ],
-    python_requires=">=3.6",
+    python_requires=">=3.6, <4",
 )

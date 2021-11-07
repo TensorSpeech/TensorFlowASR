@@ -14,7 +14,7 @@
 
 import os
 import argparse
-from tensorflow_asr.utils import env_util, math_util
+from tensorflow_asr.utils import env_util
 
 logger = env_util.setup_environment()
 import tensorflow as tf
@@ -79,12 +79,14 @@ if args.beam_width:
     logger.info(f"Transcript: {transcript[0].numpy().decode('UTF-8')}")
 elif args.timestamp:
     transcript, stime, etime, _, _ = conformer.recognize_tflite_with_timestamp(
-        signal, tf.constant(text_featurizer.blank, dtype=tf.int32), conformer.predict_net.get_initial_state())
+        signal, tf.constant(text_featurizer.blank, dtype=tf.int32), conformer.predict_net.get_initial_state()
+    )
     logger.info(f"Transcript: {transcript}")
     logger.info(f"Start time: {stime}")
     logger.info(f"End time: {etime}")
 else:
     code_points, _, _ = conformer.recognize_tflite(
-        signal, tf.constant(text_featurizer.blank, dtype=tf.int32), conformer.predict_net.get_initial_state())
-    transcript = tf.strings.unicode_encode(code_points, 'UTF-8').numpy().decode('UTF-8')
+        signal, tf.constant(text_featurizer.blank, dtype=tf.int32), conformer.predict_net.get_initial_state()
+    )
+    transcript = tf.strings.unicode_encode(code_points, "UTF-8").numpy().decode("UTF-8")
     logger.info(f"Transcript: {transcript}")
