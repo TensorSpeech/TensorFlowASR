@@ -9,3 +9,44 @@ PyYAML==5.4.1
 Pillow==8.3.2
 black==21.7b0
 flake8==3.9.2
+sounddevice==0.4.3
+
+# extra=tf2.3
+tensorflow~=2.3.0
+tensorflow-text~=2.3.0
+tensorflow-io~=0.16.0
+
+# extra=tf2.3-gpu
+tensorflow-gpu~=2.3.0
+tensorflow-text~=2.3.0
+tensorflow-io~=0.16.0
+
+# extra=tf2.4
+tensorflow~=2.4.0
+tensorflow-text~=2.4.0
+tensorflow-io~=0.17.0
+
+# extra=tf2.4-gpu
+tensorflow-gpu~=2.4.0
+tensorflow-text~=2.4.0
+tensorflow-io~=0.17.0
+
+# extra=tf2.5
+tensorflow~=2.5.0
+tensorflow-text~=2.5.0
+tensorflow-io~=0.18.0
+
+# extra=tf2.5-gpu
+tensorflow-gpu~=2.5.0
+tensorflow-text~=2.5.0
+tensorflow-io~=0.18.0
+
+# extra=tf2.6
+tensorflow~=2.6.0
+tensorflow-text~=2.6.0
+tensorflow-io~=0.20.0
+
+# extra=tf2.6-gpu
+tensorflow-gpu~=2.6.0
+tensorflow-text~=2.6.0
+tensorflow-io~=0.20.0
