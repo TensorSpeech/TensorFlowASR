@@ -1,7 +1,7 @@
 SoundFile==0.10.3.post1
 tensorflow_datasets==4.4.0
 nltk==3.6.4
-numpy>=1.19.5
+numpy~=1.19.2
 sentencepiece==0.1.96
 tqdm==4.62.1
 librosa==0.8.1
@@ -11,22 +11,7 @@ black==21.7b0
 flake8==3.9.2
 sounddevice==0.4.3
 
-# extra=tf2.5
-tensorflow~=2.5.1
-tensorflow-text~=2.5.0
-tensorflow-io~=0.18.0
-
 # extra=tf2.5-gpu
 tensorflow-gpu~=2.5.1
 tensorflow-text~=2.5.0
 tensorflow-io~=0.18.0
-
-# extra=tf2.6
-tensorflow~=2.6.0
-tensorflow-text~=2.6.0
-tensorflow-io~=0.20.0
-
-# extra=tf2.6-gpu
-tensorflow-gpu~=2.6.0
-tensorflow-text~=2.6.0
-tensorflow-io~=0.20.0
