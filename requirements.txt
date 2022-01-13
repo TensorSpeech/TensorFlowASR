@@ -6,7 +6,7 @@ sentencepiece==0.1.96
 tqdm==4.62.1
 librosa==0.8.1
 PyYAML==5.4.1
-Pillow==8.3.2
+Pillow==9.0.0
 black==21.7b0
 flake8==3.9.2
 sounddevice==0.4.3
