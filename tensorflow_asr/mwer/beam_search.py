@@ -1,318 +1,213 @@
 import collections
-from typing import Dict
 
+import numpy as np
 import tensorflow as tf
 
-from tensorflow_asr.featurizers.text_featurizers import TextFeaturizer
-from tensorflow_asr.models.transducer.base_transducer import TransducerPrediction, TransducerJoint
+from typing import Dict, List, Tuple
+from tensorflow_asr.models.transducer.transducer_prediction import TransducerPrediction
+from tensorflow_asr.models.transducer.transducer_joint import TransducerJoint
 from tensorflow_asr.utils import math_util, shape_util
 
-Hypothesis = collections.namedtuple("Hypothesis", ("index", "prediction", "states"))
+Hypothesis = collections.namedtuple("Hypothesis", ("index", "probability"))
 BeamHypothesis = collections.namedtuple("BeamHypothesis", ("score", "indices", "prediction", "states"))
 
 
 class BeamSearch:
     def __init__(self,
-                 text_featurizer: TextFeaturizer,
-                 encoder: tf.keras.Model,
+                 vocabulary_size: int,
                  predict_net: TransducerPrediction,
                  joint_net: TransducerJoint,
-                 name="transducer"):
+                 blank_token: int = 0,
+                 beam_size: int = 1,
+                 name="beam_search"):
+        self._blank_token = blank_token
+        self._vocabulary_size = vocabulary_size
         self._time_reduction_factor = 1
-        self._text_featurizer = text_featurizer
-        self._encoder = encoder
         self._predict_net = predict_net
         self._joint_net = joint_net
+        self.beam_size = beam_size
         self._name = name
+        self._predictor_states = None
 
     @tf.function
-    def recognize_beam(
-        self,
-        inputs: Dict[str, tf.Tensor],
-        lm: bool = False,
-    ):
+    def call(self,
+             encoded: tf.Tensor,
+             encoded_length: tf.Tensor,
+             parallel_iterations: int = 1,
+             return_topk: bool = True):
         """
         RNN Transducer Beam Search
         Args:
-            inputs (Dict[str, tf.Tensor]): Input dictionary containing "inputs" and "inputs_length"
-            lm (bool, optional): whether to use language model. Defaults to False.
-
+            encoded (tf.Tensor): Tensor of encoder output with a shape [B, T, V]
+            encoded_length (tf.Tensor): Tensor of input lengths (timewise) with shape [B]
+            parallel_iterations (int): How many samples from the batch should be handled at once.
+                                       Increasing it might result in higher memory usage.
+            return_topk: If true, functions returns tensors of sizes [B, beam_size, T], [B, beam_size]
+                         else it returns tensor of size [B, 1, T], [B, 1]
         Returns:
-            tf.Tensor: a batch of decoded transcripts
+            Tuple[tf.Tensor, tf.Tensor]: a batch of predictions tokens and a batch of probabilities
         """
-        encoded = self._encoder(inputs["inputs"], training=False)
-        encoded_length = math_util.get_reduced_length(inputs["inputs_length"], self._time_reduction_factor)
-        return self._perform_beam_search_batch(
-            encoded=encoded,
-            encoded_length=encoded_length,
-            lm=lm,
+        max_len = tf.reduce_max(encoded_length)
+        batch_size = tf.shape(encoded)[0]
+        start_batch = tf.constant(0)
+
+        init_predictions_arr = tf.TensorArray(
+            dtype=tf.int32,
+            size=batch_size,
+            dynamic_size=False,
+            element_shape=[self.beam_size, None],
+            clear_after_read=False,
         )
 
-    def _decoder_inference(
-        self,
-        encoded: tf.Tensor,
-        predicted: tf.Tensor,
-        states: tf.Tensor,
-        tflite: bool = False,
-    ):
-        """Infer function for decoder
+        init_probabilities_arr = tf.TensorArray(
+            dtype=tf.float32,
+            size=batch_size,
+            dynamic_size=False,
+            element_shape=[self.beam_size],
+            clear_after_read=False,
+        )
 
-        Args:
-            encoded (tf.Tensor): output of encoder at each time step => shape [E]
-            predicted (tf.Tensor): last character index of predicted sequence => shape []
-            states (nested lists of tf.Tensor): states returned by rnn layers
+        def cond(current_batch, _prev_predictions, _prev_probabilities):
+            return tf.less(current_batch, batch_size)
 
-        Returns:
-            (ytu, new_states)
-        """
-        with tf.name_scope(f"{self._name}_decoder"):
-            encoded = tf.reshape(encoded, [1, 1, -1])  # [E] => [1, 1, E]
-            predicted = tf.reshape(predicted, [1, 1])  # [] => [1, 1]
-            y, new_states = self._predict_net.recognize(predicted, states, tflite=tflite)  # [1, 1, P], states
-            ytu = tf.nn.log_softmax(self._joint_net([encoded, y], training=False))  # [1, 1, V]
-            ytu = tf.reshape(ytu, shape=[-1])  # [1, 1, V] => [V]
-            return ytu, new_states
-
-    def _perform_beam_search_batch(
-        self,
-        encoded: tf.Tensor,
-        encoded_length: tf.Tensor,
-        lm: bool = False,
-        parallel_iterations: int = 10,
-        swap_memory: bool = True,
-    ):
-        with tf.name_scope(f"{self._name}_perform_beam_search_batch"):
-            total_batch = tf.shape(encoded)[0]
-            batch = tf.constant(0, dtype=tf.int32)
-
-            decoded = tf.TensorArray(
-                dtype=tf.int32,
-                size=total_batch,
-                dynamic_size=False,
-                clear_after_read=False,
-                element_shape=None,
+        def body(current_batch, prev_predictions, prev_probabilities):
+            cur_probabilities, cur_predictions = self._perform_beam_search(
+                encoded[current_batch],
+                encoded_length[current_batch]
             )
+            cur_predictions_padded = tf.pad(cur_predictions,
+                                            [[0, 0], [0, max_len - tf.shape(cur_predictions)[1]]],
+                                            constant_values=self._blank_token)
+            predictions_arr = prev_predictions.write(current_batch, cur_predictions_padded)
+            probabilities_arr = prev_probabilities.write(current_batch, cur_probabilities)
 
-            def condition(batch, _):
-                return tf.less(batch, total_batch)
+            return current_batch + 1, predictions_arr, probabilities_arr
 
-            def body(batch, decoded):
-                hypothesis = self._perform_beam_search(
-                    encoded[batch],
-                    encoded_length[batch],
-                    lm,
-                    parallel_iterations=parallel_iterations,
-                    swap_memory=swap_memory,
-                )
-                decoded = decoded.write(batch, hypothesis.prediction)
-                return batch + 1, decoded
+        _batch, predictions_arr, probabilities_arr = tf.while_loop(
+            cond,
+            body,
+            loop_vars=[start_batch, init_predictions_arr, init_probabilities_arr],
+            parallel_iterations=parallel_iterations,
+            swap_memory=True
+        )
+        predictions = predictions_arr.stack()
+        probabilities = probabilities_arr.stack()
 
-            batch, decoded = tf.while_loop(
-                condition,
-                body,
-                loop_vars=[batch, decoded],
-                parallel_iterations=parallel_iterations,
-                swap_memory=True,
+        if return_topk:
+            return predictions, probabilities
+
+        predictions = tf.slice(predictions, [0, 0, 0], [batch_size, 1, max_len])
+        probabilities = tf.slice(probabilities, [0, 0], [batch_size, 1])
+
+        return predictions, probabilities
+
+    def _perform_beam_search(self, encoded: tf.Tensor, encoded_length: tf.Tensor) -> [tf.Tensor, tf.Tensor]:  # [T, V]
+        encoded_expanded = tf.expand_dims(encoded, axis=1)  # [T, 1, V]
+        encoded_beam_expanded = tf.tile(encoded_expanded, [1, self.beam_size, 1])  # [T, beam_size, V]
+
+        max_time = encoded_length
+        start_time = tf.constant(0)
+
+        init_prediction_array = tf.TensorArray(
+            dtype=tf.int32,
+            size=max_time,
+            dynamic_size=False,
+            element_shape=tf.TensorShape(self.beam_size),
+            clear_after_read=False,
+        )
+        init_encoder_prediction, init_path_probabilities, init_predictor_states = self._get_init_state()
+
+        def cond(current_time, _path_probabilities, _last_predicted, _predictor_states, _last_encoder_prediction):
+            return tf.less(current_time, max_time)
+
+        def body(current_time, path_probabilities, prediction_array, predictor_states, last_encoder_prediction):
+            new_path_probabilities, new_predictions, path_indices, new_predictor_states = self._joint_predictor_step(
+                previous_path_probabilities=path_probabilities,
+                predicted=last_encoder_prediction,
+                encoded_slice=encoded_beam_expanded[current_time],
+                states=predictor_states
             )
+            blanks = tf.equal(new_predictions, self._blank_token)
+            new_encoder_prediction = tf.where(blanks, last_encoder_prediction, new_predictions)
+            prediction_tensor = prediction_array.stack()
+            top_predictions_paths = tf.gather(prediction_tensor, tf.reshape(path_indices, [-1]), axis=1)
+            prediction_array = prediction_array.unstack(top_predictions_paths)
+            prediction_array = prediction_array.write(current_time, new_predictions)
 
-            decoded = math_util.pad_prediction_tfarray(decoded, blank=self._text_featurizer.blank)
-            return self._text_featurizer.iextract(decoded.stack())
+            return current_time + 1, new_path_probabilities, prediction_array, new_predictor_states, new_encoder_prediction
 
-    def _perform_beam_search(
-        self,
-        encoded: tf.Tensor,
-        encoded_length: tf.Tensor,
-        lm: bool = False,
-        parallel_iterations: int = 10,
-        swap_memory: bool = True,
-        tflite: bool = False,
-    ):
-        with tf.name_scope(f"{self._name}_beam_search"):
-            beam_width = tf.cond(
-                tf.less(self._text_featurizer.decoder_config.beam_width, self._text_featurizer.num_classes),
-                true_fn=lambda: self._text_featurizer.decoder_config.beam_width,
-                false_fn=lambda: self._text_featurizer.num_classes - 1,
-            )
-            total = encoded_length
+        _time, probabilities, predictions, _states, _last_prediction = tf.while_loop(
+            cond,
+            body,
+            loop_vars=[start_time,
+                       init_path_probabilities,
+                       init_prediction_array,
+                       init_predictor_states,
+                       init_encoder_prediction],
+            parallel_iterations=1,
+            swap_memory=True
+        )
 
-            def initialize_beam(dynamic=False):
-                return BeamHypothesis(
-                    score=tf.TensorArray(
-                        dtype=tf.float32,
-                        size=beam_width if not dynamic else 0,
-                        dynamic_size=dynamic,
-                        element_shape=tf.TensorShape([]),
-                        clear_after_read=False,
-                    ),
-                    indices=tf.TensorArray(
-                        dtype=tf.int32,
-                        size=beam_width if not dynamic else 0,
-                        dynamic_size=dynamic,
-                        element_shape=tf.TensorShape([]),
-                        clear_after_read=False,
-                    ),
-                    prediction=tf.TensorArray(
-                        dtype=tf.int32,
-                        size=beam_width if not dynamic else 0,
-                        dynamic_size=dynamic,
-                        element_shape=None,
-                        clear_after_read=False,
-                    ),
-                    states=tf.TensorArray(
-                        dtype=tf.float32,
-                        size=beam_width if not dynamic else 0,
-                        dynamic_size=dynamic,
-                        element_shape=tf.TensorShape(shape_util.shape_list(self._predict_net.get_initial_state())),
-                        clear_after_read=False,
-                    ),
-                )
+        return tf.transpose(probabilities), tf.transpose(predictions.stack())
 
-            B = initialize_beam()
-            B = BeamHypothesis(
-                score=B.score.write(0, 0.0),
-                indices=B.indices.write(0, self._text_featurizer.blank),
-                prediction=B.prediction.write(0, tf.ones([total], dtype=tf.int32) * self._text_featurizer.blank),
-                states=B.states.write(0, self._predict_net.get_initial_state()),
-            )
+    def _get_init_state(self) -> Tuple[tf.TensorArray, tf.Tensor, tf.Tensor]:
+        # First iteration of beam search has to start from a single node, so
+        # all of the beam search paths don't infer the same path
+        init_path_probabilities = tf.ones(self.beam_size - 1, dtype=tf.float32) * -np.inf
+        init_path_probabilities = tf.pad(init_path_probabilities, [[1, 0]])
+        init_predictor_states = self._predict_net.get_initial_state(
+            batch_size=tf.constant(self.beam_size))  # [num_rnns, 2, beam_size, P]
+        init_predictions = tf.ones(self.beam_size, dtype=tf.int32) * self._blank_token  # [beam_size]
 
-            def condition(time, total, B):
-                return tf.less(time, total)
+        return init_predictions, init_path_probabilities, init_predictor_states
 
-            def body(time, total, B):
-                A = initialize_beam(dynamic=True)
-                A = BeamHypothesis(
-                    score=A.score.unstack(B.score.stack()),
-                    indices=A.indices.unstack(B.indices.stack()),
-                    prediction=A.prediction.unstack(
-                        math_util.pad_prediction_tfarray(B.prediction, blank=self._text_featurizer.blank).stack()
-                    ),
-                    states=A.states.unstack(B.states.stack()),
-                )
-                A_index = tf.constant(0, tf.int32)
-                B = initialize_beam()
+    def _joint_predictor_step(self,
+                              previous_path_probabilities: tf.Tensor,  # [beam_size]
+                              encoded_slice: tf.Tensor,  # [beam_size, V]
+                              predicted: tf.Tensor,  # [beam_size]
+                              states: tf.Tensor) -> Tuple[
+        tf.Tensor, tf.Tensor, tf.Tensor, tf.Tensor]:  # [num_rnns, 2, beam_size, V]
+        encoded = tf.expand_dims(encoded_slice, axis=1)  # [beam_size, 1, V]
+        last_predicted = tf.expand_dims(predicted, axis=1)
+        prediction, new_states = self._predict_net.recognize(last_predicted, states)
+        joint_out = tf.squeeze(self._joint_net([encoded, prediction], training=False), [1, 2])
+        logits = tf.nn.log_softmax(joint_out)  # [beam_size, alphabet_size]
 
-                encoded_t = tf.gather_nd(encoded, tf.expand_dims(time, axis=-1))
+        new_path_probabilities, indices = self._get_topk_paths(logits, previous_path_probabilities)
+        new_states_masked = self._get_new_states_masked(states, new_states, indices)
+        path_indices, new_predictions = tf.split(indices, 2, axis=1)
+        new_predictions_unpacked = tf.squeeze(new_predictions, axis=1)
 
-                def beam_condition(beam, beam_width, _A, _A_index, _B):
-                    return tf.less(beam, beam_width)
+        return new_path_probabilities, new_predictions_unpacked, path_indices, new_states_masked
 
-                def beam_body(beam, beam_width, A, A_index, B):
-                    # get y_hat
-                    y_hat_score, y_hat_score_index = tf.math.top_k(A.score.stack(), k=1, sorted=True)
-                    y_hat_score = y_hat_score[0]
-                    y_hat_index = tf.gather_nd(A.indices.stack(), y_hat_score_index)
-                    y_hat_prediction = tf.gather_nd(
-                        math_util.pad_prediction_tfarray(A.prediction, blank=self._text_featurizer.blank).stack(),
-                        y_hat_score_index,
-                    )
-                    y_hat_states = tf.gather_nd(A.states.stack(), y_hat_score_index)
+    def _get_topk_paths(self,
+                        logits: tf.Tensor,  # [beam_size, alphabet_size]
+                        path_probabilities: tf.Tensor) -> Tuple[tf.Tensor, tf.Tensor]:  # [beam_size]
+        current_path_probabilities = tf.expand_dims(path_probabilities, axis=1)  # [beam_size, 1]
+        current_path_probabilities = tf.tile(current_path_probabilities,
+                                             [1, tf.shape(logits)[1]])  # [beam_size, alphabet_size]
+        current_path_probabilities = logits + current_path_probabilities
+        flat_current_path_probabilities = tf.reshape(current_path_probabilities, [-1])
+        topk_paths = tf.math.top_k(flat_current_path_probabilities, k=self.beam_size)
+        indices = tf.transpose(tf.unravel_index(topk_paths.indices, dims=tf.shape(logits)))
+        new_path_probabilities = tf.gather_nd(current_path_probabilities, indices) + tf.gather_nd(logits, indices)
 
-                    # remove y_hat from A
-                    remain_indices = tf.range(0, tf.shape(A.score.stack())[0], dtype=tf.int32)
-                    remain_indices = tf.gather_nd(remain_indices, tf.where(tf.not_equal(remain_indices, y_hat_score_index[0])))
-                    remain_indices = tf.expand_dims(remain_indices, axis=-1)
-                    A = BeamHypothesis(
-                        score=A.score.unstack(tf.gather_nd(A.score.stack(), remain_indices)),
-                        indices=A.indices.unstack(tf.gather_nd(A.indices.stack(), remain_indices)),
-                        prediction=A.prediction.unstack(
-                            tf.gather_nd(
-                                math_util.pad_prediction_tfarray(A.prediction, blank=self._text_featurizer.blank).stack(),
-                                remain_indices,
-                            )
-                        ),
-                        states=A.states.unstack(tf.gather_nd(A.states.stack(), remain_indices)),
-                    )
-                    A_index = tf.cond(tf.equal(A_index, 0), true_fn=lambda: A_index, false_fn=lambda: A_index - 1)
+        return new_path_probabilities, indices
 
-                    ytu, new_states = self._decoder_inference(
-                        encoded=encoded_t, predicted=y_hat_index, states=y_hat_states, tflite=tflite
-                    )
+    def _get_new_states_masked(self,
+                               old_states: tf.Tensor,  # [num_rnns, 2, beam_size, V]
+                               new_states: tf.Tensor,  # [num_rnns, 2, beam_size, V]
+                               topk_indices: tf.Tensor) -> tf.Tensor:  # [beam_size, alphabet_size]
+        new_path_indices, new_predictions = tf.split(topk_indices, 2, axis=1)
+        change_state_mask = tf.not_equal(new_predictions, self._blank_token)
 
-                    def predict_condition(pred, _A, _A_index, _B):
-                        return tf.less(pred, self._text_featurizer.num_classes)
+        old_states_batch_major = tf.transpose(old_states, perm=[2, 0, 1, 3])  # [beam_size, num_rnns, 2, V]
+        new_states_batch_major = tf.transpose(new_states, perm=[2, 0, 1, 3])  # [beam_size, num_rnns, 2, V]
+        old_paths_states = tf.gather_nd(old_states_batch_major, new_path_indices)
+        old_paths_states = tf.transpose(old_paths_states, perm=[1, 2, 0, 3])  # [num_rnns, 2, beam_size, V]
+        new_paths_states = tf.gather_nd(new_states_batch_major, new_path_indices)
+        new_paths_states = tf.transpose(new_paths_states, perm=[1, 2, 0, 3])  # [num_rnns, 2, beam_size, V]
 
-                    def predict_body(pred, A, A_index, B):
-                        new_score = y_hat_score + tf.gather_nd(ytu, tf.expand_dims(pred, axis=-1))
+        new_states_masked = tf.where(change_state_mask, new_paths_states, old_paths_states)
 
-                        def true_fn():
-                            return (
-                                B.score.write(beam, new_score),
-                                B.indices.write(beam, y_hat_index),
-                                B.prediction.write(beam, y_hat_prediction),
-                                B.states.write(beam, y_hat_states),
-                                A.score,
-                                A.indices,
-                                A.prediction,
-                                A.states,
-                                A_index,
-                            )
-
-                        def false_fn():
-                            scatter_index = math_util.count_non_blank(y_hat_prediction, blank=self._text_featurizer.blank)
-                            updated_prediction = tf.tensor_scatter_nd_update(
-                                y_hat_prediction,
-                                indices=tf.reshape(scatter_index, [1, 1]),
-                                updates=tf.expand_dims(pred, axis=-1),
-                            )
-                            return (
-                                B.score,
-                                B.indices,
-                                B.prediction,
-                                B.states,
-                                A.score.write(A_index, new_score),
-                                A.indices.write(A_index, pred),
-                                A.prediction.write(A_index, updated_prediction),
-                                A.states.write(A_index, new_states),
-                                A_index + 1,
-                            )
-
-                        b_score, b_indices, b_prediction, b_states, a_score, a_indices, a_prediction, a_states, A_index = tf.cond(
-                            tf.equal(pred, self._text_featurizer.blank), true_fn=true_fn, false_fn=false_fn
-                        )
-
-                        B = BeamHypothesis(score=b_score, indices=b_indices, prediction=b_prediction, states=b_states)
-                        A = BeamHypothesis(score=a_score, indices=a_indices, prediction=a_prediction, states=a_states)
-
-                        return pred + 1, A, A_index, B
-
-                    _, A, A_index, B = tf.while_loop(
-                        predict_condition,
-                        predict_body,
-                        loop_vars=[0, A, A_index, B],
-                        parallel_iterations=parallel_iterations,
-                        swap_memory=swap_memory,
-                    )
-
-                    return beam + 1, beam_width, A, A_index, B
-
-                _, _, A, A_index, B = tf.while_loop(
-                    beam_condition,
-                    beam_body,
-                    loop_vars=[0, beam_width, A, A_index, B],
-                    parallel_iterations=parallel_iterations,
-                    swap_memory=swap_memory,
-                )
-
-                return time + 1, total, B
-
-            _, _, B = tf.while_loop(
-                condition,
-                body,
-                loop_vars=[0, total, B],
-                parallel_iterations=parallel_iterations,
-                swap_memory=swap_memory,
-            )
-
-            scores = B.score.stack()
-            prediction = math_util.pad_prediction_tfarray(B.prediction, blank=self._text_featurizer.blank).stack()
-            if self._text_featurizer.decoder_config.norm_score:
-                prediction_lengths = math_util.count_non_blank(prediction, blank=self._text_featurizer.blank, axis=1)
-                scores /= tf.cast(prediction_lengths, dtype=scores.dtype)
-
-            y_hat_score, y_hat_score_index = tf.math.top_k(scores, k=1)
-            y_hat_score = y_hat_score[0]
-            y_hat_index = tf.gather_nd(B.indices.stack(), y_hat_score_index)
-            y_hat_prediction = tf.gather_nd(prediction, y_hat_score_index)
-            y_hat_states = tf.gather_nd(B.states.stack(), y_hat_score_index)
-
-            return Hypothesis(index=y_hat_index, prediction=y_hat_prediction, states=y_hat_states)
+        return new_states_masked
