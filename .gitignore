@@ -11,4 +11,4 @@ Session.vim
 __pycache__
 .pytest*
 venv
-my_train
+tensorboard/
