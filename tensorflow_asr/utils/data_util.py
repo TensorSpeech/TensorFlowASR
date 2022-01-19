@@ -18,10 +18,10 @@ import tensorflow as tf
 
 
 def create_inputs(
-    inputs: tf.Tensor,
-    inputs_length: tf.Tensor,
-    predictions: tf.Tensor = None,
-    predictions_length: tf.Tensor = None,
+        inputs: tf.Tensor,
+        inputs_length: tf.Tensor,
+        predictions: tf.Tensor = None,
+        predictions_length: tf.Tensor = None,
 ) -> dict:
     data = {
         "inputs": inputs,
@@ -35,17 +35,29 @@ def create_inputs(
 
 
 def create_logits(
-    logits: tf.Tensor,
-    logits_length: tf.Tensor,
+        logits: tf.Tensor,
+        logits_length: tf.Tensor,
 ) -> dict:
     return {"logits": logits, "logits_length": logits_length}
 
 
 def create_labels(
-    labels: tf.Tensor,
-    labels_length: tf.Tensor,
+        labels: tf.Tensor,
+        labels_length: tf.Tensor,
 ) -> dict:
     return {
         "labels": labels,
         "labels_length": labels_length,
+    }
+
+
+def create_hypotheses(
+        sentences: tf.Tensor,
+        log_probas: tf.Tensor,
+        labels: tf.Tensor
+) -> dict:
+    return {
+        "sentences": sentences,
+        "log_probas": log_probas,
+        "labels": labels
     }

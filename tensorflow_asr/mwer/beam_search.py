@@ -24,7 +24,6 @@ class BeamSearch:
         self._name = name
         self._predictor_states = None
 
-    @tf.function
     def call(self,
              encoded: tf.Tensor,
              encoded_length: tf.Tensor,
@@ -160,8 +159,8 @@ class BeamSearch:
                               previous_path_probabilities: tf.Tensor,  # [beam_size]
                               encoded_slice: tf.Tensor,  # [beam_size, V]
                               predicted: tf.Tensor,  # [beam_size]
-                              states: tf.Tensor) -> Tuple[
-        tf.Tensor, tf.Tensor, tf.Tensor, tf.Tensor]:  # [num_rnns, 2, beam_size, V]
+                              states: tf.Tensor  # [num_rnns, 2, beam_size, V]
+                              ) -> Tuple[tf.Tensor, tf.Tensor, tf.Tensor, tf.Tensor]:
         encoded = tf.expand_dims(encoded_slice, axis=1)  # [beam_size, 1, V]
         last_predicted = tf.expand_dims(predicted, axis=1)
         prediction, new_states = self._predict_net.recognize(last_predicted, states)

@@ -116,6 +116,7 @@ eval_data_loader = eval_dataset.create(global_batch_size)
 with strategy.scope():
     # build model
     conformer = Conformer(**config.model_config, vocabulary_size=text_featurizer.num_classes)
+    conformer.add_featurizers(speech_featurizer, text_featurizer)
     conformer.make(
         speech_featurizer.shape,
         prediction_shape=text_featurizer.prepand_shape,
@@ -136,7 +137,8 @@ with strategy.scope():
         optimizer=optimizer,
         experimental_steps_per_execution=args.spx,
         global_batch_size=global_batch_size,
-        blank=text_featurizer.blank
+        blank=text_featurizer.blank,
+        run_eagerly=False
     )
 
 callbacks = [

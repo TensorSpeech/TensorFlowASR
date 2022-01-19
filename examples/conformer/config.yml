@@ -24,14 +24,16 @@ speech_config:
   normalize_per_frame: False
 
 decoder_config:
-  vocabulary: ./vocabularies/librispeech/librispeech_train_4_1030.subwords
-  target_vocab_size: 1000
+  vocabulary: ./predefined_checkpoints/pretrained-subword-conformer/conformer.subwords
+#  vocabulary: ./vocabularies/librispeech/spm_512.vocab
+#  subwords: ./vocabularies/librispeech/spm_512
+  target_vocab_size: 8000
   max_subword_length: 10
   blank_at_zero: True
-  beam_width: 0
+  beam_width: 2
   norm_score: True
-  corpus_files:
-    - /mnt/Data/MLDL/Datasets/ASR/Raw/LibriSpeech/train-clean-100/transcripts.tsv
+#  corpus_files:
+#    - /mnt/Data/MLDL/Datasets/ASR/Raw/LibriSpeech/train-clean-100/transcripts.tsv
 
 model_config:
   name: conformer
@@ -61,6 +63,7 @@ model_config:
   prejoint_linear: True
   joint_activation: tanh
   joint_mode: add
+  mwer_training: True
 
 learning_config:
   train_dataset_config:
@@ -75,30 +78,35 @@ learning_config:
           num_masks: 1
           mask_factor: 27
     data_paths:
-      - /mnt/Data/MLDL/Datasets/ASR/Raw/LibriSpeech/train-clean-100/transcripts.tsv
-    tfrecords_dir: /mnt/Data/MLDL/Datasets/ASR/Raw/LibriSpeech/tfrecords_1030
+      - /home/frunc/data/LibriSpeech/test_transcriptions/test.tsv
+#      - /home/frunc/data/LibriSpeech/transcriptions/dev.tsv
+    tfrecords_dir: /home/frunc/data/LibriSpeech/tfrecords
     shuffle: True
-    cache: True
+    cache: False
     buffer_size: 100
     drop_remainder: True
     stage: train
 
   eval_dataset_config:
     use_tf: True
-    data_paths: null
-    tfrecords_dir: /mnt/Data/MLDL/Datasets/ASR/Raw/LibriSpeech/tfrecords_1030
+    data_paths:
+      - /home/frunc/data/LibriSpeech/test_transcriptions/test.tsv
+#      - /home/frunc/data/LibriSpeech/transcriptions/dev.tsv
+    tfrecords_dir: /home/frunc/data/LibriSpeech/tfrecords
     shuffle: False
-    cache: True
+    cache: False
     buffer_size: 100
     drop_remainder: True
     stage: eval
 
   test_dataset_config:
     use_tf: True
-    data_paths: null
+    data_paths:
+      - /home/frunc/data/LibriSpeech/test_transcriptions/test.tsv
+#      - /home/frunc/data/LibriSpeech/transcriptions/dev.tsv
     tfrecords_dir: null
     shuffle: False
-    cache: True
+    cache: False
     buffer_size: 100
     drop_remainder: True
     stage: test
@@ -110,16 +118,16 @@ learning_config:
     epsilon: 1e-9
 
   running_config:
-    batch_size: 2
+    batch_size: 1
     num_epochs: 50
     checkpoint:
-      filepath: /mnt/Miscellanea/Models/local/conformer/checkpoints/{epoch:02d}.h5
+      filepath: checkpoints
       save_best_only: False
       save_weights_only: True
       save_freq: epoch
-    states_dir: /mnt/Miscellanea/Models/local/conformer/states
+    states_dir: states
     tensorboard:
-      log_dir: /mnt/Miscellanea/Models/local/conformer/tensorboard
+      log_dir: tensorboard
       histogram_freq: 1
       write_graph: True
       write_images: True
