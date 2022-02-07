@@ -10,6 +10,7 @@ Pillow==9.0.1
 black==21.7b0
 flake8==3.9.2
 sounddevice==0.4.3
+fire==0.4.0
 
 # extra=tf2.5
 tensorflow~=2.5.1
