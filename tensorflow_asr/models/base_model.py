@@ -41,13 +41,21 @@ class BaseModel(tf.keras.Model):
             )
 
     def save_weights(
-        self, filepath, overwrite=True, save_format=None, options=None,
+        self,
+        filepath,
+        overwrite=True,
+        save_format=None,
+        options=None,
     ):
         with file_util.save_file(filepath) as path:
             super().save_weights(filepath=path, overwrite=overwrite, save_format=save_format, options=options)
 
     def load_weights(
-        self, filepath, by_name=False, skip_mismatch=False, options=None,
+        self,
+        filepath,
+        by_name=False,
+        skip_mismatch=False,
+        options=None,
     ):
         with file_util.read_file(filepath) as path:
             super().load_weights(filepath=path, by_name=by_name, skip_mismatch=skip_mismatch, options=options)
@@ -59,7 +67,8 @@ class BaseModel(tf.keras.Model):
         return list(self._tfasr_metrics.values())
 
     def add_metric(
-        self, metric: tf.keras.metrics.Metric,
+        self,
+        metric: tf.keras.metrics.Metric,
     ):
         if not hasattr(self, "_tfasr_metrics"):
             self._tfasr_metrics = {}
@@ -70,7 +79,11 @@ class BaseModel(tf.keras.Model):
         raise NotImplementedError()
 
     def compile(
-        self, loss, optimizer, run_eagerly=None, **kwargs,
+        self,
+        loss,
+        optimizer,
+        run_eagerly=None,
+        **kwargs,
     ):
         self.use_loss_scale = False
         if not env_util.has_devices("TPU"):
@@ -146,3 +159,12 @@ class BaseModel(tf.keras.Model):
     def recognize_beam(self, *args, **kwargs):
         """Beam search decoding function that used in self.predict_step"""
         raise NotImplementedError()
+
+    # ---------------------------------- TFLITE ---------------------------------- #
+
+    def make_tflite_function(
+        self,
+        *args,
+        **kwargs,
+    ):
+        pass
