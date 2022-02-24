@@ -14,142 +14,105 @@
 
 import os
 import math
-import argparse
+import fire
 from tensorflow_asr.utils import env_util
 
 logger = env_util.setup_environment()
 import tensorflow as tf
 
-DEFAULT_YAML = os.path.join(os.path.abspath(os.path.dirname(__file__)), "config.yml")
-
-tf.keras.backend.clear_session()
-
-parser = argparse.ArgumentParser(prog="RnnTransducer Training")
-
-parser.add_argument("--config", type=str, default=DEFAULT_YAML, help="The file path of model configuration file")
-
-parser.add_argument("--tfrecords", default=False, action="store_true", help="Whether to use tfrecords")
-
-parser.add_argument("--sentence_piece", default=False, action="store_true", help="Whether to use `SentencePiece` model")
-
-parser.add_argument("--subwords", default=False, action="store_true", help="Use subwords")
-
-parser.add_argument("--bs", type=int, default=None, help="Batch size per replica")
-
-parser.add_argument("--spx", type=int, default=1, help="Steps per execution for maximizing performance")
-
-parser.add_argument("--metadata", type=str, default=None, help="Path to file containing metadata")
-
-parser.add_argument("--static_length", default=False, action="store_true", help="Use static lengths")
-
-parser.add_argument("--devices", type=int, nargs="*", default=[0], help="Devices' ids to apply distributed training")
-
-parser.add_argument("--mxp", default=False, action="store_true", help="Enable mixed precision")
-
-parser.add_argument("--pretrained", type=str, default=None, help="Path to pretrained model")
-
-args = parser.parse_args()
-
-tf.config.optimizer.set_experimental_options({"auto_mixed_precision": args.mxp})
-
-strategy = env_util.setup_strategy(args.devices)
 
 from tensorflow_asr.configs.config import Config
-from tensorflow_asr.datasets import asr_dataset
-from tensorflow_asr.featurizers import speech_featurizers, text_featurizers
+from tensorflow_asr.helpers import featurizer_helpers, dataset_helpers
 from tensorflow_asr.models.transducer.rnn_transducer import RnnTransducer
 from tensorflow_asr.optimizers.schedules import TransformerSchedule
 
-config = Config(args.config)
-speech_featurizer = speech_featurizers.TFSpeechFeaturizer(config.speech_config)
+DEFAULT_YAML = os.path.join(os.path.abspath(os.path.dirname(__file__)), "config.yml")
 
-if args.sentence_piece:
-    logger.info("Loading SentencePiece model ...")
-    text_featurizer = text_featurizers.SentencePieceFeaturizer(config.decoder_config)
-elif args.subwords:
-    logger.info("Loading subwords ...")
-    text_featurizer = text_featurizers.SubwordFeaturizer(config.decoder_config)
-else:
-    logger.info("Use characters ...")
-    text_featurizer = text_featurizers.CharFeaturizer(config.decoder_config)
 
-if args.tfrecords:
-    train_dataset = asr_dataset.ASRTFRecordDataset(
+def main(
+    config: str = DEFAULT_YAML,
+    tfrecords: bool = False,
+    sentence_piece: bool = False,
+    subwords: bool = True,
+    bs: int = None,
+    spx: int = 1,
+    metadata: str = None,
+    static_length: bool = False,
+    devices: list = [0],
+    mxp: bool = False,
+    pretrained: str = None,
+):
+    tf.keras.backend.clear_session()
+    tf.config.optimizer.set_experimental_options({"auto_mixed_precision": mxp})
+    strategy = env_util.setup_strategy(devices)
+
+    config = Config(config)
+
+    speech_featurizer, text_featurizer = featurizer_helpers.prepare_featurizers(
+        config=config,
+        subwords=subwords,
+        sentence_piece=sentence_piece,
+    )
+
+    train_dataset, eval_dataset = dataset_helpers.prepare_training_datasets(
+        config=config,
         speech_featurizer=speech_featurizer,
         text_featurizer=text_featurizer,
-        **vars(config.learning_config.train_dataset_config),
-        indefinite=True
-    )
-    eval_dataset = asr_dataset.ASRTFRecordDataset(
-        speech_featurizer=speech_featurizer,
-        text_featurizer=text_featurizer,
-        **vars(config.learning_config.eval_dataset_config),
-        indefinite=True
-    )
-else:
-    train_dataset = asr_dataset.ASRSliceDataset(
-        speech_featurizer=speech_featurizer,
-        text_featurizer=text_featurizer,
-        **vars(config.learning_config.train_dataset_config),
-        indefinite=True
-    )
-    eval_dataset = asr_dataset.ASRSliceDataset(
-        speech_featurizer=speech_featurizer,
-        text_featurizer=text_featurizer,
-        **vars(config.learning_config.eval_dataset_config),
-        indefinite=True
+        tfrecords=tfrecords,
+        metadata=metadata,
     )
 
-train_dataset.load_metadata(args.metadata)
-eval_dataset.load_metadata(args.metadata)
+    if not static_length:
+        speech_featurizer.reset_length()
+        text_featurizer.reset_length()
 
-if not args.static_length:
-    speech_featurizer.reset_length()
-    text_featurizer.reset_length()
-
-global_batch_size = args.bs or config.learning_config.running_config.batch_size
-global_batch_size *= strategy.num_replicas_in_sync
-
-train_data_loader = train_dataset.create(global_batch_size)
-eval_data_loader = eval_dataset.create(global_batch_size)
-
-with strategy.scope():
-    # build model
-    rnn_transducer = RnnTransducer(**config.model_config, vocabulary_size=text_featurizer.num_classes)
-    rnn_transducer.make(
-        speech_featurizer.shape,
-        prediction_shape=text_featurizer.prepand_shape,
-        batch_size=global_batch_size
-    )
-    if args.pretrained:
-        rnn_transducer.load_weights(args.pretrained, by_name=True, skip_mismatch=True)
-    rnn_transducer.summary(line_length=100)
-    optimizer = tf.keras.optimizers.Adam(
-        TransformerSchedule(
-            d_model=rnn_transducer.dmodel,
-            warmup_steps=config.learning_config.optimizer_config.pop("warmup_steps", 10000),
-            max_lr=(0.05 / math.sqrt(rnn_transducer.dmodel))
-        ),
-        **config.learning_config.optimizer_config
-    )
-    rnn_transducer.compile(
-        optimizer=optimizer,
-        experimental_steps_per_execution=args.spx,
-        global_batch_size=global_batch_size,
-        blank=text_featurizer.blank
+    train_data_loader, eval_data_loader, global_batch_size = dataset_helpers.prepare_training_data_loaders(
+        config=config,
+        train_dataset=train_dataset,
+        eval_dataset=eval_dataset,
+        strategy=strategy,
+        batch_size=bs,
     )
 
-callbacks = [
-    tf.keras.callbacks.ModelCheckpoint(**config.learning_config.running_config.checkpoint),
-    tf.keras.callbacks.experimental.BackupAndRestore(config.learning_config.running_config.states_dir),
-    tf.keras.callbacks.TensorBoard(**config.learning_config.running_config.tensorboard)
-]
+    with strategy.scope():
+        # build model
+        rnn_transducer = RnnTransducer(**config.model_config, vocabulary_size=text_featurizer.num_classes)
+        rnn_transducer.make(
+            speech_featurizer.shape, prediction_shape=text_featurizer.prepand_shape, batch_size=global_batch_size
+        )
+        if pretrained:
+            rnn_transducer.load_weights(pretrained, by_name=True, skip_mismatch=True)
+        rnn_transducer.summary(line_length=100)
+        optimizer = tf.keras.optimizers.Adam(
+            TransformerSchedule(
+                d_model=rnn_transducer.dmodel,
+                warmup_steps=config.learning_config.optimizer_config.pop("warmup_steps", 10000),
+                max_lr=(0.05 / math.sqrt(rnn_transducer.dmodel)),
+            ),
+            **config.learning_config.optimizer_config
+        )
+        rnn_transducer.compile(
+            optimizer=optimizer,
+            experimental_steps_per_execution=spx,
+            global_batch_size=global_batch_size,
+            blank=text_featurizer.blank,
+        )
 
-rnn_transducer.fit(
-    train_data_loader,
-    epochs=config.learning_config.running_config.num_epochs,
-    validation_data=eval_data_loader,
-    callbacks=callbacks,
-    steps_per_epoch=train_dataset.total_steps,
-    validation_steps=eval_dataset.total_steps if eval_data_loader else None
-)
+    callbacks = [
+        tf.keras.callbacks.ModelCheckpoint(**config.learning_config.running_config.checkpoint),
+        tf.keras.callbacks.experimental.BackupAndRestore(config.learning_config.running_config.states_dir),
+        tf.keras.callbacks.TensorBoard(**config.learning_config.running_config.tensorboard),
+    ]
+
+    rnn_transducer.fit(
+        train_data_loader,
+        epochs=config.learning_config.running_config.num_epochs,
+        validation_data=eval_data_loader,
+        callbacks=callbacks,
+        steps_per_epoch=train_dataset.total_steps,
+        validation_steps=eval_dataset.total_steps if eval_data_loader else None,
+    )
+
+
+if __name__ == "__main__":
+    fire.Fire(main)

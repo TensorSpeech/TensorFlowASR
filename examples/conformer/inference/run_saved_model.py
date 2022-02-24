@@ -40,5 +40,5 @@ def main(
     print("Transcript: ", "".join([chr(u) for u in transcript]))
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     fire.Fire(main)
