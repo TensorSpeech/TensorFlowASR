@@ -13,21 +13,41 @@ sounddevice==0.4.3
 fire==0.4.0
 
 # extra=tf2.5
-tensorflow~=2.5.1
-tensorflow-text~=2.5.0
-tensorflow-io~=0.18.0
+tensorflow~=2.5
+tensorflow-text~=2.5
+tensorflow-io~=0.18
 
 # extra=tf2.5-gpu
-tensorflow-gpu~=2.5.1
-tensorflow-text~=2.5.0
-tensorflow-io~=0.18.0
+tensorflow-gpu~=2.5
+tensorflow-text~=2.5
+tensorflow-io~=0.18
 
 # extra=tf2.6
-tensorflow~=2.6.0
-tensorflow-text~=2.6.0
-tensorflow-io~=0.20.0
+tensorflow~=2.6
+tensorflow-text~=2.6
+tensorflow-io~=0.20
 
 # extra=tf2.6-gpu
-tensorflow-gpu~=2.6.0
-tensorflow-text~=2.6.0
-tensorflow-io~=0.20.0
+tensorflow-gpu~=2.6
+tensorflow-text~=2.6
+tensorflow-io~=0.20
+
+# extra=tf2.7
+tensorflow~=2.7
+tensorflow-text~=2.7
+tensorflow-io~=0.23
+
+# extra=tf2.7-gpu
+tensorflow-gpu~=2.7
+tensorflow-text~=2.7
+tensorflow-io~=0.23
+
+# extra=tf2.8
+tensorflow~=2.8
+tensorflow-text~=2.8
+tensorflow-io~=0.24
+
+# extra=tf2.8-gpu
+tensorflow-gpu~=2.8
+tensorflow-text~=2.8
+tensorflow-io~=0.24
