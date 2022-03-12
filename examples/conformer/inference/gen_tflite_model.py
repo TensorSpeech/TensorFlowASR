@@ -13,58 +13,45 @@
 # limitations under the License.
 
 import os
-import argparse
-from tensorflow_asr.utils import env_util, file_util
+import fire
+from tensorflow_asr.utils import env_util
 
 logger = env_util.setup_environment()
 import tensorflow as tf
 
 from tensorflow_asr.configs.config import Config
-from tensorflow_asr.featurizers.speech_featurizers import TFSpeechFeaturizer
-from tensorflow_asr.featurizers.text_featurizers import SubwordFeaturizer, CharFeaturizer
+from tensorflow_asr.helpers import exec_helpers, featurizer_helpers
 from tensorflow_asr.models.transducer.conformer import Conformer
 
 DEFAULT_YAML = os.path.join(os.path.abspath(os.path.dirname(__file__)), "config.yml")
 
-tf.keras.backend.clear_session()
-tf.compat.v1.enable_control_flow_v2()
 
-parser = argparse.ArgumentParser(prog="Conformer TFLite")
+def main(
+    config: str = DEFAULT_YAML,
+    h5: str = None,
+    subwords: bool = False,
+    sentence_piece: bool = False,
+    output: str = None,
+):
+    assert h5 and output
+    tf.keras.backend.clear_session()
+    tf.compat.v1.enable_control_flow_v2()
 
-parser.add_argument("--config", type=str, default=DEFAULT_YAML, help="The file path of model configuration file")
+    config = Config(config)
+    speech_featurizer, text_featurizer = featurizer_helpers.prepare_featurizers(
+        config=config,
+        subwords=subwords,
+        sentence_piece=sentence_piece,
+    )
 
-parser.add_argument("--h5", type=str, default=None, help="Path to saved model")
+    conformer = Conformer(**config.model_config, vocabulary_size=text_featurizer.num_classes)
+    conformer.make(speech_featurizer.shape)
+    conformer.load_weights(h5, by_name=True)
+    conformer.summary(line_length=100)
+    conformer.add_featurizers(speech_featurizer, text_featurizer)
 
-parser.add_argument("--subwords", default=False, action="store_true", help="Use subwords")
+    exec_helpers.convert_tflite(model=conformer, output=output)
 
-parser.add_argument("output", type=str, default=None, help="TFLite file path to be exported")
 
-args = parser.parse_args()
-
-assert args.h5 and args.output
-
-config = Config(args.config)
-speech_featurizer = TFSpeechFeaturizer(config.speech_config)
-
-if args.subwords:
-    text_featurizer = SubwordFeaturizer(config.decoder_config)
-else:
-    text_featurizer = CharFeaturizer(config.decoder_config)
-
-# build model
-conformer = Conformer(**config.model_config, vocabulary_size=text_featurizer.num_classes)
-conformer.make(speech_featurizer.shape)
-conformer.load_weights(args.h5, by_name=True)
-conformer.summary(line_length=100)
-conformer.add_featurizers(speech_featurizer, text_featurizer)
-
-concrete_func = conformer.make_tflite_function().get_concrete_function()
-converter = tf.lite.TFLiteConverter.from_concrete_functions([concrete_func])
-converter.experimental_new_converter = True
-converter.optimizations = [tf.lite.Optimize.DEFAULT]
-converter.target_spec.supported_ops = [tf.lite.OpsSet.TFLITE_BUILTINS, tf.lite.OpsSet.SELECT_TF_OPS]
-tflite_model = converter.convert()
-
-args.output = file_util.preprocess_paths(args.output)
-with open(args.output, "wb") as tflite_out:
-    tflite_out.write(tflite_model)
+if __name__ == "__main__":
+    fire.Fire(main)

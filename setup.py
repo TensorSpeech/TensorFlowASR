@@ -41,7 +41,7 @@ with open("README.md", "r", encoding="utf-8") as fh:
 
 setup(
     name="TensorFlowASR",
-    version="1.0.2",
+    version="1.0.3",
     author="Huy Le Nguyen",
     author_email="nlhuy.cs.16@gmail.com",
     description="Almost State-of-the-art Automatic Speech Recognition using Tensorflow 2",

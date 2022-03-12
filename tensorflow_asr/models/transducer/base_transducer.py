@@ -153,7 +153,7 @@ class TransducerJointReshape(tf.keras.layers.Layer):
         return tf.repeat(outputs, repeats=repeats, axis=self.axis)
 
     def get_config(self):
-        conf = super(TransducerJointReshape, self).get_config()
+        conf = super().get_config()
         conf.update({"axis": self.axis})
         return conf
 
@@ -327,7 +327,7 @@ class Transducer(BaseModel):
             self.encoder.summary(line_length=line_length, **kwargs)
         self.predict_net.summary(line_length=line_length, **kwargs)
         self.joint_net.summary(line_length=line_length, **kwargs)
-        super(Transducer, self).summary(line_length=line_length, **kwargs)
+        super().summary(line_length=line_length, **kwargs)
 
     def add_featurizers(
         self,

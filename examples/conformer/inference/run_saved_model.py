@@ -12,8 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import argparse
 import os
+import fire
 
 from tensorflow_asr.utils import env_util
 
@@ -22,21 +22,23 @@ import tensorflow as tf
 
 DEFAULT_YAML = os.path.join(os.path.abspath(os.path.dirname(__file__)), "config.yml")
 
-tf.keras.backend.clear_session()
-
-parser = argparse.ArgumentParser()
-
-parser.add_argument("--saved_model", type=str, default=None, help="The file path of saved model")
-
-parser.add_argument("filename", type=str, default=None, help="Audio file path")
-
-args = parser.parse_args()
 
 from tensorflow_asr.featurizers.speech_featurizers import read_raw_audio
 
-module = tf.saved_model.load(export_dir=args.saved_model)
 
-signal = read_raw_audio(args.filename)
-transcript = module.pred(signal)
+def main(
+    saved_model: str = None,
+    filename: str = None,
+):
+    tf.keras.backend.clear_session()
 
-print("Transcript: ", "".join([chr(u) for u in transcript]))
+    module = tf.saved_model.load(export_dir=saved_model)
+
+    signal = read_raw_audio(filename)
+    transcript = module.pred(signal)
+
+    print("Transcript: ", "".join([chr(u) for u in transcript]))
+
+
+if __name__ == "__main__":
+    fire.Fire(main)

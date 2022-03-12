@@ -59,7 +59,7 @@ learning_config:
   train_dataset_config:
     use_tf: True
     data_paths:
-      - /mnt/h/ML/Datasets/ASR/Raw/LibriSpeech/train-clean-100/transcripts.tsv
+      - H:/MLDL/Datasets/ASR/Raw/LibriSpeech/train-clean-100/transcripts.tsv
     tfrecords_dir: null
     shuffle: True
     cache: True
@@ -69,7 +69,8 @@ learning_config:
 
   eval_dataset_config:
     use_tf: True
-    data_paths: null
+    data_paths:
+      - H:/MLDL/Datasets/ASR/Raw/LibriSpeech/dev-clean/transcripts.tsv
     tfrecords_dir: null
     shuffle: False
     cache: True
@@ -80,7 +81,7 @@ learning_config:
   test_dataset_config:
     use_tf: True
     data_paths:
-      - /mnt/h/ML/Datasets/ASR/Raw/LibriSpeech/test-clean/transcripts.tsv
+      - H:/MLDL/Datasets/ASR/Raw/LibriSpeech/test-clean/transcripts.tsv
     tfrecords_dir: null
     shuffle: False
     cache: True
@@ -97,13 +98,13 @@ learning_config:
     batch_size: 4
     num_epochs: 20
     checkpoint:
-      filepath: /mnt/e/Models/local/jasper/checkpoints/{epoch:02d}.h5
+      filepath: D:/Models/local/jasper/checkpoints/{epoch:02d}.h5
       save_best_only: False
       save_weights_only: True
       save_freq: epoch
-    states_dir: /mnt/e/Models/local/jasper/states
+    states_dir: D:/Models/local/jasper/states
     tensorboard:
-      log_dir: /mnt/e/Models/local/jasper/tensorboard
+      log_dir: D:/Models/local/jasper/tensorboard
       histogram_freq: 1
       write_graph: True
       write_images: True
