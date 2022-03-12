@@ -10,11 +10,11 @@ Go to [config.yml](./config.yml)
 
 ## Usage
 
-Training, see `python examples/conformer/train_*.py --help`
+Training, see `python examples/conformer/train.py --help`
 
-Testing, see `python examples/conformer/test_*.py --help`
+Testing, see `python examples/conformer/test.py --help`
 
-TFLite Conversion, see `python examples/conformer/tflite_*.py --help`
+TFLite Conversion, see `python examples/conformer/inference/gen_tflite_model.py --help`
 
 ## Conformer Subwords - Results on LibriSpeech
 

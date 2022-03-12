@@ -58,6 +58,14 @@ class CtcModel(BaseModel):
             training=False,
         )
 
+    def summary(
+        self,
+        line_length=None,
+        **kwargs,
+    ):
+        self.encoder.summary(line_length=line_length, **kwargs)
+        super().summary(line_length=line_length, **kwargs)
+
     def compile(
         self,
         optimizer,

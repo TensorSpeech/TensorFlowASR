@@ -13,7 +13,6 @@
 # limitations under the License.
 
 import os
-import math
 import fire
 from tensorflow_asr.utils import env_util
 
@@ -24,7 +23,6 @@ import tensorflow as tf
 from tensorflow_asr.configs.config import Config
 from tensorflow_asr.helpers import featurizer_helpers, dataset_helpers
 from tensorflow_asr.models.transducer.rnn_transducer import RnnTransducer
-from tensorflow_asr.optimizers.schedules import TransformerSchedule
 
 DEFAULT_YAML = os.path.join(os.path.abspath(os.path.dirname(__file__)), "config.yml")
 
@@ -75,7 +73,6 @@ def main(
     )
 
     with strategy.scope():
-        # build model
         rnn_transducer = RnnTransducer(**config.model_config, vocabulary_size=text_featurizer.num_classes)
         rnn_transducer.make(
             speech_featurizer.shape, prediction_shape=text_featurizer.prepand_shape, batch_size=global_batch_size
@@ -83,16 +80,8 @@ def main(
         if pretrained:
             rnn_transducer.load_weights(pretrained, by_name=True, skip_mismatch=True)
         rnn_transducer.summary(line_length=100)
-        optimizer = tf.keras.optimizers.Adam(
-            TransformerSchedule(
-                d_model=rnn_transducer.dmodel,
-                warmup_steps=config.learning_config.optimizer_config.pop("warmup_steps", 10000),
-                max_lr=(0.05 / math.sqrt(rnn_transducer.dmodel)),
-            ),
-            **config.learning_config.optimizer_config
-        )
         rnn_transducer.compile(
-            optimizer=optimizer,
+            optimizer=config.learning_config.optimizer_config,
             experimental_steps_per_execution=spx,
             global_batch_size=global_batch_size,
             blank=text_featurizer.blank,

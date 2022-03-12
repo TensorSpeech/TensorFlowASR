@@ -12,11 +12,11 @@ Go to [config.yml](./config.yml)
 
 ## Usage
 
-Training, see `python examples/contextnet/train_*.py --help`
+Training, see `python examples/contextnet/train.py --help`
 
-Testing, see `python examples/contextnet/test_*.py --help`
+Testing, see `python examples/contextnet/test.py --help`
 
-TFLite Conversion, see `python examples/contextnet/tflite_*.py --help`
+TFLite Conversion, see `python examples/contextnet/inference/gen_tflite_model.py --help`
 
 ## RNN Transducer Subwords - Results on LibriSpeech
 

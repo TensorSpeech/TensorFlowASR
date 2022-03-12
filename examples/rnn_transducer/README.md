@@ -8,11 +8,11 @@ Go to [config.yml](./config.yml)
 
 ## Usage
 
-Training, see `python examples/streamingTransducer/train_*.py --help`
+Training, see `python examples/rnn_transducer/train.py --help`
 
-Testing, see `python examples/streamingTransducer/test_*.py --help`
+Testing, see `python examples/rnn_transducer/test.py --help`
 
-TFLite Conversion, see `python examples/streamingTransducer/tflite_*.py --help`
+TFLite Conversion, see `python examples/rnn_transducer/inference/gen_tflite_model.py --help`
 
 ## RNN Transducer Subwords - Results on LibriSpeech
 
