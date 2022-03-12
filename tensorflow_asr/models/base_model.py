@@ -13,7 +13,6 @@
 # limitations under the License.
 
 import tensorflow as tf
-from tensorflow.keras import mixed_precision as mxp
 
 from tensorflow_asr.utils import env_util, file_util
 
@@ -87,7 +86,7 @@ class BaseModel(tf.keras.Model):
     ):
         self.use_loss_scale = False
         if not env_util.has_devices("TPU"):
-            optimizer = mxp.experimental.LossScaleOptimizer(tf.keras.optimizers.get(optimizer), "dynamic")
+            optimizer = tf.keras.mixed_precision.experimental.LossScaleOptimizer(tf.keras.optimizers.get(optimizer), "dynamic")
             self.use_loss_scale = True
         self.add_metric(metric=tf.keras.metrics.Mean(name="loss", dtype=tf.float32))
         super().compile(optimizer=optimizer, loss=loss, run_eagerly=run_eagerly, **kwargs)
