@@ -12,10 +12,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from typing import List
+
 import tensorflow as tf
-from tensorflow_asr.augmentations.methods import specaugment
+
+from tensorflow_asr.augmentations.methods import gaussnoise, specaugment
+from tensorflow_asr.augmentations.methods.base_method import AugmentationMethod
 
 AUGMENTATIONS = {
+    "gauss_noise": gaussnoise.GaussNoise,
     "freq_masking": specaugment.FreqMasking,
     "time_masking": specaugment.TimeMasking,
 }
@@ -25,15 +30,14 @@ class Augmentation:
     def __init__(self, config: dict = None):
         if not config:
             config = {}
-        self.prob = float(config.pop("prob", 0.5))
         self.signal_augmentations = self.parse(config.pop("signal_augment", {}))
         self.feature_augmentations = self.parse(config.pop("feature_augment", {}))
 
-    def _augment(self, inputs, augmentations):
+    def _augment(self, inputs, augmentations: List[AugmentationMethod]):
         outputs = inputs
         for au in augmentations:
             p = tf.random.uniform([])
-            outputs = tf.where(tf.less(p, self.prob), au.augment(outputs), outputs)
+            outputs = tf.where(tf.less(p, au.prob), au.augment(outputs), outputs)
         return outputs
 
     @tf.function

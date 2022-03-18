@@ -12,49 +12,39 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import os
-import argparse
+
+from tensorflow_asr.utils import env_util
+
+env_util.setup_environment()
+
 from tensorflow_asr.configs.config import Config
-from tensorflow_asr.utils.file_util import preprocess_paths
 from tensorflow_asr.datasets.asr_dataset import ASRDataset
-from tensorflow_asr.featurizers.speech_featurizers import TFSpeechFeaturizer
-from tensorflow_asr.featurizers.text_featurizers import SubwordFeaturizer, SentencePieceFeaturizer
+from tensorflow_asr.helpers import featurizer_helpers
+from tensorflow_asr.utils import cli_util, file_util
 
-parser = argparse.ArgumentParser(prog="TFRecords Creation")
 
-parser.add_argument("--stage", type=str, default="train", help="The stage of dataset")
+def main(
+    *transcripts,
+    stage: str = "train",
+    config_path: str = None,
+    metadata: str = None,
+):
+    transcripts = file_util.preprocess_paths(transcripts)
 
-parser.add_argument("--config", type=str, default=None, help="The file path of model configuration file")
+    config = Config(config_path)
 
-parser.add_argument("--sentence_piece", default=False, action="store_true", help="Whether to use `SentencePiece` model")
+    speech_featurizer, text_featurizer = featurizer_helpers.prepare_featurizers(config=config)
 
-parser.add_argument("--metadata", type=str, default=None, help="Path to file containing metadata")
+    dataset = ASRDataset(
+        data_paths=transcripts,
+        speech_featurizer=speech_featurizer,
+        text_featurizer=text_featurizer,
+        stage=stage,
+        shuffle=False,
+    )
 
-parser.add_argument("--subwords", type=str, default=None, help="Path to file that stores generated subwords")
+    dataset.update_metadata(metadata)
 
-parser.add_argument("transcripts", nargs="+", type=str, default=None, help="Paths to transcript files")
 
-args = parser.parse_args()
-
-assert args.metadata is not None, "metadata must be defined"
-
-transcripts = preprocess_paths(args.transcripts)
-
-config = Config(args.config)
-
-speech_featurizer = TFSpeechFeaturizer(config.speech_config)
-
-if args.sentence_piece:
-    print("Loading SentencePiece model ...")
-    text_featurizer = SentencePieceFeaturizer.load_from_file(config.decoder_config, args.subwords)
-elif args.subwords and os.path.exists(args.subwords):
-    print("Loading subwords ...")
-    text_featurizer = SubwordFeaturizer.load_from_file(config.decoder_config, args.subwords)
-
-dataset = ASRDataset(
-    data_paths=transcripts,
-    speech_featurizer=speech_featurizer, text_featurizer=text_featurizer,
-    stage=args.stage, shuffle=False,
-)
-
-dataset.update_metadata(args.metadata)
+if __name__ == "__main__":
+    cli_util.run(main)

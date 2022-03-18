@@ -12,42 +12,29 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Dict, Union
+from typing import Dict
+
 import numpy as np
 import tensorflow as tf
 
-from tensorflow_asr.featurizers.speech_featurizers import TFSpeechFeaturizer
-from tensorflow_asr.featurizers.text_featurizers import TextFeaturizer
 from tensorflow_asr.losses.ctc_loss import CtcLoss
-from tensorflow_asr.utils import data_util, math_util, shape_util
 from tensorflow_asr.models.base_model import BaseModel
+from tensorflow_asr.utils import data_util, math_util, shape_util
 
 
 class CtcModel(BaseModel):
     def __init__(
         self,
-        encoder: tf.keras.Model,
-        decoder: Union[tf.keras.Model, tf.keras.layers.Layer] = None,
-        vocabulary_size: int = None,
+        encoder: tf.keras.layers.Layer,
+        decoder: tf.keras.layers.Layer,
         **kwargs,
     ):
         super().__init__(**kwargs)
         self.encoder = encoder
-        if decoder is None:
-            assert vocabulary_size is not None, "vocabulary_size must be set"
-            self.decoder = tf.keras.layers.Dense(
-                units=vocabulary_size,
-                name=f"{self.name}_logits",
-            )
-        else:
-            self.decoder = decoder
+        self.decoder = decoder
         self.time_reduction_factor = 1
 
-    def make(
-        self,
-        input_shape,
-        batch_size=None,
-    ):
+    def make(self, input_shape, batch_size=None):
         inputs = tf.keras.Input(input_shape, batch_size=batch_size, dtype=tf.float32)
         inputs_length = tf.keras.Input(shape=[], batch_size=batch_size, dtype=tf.int32)
         self(
@@ -58,74 +45,42 @@ class CtcModel(BaseModel):
             training=False,
         )
 
-    def summary(
-        self,
-        line_length=None,
-        **kwargs,
-    ):
-        self.encoder.summary(line_length=line_length, **kwargs)
-        super().summary(line_length=line_length, **kwargs)
-
     def compile(
         self,
         optimizer,
-        global_batch_size,
         blank=0,
         run_eagerly=None,
+        mxp=True,
+        ga_steps=None,
         **kwargs,
     ):
-        loss = CtcLoss(blank=blank, global_batch_size=global_batch_size)
-        super().compile(loss=loss, optimizer=optimizer, run_eagerly=run_eagerly, **kwargs)
+        loss = CtcLoss(blank=blank)
+        super().compile(loss=loss, optimizer=optimizer, run_eagerly=run_eagerly, mxp=mxp, ga_steps=ga_steps, **kwargs)
 
-    def add_featurizers(
-        self,
-        speech_featurizer: TFSpeechFeaturizer,
-        text_featurizer: TextFeaturizer,
-    ):
-        self.speech_featurizer = speech_featurizer
-        self.text_featurizer = text_featurizer
-
-    def call(
-        self,
-        inputs,
-        training=False,
-        **kwargs,
-    ):
-        logits = self.encoder(inputs["inputs"], training=training, **kwargs)
-        logits = self.decoder(logits, training=training, **kwargs)
-        return data_util.create_logits(
-            logits=logits,
-            logits_length=math_util.get_reduced_length(inputs["inputs_length"], self.time_reduction_factor),
-        )
+    def call(self, inputs, training=False):
+        logits, logits_length = self.encoder([inputs["inputs"], inputs["inputs_length"]], training=training)
+        logits, logits_length = self.decoder([logits, logits_length], training=training)
+        logits = tf.cast(logits, tf.float32)  # always cast the output as float32 for stable mxp training
+        return data_util.create_logits(logits=logits, logits_length=logits_length)
 
     # -------------------------------- GREEDY -------------------------------------
 
-    @tf.function
-    def recognize(
-        self,
-        inputs: Dict[str, tf.Tensor],
-    ):
-        logits = self(inputs, training=False)
-        probs = tf.nn.softmax(logits["logits"])
+    def recognize(self, inputs: Dict[str, tf.Tensor]):
+        outputs = self(inputs, training=False)
+        decoded = self._perform_greedy(encoded=outputs["logits"], encoded_length=outputs["logits_length"])
+        return self.text_featurizer.iextract(decoded)
 
-        def map_fn(prob):
-            return tf.numpy_function(self._perform_greedy, inp=[prob], Tout=tf.string)
+    def _perform_greedy(self, encoded, encoded_length):
+        decoded, _ = tf.nn.ctc_greedy_decoder(
+            inputs=tf.transpose(encoded, perm=[1, 0, 2]),
+            sequence_length=encoded_length,
+            merge_repeated=True,
+            blank_index=self.text_featurizer.blank,
+        )
+        decoded = tf.reshape(decoded[0].values, decoded[0].dense_shape)
+        return tf.cast(decoded, dtype=tf.int32)
 
-        return tf.map_fn(map_fn, probs, fn_output_signature=tf.TensorSpec([], dtype=tf.string))
-
-    def _perform_greedy(
-        self,
-        probs: np.ndarray,
-    ):
-        from ctc_decoders import ctc_greedy_decoder
-
-        decoded = ctc_greedy_decoder(probs, vocabulary=self.text_featurizer.non_blank_tokens)
-        return tf.convert_to_tensor(decoded, dtype=tf.string)
-
-    def recognize_tflite(
-        self,
-        signal,
-    ):
+    def recognize_tflite(self, signal):
         """
         Function to convert to tflite using greedy decoding
         Args:
@@ -134,56 +89,33 @@ class CtcModel(BaseModel):
         Return:
             transcript: tf.Tensor of Unicode Code Points with shape [None] and dtype tf.int32
         """
-        features = self.speech_featurizer.tf_extract(signal)
-        features = tf.expand_dims(features, axis=0)
-        input_length = shape_util.shape_list(features)[1]
-        input_length = math_util.get_reduced_length(input_length, self.time_reduction_factor)
-        input_length = tf.expand_dims(input_length, axis=0)
-        logits = self.encoder(features, training=False)
-        logits = self.decoder(logits, training=False)
-        probs = tf.nn.softmax(logits)
-        decoded = tf.keras.backend.ctc_decode(y_pred=probs, input_length=input_length, greedy=True)
-        decoded = tf.cast(decoded[0][0][0], dtype=tf.int32)
+        inputs = self.speech_featurizer.tf_extract(signal)
+        inputs = tf.expand_dims(inputs, axis=0)
+        inputs_length = shape_util.shape_list(inputs)[1]
+        inputs_length = math_util.get_reduced_length(inputs_length, self.time_reduction_factor)
+        inputs_length = tf.expand_dims(inputs_length, axis=0)
+        outputs = self(data_util.create_inputs(inputs=inputs, inputs_length=inputs_length))
+        decoded = self._perform_greedy(encoded=outputs["logits"], encoded_length=outputs["logits_length"])
         transcript = self.text_featurizer.indices2upoints(decoded)
         return transcript
 
     # -------------------------------- BEAM SEARCH -------------------------------------
 
-    @tf.function
-    def recognize_beam(
-        self,
-        inputs: Dict[str, tf.Tensor],
-        lm: bool = False,
-    ):
+    def recognize_beam(self, inputs: Dict[str, tf.Tensor], lm: bool = False):
         logits = self(inputs, training=False)
-        probs = tf.nn.softmax(logits["logits"])
+        decoded = self._perform_beam_search(encoded=logits["logits"], encoded_length=logits["logits_length"])
+        return self.text_featurizer.iextract(decoded)
 
-        def map_fn(prob):
-            return tf.numpy_function(self._perform_beam_search, inp=[prob, lm], Tout=tf.string)
-
-        return tf.map_fn(map_fn, probs, dtype=tf.string)
-
-    def _perform_beam_search(
-        self,
-        probs: np.ndarray,
-        lm: bool = False,
-    ):
-        from ctc_decoders import ctc_beam_search_decoder
-
-        decoded = ctc_beam_search_decoder(
-            probs_seq=probs,
-            vocabulary=self.text_featurizer.non_blank_tokens,
-            beam_size=self.text_featurizer.decoder_config.beam_width,
-            ext_scoring_func=self.text_featurizer.scorer if lm else None,
+    def _perform_beam_search(self, encoded: np.ndarray, encoded_length):
+        decoded, _ = tf.nn.ctc_beam_search_decoder(
+            inputs=tf.transpose(encoded, perm=[1, 0, 2]),
+            sequence_length=encoded_length,
+            beam_width=self.text_featurizer.decoder_config.beam_width,
         )
-        decoded = decoded[0][-1]
+        decoded = tf.reshape(decoded[0].values, decoded[0].dense_shape)
+        return tf.cast(decoded, dtype=tf.int32)
 
-        return tf.convert_to_tensor(decoded, dtype=tf.string)
-
-    def recognize_beam_tflite(
-        self,
-        signal,
-    ):
+    def recognize_beam_tflite(self, signal):
         """
         Function to convert to tflite using beam search decoding
         Args:
@@ -192,30 +124,19 @@ class CtcModel(BaseModel):
         Return:
             transcript: tf.Tensor of Unicode Code Points with shape [None] and dtype tf.int32
         """
-        features = self.speech_featurizer.tf_extract(signal)
-        features = tf.expand_dims(features, axis=0)
-        input_length = shape_util.shape_list(features)[1]
-        input_length = math_util.get_reduced_length(input_length, self.time_reduction_factor)
-        input_length = tf.expand_dims(input_length, axis=0)
-        logits = self.encoder(features, training=False)
-        logits = self.decoder(logits, training=False)
-        probs = tf.nn.softmax(logits)
-        decoded = tf.keras.backend.ctc_decode(
-            y_pred=probs,
-            input_length=input_length,
-            greedy=False,
-            beam_width=self.text_featurizer.decoder_config.beam_width,
-        )
-        decoded = tf.cast(decoded[0][0][0], dtype=tf.int32)
+        inputs = self.speech_featurizer.tf_extract(signal)
+        inputs = tf.expand_dims(inputs, axis=0)
+        inputs_length = shape_util.shape_list(inputs)[1]
+        inputs_length = math_util.get_reduced_length(inputs_length, self.time_reduction_factor)
+        inputs_length = tf.expand_dims(inputs_length, axis=0)
+        outputs = self(data_util.create_inputs(inputs=inputs, inputs_length=inputs_length))
+        decoded = self._perform_beam_search(encoded=outputs["logits"], encoded_length=outputs["logits_length"])
         transcript = self.text_featurizer.indices2upoints(decoded)
         return transcript
 
     # -------------------------------- TFLITE -------------------------------------
 
-    def make_tflite_function(
-        self,
-        greedy: bool = False,
-    ):
+    def make_tflite_function(self, greedy: bool = False):
         if greedy:
             return tf.function(
                 self.recognize_tflite,

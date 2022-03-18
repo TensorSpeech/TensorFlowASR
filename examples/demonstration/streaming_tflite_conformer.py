@@ -12,14 +12,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import sys
 import argparse
-import soundfile as sf
-import sounddevice as sd
-from multiprocessing import Process, Event, Manager
 import queue
+import sys
+from multiprocessing import Event, Manager, Process
 
 import numpy as np
+import sounddevice as sd
+import soundfile as sf
 import tensorflow as tf
 
 

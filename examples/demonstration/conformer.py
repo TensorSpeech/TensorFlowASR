@@ -12,8 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import os
 import argparse
+import os
+
 from tensorflow_asr.utils import env_util
 
 logger = env_util.setup_environment()
@@ -44,14 +45,13 @@ args = parser.parse_args()
 env_util.setup_devices([args.device], cpu=args.cpu)
 
 from tensorflow_asr.configs.config import Config
-from tensorflow_asr.featurizers.speech_featurizers import read_raw_audio
-from tensorflow_asr.featurizers.speech_featurizers import TFSpeechFeaturizer
-from tensorflow_asr.featurizers.text_featurizers import CharFeaturizer, SubwordFeaturizer, SentencePieceFeaturizer
+from tensorflow_asr.featurizers.speech_featurizers import SpeechFeaturizer, read_raw_audio
+from tensorflow_asr.featurizers.text_featurizers import CharFeaturizer, SentencePieceFeaturizer, SubwordFeaturizer
 from tensorflow_asr.models.transducer.conformer import Conformer
 from tensorflow_asr.utils.data_util import create_inputs
 
 config = Config(args.config)
-speech_featurizer = TFSpeechFeaturizer(config.speech_config)
+speech_featurizer = SpeechFeaturizer(config.speech_config)
 if args.sentence_piece:
     logger.info("Loading SentencePiece model ...")
     text_featurizer = SentencePieceFeaturizer.load_from_file(config.decoder_config, args.subwords)
@@ -63,10 +63,10 @@ else:
 text_featurizer.decoder_config.beam_width = args.beam_width
 
 # build model
-conformer = Conformer(**config.model_config, vocabulary_size=text_featurizer.num_classes)
+conformer = Conformer(**config.model_config, vocab_size=text_featurizer.num_classes)
 conformer.make(speech_featurizer.shape)
 conformer.load_weights(args.saved, by_name=True, skip_mismatch=True)
-conformer.summary(line_length=120)
+conformer.summary()
 conformer.add_featurizers(speech_featurizer, text_featurizer)
 
 signal = read_raw_audio(args.filename)

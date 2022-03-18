@@ -66,11 +66,3 @@ class SequenceBatchNorm(tf.keras.layers.Layer):
             scale=self.gamma,
             variance_epsilon=tf.keras.backend.epsilon(),
         )
-
-    def get_config(self):
-        config = super(SequenceBatchNorm, self).get_config()
-        config.update({"time_major": self.time_major})
-        return config
-
-    def from_config(self, config):
-        return self(**config)

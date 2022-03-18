@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import argparse
+
 from tqdm.auto import tqdm
 
 parser = argparse.ArgumentParser(prog="Create vocabulary file from transcripts")

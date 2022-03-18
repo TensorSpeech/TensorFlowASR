@@ -22,19 +22,10 @@ class GLU(tf.keras.layers.Layer):
         name="glu_activation",
         **kwargs,
     ):
-        super(GLU, self).__init__(name=name, **kwargs)
+        super().__init__(name=name, **kwargs)
         self.axis = axis
 
-    def call(
-        self,
-        inputs,
-        **kwargs,
-    ):
+    def call(self, inputs):
         a, b = tf.split(inputs, 2, axis=self.axis)
         b = tf.nn.sigmoid(b)
         return tf.multiply(a, b)
-
-    def get_config(self):
-        conf = super(GLU, self).get_config()
-        conf.update({"axis": self.axis})
-        return conf

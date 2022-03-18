@@ -1,3 +1,4 @@
+# pylint: disable=attribute-defined-outside-init
 # Copyright 2020 Huy Le Nguyen (@usimarit)
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,16 +15,39 @@
 
 import tensorflow as tf
 
-from tensorflow_asr.utils import shape_util
 from tensorflow_asr.models.activations.glu import GLU
-from tensorflow_asr.models.layers.multihead_attention import MultiHeadAttention, RelPositionMultiHeadAttention
-from tensorflow_asr.models.layers.positional_encoding import PositionalEncoding, PositionalEncodingConcat
-from tensorflow_asr.models.layers.subsampling import Conv2dSubsampling, VggSubsampling
+from tensorflow_asr.models.layers.base_layer import Layer
+from tensorflow_asr.models.layers.depthwise_conv1d import DepthwiseConv1D
+from tensorflow_asr.models.layers.multihead_attention import (
+    MultiHeadAttention,
+    MultiHeadRelativeAttention,
+    compute_self_attention_mask,
+)
+from tensorflow_asr.models.layers.positional_encoding import compute_sinusoid_position_encoding
+from tensorflow_asr.models.layers.subsampling import Conv1dSubsampling, Conv2dSubsampling, VggSubsampling
+from tensorflow_asr.utils import math_util, shape_util
 
 L2 = tf.keras.regularizers.l2(1e-6)
 
 
-class FFModule(tf.keras.layers.Layer):
+class FFModule(Layer):
+    r"""
+    architecture::
+      input
+      /   \
+      |   ln(.)                   # input_dim
+      |   fflayer(.)              # 4 * input_dim
+      |   swish(.)
+      |   dropout(.)
+      |   fflayer(.)              # input_dim
+      |   dropout(.)
+      |   * 1/2
+      \   /
+        +
+        |
+      output
+    """
+
     def __init__(
         self,
         input_dim,
@@ -34,36 +58,31 @@ class FFModule(tf.keras.layers.Layer):
         name="ff_module",
         **kwargs,
     ):
-        super(FFModule, self).__init__(name=name, **kwargs)
+        super().__init__(name=name, **kwargs)
         self.fc_factor = fc_factor
         self.ln = tf.keras.layers.LayerNormalization(
-            name=f"{name}_ln",
+            name="ln",
             gamma_regularizer=kernel_regularizer,
             beta_regularizer=bias_regularizer,
         )
         self.ffn1 = tf.keras.layers.Dense(
             4 * input_dim,
-            name=f"{name}_dense_1",
+            name="dense_1",
             kernel_regularizer=kernel_regularizer,
             bias_regularizer=bias_regularizer,
         )
-        self.swish = tf.keras.layers.Activation(tf.nn.swish, name=f"{name}_swish_activation")
-        self.do1 = tf.keras.layers.Dropout(dropout, name=f"{name}_dropout_1")
+        self.swish = tf.keras.layers.Activation(tf.nn.swish, name="swish_activation")
+        self.do1 = tf.keras.layers.Dropout(dropout, name="dropout_1")
         self.ffn2 = tf.keras.layers.Dense(
             input_dim,
-            name=f"{name}_dense_2",
+            name="dense_2",
             kernel_regularizer=kernel_regularizer,
             bias_regularizer=bias_regularizer,
         )
-        self.do2 = tf.keras.layers.Dropout(dropout, name=f"{name}_dropout_2")
-        self.res_add = tf.keras.layers.Add(name=f"{name}_add")
+        self.do2 = tf.keras.layers.Dropout(dropout, name="dropout_2")
+        self.res_add = tf.keras.layers.Add(name="add")
 
-    def call(
-        self,
-        inputs,
-        training=False,
-        **kwargs,
-    ):
+    def call(self, inputs, training=False):
         outputs = self.ln(inputs, training=training)
         outputs = self.ffn1(outputs, training=training)
         outputs = self.swish(outputs)
@@ -73,22 +92,24 @@ class FFModule(tf.keras.layers.Layer):
         outputs = self.res_add([inputs, self.fc_factor * outputs])
         return outputs
 
-    def get_config(self):
-        conf = super(FFModule, self).get_config()
-        conf.update({"fc_factor": self.fc_factor})
-        conf.update(self.ln.get_config())
-        conf.update(self.ffn1.get_config())
-        conf.update(self.swish.get_config())
-        conf.update(self.do1.get_config())
-        conf.update(self.ffn2.get_config())
-        conf.update(self.do2.get_config())
-        conf.update(self.res_add.get_config())
-        return conf
 
+class MHSAModule(Layer):
+    r"""
+    architecture::
+      input
+      /   \
+      |   ln(.)                   # input_dim
+      |   mhsa(.)                 # head_size = dmodel // num_heads
+      |   dropout(.)
+      \   /
+        +
+        |
+      output
+    """
 
-class MHSAModule(tf.keras.layers.Layer):
     def __init__(
         self,
+        dmodel,
         head_size,
         num_heads,
         dropout=0.0,
@@ -98,151 +119,168 @@ class MHSAModule(tf.keras.layers.Layer):
         name="mhsa_module",
         **kwargs,
     ):
-        super(MHSAModule, self).__init__(name=name, **kwargs)
+        super().__init__(name=name, **kwargs)
         self.ln = tf.keras.layers.LayerNormalization(
-            name=f"{name}_ln",
+            name="ln",
             gamma_regularizer=kernel_regularizer,
             beta_regularizer=bias_regularizer,
         )
         if mha_type == "relmha":
-            self.mha = RelPositionMultiHeadAttention(
-                name=f"{name}_mhsa",
-                head_size=head_size,
+            self.mha = MultiHeadRelativeAttention(
                 num_heads=num_heads,
+                key_dim=head_size,
+                output_shape=dmodel,
                 kernel_regularizer=kernel_regularizer,
                 bias_regularizer=bias_regularizer,
+                name="mhsa",
             )
         elif mha_type == "mha":
             self.mha = MultiHeadAttention(
-                name=f"{name}_mhsa",
-                head_size=head_size,
                 num_heads=num_heads,
+                key_dim=head_size,
+                output_shape=dmodel,
                 kernel_regularizer=kernel_regularizer,
                 bias_regularizer=bias_regularizer,
+                name="mhsa",
             )
         else:
             raise ValueError("mha_type must be either 'mha' or 'relmha'")
-        self.do = tf.keras.layers.Dropout(dropout, name=f"{name}_dropout")
-        self.res_add = tf.keras.layers.Add(name=f"{name}_add")
+        self.do = tf.keras.layers.Dropout(dropout, name="dropout")
+        self.res_add = tf.keras.layers.Add(name="add")
         self.mha_type = mha_type
 
     def call(
         self,
         inputs,
+        relative_position_encoding=None,
         training=False,
-        mask=None,
-        **kwargs,
+        attention_mask=None,
+        use_causal_mask=False,
     ):
-        inputs, pos = inputs  # pos is positional encoding
         outputs = self.ln(inputs, training=training)
         if self.mha_type == "relmha":
-            outputs = self.mha([outputs, outputs, outputs, pos], training=training, mask=mask)
+            outputs = self.mha(
+                query=outputs,
+                key=outputs,
+                value=outputs,
+                relative_position_encoding=relative_position_encoding,
+                training=training,
+                attention_mask=attention_mask,
+                use_causal_mask=use_causal_mask,
+            )
         else:
-            outputs = outputs + pos
-            outputs = self.mha([outputs, outputs, outputs], training=training, mask=mask)
+            outputs = self.mha(
+                query=outputs,
+                key=outputs,
+                value=outputs,
+                training=training,
+                attention_mask=attention_mask,
+                use_causal_mask=use_causal_mask,
+            )
         outputs = self.do(outputs, training=training)
         outputs = self.res_add([inputs, outputs])
         return outputs
 
-    def get_config(self):
-        conf = super(MHSAModule, self).get_config()
-        conf.update({"mha_type": self.mha_type})
-        conf.update(self.ln.get_config())
-        conf.update(self.mha.get_config())
-        conf.update(self.do.get_config())
-        conf.update(self.res_add.get_config())
-        return conf
 
+class ConvModule(Layer):
+    r"""
+    architecture::
+      input
+      /   \
+      |   ln(.)                   # input_dim
+      |   conv1d(.)              # 2 * input_dim
+      |    |
+      |   glu(.)                  # input_dim
+      |   depthwise_conv_1d(.)
+      |   bnorm(.)
+      |   swish(.)
+      |    |
+      |   conv1d(.)
+      |   dropout(.)
+      \   /
+        +
+        |
+      output
+    """
 
-class ConvModule(tf.keras.layers.Layer):
     def __init__(
         self,
         input_dim,
         kernel_size=32,
         dropout=0.0,
         depth_multiplier=1,
+        padding="same",
         kernel_regularizer=L2,
         bias_regularizer=L2,
         name="conv_module",
         **kwargs,
     ):
-        super(ConvModule, self).__init__(name=name, **kwargs)
-        self.ln = tf.keras.layers.LayerNormalization()
-        self.pw_conv_1 = tf.keras.layers.Conv2D(
+        super().__init__(name=name, **kwargs)
+        self.ln = tf.keras.layers.LayerNormalization(
+            name="ln",
+            gamma_regularizer=kernel_regularizer,
+            beta_regularizer=bias_regularizer,
+        )
+        self.pw_conv_1 = tf.keras.layers.Conv1D(
             filters=2 * input_dim,
             kernel_size=1,
             strides=1,
             padding="valid",
-            name=f"{name}_pw_conv_1",
+            name="pw_conv_1",
             kernel_regularizer=kernel_regularizer,
             bias_regularizer=bias_regularizer,
         )
-        self.glu = GLU(name=f"{name}_glu")
-        self.dw_conv = tf.keras.layers.DepthwiseConv2D(
-            kernel_size=(kernel_size, 1),
+        self.glu = GLU(axis=-1, name="glu_activation")
+        self.dw_conv = DepthwiseConv1D(
+            kernel_size=kernel_size,
             strides=1,
-            padding="same",
-            name=f"{name}_dw_conv",
+            padding=padding,
+            name="dw_conv",
             depth_multiplier=depth_multiplier,
             depthwise_regularizer=kernel_regularizer,
             bias_regularizer=bias_regularizer,
         )
         self.bn = tf.keras.layers.BatchNormalization(
-            name=f"{name}_bn",
+            name="bn",
             gamma_regularizer=kernel_regularizer,
             beta_regularizer=bias_regularizer,
         )
-        self.swish = tf.keras.layers.Activation(
-            tf.nn.swish,
-            name=f"{name}_swish_activation",
-        )
-        self.pw_conv_2 = tf.keras.layers.Conv2D(
+        self.swish = tf.keras.layers.Activation(tf.nn.swish, name="swish_activation")
+        self.pw_conv_2 = tf.keras.layers.Conv1D(
             filters=input_dim,
             kernel_size=1,
             strides=1,
             padding="valid",
-            name=f"{name}_pw_conv_2",
+            name="pw_conv_2",
             kernel_regularizer=kernel_regularizer,
             bias_regularizer=bias_regularizer,
         )
-        self.do = tf.keras.layers.Dropout(dropout, name=f"{name}_dropout")
-        self.res_add = tf.keras.layers.Add(name=f"{name}_add")
+        self.do = tf.keras.layers.Dropout(dropout, name="dropout")
+        self.res_add = tf.keras.layers.Add(name="add")
 
-    def call(
-        self,
-        inputs,
-        training=False,
-        **kwargs,
-    ):
+    def call(self, inputs, training=False):
         outputs = self.ln(inputs, training=training)
-        B, T, E = shape_util.shape_list(outputs)
-        outputs = tf.reshape(outputs, [B, T, 1, E])
         outputs = self.pw_conv_1(outputs, training=training)
         outputs = self.glu(outputs)
         outputs = self.dw_conv(outputs, training=training)
         outputs = self.bn(outputs, training=training)
         outputs = self.swish(outputs)
         outputs = self.pw_conv_2(outputs, training=training)
-        outputs = tf.reshape(outputs, [B, T, E])
         outputs = self.do(outputs, training=training)
         outputs = self.res_add([inputs, outputs])
         return outputs
 
-    def get_config(self):
-        conf = super(ConvModule, self).get_config()
-        conf.update(self.ln.get_config())
-        conf.update(self.pw_conv_1.get_config())
-        conf.update(self.glu.get_config())
-        conf.update(self.dw_conv.get_config())
-        conf.update(self.bn.get_config())
-        conf.update(self.swish.get_config())
-        conf.update(self.pw_conv_2.get_config())
-        conf.update(self.do.get_config())
-        conf.update(self.res_add.get_config())
-        return conf
 
+class ConformerBlock(Layer):
+    """
+    architecture::
+      x = x + 1/2 * FFN(x)
+      x = x + MHSA(x)
+      x = x + Lconv(x)
+      x = x + 1/2 * FFN(x)
+      y = ln(x)
+    """
 
-class ConformerBlock(tf.keras.layers.Layer):
     def __init__(
         self,
         input_dim,
@@ -253,35 +291,38 @@ class ConformerBlock(tf.keras.layers.Layer):
         mha_type="relmha",
         kernel_size=32,
         depth_multiplier=1,
+        padding="same",
         kernel_regularizer=L2,
         bias_regularizer=L2,
         name="conformer_block",
         **kwargs,
     ):
-        super(ConformerBlock, self).__init__(name=name, **kwargs)
+        super().__init__(name=name, **kwargs)
         self.ffm1 = FFModule(
             input_dim=input_dim,
             dropout=dropout,
             fc_factor=fc_factor,
-            name=f"{name}_ff_module_1",
+            name="ff_module_1",
             kernel_regularizer=kernel_regularizer,
             bias_regularizer=bias_regularizer,
         )
         self.mhsam = MHSAModule(
-            mha_type=mha_type,
+            dmodel=input_dim,
             head_size=head_size,
             num_heads=num_heads,
             dropout=dropout,
-            name=f"{name}_mhsa_module",
+            mha_type=mha_type,
             kernel_regularizer=kernel_regularizer,
             bias_regularizer=bias_regularizer,
+            name="mhsa_module",
         )
         self.convm = ConvModule(
             input_dim=input_dim,
             kernel_size=kernel_size,
             dropout=dropout,
-            name=f"{name}_conv_module",
+            name="conv_module",
             depth_multiplier=depth_multiplier,
+            padding=padding,
             kernel_regularizer=kernel_regularizer,
             bias_regularizer=bias_regularizer,
         )
@@ -289,12 +330,12 @@ class ConformerBlock(tf.keras.layers.Layer):
             input_dim=input_dim,
             dropout=dropout,
             fc_factor=fc_factor,
-            name=f"{name}_ff_module_2",
+            name="ff_module_2",
             kernel_regularizer=kernel_regularizer,
             bias_regularizer=bias_regularizer,
         )
         self.ln = tf.keras.layers.LayerNormalization(
-            name=f"{name}_ln",
+            name="ln",
             gamma_regularizer=kernel_regularizer,
             beta_regularizer=kernel_regularizer,
         )
@@ -302,33 +343,29 @@ class ConformerBlock(tf.keras.layers.Layer):
     def call(
         self,
         inputs,
+        relative_position_encoding=None,
         training=False,
-        mask=None,
-        **kwargs,
+        attention_mask=None,
+        use_causal_mask=False,
     ):
-        inputs, pos = inputs  # pos is positional encoding
-        outputs = self.ffm1(inputs, training=training, **kwargs)
-        outputs = self.mhsam([outputs, pos], training=training, mask=mask, **kwargs)
-        outputs = self.convm(outputs, training=training, **kwargs)
-        outputs = self.ffm2(outputs, training=training, **kwargs)
+        outputs = self.ffm1(inputs, training=training)
+        outputs = self.mhsam(
+            outputs,
+            relative_position_encoding=relative_position_encoding,
+            training=training,
+            attention_mask=attention_mask,
+            use_causal_mask=use_causal_mask,
+        )
+        outputs = self.convm(outputs, training=training)
+        outputs = self.ffm2(outputs, training=training)
         outputs = self.ln(outputs, training=training)
         return outputs
 
-    def get_config(self):
-        conf = super(ConformerBlock, self).get_config()
-        conf.update(self.ffm1.get_config())
-        conf.update(self.mhsam.get_config())
-        conf.update(self.convm.get_config())
-        conf.update(self.ffm2.get_config())
-        conf.update(self.ln.get_config())
-        return conf
 
-
-class ConformerEncoder(tf.keras.Model):
+class ConformerEncoder(Layer):
     def __init__(
         self,
         subsampling,
-        positional_encoding="sinusoid",
         dmodel=144,
         num_blocks=16,
         mha_type="relmha",
@@ -336,6 +373,8 @@ class ConformerEncoder(tf.keras.Model):
         num_heads=4,
         kernel_size=32,
         depth_multiplier=1,
+        padding="causal",
+        use_attention_causal_mask=False,
         fc_factor=0.5,
         dropout=0.0,
         kernel_regularizer=L2,
@@ -343,49 +382,45 @@ class ConformerEncoder(tf.keras.Model):
         name="conformer_encoder",
         **kwargs,
     ):
-        super(ConformerEncoder, self).__init__(name=name, **kwargs)
+        super().__init__(name=name, **kwargs)
+        self._dmodel = dmodel
+        self._kernel_regularizer = kernel_regularizer
+        self._bias_regularizer = bias_regularizer
+        self._num_blocks = num_blocks
 
         subsampling_name = subsampling.pop("type", "conv2d")
         if subsampling_name == "vgg":
             subsampling_class = VggSubsampling
         elif subsampling_name == "conv2d":
             subsampling_class = Conv2dSubsampling
+        elif subsampling_name == "conv1d":
+            subsampling_class = Conv1dSubsampling
         else:
-            raise ValueError("subsampling must be either  'conv2d' or 'vgg'")
+            raise ValueError("subsampling must be either 'vgg', 'conv2d', 'conv1d'")
 
         self.conv_subsampling = subsampling_class(
             **subsampling,
-            name=f"{name}_subsampling",
+            name="subsampling",
             kernel_regularizer=kernel_regularizer,
             bias_regularizer=bias_regularizer,
         )
-
-        if positional_encoding == "sinusoid":
-            self.pe = PositionalEncoding(name=f"{name}_pe")
-        elif positional_encoding == "sinusoid_v2":
-            self.pe = PositionalEncoding(alpha=2, beta=0, name=f"{name}_pe")
-        elif positional_encoding == "sinusoid_concat":
-            self.pe = PositionalEncodingConcat(name=f"{name}_pe")
-        elif positional_encoding == "sinusoid_concat_v2":
-            self.pe = PositionalEncodingConcat(alpha=2, beta=-1, name=f"{name}_pe")
-        elif positional_encoding == "subsampling":
-            self.pe = tf.keras.layers.Activation("linear", name=f"{name}_pe")
-        else:
-            raise ValueError(
-                "positional_encoding must be either 'sinusoid', \
-                'sinusoid_concat', 'sinusoid_v2', 'sinusoid_concat_v2' or 'subsampling'"
-            )
+        self.time_reduction_factor = self.conv_subsampling.time_reduction_factor
 
         self.linear = tf.keras.layers.Dense(
             dmodel,
-            name=f"{name}_linear",
+            name="linear",
             kernel_regularizer=kernel_regularizer,
             bias_regularizer=bias_regularizer,
         )
-        self.do = tf.keras.layers.Dropout(dropout, name=f"{name}_dropout")
+        self.do = tf.keras.layers.Dropout(dropout, name="dropout")
+
+        self._mha_type = mha_type
+        self._num_heads = num_heads
+        self._head_size = head_size
+        self._use_attention_causal_mask = use_attention_causal_mask
 
         self.conformer_blocks = []
-        for i in range(num_blocks):
+        for i in range(self._num_blocks):
             conformer_block = ConformerBlock(
                 input_dim=dmodel,
                 dropout=dropout,
@@ -395,34 +430,39 @@ class ConformerEncoder(tf.keras.Model):
                 mha_type=mha_type,
                 kernel_size=kernel_size,
                 depth_multiplier=depth_multiplier,
+                padding=padding,
                 kernel_regularizer=kernel_regularizer,
                 bias_regularizer=bias_regularizer,
-                name=f"{name}_block_{i}",
+                name=f"block_{i}",
             )
             self.conformer_blocks.append(conformer_block)
 
-    def call(
-        self,
-        inputs,
-        training=False,
-        mask=None,
-        **kwargs,
-    ):
-        # input with shape [B, T, V1, V2]
-        outputs = self.conv_subsampling(inputs, training=training)
-        outputs = self.linear(outputs, training=training)
-        pe = self.pe(outputs)
-        outputs = self.do(outputs, training=training)
-        for cblock in self.conformer_blocks:
-            outputs = cblock([outputs, pe], training=training, mask=mask, **kwargs)
-        return outputs
+    def _compute_relpos(self, batch_size, max_length):
+        if self._mha_type == "relmha":
+            relative_position_encoding = compute_sinusoid_position_encoding(batch_size, max_length, self._dmodel, dtype=self.compute_dtype)
+            return relative_position_encoding
+        return None
 
-    def get_config(self):
-        conf = super(ConformerEncoder, self).get_config()
-        conf.update(self.conv_subsampling.get_config())
-        conf.update(self.linear.get_config())
-        conf.update(self.do.get_config())
-        conf.update(self.pe.get_config())
-        for cblock in self.conformer_blocks:
-            conf.update(cblock.get_config())
-        return conf
+    def call(self, inputs, training=False):
+        outputs, inputs_length = inputs
+        outputs, inputs_length = self.conv_subsampling([outputs, inputs_length], training=training)
+        outputs = self.linear(outputs, training=training)
+        outputs = self.do(outputs, training=training)
+        batch_size, max_length, _ = shape_util.shape_list(outputs)
+        relative_position_encoding = self._compute_relpos(batch_size, max_length)
+        for _, cblock in enumerate(self.conformer_blocks):
+            outputs = cblock(
+                outputs,
+                relative_position_encoding=relative_position_encoding,
+                training=training,
+                use_causal_mask=self._use_attention_causal_mask,
+            )
+        return outputs, inputs_length
+
+    def compute_output_shape(self, input_shape):
+        inputs_shape, inputs_length_shape = input_shape
+        outputs_size = self._dmodel
+        outputs_time = None if inputs_shape[1] is None else math_util.legacy_get_reduced_length(inputs_shape[1], self.time_reduction_factor)
+        outputs_batch = inputs_shape[0]
+        outputs_shape = [outputs_batch, outputs_time, outputs_size]
+        return tuple(outputs_shape), tuple(inputs_length_shape)

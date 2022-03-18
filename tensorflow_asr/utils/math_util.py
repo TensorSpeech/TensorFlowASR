@@ -13,6 +13,8 @@
 # limitations under the License.
 
 import math
+from typing import Union
+
 import numpy as np
 import tensorflow as tf
 
@@ -62,6 +64,13 @@ def get_reduced_length(
     )
 
 
+def legacy_get_reduced_length(
+    length,
+    reduction_factor,
+):
+    return int(math.ceil(length / reduction_factor))
+
+
 def count_non_blank(
     tensor: tf.Tensor,
     blank: int or tf.Tensor = 0,
@@ -92,7 +101,7 @@ def merge_repeated(
 
     def _body(i, result, yseqs, U):
         if yseqs[i] != result[-1]:
-            result = tf.concat([result, [yseqs[i]]], axis=-1)
+            result = tf.concat([result, [yseqs[i]]], -1)
         return i + 1, result, yseqs, U
 
     _, result, _, _ = tf.while_loop(
@@ -110,49 +119,89 @@ def merge_repeated(
     return tf.pad(result, [[U - shape_util.shape_list(result)[0], 0]], constant_values=blank)
 
 
-def find_max_length_prediction_tfarray(
+def find_max_length_tfarray(
     tfarray: tf.TensorArray,
+    element_axis: Union[int, tf.Tensor] = 0,
 ) -> tf.Tensor:
-    with tf.name_scope("find_max_length_prediction_tfarray"):
+    with tf.name_scope("find_max_length_tfarray"):
         index = tf.constant(0, dtype=tf.int32)
         total = tfarray.size()
         max_length = tf.constant(0, dtype=tf.int32)
 
-        def condition(index, _):
-            return tf.less(index, total)
+        def condition(_index, _):
+            return tf.less(_index, total)
 
-        def body(index, max_length):
-            prediction = tfarray.read(index)
-            length = tf.shape(prediction)[0]
-            max_length = tf.where(tf.greater(length, max_length), length, max_length)
-            return index + 1, max_length
+        def body(_index, _max_length):
+            prediction = tfarray.read(_index)
+            length = tf.shape(prediction)[element_axis]
+            _max_length = tf.where(tf.greater(length, _max_length), length, _max_length)
+            return _index + 1, _max_length
 
         index, max_length = tf.while_loop(condition, body, loop_vars=[index, max_length], swap_memory=False)
         return max_length
 
 
-def pad_prediction_tfarray(
+def pad_tfarray(
     tfarray: tf.TensorArray,
-    blank: int or tf.Tensor,
+    blank: Union[int, tf.Tensor],
+    element_axis: Union[int, tf.Tensor] = 0,
 ) -> tf.TensorArray:
-    with tf.name_scope("pad_prediction_tfarray"):
+    with tf.name_scope("pad_tfarray"):
         index = tf.constant(0, dtype=tf.int32)
         total = tfarray.size()
-        max_length = find_max_length_prediction_tfarray(tfarray) + 1
+        max_length = find_max_length_tfarray(tfarray, element_axis=element_axis)
+        paddings = tf.TensorArray(
+            dtype=tf.int32,
+            size=tfarray.element_shape.rank,
+            dynamic_size=False,
+            clear_after_read=False,
+            element_shape=tf.TensorShape([2]),
+        )
+        paddings = paddings.unstack(tf.zeros(shape=[tfarray.element_shape.rank, 2], dtype=tf.int32))
 
-        def condition(index, _):
-            return tf.less(index, total)
+        def condition(_index, _tfarray, _paddings):
+            return tf.less(_index, total)
 
-        def body(index, tfarray):
-            prediction = tfarray.read(index)
-            prediction = tf.pad(
-                prediction,
-                paddings=[[0, max_length - tf.shape(prediction)[0]]],
-                mode="CONSTANT",
-                constant_values=blank,
-            )
-            tfarray = tfarray.write(index, prediction)
-            return index + 1, tfarray
+        def body(_index, _tfarray, _paddings):
+            element = _tfarray.read(_index)
+            pad_size = max_length - tf.shape(element)[element_axis]
+            _paddings = _paddings.write(element_axis, tf.pad(tf.expand_dims(pad_size, axis=0), [[1, 0]]))
+            element = tf.pad(element, paddings=_paddings.stack(), mode="CONSTANT", constant_values=blank)
+            _tfarray = _tfarray.write(_index, element)
+            return _index + 1, _tfarray, _paddings
 
-        index, tfarray = tf.while_loop(condition, body, loop_vars=[index, tfarray], swap_memory=False)
+        index, tfarray, paddings = tf.while_loop(condition, body, loop_vars=[index, tfarray, paddings], swap_memory=False)
+        paddings.close()
         return tfarray
+
+
+def bfloat16_to_float16(
+    tensor,
+):
+    return tf.cond(tf.equal(tensor.dtype, tf.bfloat16), lambda: tf.cast(tensor, tf.float16), lambda: tensor)
+
+
+def masked_fill(
+    tensor,
+    mask,
+    value=0,
+):
+    shape = shape_util.shape_list(tensor)
+    mask = tf.broadcast_to(mask, shape)
+    values = tf.cast(tf.fill(shape, value), tensor.dtype)
+    return tf.where(mask, tensor, values)
+
+
+def large_compatible_negative(
+    tensor_type,
+):
+    if tensor_type == tf.float16:
+        return tf.float16.min
+    return -1e9
+
+
+def apply_mask(outputs, mask=None):
+    if mask is not None:
+        outputs = outputs * tf.cast(tf.expand_dims(mask, -1), dtype=outputs.dtype)
+        outputs._keras_mask = mask  # pylint: disable=protected-access
+    return outputs

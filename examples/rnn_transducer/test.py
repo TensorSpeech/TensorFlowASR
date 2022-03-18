@@ -13,53 +13,42 @@
 # limitations under the License.
 
 import os
-import fire
-from tensorflow_asr.utils import env_util
-
-logger = env_util.setup_environment()
-import tensorflow as tf
 
 from tensorflow_asr.configs.config import Config
+from tensorflow_asr.helpers import dataset_helpers, exec_helpers, featurizer_helpers
 from tensorflow_asr.models.transducer.rnn_transducer import RnnTransducer
-from tensorflow_asr.helpers import exec_helpers, dataset_helpers, featurizer_helpers
+from tensorflow_asr.utils import cli_util, env_util, file_util
 
-DEFAULT_YAML = os.path.join(os.path.abspath(os.path.dirname(__file__)), "config.yml")
+logger = env_util.setup_environment()
+
+DEFAULT_YAML = os.path.join(os.path.abspath(os.path.dirname(__file__)), "config_wp.j2")
 
 
 def main(
-    config: str = DEFAULT_YAML,
+    config_path: str = DEFAULT_YAML,
     saved: str = None,
     mxp: bool = False,
     bs: int = None,
-    sentence_piece: bool = False,
-    subwords: bool = False,
     device: int = 0,
     cpu: bool = False,
     output: str = "test.tsv",
 ):
     assert saved and output
-    tf.random.set_seed(0)
-    tf.keras.backend.clear_session()
-    tf.config.optimizer.set_experimental_options({"auto_mixed_precision": mxp})
+    env_util.setup_seed()
     env_util.setup_devices([device], cpu=cpu)
+    env_util.setup_mxp(mxp=mxp)
 
-    config = Config(config)
+    config = Config(config_path)
 
-    speech_featurizer, text_featurizer = featurizer_helpers.prepare_featurizers(
-        config=config,
-        subwords=subwords,
-        sentence_piece=sentence_piece,
-    )
+    speech_featurizer, text_featurizer = featurizer_helpers.prepare_featurizers(config=config)
 
-    rnn_transducer = RnnTransducer(**config.model_config, vocabulary_size=text_featurizer.num_classes)
+    rnn_transducer = RnnTransducer(**config.model_config, vocab_size=text_featurizer.num_classes)
     rnn_transducer.make(speech_featurizer.shape)
-    rnn_transducer.load_weights(saved, by_name=True)
-    rnn_transducer.summary(line_length=100)
+    rnn_transducer.load_weights(saved, by_name=file_util.is_hdf5_filepath(saved))
+    rnn_transducer.summary()
     rnn_transducer.add_featurizers(speech_featurizer, text_featurizer)
 
-    test_dataset = dataset_helpers.prepare_testing_datasets(
-        config=config, speech_featurizer=speech_featurizer, text_featurizer=text_featurizer
-    )
+    test_dataset = dataset_helpers.prepare_testing_datasets(config=config, speech_featurizer=speech_featurizer, text_featurizer=text_featurizer)
     batch_size = bs or config.learning_config.running_config.batch_size
     test_data_loader = test_dataset.create(batch_size)
 
@@ -67,4 +56,4 @@ def main(
 
 
 if __name__ == "__main__":
-    fire.Fire(main)
+    cli_util.run(main)

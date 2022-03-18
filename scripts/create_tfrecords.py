@@ -12,56 +12,43 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import os
-import argparse
+from tensorflow_asr.utils import env_util
+
+logger = env_util.setup_environment()
+
 from tensorflow_asr.configs.config import Config
-from tensorflow_asr.utils.file_util import preprocess_paths
 from tensorflow_asr.datasets.asr_dataset import ASRTFRecordDataset
-from tensorflow_asr.featurizers import speech_featurizers, text_featurizers
-
-parser = argparse.ArgumentParser(prog="TFRecords Creation")
-
-parser.add_argument("--mode", "-m", type=str, default=None, help="Mode")
-
-parser.add_argument("--config", type=str, default=None, help="The file path of model configuration file")
-
-parser.add_argument("--tfrecords_dir", type=str, default=None, help="Directory to tfrecords")
-
-parser.add_argument("--tfrecords_shards", type=int, default=16, help="Number of tfrecords shards")
-
-parser.add_argument("--shuffle", default=False, action="store_true", help="Shuffle data or not")
-
-parser.add_argument("--sentence_piece", default=False, action="store_true", help="Whether to use `SentencePiece` model")
-
-parser.add_argument("--subwords", type=str, default=None, help="Path to file that stores generated subwords")
-
-parser.add_argument("transcripts", nargs="+", type=str, default=None, help="Paths to transcript files")
-
-args = parser.parse_args()
-
-transcripts = preprocess_paths(args.transcripts)
-tfrecords_dir = preprocess_paths(args.tfrecords_dir, isdir=True)
-
-config = Config(args.config)
-
-speech_featurizer = speech_featurizers.TFSpeechFeaturizer(config.speech_config)
-
-if args.sentence_piece:
-    print("Loading SentencePiece model ...")
-    text_featurizer = text_featurizers.SentencePieceFeaturizer.load_from_file(config.decoder_config, args.subwords)
-elif args.subwords and os.path.exists(args.subwords):
-    print("Loading subwords ...")
-    text_featurizer = text_featurizers.SubwordFeaturizer.load_from_file(config.decoder_config, args.subwords)
-else:
-    text_featurizer = text_featurizers.CharFeaturizer(config.decoder_config)
+from tensorflow_asr.helpers import featurizer_helpers
+from tensorflow_asr.utils import cli_util, file_util
 
 
-ASRTFRecordDataset(
-    data_paths=transcripts,
-    tfrecords_dir=tfrecords_dir,
-    speech_featurizer=speech_featurizer,
-    text_featurizer=text_featurizer,
-    stage=args.mode,
-    shuffle=args.shuffle,
-    tfrecords_shards=args.tfrecords_shards
-).create_tfrecords()
+def main(
+    *transcripts,
+    mode: str = None,
+    config_path: str = None,
+    tfrecords_dir: str = None,
+    tfrecords_shards: int = 16,
+    shuffle: bool = True,
+):
+    data_paths = file_util.preprocess_paths(transcripts)
+    tfrecords_dir = file_util.preprocess_paths(tfrecords_dir, isdir=True)
+    logger.info(f"Create tfrecords to directory: {tfrecords_dir}")
+
+    config = Config(config_path)
+
+    speech_featurizer, text_featurizer = featurizer_helpers.prepare_featurizers(config=config)
+
+    tfrecord_dataset = ASRTFRecordDataset(
+        data_paths=data_paths,
+        tfrecords_dir=tfrecords_dir,
+        speech_featurizer=speech_featurizer,
+        text_featurizer=text_featurizer,
+        stage=mode,
+        shuffle=shuffle,
+        tfrecords_shards=tfrecords_shards,
+    )
+    tfrecord_dataset.create_tfrecords()
+
+
+if __name__ == "__main__":
+    cli_util.run(main)

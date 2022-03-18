@@ -11,7 +11,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import abc
 import tensorflow as tf
 
 from tensorflow_asr.augmentations.augmentation import Augmentation
@@ -21,7 +20,7 @@ TFRECORD_SHARDS = 16
 AUTOTUNE = tf.data.experimental.AUTOTUNE
 
 
-class BaseDataset(metaclass=abc.ABCMeta):
+class BaseDataset:
     """Based dataset for all models"""
 
     def __init__(
@@ -34,6 +33,8 @@ class BaseDataset(metaclass=abc.ABCMeta):
         indefinite: bool = False,
         drop_remainder: bool = True,
         use_tf: bool = False,
+        enabled: bool = True,
+        metadata: str = None,
         stage: str = "train",
         **kwargs
     ):
@@ -48,14 +49,14 @@ class BaseDataset(metaclass=abc.ABCMeta):
         self.buffer_size = buffer_size  # shuffle buffer size
         self.stage = stage  # for defining tfrecords files
         self.use_tf = use_tf
+        self.enabled = enabled
         self.drop_remainder = drop_remainder  # whether to drop remainder for multi gpu training
         self.indefinite = indefinite  # Whether to make dataset repeat indefinitely -> avoid the potential last partial batch
         self.total_steps = None  # for better training visualization
+        self.metadata = metadata
 
-    @abc.abstractmethod
     def parse(self, *args, **kwargs):
         raise NotImplementedError()
 
-    @abc.abstractmethod
     def create(self, batch_size):
         raise NotImplementedError()

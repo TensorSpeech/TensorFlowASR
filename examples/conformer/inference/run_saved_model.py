@@ -13,17 +13,16 @@
 # limitations under the License.
 
 import os
-import fire
 
+import fire
+import tensorflow as tf
+
+from tensorflow_asr.featurizers.speech_featurizers import read_raw_audio
 from tensorflow_asr.utils import env_util
 
 logger = env_util.setup_environment()
-import tensorflow as tf
 
-DEFAULT_YAML = os.path.join(os.path.abspath(os.path.dirname(__file__)), "config.yml")
-
-
-from tensorflow_asr.featurizers.speech_featurizers import read_raw_audio
+DEFAULT_YAML = os.path.join(os.path.abspath(os.path.dirname(__file__)), "config_wp.j2")
 
 
 def main(

@@ -12,13 +12,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from setuptools import find_packages, setup
-from typing import List
 from collections import defaultdict
+from typing import List
+
+from setuptools import find_packages, setup
 
 
 def parse_requirements(lines: List[str]):
-    extras_requires = defaultdict(list)
+    _extras_requires = defaultdict(list)
     extra = "requires"
     for line in lines:
         line = line.strip()
@@ -27,9 +28,9 @@ def parse_requirements(lines: List[str]):
             continue
         if line and line[0] != "#":
             lib_package = line.split("#")[0].strip()  # split comments
-            extras_requires[extra].append(lib_package)
-    install_requires = extras_requires.pop("requires")
-    return install_requires, extras_requires
+            _extras_requires[extra].append(lib_package)
+    _install_requires = _extras_requires.pop("requires")
+    return _install_requires, _extras_requires
 
 
 with open("requirements.txt", "r", encoding="utf-8") as fr:
@@ -41,7 +42,7 @@ with open("README.md", "r", encoding="utf-8") as fh:
 
 setup(
     name="TensorFlowASR",
-    version="1.0.3",
+    version="2.0.0",
     author="Huy Le Nguyen",
     author_email="nlhuy.cs.16@gmail.com",
     description="Almost State-of-the-art Automatic Speech Recognition using Tensorflow 2",

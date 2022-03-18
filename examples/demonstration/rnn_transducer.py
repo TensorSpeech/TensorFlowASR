@@ -13,7 +13,8 @@
 # limitations under the License.
 
 import argparse
-from tensorflow_asr.utils import env_util, math_util, data_util
+
+from tensorflow_asr.utils import data_util, env_util, math_util
 
 logger = env_util.setup_environment()
 import tensorflow as tf
@@ -43,13 +44,12 @@ args = parser.parse_args()
 env_util.setup_devices([args.device], cpu=args.cpu)
 
 from tensorflow_asr.configs.config import Config
-from tensorflow_asr.featurizers.speech_featurizers import read_raw_audio
-from tensorflow_asr.featurizers.speech_featurizers import TFSpeechFeaturizer
-from tensorflow_asr.featurizers.text_featurizers import CharFeaturizer, SubwordFeaturizer, SentencePieceFeaturizer
+from tensorflow_asr.featurizers.speech_featurizers import SpeechFeaturizer, read_raw_audio
+from tensorflow_asr.featurizers.text_featurizers import CharFeaturizer, SentencePieceFeaturizer, SubwordFeaturizer
 from tensorflow_asr.models.transducer.rnn_transducer import RnnTransducer
 
 config = Config(args.config)
-speech_featurizer = TFSpeechFeaturizer(config.speech_config)
+speech_featurizer = SpeechFeaturizer(config.speech_config)
 if args.sentence_piece:
     logger.info("Loading SentencePiece model ...")
     text_featurizer = SentencePieceFeaturizer(config.decoder_config)
@@ -61,10 +61,10 @@ else:
 text_featurizer.decoder_config.beam_width = args.beam_width
 
 # build model
-rnnt = RnnTransducer(**config.model_config, vocabulary_size=text_featurizer.num_classes)
+rnnt = RnnTransducer(**config.model_config, vocab_size=text_featurizer.num_classes)
 rnnt.make(speech_featurizer.shape)
 rnnt.load_weights(args.saved, by_name=True, skip_mismatch=True)
-rnnt.summary(line_length=120)
+rnnt.summary()
 rnnt.add_featurizers(speech_featurizer, text_featurizer)
 
 signal = read_raw_audio(args.filename)
@@ -72,28 +72,18 @@ features = speech_featurizer.tf_extract(signal)
 input_length = math_util.get_reduced_length(tf.shape(features)[0], rnnt.time_reduction_factor)
 
 if args.beam_width:
-    transcript = rnnt.recognize_beam(
-        data_util.create_inputs(
-            inputs=features[None, ...],
-            inputs_length=input_length[None, ...]
-        )
-    )
+    transcript = rnnt.recognize_beam(data_util.create_inputs(inputs=features[None, ...], inputs_length=input_length[None, ...]))
     logger.info("Transcript:", transcript[0].numpy().decode("UTF-8"))
 elif args.timestamp:
     transcript, stime, etime, _, _, _ = rnnt.recognize_tflite_with_timestamp(
         signal=signal,
         predicted=tf.constant(text_featurizer.blank, dtype=tf.int32),
         encoder_states=rnnt.encoder.get_initial_state(),
-        prediction_states=rnnt.predict_net.get_initial_state()
+        prediction_states=rnnt.predict_net.get_initial_state(),
     )
     logger.info("Transcript:", transcript)
     logger.info("Start time:", stime)
     logger.info("End time:", etime)
 else:
-    transcript = rnnt.recognize(
-        data_util.create_inputs(
-            inputs=features[None, ...],
-            inputs_length=input_length[None, ...]
-        )
-    )
+    transcript = rnnt.recognize(data_util.create_inputs(inputs=features[None, ...], inputs_length=input_length[None, ...]))
     logger.info("Transcript:", transcript[0].numpy().decode("UTF-8"))

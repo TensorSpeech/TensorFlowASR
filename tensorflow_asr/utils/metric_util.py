@@ -13,6 +13,7 @@
 # limitations under the License.
 
 from typing import Tuple
+
 import tensorflow as tf
 from nltk.metrics import distance
 
@@ -82,11 +83,33 @@ def cer(
     return tf.numpy_function(execute_cer, inp=[decode, target], Tout=[tf.float32, tf.float32])
 
 
+def tf_wer(
+    decode: tf.Tensor,
+    target: tf.Tensor,
+) -> Tuple[tf.Tensor, tf.Tensor]:
+    """
+    Tensorflow Word Error Rate
+
+    Args:
+        decode (tf.Tensor): tensor shape [B]
+        target (tf.Tensor): tensor shape [B]
+
+    Returns:
+        tuple: a tuple of tf.Tensor of (edit distances, number of words) of each text
+    """
+    decode = tf.strings.split(decode)
+    target = tf.strings.split(target)
+    distances = tf.edit_distance(decode.to_sparse(), target.to_sparse(), normalize=False)  # [B]
+    lengths = tf.cast(target.row_lengths(axis=1), dtype=tf.float32)  # [B]
+    return tf.reduce_sum(distances), tf.reduce_sum(lengths)
+
+
 def tf_cer(
     decode: tf.Tensor,
     target: tf.Tensor,
 ) -> Tuple[tf.Tensor, tf.Tensor]:
-    """Tensorflwo Charactor Error rate
+    """
+    Tensorflow Charactor Error rate
 
     Args:
         decoder (tf.Tensor): tensor shape [B]

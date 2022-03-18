@@ -18,21 +18,19 @@ Testing, see `python examples/contextnet/test.py --help`
 
 TFLite Conversion, see `python examples/contextnet/inference/gen_tflite_model.py --help`
 
-## RNN Transducer Subwords - Results on LibriSpeech
+## WordPiece ContextNet - Results on LibriSpeech
 
-**Summary**
-
-- Number of subwords: 1008
-- Maximum length of a subword: 10
-- Subwords corpus: all training sets
-- Number of parameters: 12,075,320
-- Number of epochs: 86
-- Train on: 8 Google Colab TPUs
-- Train hours: 8.375 days uncontinuous (each day I trained 12 epoch because colab only allows 12 hours/day and 1 epoch required 1 hour) => 86 hours continuous (3.58333333 days)
+| **Name**                  | **Description**                                      |
+| :------------------------ | :--------------------------------------------------- |
+| Number of tokens          | 1000                                                 |
+| Maximum length of a token | 50                                                   |
+| WordPiece corpus          | all training transcripts.tsv                         |
+| Train on                  | 8 Google Colab TPUs                                  |
+| Train hours               | 8.375 days uncontinuous (3.58333333 days continuous) |
 
 **Pretrained and Config**, go to [drive](https://drive.google.com/drive/folders/1fzOkwKaOcMUMD9BAjcLLmSG2Tfpeabbq?usp=sharing)
 
-**Epoch Transducer Loss**
+**Epoch RNNT Loss**
 
 <img src="./figs/1008_subword_contextnet_loss.svg" alt="subword_contextnet_loss" width="300px" />
 
@@ -42,6 +40,10 @@ TFLite Conversion, see `python examples/contextnet/inference/gen_tflite_model.py
 
 **Error Rates**
 
-| **Test-clean** | Test batch size | Epoch |      WER (%)       |      CER (%)       |
-| :------------: | :-------------: | :---: | :----------------: | :----------------: |
-|    _Greedy_    |        1        |  86   | 10.356436669826508 | 5.8370333164930344 |
+| **Test-clean** | Test batch size | Epoch | WER (%) | CER (%) |
+| :------------: | :-------------: | :---: | :-----: | :-----: |
+|    _Greedy_    |        1        |  86   |         |         |
+
+| **Test-other** | Test batch size | Epoch | WER (%) | CER (%) |
+| :------------: | :-------------: | :---: | :-----: | :-----: |
+|    _Greedy_    |        1        |  86   |         |         |

@@ -1,10 +1,10 @@
-import os
 import argparse
+import os
 
 from tensorflow_asr.configs.config import Config
 from tensorflow_asr.featurizers.text_featurizers import SubwordFeaturizer
 
-DEFAULT_YAML = os.path.join(os.path.abspath(os.path.dirname(__file__)), "config.yml")
+DEFAULT_YAML = os.path.join(os.path.abspath(os.path.dirname(__file__)), "config_wp.j2")
 
 parser = argparse.ArgumentParser(prog="Vocab Training with Subwords")
 
@@ -20,5 +20,4 @@ config = Config(args.config)
 
 print("Generating subwords ...")
 
-text_featurizer = SubwordFeaturizer.build_from_corpus(config.decoder_config, args.corpus)
-text_featurizer.save_to_file(args.output_file)
+SubwordFeaturizer.build_from_corpus(config.decoder_config)

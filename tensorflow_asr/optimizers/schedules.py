@@ -13,7 +13,6 @@
 # limitations under the License.
 
 import tensorflow as tf
-from tensorflow.keras.optimizers.schedules import ExponentialDecay
 
 
 class TransformerSchedule(tf.keras.optimizers.schedules.LearningRateSchedule):
@@ -29,18 +28,11 @@ class TransformerSchedule(tf.keras.optimizers.schedules.LearningRateSchedule):
         # lr = (d_model^-0.5) * min(step^-0.5, step*(warm_up^-1.5))
         step = tf.cast(step, dtype=tf.float32)
         arg1 = tf.math.rsqrt(step)
-        arg2 = step * (self.warmup_steps ** -1.5)
+        arg2 = step * (self.warmup_steps**-1.5)
         lr = tf.math.rsqrt(self.d_model) * tf.math.minimum(arg1, arg2)
         if self.max_lr is not None:
             return tf.math.minimum(self.max_lr, lr)
         return lr
-
-    def get_config(self):
-        return {
-            "d_model": self.d_model,
-            "warmup_steps": self.warmup_steps,
-            "max_lr": self.max_lr,
-        }
 
 
 class SANSchedule(tf.keras.optimizers.schedules.LearningRateSchedule):
@@ -54,19 +46,12 @@ class SANSchedule(tf.keras.optimizers.schedules.LearningRateSchedule):
 
     def __call__(self, step):
         step = tf.cast(step, dtype=tf.float32)
-        arg1 = step / (self.warmup_steps ** 1.5)
+        arg1 = step / (self.warmup_steps**1.5)
         arg2 = 1 / tf.math.sqrt(step)
         return (self.lamb / tf.math.sqrt(self.d_model)) * tf.math.minimum(arg1, arg2)
 
-    def get_config(self):
-        return {
-            "lamb": self.lamb,
-            "d_model": self.d_model,
-            "warmup_steps": self.warmup_steps,
-        }
 
-
-class BoundExponentialDecay(ExponentialDecay):
+class BoundExponentialDecay(tf.keras.optimizers.schedules.ExponentialDecay):
     def __init__(self, min_lr=0.0, **kwargs):
         super().__init__(**kwargs)
         self.min_lr = min_lr
@@ -123,7 +108,7 @@ class CyclicTransformerSchedule(tf.keras.optimizers.schedules.LearningRateSchedu
 
     def __call__(self, step):
         step = tf.cast(step, tf.float32)
-        warmup = step * (self.warmup_steps ** -1.5)
+        warmup = step * (self.warmup_steps**-1.5)
         lr = 2 * tf.math.rsqrt(step)
         lr = tf.math.rsqrt(self.d_model) * tf.math.minimum(lr, warmup)
         lr = tf.math.minimum(self.max_lr, lr)
@@ -132,11 +117,3 @@ class CyclicTransformerSchedule(tf.keras.optimizers.schedules.LearningRateSchedu
         lr = lr * (0.5 + tf.math.maximum(0.0, x))
         lr = tf.math.minimum(self.max_lr, tf.math.minimum(lr, warmup))
         return lr
-
-    def get_config(self):
-        return {
-            "d_model": self.d_model,
-            "warmup_steps": self.warmup_steps,
-            "max_lr": self.max_lr,
-            "step_size": self.step_size,
-        }

@@ -1,9 +1,23 @@
-from tqdm import tqdm
-import tensorflow as tf
-from tensorflow_asr.datasets.asr_dataset import ASRSliceDataset
+# Copyright 2022 Huy Le Nguyen (@usimarit)
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 
+import tensorflow as tf
+from tqdm import tqdm
+
+from tensorflow_asr.datasets.asr_dataset import ASRSliceDataset
 from tensorflow_asr.models.base_model import BaseModel
-from tensorflow_asr.utils import file_util, app_util
+from tensorflow_asr.utils import app_util, file_util
 
 logger = tf.get_logger()
 
@@ -21,7 +35,7 @@ def run_testing(
         if overwrite:
             results = model.predict(test_data_loader, verbose=1)
             logger.info(f"Saving result to {output} ...")
-            with open(filepath, "w") as openfile:
+            with tf.io.gfile.GFile(filepath, "w") as openfile:
                 openfile.write("PATH\tDURATION\tGROUNDTRUTH\tGREEDY\tBEAMSEARCH\n")
                 progbar = tqdm(total=test_dataset.total_steps, unit="batch")
                 for i, pred in enumerate(results):
@@ -39,9 +53,10 @@ def convert_tflite(
 ):
     concrete_func = model.make_tflite_function().get_concrete_function()
     converter = tf.lite.TFLiteConverter.from_concrete_functions([concrete_func])
-    converter.experimental_new_converter = True
-    converter.optimizations = [tf.lite.Optimize.DEFAULT]
-    converter.target_spec.supported_ops = [tf.lite.OpsSet.TFLITE_BUILTINS, tf.lite.OpsSet.SELECT_TF_OPS]
+    converter.target_spec.supported_ops = [
+        tf.lite.OpsSet.TFLITE_BUILTINS,  # enable TensorFlow Lite ops.
+        tf.lite.OpsSet.SELECT_TF_OPS,  # enable TensorFlow ops.
+    ]
     tflite_model = converter.convert()
 
     output = file_util.preprocess_paths(output)

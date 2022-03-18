@@ -16,30 +16,28 @@ Testing, see `python examples/conformer/test.py --help`
 
 TFLite Conversion, see `python examples/conformer/inference/gen_tflite_model.py --help`
 
-## Conformer Subwords - Results on LibriSpeech
+## WordPiece Conformer - Results on LibriSpeech
 
-**Summary**
-
-- Number of subwords: 1031
-- Maxium length of a subword: 4
-- Subwords corpus: all training sets, dev sets and test-clean
-- Number of parameters: 10,341,639
-- Positional Encoding Type: sinusoid concatenation
-- Trained on: 4 RTX 2080Ti 11G
+| **Name**                 | **Description**              |
+| :----------------------- | :--------------------------- |
+| Number of tokens         | 1000                         |
+| Maxium length of a token | 50                           |
+| WordPiece Corpus         | All training transcripts.tsv |
+| Trained on               | 8 Google Colab TPUs          |
+| Training hours           |                              |
 
 **Pretrained and Config**, go to [drive](https://drive.google.com/drive/folders/1VAihgSB5vGXwIVTl3hkUk95joxY1YbfW?usp=sharing)
 
-**Transducer Loss**
+**Epoch RNNT Loss**
 
 <img src="./figs/subword_conformer_loss.svg" alt="conformer_subword" width="300px" />
 
 **Error Rates**
 
-| **Test-clean** | Test batch size |  WER (%)   |  CER (%)   |
-| :------------: | :-------------: | :--------: | :--------: |
-|    _Greedy_    |        1        | 6.37933683 | 2.4757576  |
-|  _Greedy V2_   |        1        | 7.86670732 | 2.82563138 |
+| **Test-clean** | Test batch size | Epoch | WER (%) | CER (%) |
+| :------------: | :-------------: | :---: | :-----: | :-----: |
+|    _Greedy_    |        1        |  50   |         |         |
 
-| **Test-other** | Test batch size |  WER (%)   |  CER (%)   |
-| :------------: | :-------------: | :--------: | :--------: |
-|    _Greedy_    |        1        | 15.7308521 | 7.67273521 |
+| **Test-other** | Test batch size | Epoch | WER (%) | CER (%) |
+| :------------: | :-------------: | :---: | :-----: | :-----: |
+|    _Greedy_    |        1        |  50   |         |         |

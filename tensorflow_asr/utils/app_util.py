@@ -1,3 +1,4 @@
+# pylint: disable=not-callable
 # Copyright 2020 Huy Le Nguyen (@usimarit)
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,8 +17,7 @@ import tensorflow as tf
 from tqdm import tqdm
 
 from tensorflow_asr.metrics.error_rates import ErrorRate
-from tensorflow_asr.utils.file_util import read_file
-from tensorflow_asr.utils.metric_util import cer, wer
+from tensorflow_asr.utils import file_util, metric_util
 
 logger = tf.get_logger()
 
@@ -27,12 +27,12 @@ def evaluate_results(
 ):
     logger.info(f"Evaluating result from {filepath} ...")
     metrics = {
-        "greedy_wer": ErrorRate(wer, name="greedy_wer", dtype=tf.float32),
-        "greedy_cer": ErrorRate(cer, name="greedy_cer", dtype=tf.float32),
-        "beamsearch_wer": ErrorRate(wer, name="beamsearch_wer", dtype=tf.float32),
-        "beamsearch_cer": ErrorRate(cer, name="beamsearch_cer", dtype=tf.float32),
+        "greedy_wer": ErrorRate(metric_util.tf_wer, name="greedy_wer", dtype=tf.float32),
+        "greedy_cer": ErrorRate(metric_util.tf_cer, name="greedy_cer", dtype=tf.float32),
+        "beamsearch_wer": ErrorRate(metric_util.tf_wer, name="beamsearch_wer", dtype=tf.float32),
+        "beamsearch_cer": ErrorRate(metric_util.tf_cer, name="beamsearch_cer", dtype=tf.float32),
     }
-    with read_file(filepath) as path:
+    with file_util.read_file(filepath) as path:
         with open(path, "r", encoding="utf-8") as openfile:
             lines = openfile.read().splitlines()
             lines = lines[1:]  # skip header

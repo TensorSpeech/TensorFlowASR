@@ -1,0 +1,171 @@
+# Copyright 2020 Huy Le Nguyen (@usimarit)
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+{% set repodir = "." %}
+{% set modeldir = "/mnt/Miscellanea/Models/local/conformer" %}
+{% set datadir = "/mnt/Data/MLDL/Datasets/ASR/LibriSpeech" %}
+
+model_config:
+  name: conformer
+  encoder_subsampling:
+    type: conv2d
+    nlayers: 2
+    filters: 144
+    kernel_size: 3
+    strides: 2
+    padding: same
+    activation: swish
+    norm: batch
+  encoder_dmodel: 144
+  encoder_num_blocks: 16
+  encoder_head_size: 36 # == dmodel // num_heads
+  encoder_num_heads: 4
+  encoder_mha_type: relmha
+  encoder_use_attention_mask: True
+  encoder_kernel_size: 32
+  encoder_fc_factor: 0.5
+  encoder_dropout: 0.1
+  encoder_padding: same
+  prediction_label_encode_mode: embedding
+  prediction_embed_dim: 320
+  prediction_num_rnns: 1
+  prediction_rnn_units: 320
+  prediction_rnn_type: lstm
+  prediction_rnn_implementation: 2
+  prediction_rnn_unroll: False # False to use with CUDA or dynamic length, True to use with TPU and static length
+  prediction_layer_norm: False
+  prediction_projection_units: 0
+  joint_dim: 320
+  prejoint_encoder_linear: True
+  prejoint_prediction_linear: True
+  postjoint_linear: False
+  joint_activation: tanh
+  joint_mode: add
+
+speech_config:
+  sample_rate: 16000
+  frame_ms: 25
+  stride_ms: 10
+  num_feature_bins: 80
+  feature_type: log_mel_spectrogram
+
+decoder_config:
+  type: wordpiece
+
+  blank_index: 0
+  unknown_token: "<pad>"
+  unknown_index: 0
+
+  beam_width: 0
+  norm_score: True
+  lm_config: null
+
+  vocabulary: {{repodir}}/vocabularies/librispeech/wordpiece/train_1000_4.tokens
+  vocab_size: 1000
+  max_token_length: 4
+  max_unique_chars: 1000
+  reserved_tokens:
+    - "<pad>"
+  normalization_form: NFKC
+  num_iterations: 4
+
+  corpus_files:
+    - {{datadir}}/train-clean-100/transcripts.tsv
+    - {{datadir}}/train-clean-360/transcripts.tsv
+    - {{datadir}}/train-other-500/transcripts.tsv
+
+learning_config:
+  train_dataset_config:
+    enabled: True
+    use_tf: True
+    augmentation_config:
+      feature_augment:
+        time_masking:
+          prob: 0.5
+          num_masks: 10
+          mask_factor: 100
+          p_upperbound: 0.05
+        freq_masking:
+          prob: 0.5
+          num_masks: 1
+          mask_factor: 27
+    data_paths:
+      - {{datadir}}/dev-clean/transcripts.tsv
+    tfrecords_dir: {{datadir}}/tfrecords
+    shuffle: True
+    cache: True
+    buffer_size: 100
+    drop_remainder: True
+    stage: train
+    metadata: {{repodir}}/vocabularies/librispeech/wordpiece/train_1000_50.metadata.json
+
+  eval_dataset_config:
+    enabled: False
+    use_tf: True
+    data_paths:
+      - {{datadir}}/dev-clean/transcripts.tsv
+    tfrecords_dir: null
+    shuffle: False
+    cache: True
+    buffer_size: 100
+    drop_remainder: True
+    stage: eval
+    metadata: {{repodir}}/vocabularies/librispeech/wordpiece/train_1000_50.metadata.json
+
+  test_dataset_config:
+    enabled: False
+    use_tf: True
+    data_paths:
+      - {{datadir}}/test-clean/transcripts.tsv
+    tfrecords_dir: null
+    shuffle: False
+    cache: True
+    buffer_size: 100
+    drop_remainder: True
+    stage: test
+
+  optimizer_config:
+    beta_1: 0.9
+    beta_2: 0.98
+    epsilon: 1e-9
+
+  learning_rate_config:
+    warmup_steps: 10000
+    max_lr_numerator: 0.05
+
+  apply_gwn_config:
+    predict_net_step: 20000
+    predict_net_stddev: 0.075
+
+  running_config:
+    batch_size: 2
+    num_epochs: 100
+    checkpoint:
+      filepath: {{modeldir}}/checkpoints/{epoch:02d}.h5
+      save_best_only: False
+      save_weights_only: True
+      save_freq: epoch
+      options:
+        experimental_enable_async_checkpoint: True
+    backup_and_restore:
+      backup_dir: {{modeldir}}/states
+      save_freq: epoch
+      delete_checkpoint: False
+    tensorboard:
+      log_dir: {{modeldir}}/tensorboard
+      histogram_freq: 1
+      write_graph: True
+      write_images: True
+      update_freq: epoch
+      profile_batch: 2

@@ -14,14 +14,12 @@
 
 # tf.data.Dataset does not work well for namedtuple so we are using dict
 
-import tensorflow as tf
-
 
 def create_inputs(
-    inputs: tf.Tensor,
-    inputs_length: tf.Tensor,
-    predictions: tf.Tensor = None,
-    predictions_length: tf.Tensor = None,
+    inputs,
+    inputs_length,
+    predictions=None,
+    predictions_length=None,
 ) -> dict:
     data = {
         "inputs": inputs,
@@ -35,15 +33,15 @@ def create_inputs(
 
 
 def create_logits(
-    logits: tf.Tensor,
-    logits_length: tf.Tensor,
+    logits,
+    logits_length,
 ) -> dict:
     return {"logits": logits, "logits_length": logits_length}
 
 
 def create_labels(
-    labels: tf.Tensor,
-    labels_length: tf.Tensor,
+    labels,
+    labels_length,
 ) -> dict:
     return {
         "labels": labels,

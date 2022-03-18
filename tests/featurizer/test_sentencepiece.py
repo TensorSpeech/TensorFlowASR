@@ -1,8 +1,10 @@
 import os
 import re
+
 import sentencepiece as spm
+
 from tensorflow_asr.datasets.asr_dataset import ASRSliceDataset, ASRSliceTestDataset
-from tensorflow_asr.featurizers.speech_featurizers import TFSpeechFeaturizer
+from tensorflow_asr.featurizers.speech_featurizers import SpeechFeaturizer
 from tensorflow_asr.featurizers.text_featurizers import SentencePieceFeaturizer, SubwordFeaturizer, TextFeaturizer
 
 
@@ -13,7 +15,7 @@ def test_encoder():
     sp.load(os.path.join(model_path, "sentencepiece_librispeech_960_8000.model"))
 
     # Encode a dummy sentence
-    sentence = 'this is a test'
+    sentence = "this is a test"
     embeding_int = sp.encode_as_ids(sentence)
     embeding_str = sp.encode_as_pieces(sentence)
     decoded_int = sp.decode_ids(embeding_int)
@@ -28,34 +30,35 @@ def test_featurizer():
     config = {
         "output_path_prefix": "/data/models/asr/conformer_sentencepiece_subword",
         "model_type": "unigram",
-        "target_vocab_size": 8000,
+        "vocab_size": 8000,
         "blank_at_zero": True,
         "beam_width": 5,
         "norm_score": True,
         "corpus_files": [
             "/data/datasets/LibriSpeech/train-clean-100/transcripts.tsv"
             "/data/datasets/LibriSpeech/train-clean-360/transcripts.tsv"
-            "/data/datasets/LibriSpeech/train-other-500/transcripts.tsv"]}
+            "/data/datasets/LibriSpeech/train-other-500/transcripts.tsv"
+        ],
+    }
 
     config_speech = {
         "sample_rate": 16000,
         "frame_ms": 25,
         "stride_ms": 10,
         "num_feature_bins": 80,
-        'feature_type': "log_mel_spectrogram",
+        "feature_type": "log_mel_spectrogram",
         "preemphasis": 0.97,
         "normalize_signal": True,
         "normalize_feature": True,
-        "normalize_per_frame": False}
+        "normalize_per_frame": False,
+    }
 
     text_featurizer_sentencepiece = SentencePieceFeaturizer.load_from_file(config, None)
-    subwords_path = os.path.join(os.path.abspath(os.path.dirname(__file__)),
-                                 os.pardir,
-                                 os.pardir,
-                                 "vocabularies",
-                                 "librispeech_train_4_1030.subwords")
+    subwords_path = os.path.join(
+        os.path.abspath(os.path.dirname(__file__)), os.pardir, os.pardir, "vocabularies", "librispeech_train_4_1030.subwords"
+    )
     text_featurizer_subwords = SubwordFeaturizer.load_from_file(config, subwords_path)
-    speech_featurizer = TFSpeechFeaturizer(config_speech)
+    speech_featurizer = SpeechFeaturizer(config_speech)
     data_path = os.path.join(os.path.abspath(os.path.dirname(__file__)), "transcripts_librispeech_train_clean_100.tsv")
 
     def get_data(featurizer: TextFeaturizer):
@@ -64,7 +67,7 @@ def test_featurizer():
             speech_featurizer=speech_featurizer,
             text_featurizer=featurizer,
             stage="train",
-            shuffle=False
+            shuffle=False,
         )
         train_data = train_dataset.create(1)
         return next(iter(train_data))
@@ -81,28 +84,31 @@ def test_iextract():
     config = {
         "output_path_prefix": "/data/models/asr/conformer_sentencepiece_subword",
         "model_type": "unigram",
-        "target_vocab_size": 8000,
+        "vocab_size": 8000,
         "blank_at_zero": True,
         "beam_width": 5,
         "norm_score": True,
         "corpus_files": [
             "/data/datasets/LibriSpeech/train-clean-100/transcripts.tsv"
             "/data/datasets/LibriSpeech/train-clean-360/transcripts.tsv"
-            "/data/datasets/LibriSpeech/train-other-500/transcripts.tsv"]}
+            "/data/datasets/LibriSpeech/train-other-500/transcripts.tsv"
+        ],
+    }
 
     config_speech = {
         "sample_rate": 16000,
         "frame_ms": 25,
         "stride_ms": 10,
         "num_feature_bins": 80,
-        'feature_type': "log_mel_spectrogram",
+        "feature_type": "log_mel_spectrogram",
         "preemphasis": 0.97,
         "normalize_signal": True,
         "normalize_feature": True,
-        "normalize_per_frame": False}
+        "normalize_per_frame": False,
+    }
 
     text_featurizer_sentencepiece = SentencePieceFeaturizer.load_from_file(config, None)
-    speech_featurizer = TFSpeechFeaturizer(config_speech)
+    speech_featurizer = SpeechFeaturizer(config_speech)
     data_path = os.path.join(os.path.abspath(os.path.dirname(__file__)), "transcripts_librispeech_train_clean_100.tsv")
 
     train_dataset = ASRSliceTestDataset(
@@ -110,7 +116,7 @@ def test_iextract():
         speech_featurizer=speech_featurizer,
         text_featurizer=text_featurizer_sentencepiece,
         stage="train",
-        shuffle=False
+        shuffle=False,
     )
     train_data = train_dataset.create(1)
     batch = next(iter(train_data))
@@ -127,4 +133,4 @@ def test_iextract():
     m = re.search(r"[0-9]+-[0-9]+-[0-9]+\s+([\w\s]+)", lines[0])
     transcript = m.groups(1)[0].lower()
 
-    assert(labels == transcript)
+    assert labels == transcript

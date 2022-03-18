@@ -11,11 +11,12 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Ref: https://github.com/iankur/ContextNet """
 
 from typing import List
+
 import tensorflow as tf
 
+from tensorflow_asr.models.layers.base_layer import Layer
 from tensorflow_asr.utils import math_util
 
 L2 = tf.keras.regularizers.l2(1e-6)
@@ -27,12 +28,11 @@ def get_activation(
     activation = activation.lower()
     if activation in ["silu", "swish"]:
         return tf.nn.swish
-    elif activation == "relu":
+    if activation == "relu":
         return tf.nn.relu
-    elif activation == "linear":
+    if activation == "linear":
         return tf.keras.activations.linear
-    else:
-        raise ValueError("activation must be either 'silu', 'swish', 'relu' or 'linear'")
+    raise ValueError("activation must be either 'silu', 'swish', 'relu' or 'linear'")
 
 
 class Reshape(tf.keras.layers.Layer):
@@ -47,31 +47,27 @@ class ConvModule(tf.keras.layers.Layer):
         strides: int = 1,
         filters: int = 256,
         activation: str = "silu",
+        padding: str = "causal",
         kernel_regularizer=None,
         bias_regularizer=None,
         **kwargs,
     ):
-        super(ConvModule, self).__init__(**kwargs)
+        super().__init__(**kwargs)
         self.strides = strides
         self.conv = tf.keras.layers.SeparableConv1D(
             filters=filters,
             kernel_size=kernel_size,
             strides=strides,
-            padding="same",
+            padding=padding,
             depthwise_regularizer=kernel_regularizer,
             pointwise_regularizer=kernel_regularizer,
             bias_regularizer=bias_regularizer,
-            name=f"{self.name}_conv",
+            name="conv",
         )
-        self.bn = tf.keras.layers.BatchNormalization(name=f"{self.name}_bn")
+        self.bn = tf.keras.layers.BatchNormalization(name="bn")
         self.activation = get_activation(activation)
 
-    def call(
-        self,
-        inputs,
-        training=False,
-        **kwargs,
-    ):
+    def call(self, inputs, training=False):
         outputs = self.conv(inputs, training=training)
         outputs = self.bn(outputs, training=training)
         outputs = self.activation(outputs)
@@ -85,42 +81,40 @@ class SEModule(tf.keras.layers.Layer):
         strides: int = 1,
         filters: int = 256,
         activation: str = "silu",
+        padding: str = "causal",
         kernel_regularizer=None,
         bias_regularizer=None,
         **kwargs,
     ):
-        super(SEModule, self).__init__(**kwargs)
+        super().__init__(**kwargs)
         self.conv = ConvModule(
             kernel_size=kernel_size,
             strides=strides,
             filters=filters,
             activation=activation,
+            padding=padding,
             kernel_regularizer=kernel_regularizer,
             bias_regularizer=bias_regularizer,
-            name=f"{self.name}_conv_module",
+            name="conv_module",
         )
+        self.global_avg_pool = tf.keras.layers.GlobalAveragePooling1D(keepdims=True, name="global_avg_pool")
         self.activation = get_activation(activation)
-        self.fc1 = tf.keras.layers.Dense(filters // 8, name=f"{self.name}_fc1")
-        self.fc2 = tf.keras.layers.Dense(filters, name=f"{self.name}_fc2")
+        self.fc1 = tf.keras.layers.Dense(filters // 8, name="fc1")
+        self.fc2 = tf.keras.layers.Dense(filters, name="fc2")
 
-    def call(
-        self,
-        inputs,
-        training=False,
-        **kwargs,
-    ):
-        features, input_length = inputs
-        outputs = self.conv(features, training=training)
+    def call(self, inputs, training=False):
+        features, inputs_length = inputs
+        outputs = self.conv(features, training=training)  # [B, T, E]
 
-        se = tf.divide(tf.reduce_sum(outputs, axis=1), tf.expand_dims(tf.cast(input_length, dtype=outputs.dtype), axis=1))
+        mask = tf.sequence_mask(inputs_length, maxlen=tf.shape(outputs)[1])
+        se = self.global_avg_pool(outputs, mask=mask)  # [B, 1, E]
         se = self.fc1(se, training=training)
         se = self.activation(se)
         se = self.fc2(se, training=training)
-        se = self.activation(se)
         se = tf.nn.sigmoid(se)
-        se = tf.expand_dims(se, axis=1)
 
-        outputs = tf.multiply(outputs, se)
+        se = tf.tile(se, [1, tf.shape(outputs)[1], 1])  # [B, 1, E] => [B, T, E]
+        outputs = tf.multiply(outputs, se)  # [B, T, E]
         return outputs
 
 
@@ -134,11 +128,12 @@ class ConvBlock(tf.keras.layers.Layer):
         residual: bool = True,
         activation: str = "silu",
         alpha: float = 1.0,
+        padding: str = "causal",
         kernel_regularizer=None,
         bias_regularizer=None,
         **kwargs,
     ):
-        super(ConvBlock, self).__init__(**kwargs)
+        super().__init__(**kwargs)
 
         self.dmodel = filters
         self.time_reduction_factor = strides
@@ -152,9 +147,10 @@ class ConvBlock(tf.keras.layers.Layer):
                     strides=1,
                     filters=filters,
                     activation=activation,
+                    padding=padding,
                     kernel_regularizer=kernel_regularizer,
                     bias_regularizer=bias_regularizer,
-                    name=f"{self.name}_conv_module_{i}",
+                    name=f"conv_module_{i}",
                 )
             )
 
@@ -163,9 +159,10 @@ class ConvBlock(tf.keras.layers.Layer):
             strides=strides,
             filters=filters,
             activation=activation,
+            padding=padding,
             kernel_regularizer=kernel_regularizer,
             bias_regularizer=bias_regularizer,
-            name=f"{self.name}_conv_module_{nlayers - 1}",
+            name=f"conv_module_{nlayers - 1}",
         )
 
         self.se = SEModule(
@@ -173,9 +170,10 @@ class ConvBlock(tf.keras.layers.Layer):
             strides=1,
             filters=filters,
             activation=activation,
+            padding=padding,
             kernel_regularizer=kernel_regularizer,
             bias_regularizer=bias_regularizer,
-            name=f"{self.name}_se",
+            name="se",
         )
 
         self.residual = None
@@ -185,34 +183,30 @@ class ConvBlock(tf.keras.layers.Layer):
                 strides=strides,
                 filters=filters,
                 activation="linear",
+                padding=padding,
                 kernel_regularizer=kernel_regularizer,
                 bias_regularizer=bias_regularizer,
-                name=f"{self.name}_residual",
+                name="residual",
             )
 
         self.activation = get_activation(activation)
 
-    def call(
-        self,
-        inputs,
-        training=False,
-        **kwargs,
-    ):
-        features, input_length = inputs
+    def call(self, inputs, training=False):
+        features, inputs_length = inputs
         outputs = features
         for conv in self.convs:
             outputs = conv(outputs, training=training)
         outputs = self.last_conv(outputs, training=training)
-        input_length = math_util.get_reduced_length(input_length, self.last_conv.strides)
-        outputs = self.se([outputs, input_length], training=training)
+        inputs_length = math_util.get_reduced_length(inputs_length, self.last_conv.strides)
+        outputs = self.se([outputs, inputs_length], training=training)
         if self.residual is not None:
             res = self.residual(features, training=training)
             outputs = tf.add(outputs, res)
         outputs = self.activation(outputs)
-        return outputs, input_length
+        return outputs, inputs_length
 
 
-class ContextNetEncoder(tf.keras.Model):
+class ContextNetEncoder(Layer):
     def __init__(
         self,
         blocks: List[dict] = [],
@@ -221,9 +215,9 @@ class ContextNetEncoder(tf.keras.Model):
         bias_regularizer=None,
         **kwargs,
     ):
-        super(ContextNetEncoder, self).__init__(**kwargs)
+        super().__init__(**kwargs)
 
-        self.reshape = Reshape(name=f"{self.name}_reshape")
+        self.reshape = Reshape(name="reshape")
 
         self.blocks = []
         for i, config in enumerate(blocks):
@@ -233,18 +227,26 @@ class ContextNetEncoder(tf.keras.Model):
                     alpha=alpha,
                     kernel_regularizer=kernel_regularizer,
                     bias_regularizer=bias_regularizer,
-                    name=f"{self.name}_block_{i}",
+                    name=f"block_{i}",
                 )
             )
 
-    def call(
-        self,
-        inputs,
-        training=False,
-        **kwargs,
-    ):
-        outputs, input_length = inputs
+        self.dmodel = self.blocks[-1].dmodel
+        self.time_reduction_factor = 1
+        for block in self.blocks:
+            self.time_reduction_factor *= block.time_reduction_factor
+
+    def call(self, inputs, training=False):
+        outputs, inputs_length = inputs
         outputs = self.reshape(outputs)
         for block in self.blocks:
-            outputs, input_length = block([outputs, input_length], training=training)
-        return outputs
+            outputs, inputs_length = block([outputs, inputs_length], training=training)
+        return outputs, inputs_length
+
+    def compute_output_shape(self, input_shape):
+        inputs_shape, inputs_length_shape = input_shape
+        outputs_size = self.dmodel
+        outputs_time = None if inputs_shape[1] is None else math_util.legacy_get_reduced_length(inputs_shape[1], self.time_reduction_factor)
+        outputs_batch = inputs_shape[0]
+        outputs_shape = [outputs_batch, outputs_time, outputs_size]
+        return tuple(outputs_shape), tuple(inputs_length_shape)

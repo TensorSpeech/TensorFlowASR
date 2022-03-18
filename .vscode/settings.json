@@ -1,0 +1,17 @@
+{
+    "python.linting.pylintEnabled": true,
+    "python.linting.flake8Enabled": false,
+    "python.linting.enabled": true,
+    "editor.formatOnSave": true,
+    "python.linting.lintOnSave": true,
+    "editor.codeActionsOnSave": {
+        "source.organizeImports": true,
+    },
+    "isort.args": [
+        "--profile",
+        "black",
+        "--line-length",
+        "130"
+    ],
+    "python.formatting.provider": "black"
+}

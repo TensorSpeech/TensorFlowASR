@@ -25,8 +25,8 @@ class ErrorRate(tf.keras.metrics.Metric):
         **kwargs,
     ):
         super(ErrorRate, self).__init__(name=name, **kwargs)
-        self.numerator = self.add_weight(name=f"{name}_numerator", initializer="zeros")
-        self.denominator = self.add_weight(name=f"{name}_denominator", initializer="zeros")
+        self.numerator = self.add_weight(name="numerator", initializer="zeros")
+        self.denominator = self.add_weight(name="denominator", initializer="zeros")
         self.func = func
 
     def update_state(

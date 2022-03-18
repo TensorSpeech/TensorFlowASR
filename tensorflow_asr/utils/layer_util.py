@@ -33,3 +33,23 @@ def get_conv(
     if conv_type == "conv1d":
         return tf.keras.layers.Conv1D
     return tf.keras.layers.Conv2D
+
+
+def add_gwn(
+    trainable_weights: list,
+    stddev: float = 1.0,
+):
+    original_weights = []
+    for weight in trainable_weights:
+        noise = tf.random.normal(mean=0, stddev=stddev, shape=weight.shape, dtype=weight.dtype)
+        original_weights.append(weight.value())
+        weight.assign_add(noise)
+    return original_weights
+
+
+def sub_gwn(
+    original_weights: list,
+    trainable_weights: list,
+):
+    for i, weight in enumerate(trainable_weights):
+        weight.assign(original_weights[i])

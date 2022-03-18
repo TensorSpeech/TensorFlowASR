@@ -37,11 +37,3 @@ class PointWiseFFN(tf.keras.layers.Layer):
         outputs = self.ffn2(outputs, training=training)
         outputs = self.do2(outputs, training=training)
         return outputs
-
-    def get_config(self):
-        conf = super(PointWiseFFN, self).get_config()
-        conf.update(self.ffn1.get_config())
-        conf.update(self.do1.get_config())
-        conf.update(self.ffn2.get_config())
-        conf.update(self.do2.get_config())
-        return conf

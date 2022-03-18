@@ -11,7 +11,7 @@ Speech features has the shape `(B, T, num_feature_bins, num_channels)` and it co
 3. Delta deltas features: `librosa.feature.delta` with `order=2` from the features extracted on channel 1.
 4. Pitch features: `librosa.core.piptrack` from the signal
 
-There are 2 classes for Speech Features Extraction: `SpeechFeaturizer` (uses `librosa`) and `TFSpeechFeaturizer` (uses `tf.signal`). The tf based class does not support `delta, delta_delta, pitch` features yet.
+There are 2 classes for Speech Features Extraction: `NumpySpeechFeaturizer` (uses `librosa`) and `TFSpeechFeaturizer` (uses `tf.signal`). The tf based class does not support `delta, delta_delta, pitch` features yet.
 
 _Note_: `TFSpeechFeaturizer` class **should be used** if you want to deploy `tflite`.
 

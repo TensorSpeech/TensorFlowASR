@@ -13,17 +13,18 @@
 # limitations under the License.
 
 import os
+
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 import tensorflow as tf
 
 logger = tf.get_logger()
 
-DEFAULT_YAML = os.path.join(os.path.abspath(os.path.dirname(__file__)), "config.yml")
+DEFAULT_YAML = os.path.join(os.path.abspath(os.path.dirname(__file__)), "config_wp.j2")
 
 from tensorflow_asr.configs.config import Config
-from tensorflow_asr.models.ctc.deepspeech2 import DeepSpeech2
+from tensorflow_asr.featurizers.speech_featurizers import SpeechFeaturizer
 from tensorflow_asr.featurizers.text_featurizers import CharFeaturizer
-from tensorflow_asr.featurizers.speech_featurizers import TFSpeechFeaturizer
+from tensorflow_asr.models.ctc.deepspeech2 import DeepSpeech2
 
 
 def test_ds2():
@@ -31,12 +32,12 @@ def test_ds2():
 
     text_featurizer = CharFeaturizer(config.decoder_config)
 
-    speech_featurizer = TFSpeechFeaturizer(config.speech_config)
+    speech_featurizer = SpeechFeaturizer(config.speech_config)
 
-    model = DeepSpeech2(vocabulary_size=text_featurizer.num_classes, **config.model_config)
+    model = DeepSpeech2(vocab_size=text_featurizer.num_classes, **config.model_config)
 
     model.make(speech_featurizer.shape)
-    model.summary(line_length=150)
+    model.summary()
 
     model.add_featurizers(speech_featurizer=speech_featurizer, text_featurizer=text_featurizer)
 

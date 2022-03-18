@@ -1,0 +1,156 @@
+# Copyright 2020 Huy Le Nguyen (@usimarit)
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+{% set repodir = "." %}
+{% set modeldir = "/mnt/Miscellanea/Models/local/jasper" %}
+{% set datadir = "/mnt/Data/MLDL/Datasets/ASR/LibriSpeech" %}
+
+model_config:
+  name: jasper
+  dense: True
+  first_additional_block_channels: 256
+  first_additional_block_kernels: 11
+  first_additional_block_strides: 2
+  first_additional_block_dilation: 1
+  first_additional_block_dropout: 0.2
+  nsubblocks: 3
+  block_channels: [256, 384, 512, 640, 768]
+  block_kernels: [11, 13, 17, 21, 25]
+  block_dropout: [0.2, 0.2, 0.2, 0.3, 0.3]
+  second_additional_block_channels: 896
+  second_additional_block_kernels: 1
+  second_additional_block_strides: 1
+  second_additional_block_dilation: 2
+  second_additional_block_dropout: 0.4
+  third_additional_block_channels: 1024
+  third_additional_block_kernels: 1
+  third_additional_block_strides: 1
+  third_additional_block_dilation: 1
+  third_additional_block_dropout: 0.4
+
+speech_config:
+  sample_rate: 16000
+  frame_ms: 25
+  stride_ms: 10
+  num_feature_bins: 80
+  feature_type: log_mel_spectrogram
+
+decoder_config:
+  type: wordpiece
+
+  blank_index: 0
+  unknown_token: "<unk>"
+  unknown_index: 1
+
+  beam_width: 0
+  norm_score: True
+  lm_config: null
+
+  vocabulary: {{repodir}}/vocabularies/librispeech/wordpiece/train_1000_50.tokens
+  vocab_size: 1000
+  max_token_length: 50
+  max_unique_chars: 1000
+  reserved_tokens:
+    - "<pad>"
+    - "<unk>"
+  normalization_form: NFKC
+  num_iterations: 4
+
+  corpus_files:
+    - {{datadir}}/train-clean-100/transcripts.tsv
+    - {{datadir}}/train-clean-360/transcripts.tsv
+    - {{datadir}}/train-other-500/transcripts.tsv
+
+learning_config:
+  train_dataset_config:
+    enabled: True
+    use_tf: True
+    augmentation_config:
+      feature_augment:
+        gauss_noise:
+          prob: 0.1
+          stddev: 0.075
+        time_masking:
+          prob: 0.5
+          num_masks: 10
+          mask_factor: 100
+          p_upperbound: 0.05
+        freq_masking:
+          prob: 0.5
+          num_masks: 1
+          mask_factor: 27
+    data_paths:
+      - {{datadir}}/train-clean-100/transcripts.tsv
+    tfrecords_dir: {{datadir}}/tfrecords/100h
+    shuffle: True
+    cache: True
+    buffer_size: 100
+    drop_remainder: True
+    stage: train
+    metadata: {{repodir}}/vocabularies/librispeech/wordpiece/train_1000.metadata.json
+
+  eval_dataset_config:
+    enabled: False
+    use_tf: True
+    data_paths:
+      - {{datadir}}/dev-clean/transcripts.tsv
+    tfrecords_dir: null
+    shuffle: False
+    cache: True
+    buffer_size: 100
+    drop_remainder: True
+    stage: eval
+    metadata: {{repodir}}/vocabularies/librispeech/wordpiece/train_1000.metadata.json
+
+  test_dataset_config:
+    enabled: False
+    use_tf: True
+    data_paths:
+      - {{datadir}}/test-clean/transcripts.tsv
+    tfrecords_dir: null
+    shuffle: False
+    cache: True
+    buffer_size: 100
+    drop_remainder: True
+    stage: test
+
+  optimizer_config:
+    beta_1: 0.9
+    beta_2: 0.98
+    epsilon: 1e-9
+
+  learning_rate_config:
+    warmup_steps: 10000
+    max_lr_numerator: 0.05
+
+  running_config:
+    batch_size: 2
+    num_epochs: 100
+    checkpoint:
+      filepath: {{modeldir}}/checkpoints/{epoch:02d}.h5
+      save_best_only: False
+      save_weights_only: True
+      save_freq: epoch
+    backup_and_restore:
+      backup_dir: {{modeldir}}/states
+      save_freq: epoch
+      delete_checkpoint: False
+    tensorboard:
+      log_dir: {{modeldir}}/tensorboard
+      histogram_freq: 1
+      write_graph: True
+      write_images: True
+      update_freq: epoch
+      profile_batch: 2
+

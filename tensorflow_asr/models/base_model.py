@@ -1,3 +1,4 @@
+# pylint: disable=attribute-defined-outside-init
 # Copyright 2020 Huy Le Nguyen (@usimarit)
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,10 +15,24 @@
 
 import tensorflow as tf
 
+from tensorflow_asr.featurizers.speech_featurizers import SpeechFeaturizer
+from tensorflow_asr.featurizers.text_featurizers import TextFeaturizer
+from tensorflow_asr.optimizers.accumulation import GradientAccumulator
 from tensorflow_asr.utils import env_util, file_util
+
+logger = tf.get_logger()
 
 
 class BaseModel(tf.keras.Model):
+    def summary(
+        self,
+        line_length=127,
+        expand_nested=True,
+        show_trainable=True,
+        **kwargs,
+    ):
+        super().summary(line_length=line_length, expand_nested=expand_nested, show_trainable=show_trainable, **kwargs)
+
     def save(
         self,
         filepath,
@@ -65,10 +80,7 @@ class BaseModel(tf.keras.Model):
             self._tfasr_metrics = {}
         return list(self._tfasr_metrics.values())
 
-    def add_metric(
-        self,
-        metric: tf.keras.metrics.Metric,
-    ):
+    def add_metric(self, metric: tf.keras.metrics.Metric):
         if not hasattr(self, "_tfasr_metrics"):
             self._tfasr_metrics = {}
         self._tfasr_metrics[metric.name] = metric
@@ -82,16 +94,51 @@ class BaseModel(tf.keras.Model):
         loss,
         optimizer,
         run_eagerly=None,
+        mxp=True,
+        ga_steps=None,
+        apply_gwn_config=None,
         **kwargs,
     ):
-        self.use_loss_scale = False
-        if not env_util.has_devices("TPU"):
-            optimizer = tf.keras.mixed_precision.experimental.LossScaleOptimizer(tf.keras.optimizers.get(optimizer), "dynamic")
-            self.use_loss_scale = True
+        if env_util.has_devices("TPU"):
+            self.use_loss_scale = False
+        else:
+            self.use_loss_scale = mxp
+            if self.use_loss_scale:
+                optimizer = tf.keras.mixed_precision.LossScaleOptimizer(tf.keras.optimizers.get(optimizer))
+                logger.info("Using loss scale")
+        if isinstance(ga_steps, int) and ga_steps > 1:
+            self.use_ga = True
+            self.ga = GradientAccumulator(ga_steps=ga_steps, trainable_variables=self.trainable_variables)
+            logger.info(f"Using gradient accumulation with accumulate steps = {ga_steps}")
+        else:
+            self.use_ga = False
+        self.apply_gwn_config = apply_gwn_config
         self.add_metric(metric=tf.keras.metrics.Mean(name="loss", dtype=tf.float32))
         super().compile(optimizer=optimizer, loss=loss, run_eagerly=run_eagerly, **kwargs)
 
+    def add_featurizers(self, speech_featurizer: SpeechFeaturizer, text_featurizer: TextFeaturizer):
+        """
+        Function to add featurizer to model to convert to end2end tflite
+        Args:
+            speech_featurizer: SpeechFeaturizer instance
+            text_featurizer: TextFeaturizer instance
+            scorer: external language model scorer
+        """
+        self.speech_featurizer = speech_featurizer
+        self.text_featurizer = text_featurizer
+
     # -------------------------------- STEP FUNCTIONS -------------------------------------
+    def apply_gwn(self) -> list:
+        return []
+
+    def remove_gwn(self, original_weights):
+        pass
+
+    def _get_global_batch_size(self, y_pred):
+        global_batch_size = tf.shape(y_pred["logits"])[0] * tf.distribute.get_strategy().num_replicas_in_sync
+        if self.use_ga:
+            global_batch_size *= self.ga.total_steps
+        return global_batch_size
 
     def train_step(self, batch):
         """
@@ -103,18 +150,31 @@ class BaseModel(tf.keras.Model):
 
         """
         inputs, y_true = batch
+
         with tf.GradientTape() as tape:
+            original_weights = self.apply_gwn()
             y_pred = self(inputs, training=True)
-            loss = self.loss(y_true, y_pred)
+            self.remove_gwn(original_weights)
+            tape.watch(y_pred["logits"])
+            per_sample_loss = self.loss(y_true=y_true, y_pred=y_pred)
+            loss = tf.nn.compute_average_loss(per_sample_loss, global_batch_size=self._get_global_batch_size(y_pred))
             if self.use_loss_scale:
                 scaled_loss = self.optimizer.get_scaled_loss(loss)
+
         if self.use_loss_scale:
-            gradients = tape.gradient(scaled_loss, self.trainable_weights)
+            gradients = tape.gradient(scaled_loss, self.trainable_weights, unconnected_gradients=tf.UnconnectedGradients.ZERO)
             gradients = self.optimizer.get_unscaled_gradients(gradients)
         else:
-            gradients = tape.gradient(loss, self.trainable_weights)
-        self.optimizer.apply_gradients(zip(gradients, self.trainable_variables))
-        self._tfasr_metrics["loss"].update_state(loss)
+            gradients = tape.gradient(loss, self.trainable_weights, unconnected_gradients=tf.UnconnectedGradients.ZERO)
+
+        if self.use_ga:  # perform gradient accumulation
+            self.ga.accumulate(gradients=gradients)
+            self.optimizer.apply_gradients(zip(self.ga.gradients, self.trainable_variables))
+            tf.cond(self.ga.is_apply_step, self.ga.reset, lambda: None)
+        else:
+            self.optimizer.apply_gradients(zip(gradients, self.trainable_variables))
+
+        self._tfasr_metrics["loss"].update_state(per_sample_loss)
         return {m.name: m.result() for m in self.metrics}
 
     def test_step(self, batch):
@@ -128,8 +188,8 @@ class BaseModel(tf.keras.Model):
         """
         inputs, y_true = batch
         y_pred = self(inputs, training=False)
-        loss = self.loss(y_true, y_pred)
-        self._tfasr_metrics["loss"].update_state(loss)
+        per_sample_loss = self.loss(y_true=y_true, y_pred=y_pred)
+        self._tfasr_metrics["loss"].update_state(per_sample_loss)
         return {m.name: m.result() for m in self.metrics}
 
     def predict_step(self, batch):
@@ -144,7 +204,7 @@ class BaseModel(tf.keras.Model):
         labels = self.text_featurizer.iextract(y_true["labels"])
         greedy_decoding = self.recognize(inputs)
         if self.text_featurizer.decoder_config.beam_width == 0:
-            beam_search_decoding = tf.map_fn(lambda _: tf.convert_to_tensor("", dtype=tf.string), labels)
+            beam_search_decoding = tf.tile(tf.expand_dims(tf.convert_to_tensor("", tf.string), 0), [tf.shape(labels)[0]])
         else:
             beam_search_decoding = self.recognize_beam(inputs)
         return tf.stack([labels, greedy_decoding, beam_search_decoding], axis=-1)
@@ -161,9 +221,5 @@ class BaseModel(tf.keras.Model):
 
     # ---------------------------------- TFLITE ---------------------------------- #
 
-    def make_tflite_function(
-        self,
-        *args,
-        **kwargs,
-    ):
+    def make_tflite_function(self, *args, **kwargs):
         pass

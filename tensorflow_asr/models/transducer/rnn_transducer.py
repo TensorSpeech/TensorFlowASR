@@ -13,12 +13,13 @@
 # limitations under the License.
 """ http://arxiv.org/abs/1811.06621 """
 
-from typing import Dict
+
 import tensorflow as tf
 
-from tensorflow_asr.utils import layer_util, math_util, shape_util
+from tensorflow_asr.models.layers.base_layer import Layer
 from tensorflow_asr.models.layers.subsampling import TimeReduction
 from tensorflow_asr.models.transducer.base_transducer import Transducer
+from tensorflow_asr.utils import layer_util, math_util
 
 
 class Reshape(tf.keras.layers.Layer):
@@ -26,7 +27,7 @@ class Reshape(tf.keras.layers.Layer):
         return math_util.merge_two_last_dims(inputs)
 
 
-class RnnTransducerBlock(tf.keras.Model):
+class RnnTransducerBlock(Layer):
     def __init__(
         self,
         reduction_factor: int = 0,
@@ -41,7 +42,7 @@ class RnnTransducerBlock(tf.keras.Model):
         super().__init__(**kwargs)
 
         if reduction_factor > 0:
-            self.reduction = TimeReduction(reduction_factor, name=f"{self.name}_reduction")
+            self.reduction = TimeReduction(reduction_factor, name="reduction")
         else:
             self.reduction = None
 
@@ -49,48 +50,39 @@ class RnnTransducerBlock(tf.keras.Model):
         self.rnn = RNN(
             units=rnn_units,
             return_sequences=True,
-            name=f"{self.name}_{rnn_type}",
+            name=rnn_type,
             return_state=True,
             kernel_regularizer=kernel_regularizer,
             bias_regularizer=bias_regularizer,
         )
 
         if layer_norm:
-            self.ln = tf.keras.layers.LayerNormalization(name=f"{self.name}_ln")
+            self.ln = tf.keras.layers.LayerNormalization(name="ln")
         else:
             self.ln = None
 
         self.projection = tf.keras.layers.Dense(
             dmodel,
-            name=f"{self.name}_projection",
+            name="projection",
             kernel_regularizer=kernel_regularizer,
             bias_regularizer=bias_regularizer,
         )
 
-    def call(
-        self,
-        inputs,
-        training=False,
-        **kwargs,
-    ):
-        outputs = inputs
+    def call(self, inputs, training=False, **kwargs):
+        outputs, inputs_length = inputs
         if self.reduction is not None:
-            outputs = self.reduction(outputs)
+            outputs, inputs_length = self.reduction([outputs, inputs_length])
         outputs = self.rnn(outputs, training=training)
         outputs = outputs[0]
         if self.ln is not None:
             outputs = self.ln(outputs, training=training)
         outputs = self.projection(outputs, training=training)
-        return outputs
+        return outputs, inputs_length
 
-    def recognize(
-        self,
-        inputs,
-        states,
-    ):
+    def recognize(self, inputs, states):
         outputs = inputs
         if self.reduction is not None:
-            outputs = self.reduction(outputs)
+            outputs, _ = self.reduction([outputs, tf.reshape(tf.shape(outputs)[1], [1])])
         outputs = self.rnn(outputs, training=False, initial_state=states)
         new_states = tf.stack(outputs[1:], axis=0)
         outputs = outputs[0]
@@ -98,16 +90,6 @@ class RnnTransducerBlock(tf.keras.Model):
             outputs = self.ln(outputs, training=False)
         outputs = self.projection(outputs, training=False)
         return outputs, new_states
-
-    def get_config(self):
-        conf = {}
-        if self.reduction is not None:
-            conf.update(self.reduction.get_config())
-        conf.update(self.rnn.get_config())
-        if self.ln is not None:
-            conf.update(self.ln.get_config())
-        conf.update(self.projection.get_config())
-        return conf
 
 
 class RnnTransducerEncoder(tf.keras.Model):
@@ -125,7 +107,7 @@ class RnnTransducerEncoder(tf.keras.Model):
     ):
         super().__init__(**kwargs)
 
-        self.reshape = Reshape(name=f"{self.name}_reshape")
+        self.reshape = Reshape(name="reshape")
 
         self.blocks = [
             RnnTransducerBlock(
@@ -136,7 +118,7 @@ class RnnTransducerEncoder(tf.keras.Model):
                 layer_norm=layer_norm,
                 kernel_regularizer=kernel_regularizer,
                 bias_regularizer=bias_regularizer,
-                name=f"{self.name}_block_{i}",
+                name="block_{i}",
             )
             for i in range(nlayers)
         ]
@@ -147,10 +129,7 @@ class RnnTransducerEncoder(tf.keras.Model):
             if reduction_factor > 0:
                 self.time_reduction_factor *= reduction_factor
 
-    def get_initial_state(
-        self,
-        batch_size=1,
-    ):
+    def get_initial_state(self, batch_size=1):
         """Get zeros states
 
         Returns:
@@ -161,22 +140,14 @@ class RnnTransducerEncoder(tf.keras.Model):
             states.append(tf.stack(block.rnn.get_initial_state(tf.zeros([batch_size, 1, 1], dtype=tf.float32)), axis=0))
         return tf.stack(states, axis=0)
 
-    def call(
-        self,
-        inputs,
-        training=False,
-        **kwargs,
-    ):
+    def call(self, inputs, training=False, **kwargs):
+        outputs, inputs_length = inputs
         outputs = self.reshape(inputs)
         for block in self.blocks:
-            outputs = block(outputs, training=training, **kwargs)
-        return outputs
+            outputs, inputs_length = block([outputs, inputs_length], training=training, **kwargs)
+        return outputs, inputs_length
 
-    def recognize(
-        self,
-        inputs,
-        states,
-    ):
+    def recognize(self, inputs, states):
         """Recognize function for encoder network
 
         Args:
@@ -194,37 +165,33 @@ class RnnTransducerEncoder(tf.keras.Model):
             new_states.append(block_states)
         return outputs, tf.stack(new_states, axis=0)
 
-    def get_config(self):
-        conf = self.reshape.get_config()
-        if self.fnorm is not None:
-            conf.update(self.fnorm.get_config())
-        for block in self.blocks:
-            conf.update(block.get_config())
-        return conf
-
 
 class RnnTransducer(Transducer):
     def __init__(
         self,
-        vocabulary_size: int,
+        blank: int,
+        vocab_size: int,
         encoder_reductions: dict = {0: 3, 1: 2},
         encoder_dmodel: int = 640,
         encoder_nlayers: int = 8,
         encoder_rnn_type: str = "lstm",
         encoder_rnn_units: int = 2048,
-        encoder_layer_norm: bool = True,
+        encoder_layer_norm: bool = False,
         encoder_trainable: bool = True,
+        prediction_label_encode_mode: str = "embedding",
         prediction_embed_dim: int = 320,
-        prediction_embed_dropout: float = 0,
         prediction_num_rnns: int = 2,
         prediction_rnn_units: int = 2048,
         prediction_rnn_type: str = "lstm",
-        prediction_layer_norm: bool = True,
+        prediction_rnn_implementation: int = 2,
+        prediction_rnn_unroll: bool = False,
+        prediction_layer_norm: bool = False,
         prediction_projection_units: int = 640,
         prediction_trainable: bool = True,
         joint_dim: int = 640,
         joint_activation: str = "tanh",
-        prejoint_linear: bool = True,
+        prejoint_encoder_linear: bool = True,
+        prejoint_prediction_linear: bool = True,
         postjoint_linear: bool = False,
         joint_mode: str = "add",
         joint_trainable: bool = True,
@@ -244,20 +211,24 @@ class RnnTransducer(Transducer):
                 kernel_regularizer=kernel_regularizer,
                 bias_regularizer=bias_regularizer,
                 trainable=encoder_trainable,
-                name=f"{name}_encoder",
+                name="encoder",
             ),
-            vocabulary_size=vocabulary_size,
-            embed_dim=prediction_embed_dim,
-            embed_dropout=prediction_embed_dropout,
-            num_rnns=prediction_num_rnns,
-            rnn_units=prediction_rnn_units,
-            rnn_type=prediction_rnn_type,
-            layer_norm=prediction_layer_norm,
-            projection_units=prediction_projection_units,
+            blank=blank,
+            vocab_size=vocab_size,
+            prediction_label_encoder_mode=prediction_label_encode_mode,
+            prediction_embed_dim=prediction_embed_dim,
+            prediction_num_rnns=prediction_num_rnns,
+            prediction_rnn_units=prediction_rnn_units,
+            prediction_rnn_type=prediction_rnn_type,
+            prediction_layer_norm=prediction_layer_norm,
+            prediction_rnn_implementation=prediction_rnn_implementation,
+            prediction_rnn_unroll=prediction_rnn_unroll,
+            prediction_projection_units=prediction_projection_units,
             prediction_trainable=prediction_trainable,
             joint_dim=joint_dim,
             joint_activation=joint_activation,
-            prejoint_linear=prejoint_linear,
+            prejoint_encoder_linear=prejoint_encoder_linear,
+            prejoint_prediction_linear=prejoint_prediction_linear,
             postjoint_linear=postjoint_linear,
             joint_mode=joint_mode,
             joint_trainable=joint_trainable,
@@ -269,11 +240,7 @@ class RnnTransducer(Transducer):
         self.time_reduction_factor = self.encoder.time_reduction_factor
         self.dmodel = encoder_dmodel
 
-    def encoder_inference(
-        self,
-        features: tf.Tensor,
-        states: tf.Tensor,
-    ):
+    def encoder_inference(self, features: tf.Tensor, states: tf.Tensor):
         """Infer function for encoder (or encoders)
 
         Args:
@@ -284,38 +251,14 @@ class RnnTransducer(Transducer):
             tf.Tensor: output of encoders with shape [T, E]
             tf.Tensor: states of encoders with shape [num_rnns, 1 or 2, 1, P]
         """
-        with tf.name_scope(f"{self.name}_encoder"):
+        with tf.name_scope("encoder"):
             outputs = tf.expand_dims(features, axis=0)
             outputs, new_states = self.encoder.recognize(outputs, states)
             return tf.squeeze(outputs, axis=0), new_states
 
     # -------------------------------- GREEDY -------------------------------------
 
-    @tf.function
-    def recognize(
-        self,
-        inputs: Dict[str, tf.Tensor],
-    ):
-        """
-        RNN Transducer Greedy decoding
-        Args:
-            features (tf.Tensor): a batch of padded extracted features
-
-        Returns:
-            tf.Tensor: a batch of decoded transcripts
-        """
-        batch_size, _, _, _ = shape_util.shape_list(inputs["inputs"])
-        encoded, _ = self.encoder.recognize(inputs["inputs"], self.encoder.get_initial_state(batch_size))
-        encoded_length = math_util.get_reduced_length(inputs["inputs_length"], self.time_reduction_factor)
-        return self._perform_greedy_batch(encoded=encoded, encoded_length=encoded_length)
-
-    def recognize_tflite(
-        self,
-        signal,
-        predicted,
-        encoder_states,
-        prediction_states,
-    ):
+    def recognize_tflite(self, signal, predicted, encoder_states, prediction_states):
         """
         Function to convert to tflite using greedy decoding (default streaming mode)
         Args:
@@ -336,13 +279,7 @@ class RnnTransducer(Transducer):
         transcript = self.text_featurizer.indices2upoints(hypothesis.prediction)
         return transcript, hypothesis.index, new_encoder_states, hypothesis.states
 
-    def recognize_tflite_with_timestamp(
-        self,
-        signal,
-        predicted,
-        encoder_states,
-        prediction_states,
-    ):
+    def recognize_tflite_with_timestamp(self, signal, predicted, encoder_states, prediction_states):
         features = self.speech_featurizer.tf_extract(signal)
         encoded, new_encoder_states = self.encoder_inference(features, encoder_states)
         hypothesis = self._perform_greedy(encoded, tf.shape(encoded)[0], predicted, prediction_states)
@@ -364,28 +301,6 @@ class RnnTransducer(Transducer):
         non_blank_etime = tf.gather_nd(tf.repeat(tf.expand_dims(etime, axis=-1), tf.shape(upoints)[-1], axis=-1), non_blank)
 
         return non_blank_transcript, non_blank_stime, non_blank_etime, hypothesis.index, new_encoder_states, hypothesis.states
-
-    # -------------------------------- BEAM SEARCH -------------------------------------
-
-    @tf.function
-    def recognize_beam(
-        self,
-        inputs: Dict[str, tf.Tensor],
-        lm: bool = False,
-    ):
-        """
-        RNN Transducer Beam Search
-        Args:
-            features (tf.Tensor): a batch of padded extracted features
-            lm (bool, optional): whether to use language model. Defaults to False.
-
-        Returns:
-            tf.Tensor: a batch of decoded transcripts
-        """
-        batch_size, _, _, _ = shape_util.shape_list(inputs["inputs"])
-        encoded, _ = self.encoder.recognize(inputs["inputs"], self.encoder.get_initial_state(batch_size))
-        encoded_length = math_util.get_reduced_length(inputs["inputs_length"], self.time_reduction_factor)
-        return self._perform_beam_search_batch(encoded=encoded, encoded_length=encoded_length, lm=lm)
 
     # -------------------------------- TFLITE -------------------------------------
 

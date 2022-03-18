@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import argparse
+
 import tensorflow as tf
 
 parser = argparse.ArgumentParser(prog="Convert saved model to weights")
