@@ -13,19 +13,20 @@
 # limitations under the License.
 
 {% set repodir = "." %}
-{% set modeldir = "/mnt/Miscellanea/Models/local/conformer-ctc" %}
-{% set datadir = "/mnt/Data/MLDL/Datasets/ASR/LibriSpeech" %}
+{% set modeldir = "/Users/nlhuy/Paraphernalia/models/local/conformer-ctc" %}
+{% set datadir = "/Users/nlhuy/Paraphernalia/data/LibriSpeech" %}
 
 model_config:
   name: conformer
   encoder_subsampling:
-    type: conv2d_blurpool
+    type: conv2d
+    nlayers: 2
     filters: 144
     kernel_size: 3
     strides: 2
-    conv_padding: same
-    pool_padding: reflect
-    activation: relu
+    padding: same
+    activation: swish
+    norm: batch
   encoder_dmodel: 144
   encoder_num_blocks: 16
   encoder_head_size: 36 # == dmodel // num_heads
@@ -86,8 +87,8 @@ learning_config:
           num_masks: 1
           mask_factor: 27
     data_paths:
-      - {{datadir}}/train-clean-100/transcripts.tsv
-    tfrecords_dir: {{datadir}}/tfrecords/100h
+      - {{datadir}}/dev-clean/transcripts.tsv
+    tfrecords_dir: null
     shuffle: True
     cache: True
     buffer_size: 100

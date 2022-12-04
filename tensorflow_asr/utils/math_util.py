@@ -202,6 +202,9 @@ def large_compatible_negative(
 
 def apply_mask(outputs, mask=None):
     if mask is not None:
-        outputs = outputs * tf.cast(tf.expand_dims(mask, -1), dtype=outputs.dtype)
+        expanded_mask = mask
+        for _ in range(len(outputs.shape) - len(mask.shape)):  # expand last axis of mask so that it's dim equals output's dim
+            expanded_mask = tf.expand_dims(expanded_mask, -1)
+        outputs = outputs * tf.cast(expanded_mask, dtype=outputs.dtype)
         outputs._keras_mask = mask  # pylint: disable=protected-access
     return outputs

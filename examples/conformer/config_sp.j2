@@ -13,8 +13,8 @@
 # limitations under the License.
 
 {% set repodir = "." %}
-{% set modeldir = "/mnt/Miscellanea/Models/local/conformer" %}
-{% set datadir = "/mnt/Data/MLDL/Datasets/ASR/LibriSpeech" %}
+{% set modeldir = "/Users/nlhuy/Paraphernalia/models/local/conformer" %}
+{% set datadir = "/Users/nlhuy/Paraphernalia/data/LibriSpeech" %}
 
 model_config:
   name: conformer
@@ -32,6 +32,7 @@ model_config:
   encoder_head_size: 36 # == dmodel // num_heads
   encoder_num_heads: 4
   encoder_mha_type: relmha
+  encoder_use_attention_causal_mask: False
   encoder_kernel_size: 32
   encoder_fc_factor: 0.5
   encoder_dropout: 0.1
