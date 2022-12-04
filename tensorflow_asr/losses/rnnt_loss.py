@@ -22,7 +22,7 @@ from tensorflow_asr.utils import env_util
 
 logger = tf.get_logger()
 
-USE_CPU_LOSS = bool(os.getenv("USE_CPU_LOSS", "True"))
+USE_CPU_LOSS = os.getenv("USE_CPU_LOSS", "False") == "True"
 
 try:
     from warprnnt_tensorflow import rnnt_loss as warp_rnnt_loss
