@@ -145,9 +145,6 @@ class CharFeaturizer(TextFeaturizer):
 
     def __init__(self, decoder_config: DecoderConfig):
         super().__init__(decoder_config)
-        self.__init_vocabulary()
-
-    def __init_vocabulary(self):
         lines = []
         if self.decoder_config.vocabulary is not None:
             with codecs.open(self.decoder_config.vocabulary, "r", "utf-8") as fin:
@@ -155,40 +152,37 @@ class CharFeaturizer(TextFeaturizer):
         else:
             lines = ENGLISH_CHARACTERS
         self.blank = self.decoder_config.blank_index
-        self.tokens2indices = {}
         self.tokens = []
         index = 1 if self.blank == 0 else 0
         for line in lines:
             line = unicodedata.normalize(self.decoder_config.normalization_form, line.lower()).strip("\n")
             if line.startswith("#") or not line:
                 continue
-            self.tokens2indices[line[0]] = index
             self.tokens.append(line[0])
             index += 1
         if self.blank is None:
             self.blank = len(self.tokens)  # blank not at zero
-        self.non_blank_tokens = self.tokens.copy()
         self.tokens.insert(self.blank, "")  # add blank token to tokens
         self.num_classes = len(self.tokens)
+        self.indices = tf.range(self.num_classes, dtype=tf.int32)
         self.tokens = tf.convert_to_tensor(self.tokens, dtype=tf.string)
+        self.tokenizer = tf.lookup.StaticHashTable(
+            tf.lookup.KeyValueTensorInitializer(keys=self.tokens, values=self.indices, key_dtype=tf.string, value_dtype=tf.int32),
+            default_value=self.blank,
+        )
+        self.detokenizer = tf.lookup.StaticHashTable(
+            tf.lookup.KeyValueTensorInitializer(keys=self.indices, values=self.tokens, key_dtype=tf.int32, value_dtype=tf.string),
+            default_value="",
+        )
         self.upoints = tf.strings.unicode_decode(self.tokens, "UTF-8").to_tensor(shape=[None, 1])
 
-    def extract(self, text: str) -> tf.Tensor:
-        """
-        Convert string to a list of integers
-        Args:
-            text: string (sequence of characters)
-
-        Returns:
-            sequence of ints in tf.Tensor
-        """
-        text = self.preprocess_text(text)
-        text = list(text)
-        indices = [self.tokens2indices[token] for token in text]
-        return tf.convert_to_tensor(indices, dtype=tf.int32)
+    def extract(self, text: str):
+        return self.tf_extract(tf.convert_to_tensor(text))
 
     def tf_extract(self, text):
-        return tf.numpy_function(lambda t: self.extract(t.decode("utf-8")), [text], Tout=tf.int32, stateful=False)
+        text = self.tf_preprocess_text(text)
+        text = tf.strings.unicode_split(text, "UTF-8")
+        return self.tokenizer.lookup(text)
 
     def iextract(self, indices: tf.Tensor) -> tf.Tensor:
         """
@@ -200,7 +194,7 @@ class CharFeaturizer(TextFeaturizer):
             transcripts: tf.Tensor of dtype tf.string with dim [B]
         """
         indices = self.normalize_indices(indices)
-        tokens = tf.gather_nd(self.tokens, tf.expand_dims(indices, axis=-1))
+        tokens = self.detokenizer.lookup(indices)
         tokens = tf.strings.reduce_join(tokens, axis=-1)
         return tokens
 
