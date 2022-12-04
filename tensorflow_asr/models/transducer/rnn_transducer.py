@@ -22,9 +22,17 @@ from tensorflow_asr.models.transducer.base_transducer import Transducer
 from tensorflow_asr.utils import layer_util, math_util
 
 
-class Reshape(tf.keras.layers.Layer):
+class Reshape(Layer):
     def call(self, inputs):
-        return math_util.merge_two_last_dims(inputs)
+        outputs, outputs_length = inputs
+        outputs = math_util.merge_two_last_dims(outputs)
+        outputs = math_util.apply_mask(outputs, mask=tf.sequence_mask(outputs_length, maxlen=tf.shape(outputs)[1], dtype=tf.bool))
+        return outputs, outputs_length
+
+    def compute_output_shape(self, input_shape):
+        output_shape, output_length_shape = input_shape
+        output_shape = list(output_shape)
+        return (output_shape[0], output_shape[1], output_shape[2] * output_shape[3]), tuple(output_length_shape)
 
 
 class RnnTransducerBlock(Layer):
@@ -61,29 +69,29 @@ class RnnTransducerBlock(Layer):
         else:
             self.ln = None
 
-        self.projection = tf.keras.layers.Dense(
-            dmodel,
-            name="projection",
-            kernel_regularizer=kernel_regularizer,
-            bias_regularizer=bias_regularizer,
-        )
+        self.projection = tf.keras.layers.Dense(dmodel, name="projection", kernel_regularizer=kernel_regularizer, bias_regularizer=bias_regularizer)
 
-    def call(self, inputs, training=False, **kwargs):
-        outputs, inputs_length = inputs
+    def call(self, inputs, training=False):
+        outputs, outputs_length = inputs
         if self.reduction is not None:
-            outputs, inputs_length = self.reduction([outputs, inputs_length])
-        outputs = self.rnn(outputs, training=training)
+            outputs, outputs_length = self.reduction([outputs, outputs_length])
+        outputs = self.rnn(outputs, training=training, mask=getattr(outputs, "_keras_mask", None))
         outputs = outputs[0]
         if self.ln is not None:
             outputs = self.ln(outputs, training=training)
         outputs = self.projection(outputs, training=training)
-        return outputs, inputs_length
+        return outputs, outputs_length
+
+    def compute_mask(self, inputs, mask=None):
+        if self.reduction is not None:
+            mask = self.reduction.compute_mask(inputs)
+        return mask
 
     def recognize(self, inputs, states):
         outputs = inputs
         if self.reduction is not None:
             outputs, _ = self.reduction([outputs, tf.reshape(tf.shape(outputs)[1], [1])])
-        outputs = self.rnn(outputs, training=False, initial_state=states)
+        outputs = self.rnn(outputs, training=False, initial_state=states, mask=getattr(outputs, "_keras_mask", None))
         new_states = tf.stack(outputs[1:], axis=0)
         outputs = outputs[0]
         if self.ln is not None:
@@ -91,8 +99,13 @@ class RnnTransducerBlock(Layer):
         outputs = self.projection(outputs, training=False)
         return outputs, new_states
 
+    def compute_output_shape(self, input_shape):
+        if self.reduction is None:
+            return tuple(input_shape)
+        return self.reduction.compute_output_shape(input_shape)
 
-class RnnTransducerEncoder(tf.keras.Model):
+
+class RnnTransducerEncoder(Layer):
     def __init__(
         self,
         reductions: dict = {0: 3, 1: 2},
@@ -106,28 +119,27 @@ class RnnTransducerEncoder(tf.keras.Model):
         **kwargs,
     ):
         super().__init__(**kwargs)
-
+        self._dmodel = dmodel
         self.reshape = Reshape(name="reshape")
 
         self.blocks = [
             RnnTransducerBlock(
-                reduction_factor=reductions.get(i, 0),  # key is index, value is the factor
+                reduction_factor=reductions.get(i, 0) if reductions else 0,  # key is index, value is the factor
                 dmodel=dmodel,
                 rnn_type=rnn_type,
                 rnn_units=rnn_units,
                 layer_norm=layer_norm,
                 kernel_regularizer=kernel_regularizer,
                 bias_regularizer=bias_regularizer,
-                name="block_{i}",
+                name=f"block_{i}",
             )
             for i in range(nlayers)
         ]
 
         self.time_reduction_factor = 1
-        for i in range(nlayers):
-            reduction_factor = reductions.get(i, 0)
-            if reduction_factor > 0:
-                self.time_reduction_factor *= reduction_factor
+        for block in self.blocks:
+            if block.reduction is not None:
+                self.time_reduction_factor *= block.reduction.time_reduction_factor
 
     def get_initial_state(self, batch_size=1):
         """Get zeros states
@@ -140,12 +152,11 @@ class RnnTransducerEncoder(tf.keras.Model):
             states.append(tf.stack(block.rnn.get_initial_state(tf.zeros([batch_size, 1, 1], dtype=tf.float32)), axis=0))
         return tf.stack(states, axis=0)
 
-    def call(self, inputs, training=False, **kwargs):
-        outputs, inputs_length = inputs
-        outputs = self.reshape(inputs)
+    def call(self, inputs, training=False):
+        outputs, outputs_length = self.reshape(inputs)
         for block in self.blocks:
-            outputs, inputs_length = block([outputs, inputs_length], training=training, **kwargs)
-        return outputs, inputs_length
+            outputs, outputs_length = block([outputs, outputs_length], training=training)
+        return outputs, outputs_length
 
     def recognize(self, inputs, states):
         """Recognize function for encoder network
@@ -158,12 +169,19 @@ class RnnTransducerEncoder(tf.keras.Model):
             tf.Tensor: outputs with shape [1, T, E]
             tf.Tensor: new states with shape [num_lstms, 1 or 2, 1, P]
         """
-        outputs = self.reshape(inputs)
+        outputs, _ = self.reshape([inputs, tf.reshape(tf.shape(inputs)[1], [1])])
         new_states = []
         for i, block in enumerate(self.blocks):
             outputs, block_states = block.recognize(outputs, states=tf.unstack(states[i], axis=0))
             new_states.append(block_states)
         return outputs, tf.stack(new_states, axis=0)
+
+    def compute_output_shape(self, input_shape):
+        output_shape, output_length_shape = self.reshape.compute_output_shape(input_shape)
+        output_shape = list(output_shape)
+        output_shape[1] = None if output_shape[1] is None else math_util.legacy_get_reduced_length(output_shape[1], self.time_reduction_factor)
+        output_shape[2] = self._dmodel
+        return tuple(output_shape), output_length_shape
 
 
 class RnnTransducer(Transducer):
@@ -197,7 +215,7 @@ class RnnTransducer(Transducer):
         joint_trainable: bool = True,
         kernel_regularizer=None,
         bias_regularizer=None,
-        name="RnnTransducer",
+        name="rnn_transducer",
         **kwargs,
     ):
         super().__init__(

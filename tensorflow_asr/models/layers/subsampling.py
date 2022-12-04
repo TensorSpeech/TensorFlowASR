@@ -24,10 +24,17 @@ class Subsampling(Layer):
         self.time_reduction_factor = 1
 
     def call(self, inputs):
-        outputs, inputs_length = inputs
+        outputs, inputs_length = inputs  # outputs already reduced, inputs_length is original
         outputs_length = math_util.get_reduced_length(inputs_length, self.time_reduction_factor)
         outputs = math_util.apply_mask(outputs, mask=tf.sequence_mask(outputs_length, maxlen=tf.shape(outputs)[1], dtype=tf.bool))
         return outputs, outputs_length
+
+    def compute_mask(self, inputs, mask=None):
+        outputs, outputs_length = inputs
+        maxlen = math_util.get_reduced_length(tf.shape(outputs)[1], self.time_reduction_factor)
+        outputs_length = math_util.get_reduced_length(outputs_length, self.time_reduction_factor)
+        mask = tf.sequence_mask(outputs_length, maxlen=maxlen, dtype=tf.bool)
+        return mask
 
     def compute_output_shape(self, input_shape):
         inputs_shape, inputs_length_shape = input_shape
@@ -49,7 +56,7 @@ class TimeReduction(Subsampling):
     def call(self, inputs):
         outputs, inputs_length = inputs
         shape = shape_util.shape_list(outputs)
-        outputs = tf.pad(inputs, [[0, 0], [0, self.padding(shape[1])], [0, 0]])
+        outputs = tf.pad(outputs, [[0, 0], [0, self.padding(shape[1])], [0, 0]])
         outputs = tf.reshape(outputs, [shape[0], -1, shape[-1] * self.time_reduction_factor])
         outputs, outputs_length = super().call([outputs, inputs_length])
         return outputs, outputs_length

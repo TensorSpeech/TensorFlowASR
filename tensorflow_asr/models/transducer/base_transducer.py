@@ -113,7 +113,7 @@ class TransducerPrediction(Layer):
         outputs = self.label_encoder(outputs, training=training)
         outputs = math_util.apply_mask(outputs, mask=tf.sequence_mask(prediction_length, maxlen=tf.shape(outputs)[1], dtype=tf.bool))
         for i, rnn in enumerate(self.rnns):
-            outputs = rnn(outputs, training=training)
+            outputs = rnn(outputs, training=training, mask=getattr(outputs, "_keras_mask", None))
             outputs = outputs[0]
             if self.lns[i] is not None:
                 outputs = self.lns[i](outputs, training=training)
@@ -169,10 +169,14 @@ class TransducerJointMerge(Layer):
         if enc_mask is not None:
             auto_mask = enc_mask[:, :, tf.newaxis]  # BT1
         if pred_mask is not None:
-            auto_mask = auto_mask & pred_mask[:, tf.newaxis, :]  # BT1 & B1U -> BTU
+            if auto_mask is not None:
+                auto_mask = auto_mask & pred_mask[:, tf.newaxis, :]  # BT1 & B1U -> BTU
+            else:
+                auto_mask = pred_mask[:, tf.newaxis, :]
         if mask is not None and auto_mask is not None:
             auto_mask = auto_mask & mask
-        return auto_mask
+        mask = auto_mask
+        return mask
 
     def call(self, inputs):
         enc_out, pred_out = inputs

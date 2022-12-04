@@ -13,8 +13,8 @@
 # limitations under the License.
 
 {% set repodir = "." %}
-{% set modeldir = "/mnt/Miscellanea/Models/local/jasper" %}
-{% set datadir = "/mnt/Data/MLDL/Datasets/ASR/LibriSpeech" %}
+{% set modeldir = "/Users/nlhuy/Paraphernalia/models/local/rnn-transducer" %}
+{% set datadir = "/Users/nlhuy/Paraphernalia/data/LibriSpeech" %}
 
 model_config:
   name: rnn_transducer
@@ -23,20 +23,20 @@ model_config:
     1: 2
   encoder_dmodel: 640
   encoder_rnn_type: lstm
-  encoder_rnn_units: 2048
-  encoder_nlayers: 8
+  encoder_rnn_units: 1024
+  encoder_nlayers: 5
   encoder_layer_norm: False
   prediction_label_encode_mode: embedding
   prediction_embed_dim: 640
   prediction_num_rnns: 2
-  prediction_rnn_units: 2048
+  prediction_rnn_units: 1024
   prediction_rnn_type: lstm
   prediction_rnn_unroll: False
   prediction_layer_norm: False
   prediction_projection_units: 640
   joint_dim: 640
-  prejoint_encoder_linear: True
-  prejoint_prediction_linear: True
+  prejoint_encoder_linear: False
+  prejoint_prediction_linear: False
   postjoint_linear: False
   joint_activation: tanh
   joint_mode: add
@@ -52,20 +52,19 @@ decoder_config:
   type: wordpiece
 
   blank_index: 0
-  unknown_token: "<unk>"
-  unknown_index: 1
+  unknown_token: "<pad>"
+  unknown_index: 0
 
   beam_width: 0
   norm_score: True
   lm_config: null
 
-  vocabulary: {{repodir}}/vocabularies/librispeech/wordpiece/train_1000_50.tokens
+  vocabulary: {{repodir}}/vocabularies/librispeech/wordpiece/train_1000_4.tokens
   vocab_size: 1000
-  max_token_length: 50
+  max_token_length: 4
   max_unique_chars: 1000
   reserved_tokens:
     - "<pad>"
-    - "<unk>"
   normalization_form: NFKC
   num_iterations: 4
 
@@ -80,27 +79,24 @@ learning_config:
     use_tf: True
     augmentation_config:
       feature_augment:
-        gauss_noise:
-          prob: 0.1
-          stddev: 0.075
         time_masking:
-          prob: 0.5
+          prob: 1.0
           num_masks: 10
           mask_factor: 100
           p_upperbound: 0.05
         freq_masking:
-          prob: 0.5
+          prob: 1.0
           num_masks: 1
           mask_factor: 27
     data_paths:
-      - {{datadir}}/train-clean-100/transcripts.tsv
-    tfrecords_dir: {{datadir}}/tfrecords/100h
+      - {{datadir}}/dev-clean/transcripts.tsv
+    tfrecords_dir: {{datadir}}/tfrecords
     shuffle: True
     cache: True
     buffer_size: 100
     drop_remainder: True
     stage: train
-    metadata: {{repodir}}/vocabularies/librispeech/wordpiece/train_1000.metadata.json
+    metadata: {{repodir}}/vocabularies/librispeech/wordpiece/train_1000_4.metadata.json
 
   eval_dataset_config:
     enabled: False
@@ -113,7 +109,7 @@ learning_config:
     buffer_size: 100
     drop_remainder: True
     stage: eval
-    metadata: {{repodir}}/vocabularies/librispeech/wordpiece/train_1000.metadata.json
+    metadata: {{repodir}}/vocabularies/librispeech/wordpiece/train_1000_4.metadata.json
 
   test_dataset_config:
     enabled: False
@@ -128,13 +124,11 @@ learning_config:
     stage: test
 
   optimizer_config:
-    beta_1: 0.9
-    beta_2: 0.98
-    epsilon: 1e-9
-
-  learning_rate_config:
-    warmup_steps: 10000
-    max_lr_numerator: 0.05
+    class_name: adam
+    config:
+      beta_1: 0.9
+      beta_2: 0.98
+      epsilon: 1e-9
 
   running_config:
     batch_size: 2
