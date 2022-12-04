@@ -17,6 +17,8 @@ text = "i'm good but it would have broken down after ten miles of that hard trai
 
 def test():
     featurizer = CharFeaturizer(decoder_config=decoder_config)
+    print(featurizer.tokens)
+    print(featurizer.num_classes)
     print(text)
     indices = featurizer.extract(text)
     print(indices.numpy())

@@ -32,6 +32,7 @@ logger = tf.get_logger()
 TEXT_FEATURIZER_TYPES = ["characters", "wordpiece", "subwords", "sentencepiece"]
 
 ENGLISH_CHARACTERS = [
+    "<blank>",
     " ",
     "a",
     "b",
@@ -153,26 +154,22 @@ class CharFeaturizer(TextFeaturizer):
             lines = ENGLISH_CHARACTERS
         self.blank = self.decoder_config.blank_index
         self.tokens = []
-        index = 1 if self.blank == 0 else 0
         for line in lines:
             line = unicodedata.normalize(self.decoder_config.normalization_form, line.lower()).strip("\n")
             if line.startswith("#") or not line:
                 continue
-            self.tokens.append(line[0])
-            index += 1
+            self.tokens.append(line)
         if self.blank is None:
             self.blank = len(self.tokens)  # blank not at zero
-        self.tokens.insert(self.blank, "")  # add blank token to tokens
         self.num_classes = len(self.tokens)
         self.indices = tf.range(self.num_classes, dtype=tf.int32)
-        self.tokens = tf.convert_to_tensor(self.tokens, dtype=tf.string)
         self.tokenizer = tf.lookup.StaticHashTable(
             tf.lookup.KeyValueTensorInitializer(keys=self.tokens, values=self.indices, key_dtype=tf.string, value_dtype=tf.int32),
             default_value=self.blank,
         )
         self.detokenizer = tf.lookup.StaticHashTable(
             tf.lookup.KeyValueTensorInitializer(keys=self.indices, values=self.tokens, key_dtype=tf.int32, value_dtype=tf.string),
-            default_value="",
+            default_value=self.tokens[self.blank],
         )
         self.upoints = tf.strings.unicode_decode(self.tokens, "UTF-8").to_tensor(shape=[None, 1])
 
@@ -194,6 +191,7 @@ class CharFeaturizer(TextFeaturizer):
             transcripts: tf.Tensor of dtype tf.string with dim [B]
         """
         indices = self.normalize_indices(indices)
+        indices = tf.ragged.boolean_mask(indices, tf.not_equal(indices, self.blank))
         tokens = self.detokenizer.lookup(indices)
         tokens = tf.strings.reduce_join(tokens, axis=-1)
         return tokens
