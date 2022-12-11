@@ -16,6 +16,7 @@
 
 import os
 
+import numpy as np
 import tensorflow as tf
 
 from tensorflow_asr.utils import env_util
@@ -121,7 +122,7 @@ def rnnt_loss_warprnnt(
 
 # ------------------------------ RNNT LOSS IN TF ----------------------------- #
 
-LOG_0 = float("-inf")
+LOG_0 = -np.inf
 
 
 def nan_to_zero(
