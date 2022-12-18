@@ -86,16 +86,16 @@ def compute_alphas_naive(
 
     t = tf.constant(0, tf.int32)
 
-    def _t_cond(_t, _T, U, _alphas):
-        return tf.less(_t, _T)
+    def _t_cond(_t, _alphas):
+        return tf.less(_t, T)
 
-    def _t_body(_t, _T, U, _alphas):
+    def _t_body(_t, _alphas):
         u = tf.constant(0, tf.int32)
 
-        def _u_cond(_t, _u, _U, _alphas):
-            return tf.less(_u, _U)
+        def _u_cond(_u, _alphas):
+            return tf.less(_u, U)
 
-        def _u_body(_t, _u, _U, _alphas):
+        def _u_body(_u, _alphas):
             _alphas = tf.cond(
                 tf.logical_and(tf.equal(_u, 0), tf.greater(_t, 0)),
                 true_fn=lambda: _update_alphas_case_1(_t, _u, _alphas),
@@ -111,12 +111,12 @@ def compute_alphas_naive(
                 true_fn=lambda: _update_alphas_case_3(_t, _u, _alphas),
                 false_fn=lambda: _alphas,
             )
-            return _t, _u + 1, _U, _alphas
+            return _u + 1, _alphas
 
-        _t, u, U, _alphas = tf.while_loop(_u_cond, _u_body, loop_vars=[_t, u, U, _alphas])
-        return _t + 1, u, U, _alphas
+        u, _alphas = tf.while_loop(_u_cond, _u_body, loop_vars=[u, _alphas])
+        return _t + 1, _alphas
 
-    t, T, U, alphas = tf.while_loop(_t_cond, _t_body, loop_vars=[t, T, U, alphas])
+    t, alphas = tf.while_loop(_t_cond, _t_body, loop_vars=[t, alphas])
 
     loglike = getitem(alphas, [batch, T - 1, U - 1]) + getitem(logprobs, [batch, T - 1, U - 1, blank])
     llforward = setitem(llforward, [batch], loglike)
@@ -155,37 +155,37 @@ def compute_betas_naive(
 
     t = T - 1
 
-    def _t_cond(_t, _T, _U, _betas):
+    def _t_cond(_t, _betas):
         return tf.greater_equal(_t, 0)
 
-    def _t_body(_t, _T, _U, _betas):
-        u = _U - 1
+    def _t_body(_t, _betas):
+        u = U - 1
 
-        def _u_cond(_t, _u, _T, _U, _betas):
+        def _u_cond(_u, _betas):
             return tf.greater_equal(_u, 0)
 
-        def _u_body(_t, _u, _T, _U, _betas):
+        def _u_body(_u, _betas):
             _betas = tf.cond(
-                tf.logical_and(tf.equal(_u, _U - 1), tf.less(_t, _T - 1)),
+                tf.logical_and(tf.equal(_u, U - 1), tf.less(_t, T - 1)),
                 true_fn=lambda: _update_betas_case_1(_t, _u, _betas),
                 false_fn=lambda: _betas,
             )
             _betas = tf.cond(
-                tf.logical_and(tf.equal(_t, _T - 1), tf.less(_u, _U - 1)),
+                tf.logical_and(tf.equal(_t, T - 1), tf.less(_u, U - 1)),
                 true_fn=lambda: _update_betas_case_2(_t, _u, _betas),
                 false_fn=lambda: _betas,
             )
             _betas = tf.cond(
-                tf.logical_and(tf.less(_t, _T - 1), tf.less(_u, _U - 1)),
+                tf.logical_and(tf.less(_t, T - 1), tf.less(_u, U - 1)),
                 true_fn=lambda: _update_betas_case_3(_t, _u, _betas),
                 false_fn=lambda: _betas,
             )
-            return _t, _u - 1, _T, _U, _betas
+            return _u - 1, _betas
 
-        _t, u, _T, _U, _betas = tf.while_loop(_u_cond, _u_body, loop_vars=[_t, u, _T, _U, _betas])
-        return _t - 1, _T, _U, _betas
+        u, _betas = tf.while_loop(_u_cond, _u_body, loop_vars=[u, _betas])
+        return _t - 1, _betas
 
-    t, T, U, betas = tf.while_loop(_t_cond, _t_body, loop_vars=[t, T, U, betas])
+    t, betas = tf.while_loop(_t_cond, _t_body, loop_vars=[t, betas])
 
     loglike = getitem(betas, [batch, 0, 0])
     llbackward = setitem(llbackward, [batch], loglike)
@@ -221,32 +221,32 @@ def compute_grads_naive(
 
     t = tf.constant(0, tf.int32)
 
-    def _t_grads_cond(_t, _T, _U, _grads):
-        return tf.less(_t, _T)
+    def _t_grads_cond(_t, _grads):
+        return tf.less(_t, T)
 
-    def _t_grads_body(_t, _T, _U, _grads):
+    def _t_grads_body(_t, _grads):
         u = tf.constant(0, tf.int32)
 
-        def _u_grads_cond(_t, _u, _U, _grads):
-            return tf.less(_u, _U)
+        def _u_grads_cond(_u, _grads):
+            return tf.less(_u, U)
 
-        def _u_grads_body(_t, _u, _U, _grads):
+        def _u_grads_body(_u, _grads):
             _grads = tf.cond(
-                tf.less(_t, _T - 1),
+                tf.less(_t, T - 1),
                 true_fn=lambda: _update_grads_case_1(_t, _u, _grads),
                 false_fn=lambda: _grads,
             )
             _grads = tf.cond(
-                tf.less(_u, _U - 1),
+                tf.less(_u, U - 1),
                 true_fn=lambda: _update_grads_case_2(_t, _u, _grads),
                 false_fn=lambda: _grads,
             )
-            return _t, _u + 1, _U, _grads
+            return _u + 1, _grads
 
-        _t, u, _U, _grads = tf.while_loop(_u_grads_cond, _u_grads_body, loop_vars=[_t, u, _U, _grads])
-        return _t + 1, _T, _U, _grads
+        u, _grads = tf.while_loop(_u_grads_cond, _u_grads_body, loop_vars=[u, _grads])
+        return _t + 1, _grads
 
-    t, T, U, grads = tf.while_loop(_t_grads_cond, _t_grads_body, loop_vars=[t, T, U, grads])
+    t, grads = tf.while_loop(_t_grads_cond, _t_grads_body, loop_vars=[t, grads])
 
     grads = setitem(
         grads,

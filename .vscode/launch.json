@@ -5,7 +5,7 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "Python: Module",
+            "name": "Test RNNT Loss",
             "type": "python",
             "request": "launch",
             "module": "pytest",
