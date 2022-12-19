@@ -113,10 +113,10 @@ def compute_alphas_naive(
             )
             return _u + 1, _alphas
 
-        u, _alphas = tf.while_loop(_u_cond, _u_body, loop_vars=[u, _alphas], parallel_iterations=U)
+        u, _alphas = tf.while_loop(_u_cond, _u_body, loop_vars=[u, _alphas])
         return _t + 1, _alphas
 
-    t, alphas = tf.while_loop(_t_cond, _t_body, loop_vars=[t, alphas], parallel_iterations=T)
+    t, alphas = tf.while_loop(_t_cond, _t_body, loop_vars=[t, alphas])
 
     loglike = getitem(alphas, [batch, T - 1, U - 1]) + getitem(logprobs, [batch, T - 1, U - 1, blank])
     llforward = setitem(llforward, [batch], loglike)
@@ -182,10 +182,10 @@ def compute_betas_naive(
             )
             return _u - 1, _betas
 
-        u, _betas = tf.while_loop(_u_cond, _u_body, loop_vars=[u, _betas], parallel_iterations=U)
+        u, _betas = tf.while_loop(_u_cond, _u_body, loop_vars=[u, _betas])
         return _t - 1, _betas
 
-    t, betas = tf.while_loop(_t_cond, _t_body, loop_vars=[t, betas], parallel_iterations=T)
+    t, betas = tf.while_loop(_t_cond, _t_body, loop_vars=[t, betas])
 
     loglike = getitem(betas, [batch, 0, 0])
     llbackward = setitem(llbackward, [batch], loglike)
@@ -243,10 +243,10 @@ def compute_grads_naive(
             )
             return _u + 1, _grads
 
-        u, _grads = tf.while_loop(_u_grads_cond, _u_grads_body, loop_vars=[u, _grads], parallel_iterations=U)
+        u, _grads = tf.while_loop(_u_grads_cond, _u_grads_body, loop_vars=[u, _grads])
         return _t + 1, _grads
 
-    t, grads = tf.while_loop(_t_grads_cond, _t_grads_body, loop_vars=[t, grads], parallel_iterations=T)
+    t, grads = tf.while_loop(_t_grads_cond, _t_grads_body, loop_vars=[t, grads])
 
     grads = setitem(
         grads,
