@@ -292,6 +292,7 @@ def compute_rnnt_loss_and_grad_helper(
         return cost_and_grad_per_batch(_loglike, _grads, _logprobs, _labels, _logit_length, _label_length, _mask, blank)
 
     loglike, grads, _, _, _, _, _ = tf.map_fn(fn, elems=(loglike, grads, logprobs, labels, logit_length, label_length, mask))
+    grads = tf.where(tf.math.is_nan(grads), tf.zeros_like(grads), grads)
 
     return -loglike, grads
 
