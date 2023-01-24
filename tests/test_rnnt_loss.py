@@ -1,21 +1,24 @@
+import time
+
 import tensorflow as tf
 
 from tensorflow_asr.losses.rnnt_loss_naive import compute_rnnt_loss_and_grad_helper
 
-B = 1
-T = 30
-U = 30
+B = 4
+T = 743
+U = 200
 V = 1000
 blank = 0
 
 
-@tf.function
+# @tf.function
 def run():
     logits = tf.random.normal([B, T, U + 1, V], dtype=tf.float32)
     labels = tf.repeat(tf.range(U, dtype=tf.int32)[None, :], B, 0)
     logit_length = tf.repeat(tf.convert_to_tensor([T], dtype=tf.int32), B, 0)
     label_length = tf.repeat(tf.convert_to_tensor([U], dtype=tf.int32), B, 0)
 
+    t0 = time.time()
     loss, grad = compute_rnnt_loss_and_grad_helper(
         logits=logits,
         labels=labels,
@@ -23,7 +26,9 @@ def run():
         logit_length=logit_length,
         blank=blank,
     )
-    tf.print(loss, grad)
+    t1 = time.time()
+    tf.print(loss)
+    print("Took", t1 - t0)
 
 
 def test():

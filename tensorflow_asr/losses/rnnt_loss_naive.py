@@ -56,11 +56,11 @@ def setitem(tensor, index, value):
 
 
 def compute_alphas_naive(
-    logprobs,  # [maxT, maxU + 1, V]
-    labels,  # [maxU]
+    logprobs,  # [T, U_p1, V]
+    labels,  # [U]
     T,  # []
-    U,  # []
-    alphas,  # [maxT, maxU + 1]
+    U_p1,  # []
+    alphas,  # [T, U_p1]
     blank,  # []
 ):
     alphas = setitem(alphas, [0, 0], 0)
@@ -91,7 +91,7 @@ def compute_alphas_naive(
         u = tf.constant(0, tf.int32)
 
         def _u_cond(_u, _alphas):
-            return tf.less(_u, U)
+            return tf.less(_u, U_p1)
 
         def _u_body(_u, _alphas):
             _alphas = tf.cond(
@@ -116,24 +116,24 @@ def compute_alphas_naive(
 
     t, alphas = tf.while_loop(_t_cond, _t_body, loop_vars=[t, alphas])
 
-    loglike = getitem(alphas, [T - 1, U - 1]) + getitem(logprobs, [T - 1, U - 1, blank])
+    loglike = getitem(alphas, [T - 1, U_p1 - 1]) + getitem(logprobs, [T - 1, U_p1 - 1, blank])
 
     return alphas, loglike
 
 
 def compute_betas_naive(
-    logprobs,  # [maxT, maxU + 1, V]
-    labels,  # [maxU]
+    logprobs,  # [T, U_p1, V]
+    labels,  # [U]
     T,  # []
-    U,  # []
-    betas,  # [maxT, maxU + 1]
+    U_p1,  # []
+    betas,  # [T, U_p1]
     blank,  # []
 ):
-    betas = setitem(betas, [T - 1, U - 1], getitem(logprobs, [T - 1, U - 1, blank]))
+    betas = setitem(betas, [T - 1, U_p1 - 1], getitem(logprobs, [T - 1, U_p1 - 1, blank]))
 
     def _update_betas_case_1(_t, _u, _betas):
-        update = getitem(betas, [_t + 1, U - 1]) + getitem(logprobs, [_t, U - 1, blank])
-        _betas = setitem(_betas, [_t, U - 1], update)
+        update = getitem(betas, [_t + 1, U_p1 - 1]) + getitem(logprobs, [_t, U_p1 - 1, blank])
+        _betas = setitem(_betas, [_t, U_p1 - 1], update)
         return _betas
 
     def _update_betas_case_2(_t, _u, _betas):
@@ -154,24 +154,24 @@ def compute_betas_naive(
         return tf.greater_equal(_t, 0)
 
     def _t_body(_t, _betas):
-        u = U - 1
+        u = U_p1 - 1
 
         def _u_cond(_u, _betas):
             return tf.greater_equal(_u, 0)
 
         def _u_body(_u, _betas):
             _betas = tf.cond(
-                tf.logical_and(tf.equal(_u, U - 1), tf.less(_t, T - 1)),
+                tf.logical_and(tf.equal(_u, U_p1 - 1), tf.less(_t, T - 1)),
                 true_fn=lambda: _update_betas_case_1(_t, _u, _betas),
                 false_fn=lambda: _betas,
             )
             _betas = tf.cond(
-                tf.logical_and(tf.equal(_t, T - 1), tf.less(_u, U - 1)),
+                tf.logical_and(tf.equal(_t, T - 1), tf.less(_u, U_p1 - 1)),
                 true_fn=lambda: _update_betas_case_2(_t, _u, _betas),
                 false_fn=lambda: _betas,
             )
             _betas = tf.cond(
-                tf.logical_and(tf.less(_t, T - 1), tf.less(_u, U - 1)),
+                tf.logical_and(tf.less(_t, T - 1), tf.less(_u, U_p1 - 1)),
                 true_fn=lambda: _update_betas_case_3(_t, _u, _betas),
                 false_fn=lambda: _betas,
             )
@@ -188,14 +188,14 @@ def compute_betas_naive(
 
 
 def compute_grads_naive(
-    logprobs,  # [maxT, maxU + 1, V]
-    labels,  # [maxU]
+    logprobs,  # [T, U_p1, V]
+    labels,  # [U]
     T,  # []
-    U,  # []
+    U_p1,  # []
     loglike,  # []
-    alphas,  # [maxT, maxU + 1]
-    betas,  # [maxT, maxU + 1]
-    grads,  # [maxT, maxU + 1, V]
+    alphas,  # [T, U_p1]
+    betas,  # [T, U_p1]
+    grads,  # [T, U_p1, V]
     blank,  # []
 ):
     def _update_grads_case_1(_t, _u, _grads):
@@ -219,7 +219,7 @@ def compute_grads_naive(
         u = tf.constant(0, tf.int32)
 
         def _u_grads_cond(_u, _grads):
-            return tf.less(_u, U)
+            return tf.less(_u, U_p1)
 
         def _u_grads_body(_u, _grads):
             _grads = tf.cond(
@@ -228,7 +228,7 @@ def compute_grads_naive(
                 false_fn=lambda: _grads,
             )
             _grads = tf.cond(
-                tf.less(_u, U - 1),
+                tf.less(_u, U_p1 - 1),
                 true_fn=lambda: _update_grads_case_2(_t, _u, _grads),
                 false_fn=lambda: _grads,
             )
@@ -241,33 +241,25 @@ def compute_grads_naive(
 
     grads = setitem(
         grads,
-        [T - 1, U - 1, blank],
-        -tf.exp(getitem(logprobs, [T - 1, U - 1, blank]) + getitem(alphas, [T - 1, U - 1]) - loglike),
+        [T - 1, U_p1 - 1, blank],
+        -tf.exp(getitem(logprobs, [T - 1, U_p1 - 1, blank]) + getitem(alphas, [T - 1, U_p1 - 1]) - loglike),
     )
     return grads
 
 
-def cost_and_grad_per_batch(
-    loglike,
-    grads,  # [maxT, maxU + 1, V]
-    logprobs,  # [maxT, maxU + 1, V]
-    labels,  # [maxU]
-    logit_length,  # []
-    label_length,  # []
-    mask,  # [maxT, maxU + 1]
-    blank,  # []
-):
+def cost_and_grad_per_batch(data):
+    loglike, grads, logprobs, labels, logit_length, label_length, mask, blank = data  # [T, U_p1, V]  # [T, U_p1, V]  # [U]  # []  # []  # [T, U_p1]
+
     T = logit_length
-    U = label_length + 1
+    U_p1 = label_length + 1
+    alphas = betas = mask * -np.inf
 
-    alphas = tf.ones([T, U], dtype=tf.float32) * mask * -np.inf
-    betas = tf.ones([T, U], dtype=tf.float32) * mask * -np.inf
+    alphas, loglike = compute_alphas_naive(logprobs, labels, T, U_p1, alphas, blank)
+    betas, _ = compute_betas_naive(logprobs, labels, T, U_p1, betas, blank)
+    grads = compute_grads_naive(logprobs, labels, T, U_p1, loglike, alphas, betas, grads, blank)
+    grads = tf.where(tf.math.is_nan(grads), tf.zeros_like(grads, dtype=grads.dtype), grads)
 
-    alphas, loglike = compute_alphas_naive(logprobs, labels, T, U, alphas, blank)
-    betas, _ = compute_betas_naive(logprobs, labels, T, U, betas, blank)
-    grads = compute_grads_naive(logprobs, labels, T, U, loglike, alphas, betas, grads, blank)
-
-    return loglike, grads, logprobs, labels, logit_length, label_length, mask
+    return loglike, grads, logprobs, labels, logit_length, label_length, mask, blank
 
 
 def compute_rnnt_loss_and_grad_helper(
@@ -278,22 +270,15 @@ def compute_rnnt_loss_and_grad_helper(
     blank,
 ):
     batch_size, max_t, max_u_1, _ = shape_util.shape_list(logits)
-    mask = tf.cast(
-        tf.sequence_mask(logit_length, max_t)[:, :, None] & tf.sequence_mask(label_length, max_u_1)[:, None, :], dtype=tf.float32
-    )  # [B, maxT, maxU + 1]
-
-    logprobs = tf.nn.log_softmax(logits)
 
     loglike = tf.ones([batch_size], dtype=tf.float32) * -np.inf
-    grads = tf.zeros_like(logprobs)
+    grads = tf.zeros_like(logits, dtype=tf.float32)
+    logprobs = tf.nn.log_softmax(logits)
+    masks = tf.sequence_mask(logit_length, max_t)[:, :, None] & tf.sequence_mask(label_length, max_u_1)[:, None, :]
+    masks = tf.cast(masks, dtype=tf.float32)  # [B, T, U_p1]
+    blanks = tf.repeat(tf.expand_dims(blank, axis=0), batch_size)
 
-    def fn(elem):
-        _loglike, _grads, _logprobs, _labels, _logit_length, _label_length, _mask = elem
-        return cost_and_grad_per_batch(_loglike, _grads, _logprobs, _labels, _logit_length, _label_length, _mask, blank)
-
-    loglike, grads, _, _, _, _, _ = tf.map_fn(fn, elems=(loglike, grads, logprobs, labels, logit_length, label_length, mask))
-    grads = tf.where(tf.math.is_nan(grads), tf.zeros_like(grads), grads)
-
+    loglike, grads, *_ = tf.map_fn(cost_and_grad_per_batch, elems=(loglike, grads, logprobs, labels, logit_length, label_length, masks, blanks))
     return -loglike, grads
 
 
