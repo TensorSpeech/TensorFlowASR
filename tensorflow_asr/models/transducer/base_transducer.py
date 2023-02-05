@@ -19,7 +19,7 @@ from typing import Dict
 
 import tensorflow as tf
 
-from tensorflow_asr.losses.rnnt_loss_naive import RnntLoss
+from tensorflow_asr.losses.rnnt_loss import RnntLoss
 from tensorflow_asr.models.base_model import BaseModel
 from tensorflow_asr.models.layers.base_layer import Layer
 from tensorflow_asr.models.layers.embedding import Embedding

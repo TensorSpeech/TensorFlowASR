@@ -148,11 +148,7 @@ def extract_diagonals(
     reverse_log_probs = tf.reverse(log_probs, axis=[-1])
     paddings = [[0, 0], [0, 0], [time_steps - 1, 0]]
     padded_reverse_log_probs = tf.pad(reverse_log_probs, paddings, "CONSTANT", constant_values=LOG_0)
-    diagonals = tf.raw_ops.MatrixDiagPartV2(
-        input=padded_reverse_log_probs,
-        k=(0, time_steps + output_steps - 2),
-        padding_value=LOG_0,
-    )
+    diagonals = tf.raw_ops.MatrixDiagPartV2(input=padded_reverse_log_probs, k=(0, time_steps + output_steps - 2), padding_value=LOG_0)
 
     return tf.transpose(diagonals, perm=[1, 0, 2])
 
@@ -192,13 +188,7 @@ def forward_dp(
         x = tf.math.reduce_logsumexp(tf.stack([x_b, x_t], axis=0), axis=0)
         return x
 
-    initial_alpha = tf.concat(
-        [
-            tf.zeros(shape=[batch_size, 1]),
-            tf.ones(shape=[batch_size, input_max_len - 1]) * LOG_0,
-        ],
-        axis=1,
-    )
+    initial_alpha = tf.concat([tf.zeros(shape=[batch_size, 1]), tf.ones(shape=[batch_size, input_max_len - 1]) * LOG_0], axis=1)
 
     fwd = tf.scan(next_state, (bp_diags[:-1, :, :-1], tp_diags), initializer=initial_alpha)
 
@@ -231,26 +221,18 @@ def backward_dp(
 
         beta_next = reduce_logsumexp(tf.stack([beta_b, beta_t], axis=0), axis=0)
         masked_beta_next = nan_to_zero(beta_next * tf.expand_dims(mask_s, axis=1)) + nan_to_zero(x * tf.expand_dims((1.0 - mask_s), axis=1))
-        return tf.reshape(masked_beta_next, shape=tf.shape(x))
+        # return tf.reshape(masked_beta_next, shape=tf.shape(x))
+        return masked_beta_next
 
     # Initial beta for batches.
     initial_beta_mask = tf.one_hot(logit_length - 1, depth=input_max_len + 1)
     initial_beta = tf.expand_dims(blank_sl, axis=1) * initial_beta_mask + nan_to_zero(LOG_0 * (1.0 - initial_beta_mask))
 
     # Mask for scan iterations.
-    mask = tf.sequence_mask(
-        logit_length + label_length - 1,
-        input_max_len + target_max_len - 2,
-        dtype=tf.dtypes.float32,
-    )
+    mask = tf.sequence_mask(logit_length + label_length - 1, input_max_len + target_max_len - 2, dtype=tf.dtypes.float32)
     mask = tf.transpose(mask, perm=[1, 0])
 
-    bwd = tf.scan(
-        next_state,
-        (mask, bp_diags[:-1, :, :], tp_diags),
-        initializer=initial_beta,
-        reverse=True,
-    )
+    bwd = tf.scan(next_state, (mask, bp_diags[:-1, :, :], tp_diags), initializer=initial_beta, reverse=True)
 
     beta = tf.transpose(tf.concat([bwd, tf.expand_dims(initial_beta, axis=0)], axis=0), perm=[1, 2, 0])[:, :-1, :]
     beta = tf.raw_ops.MatrixDiagPartV2(input=beta, k=(0, target_max_len - 1), padding_value=LOG_0)
@@ -265,26 +247,17 @@ def compute_rnnt_loss_and_grad_helper(logits, labels, label_length, logit_length
     target_max_len = tf.shape(logits)[2]
     vocab_size = tf.shape(logits)[3]
 
-    one_hot_labels = tf.one_hot(
-        tf.tile(tf.expand_dims(labels, axis=1), multiples=[1, input_max_len, 1]),
-        depth=vocab_size,
-    )
+    one_hot_labels = tf.one_hot(tf.tile(tf.expand_dims(labels, axis=1), multiples=[1, input_max_len, 1]), depth=vocab_size)
 
     log_probs = tf.nn.log_softmax(logits)
     blank_probs, truth_probs = transition_probs(one_hot_labels, log_probs)
     bp_diags = extract_diagonals(blank_probs)
     tp_diags = extract_diagonals(truth_probs)
 
-    label_mask = tf.expand_dims(
-        tf.sequence_mask(label_length + 1, maxlen=target_max_len, dtype=tf.float32),
-        axis=1,
-    )
+    label_mask = tf.expand_dims(tf.sequence_mask(label_length + 1, maxlen=target_max_len, dtype=tf.float32), axis=1)
     small_label_mask = tf.expand_dims(tf.sequence_mask(label_length, maxlen=target_max_len, dtype=tf.float32), axis=1)
     input_mask = tf.expand_dims(tf.sequence_mask(logit_length, maxlen=input_max_len, dtype=tf.float32), axis=2)
-    small_input_mask = tf.expand_dims(
-        tf.sequence_mask(logit_length - 1, maxlen=input_max_len, dtype=tf.float32),
-        axis=2,
-    )
+    small_input_mask = tf.expand_dims(tf.sequence_mask(logit_length - 1, maxlen=input_max_len, dtype=tf.float32), axis=2)
     mask = label_mask * input_mask
     grad_blank_mask = (label_mask * small_input_mask)[:, :-1, :]
     grad_truth_mask = (small_label_mask * input_mask)[:, :, :-1]
@@ -307,13 +280,7 @@ def compute_rnnt_loss_and_grad_helper(logits, labels, label_length, logit_length
     )
     grads_blank = tf.concat([grads_blank, tf.zeros(shape=(batch_size, 1, target_max_len))], axis=1)
     last_grads_blank = -1 * tf.scatter_nd(
-        tf.concat(
-            [
-                tf.reshape(tf.range(batch_size, dtype=tf.int64), shape=[batch_size, 1]),
-                tf.cast(indices, dtype=tf.int64),
-            ],
-            axis=1,
-        ),
+        tf.concat([tf.reshape(tf.range(batch_size, dtype=tf.int64), shape=[batch_size, 1]), tf.cast(indices, dtype=tf.int64)], axis=1),
         tf.ones(batch_size, dtype=tf.float32),
         [batch_size, input_max_len, target_max_len],
     )
@@ -326,45 +293,20 @@ def compute_rnnt_loss_and_grad_helper(logits, labels, label_length, logit_length
     )
 
     # Compute gradients of loss w.r.t. activations.
-    a = tf.tile(
-        tf.reshape(
-            tf.range(target_max_len - 1, dtype=tf.int64),
-            shape=(1, 1, target_max_len - 1, 1),
-        ),
-        multiples=[batch_size, 1, 1, 1],
-    )
-    b = tf.cast(
-        tf.reshape(labels - 1, shape=(batch_size, 1, target_max_len - 1, 1)),
-        dtype=tf.int64,
-    )
+    a = tf.tile(tf.reshape(tf.range(target_max_len - 1, dtype=tf.int64), shape=(1, 1, target_max_len - 1, 1)), multiples=[batch_size, 1, 1, 1])
+    b = tf.cast(tf.reshape(labels - 1, shape=(batch_size, 1, target_max_len - 1, 1)), dtype=tf.int64)
     if use_cpu:
         b = tf.where(tf.equal(b, -1), tf.zeros_like(b), b)  # for cpu testing (index -1 on cpu will raise errors)
     c = tf.concat([a, b], axis=3)
     d = tf.tile(c, multiples=(1, input_max_len, 1, 1))
-    e = tf.tile(
-        tf.reshape(tf.range(input_max_len, dtype=tf.int64), shape=(1, input_max_len, 1, 1)),
-        multiples=(batch_size, 1, target_max_len - 1, 1),
-    )
+    e = tf.tile(tf.reshape(tf.range(input_max_len, dtype=tf.int64), shape=(1, input_max_len, 1, 1)), multiples=(batch_size, 1, target_max_len - 1, 1))
     f = tf.concat([e, d], axis=3)
-    g = tf.tile(
-        tf.reshape(tf.range(batch_size, dtype=tf.int64), shape=(batch_size, 1, 1, 1)),
-        multiples=[1, input_max_len, target_max_len - 1, 1],
-    )
+    g = tf.tile(tf.reshape(tf.range(batch_size, dtype=tf.int64), shape=(batch_size, 1, 1, 1)), multiples=[1, input_max_len, target_max_len - 1, 1])
     scatter_idx = tf.concat([g, f], axis=3)
     # TODO - improve the part of code for scatter_idx computation.
     probs = tf.exp(log_probs)
-    grads_truth_scatter = tf.scatter_nd(
-        scatter_idx,
-        grads_truth,
-        [batch_size, input_max_len, target_max_len, vocab_size - 1],
-    )
-    grads = tf.concat(
-        [
-            tf.reshape(grads_blank, shape=(batch_size, input_max_len, target_max_len, -1)),
-            grads_truth_scatter,
-        ],
-        axis=3,
-    )
+    grads_truth_scatter = tf.scatter_nd(scatter_idx, grads_truth, [batch_size, input_max_len, target_max_len, vocab_size - 1])
+    grads = tf.concat([tf.reshape(grads_blank, shape=(batch_size, input_max_len, target_max_len, -1)), grads_truth_scatter], axis=3)
     grads_logits = grads - probs * (tf.reduce_sum(grads, axis=3, keepdims=True))
 
     loss = -final_state_probs
