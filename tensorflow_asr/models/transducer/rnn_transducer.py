@@ -56,15 +56,14 @@ class RnnTransducerBlock(Layer):
             self.reduction = None
 
         RnnClass = layer_util.get_rnn(rnn_type)
-        # dtype = tf.float32 if tf.keras.mixed_precision.global_policy().name == "mixed_bfloat16" and not rnn_unroll else None
         self.rnn = RnnClass(
             units=rnn_units,
             return_sequences=True,
             name=rnn_type,
+            unroll=rnn_unroll,
             return_state=True,
             kernel_regularizer=kernel_regularizer,
             bias_regularizer=bias_regularizer,
-            # dtype=dtype,
         )
 
         if layer_norm:

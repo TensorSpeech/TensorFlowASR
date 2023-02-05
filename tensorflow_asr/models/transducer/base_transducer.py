@@ -56,8 +56,6 @@ class TransducerPrediction(Layer):
         if label_encoder_mode not in ["one_hot", "embedding"]:
             raise ValueError("label_encode_mode must be either 'one_hot' or 'embedding'")
         self.label_encoder_mode = label_encoder_mode
-        # cudnn not support bfloat16
-        # dtype = tf.float32 if tf.keras.mixed_precision.global_policy().name == "mixed_bfloat16" and not rnn_unroll else None
         if self.label_encoder_mode == "embedding":
             self.label_encoder = Embedding(vocab_size, embed_dim, regularizer=kernel_regularizer, name=self.label_encoder_mode)
         else:
