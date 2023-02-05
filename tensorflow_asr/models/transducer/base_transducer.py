@@ -49,7 +49,6 @@ class TransducerPrediction(Layer):
         projection_units: int = 0,
         kernel_regularizer=None,
         bias_regularizer=None,
-        dtype=None,
         name="transducer_prediction",
         **kwargs,
     ):
@@ -58,11 +57,11 @@ class TransducerPrediction(Layer):
             raise ValueError("label_encode_mode must be either 'one_hot' or 'embedding'")
         self.label_encoder_mode = label_encoder_mode
         # cudnn not support bfloat16
-        dtype = tf.float32 if tf.keras.mixed_precision.global_policy().name == "mixed_bfloat16" and not rnn_unroll else None
+        # dtype = tf.float32 if tf.keras.mixed_precision.global_policy().name == "mixed_bfloat16" and not rnn_unroll else None
         if self.label_encoder_mode == "embedding":
-            self.label_encoder = Embedding(vocab_size, embed_dim, regularizer=kernel_regularizer, name=self.label_encoder_mode, dtype=dtype)
+            self.label_encoder = Embedding(vocab_size, embed_dim, regularizer=kernel_regularizer, name=self.label_encoder_mode)
         else:
-            self.label_encoder = OneHotBlank(blank=blank, depth=vocab_size, name=self.label_encoder_mode, dtype=dtype)
+            self.label_encoder = OneHotBlank(blank=blank, depth=vocab_size, name=self.label_encoder_mode)
         # Initialize rnn layers
         RnnClass = layer_util.get_rnn(rnn_type)
         self.rnns = []
@@ -78,7 +77,6 @@ class TransducerPrediction(Layer):
                 unroll=rnn_unroll,
                 kernel_regularizer=kernel_regularizer,
                 bias_regularizer=bias_regularizer,
-                dtype=dtype,
             )
             ln = tf.keras.layers.LayerNormalization(name=f"ln_{i}") if layer_norm else None
             if projection_units > 0:
@@ -87,7 +85,6 @@ class TransducerPrediction(Layer):
                     name=f"projection_{i}",
                     kernel_regularizer=kernel_regularizer,
                     bias_regularizer=bias_regularizer,
-                    dtype=dtype,
                 )
             else:
                 projection = None

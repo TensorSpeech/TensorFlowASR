@@ -42,6 +42,7 @@ class RnnTransducerBlock(Layer):
         dmodel: int = 640,
         rnn_type: str = "lstm",
         rnn_units: int = 2048,
+        rnn_unroll: bool = False,
         layer_norm: bool = True,
         kernel_regularizer=None,
         bias_regularizer=None,
@@ -54,14 +55,16 @@ class RnnTransducerBlock(Layer):
         else:
             self.reduction = None
 
-        RNN = layer_util.get_rnn(rnn_type)
-        self.rnn = RNN(
+        RnnClass = layer_util.get_rnn(rnn_type)
+        # dtype = tf.float32 if tf.keras.mixed_precision.global_policy().name == "mixed_bfloat16" and not rnn_unroll else None
+        self.rnn = RnnClass(
             units=rnn_units,
             return_sequences=True,
             name=rnn_type,
             return_state=True,
             kernel_regularizer=kernel_regularizer,
             bias_regularizer=bias_regularizer,
+            # dtype=dtype,
         )
 
         if layer_norm:
@@ -113,6 +116,7 @@ class RnnTransducerEncoder(Layer):
         nlayers: int = 8,
         rnn_type: str = "lstm",
         rnn_units: int = 2048,
+        rnn_unroll: bool = False,
         layer_norm: bool = True,
         kernel_regularizer=None,
         bias_regularizer=None,
@@ -128,6 +132,7 @@ class RnnTransducerEncoder(Layer):
                 dmodel=dmodel,
                 rnn_type=rnn_type,
                 rnn_units=rnn_units,
+                rnn_unroll=rnn_unroll,
                 layer_norm=layer_norm,
                 kernel_regularizer=kernel_regularizer,
                 bias_regularizer=bias_regularizer,
@@ -194,6 +199,7 @@ class RnnTransducer(Transducer):
         encoder_nlayers: int = 8,
         encoder_rnn_type: str = "lstm",
         encoder_rnn_units: int = 2048,
+        encoder_rnn_unroll: bool = False,
         encoder_layer_norm: bool = False,
         encoder_trainable: bool = True,
         prediction_label_encode_mode: str = "embedding",
@@ -225,6 +231,7 @@ class RnnTransducer(Transducer):
                 nlayers=encoder_nlayers,
                 rnn_type=encoder_rnn_type,
                 rnn_units=encoder_rnn_units,
+                rnn_unroll=encoder_rnn_unroll,
                 layer_norm=encoder_layer_norm,
                 kernel_regularizer=kernel_regularizer,
                 bias_regularizer=bias_regularizer,
