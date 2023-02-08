@@ -158,15 +158,17 @@ class BaseModel(tf.keras.Model):
             self.remove_gwn(original_weights)
             tape.watch(y_pred["logits"])
             per_sample_loss = self.loss(y_true=y_true, y_pred=y_pred)
-            loss = tf.nn.compute_average_loss(per_sample_loss, global_batch_size=self._get_global_batch_size(y_pred))
+            # loss = tf.nn.compute_average_loss(per_sample_loss, global_batch_size=self._get_global_batch_size(y_pred))
+            loss = per_sample_loss
             if self.use_loss_scale:
                 scaled_loss = self.optimizer.get_scaled_loss(loss)
 
+        unconnedted_gradients = tf.UnconnectedGradients.ZERO if self.use_ga else tf.UnconnectedGradients.NONE
         if self.use_loss_scale:
-            gradients = tape.gradient(scaled_loss, self.trainable_weights, unconnected_gradients=tf.UnconnectedGradients.ZERO)
+            gradients = tape.gradient(scaled_loss, self.trainable_weights, unconnected_gradients=unconnedted_gradients)
             gradients = self.optimizer.get_unscaled_gradients(gradients)
         else:
-            gradients = tape.gradient(loss, self.trainable_weights, unconnected_gradients=tf.UnconnectedGradients.ZERO)
+            gradients = tape.gradient(loss, self.trainable_weights, unconnected_gradients=unconnedted_gradients)
 
         if self.use_ga:  # perform gradient accumulation
             self.ga.accumulate(gradients=gradients)
