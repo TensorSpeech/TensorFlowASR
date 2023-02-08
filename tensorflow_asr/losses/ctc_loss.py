@@ -14,6 +14,8 @@
 
 import tensorflow as tf
 
+logger = tf.get_logger()
+
 
 class CtcLoss(tf.keras.losses.Loss):
     def __init__(
@@ -23,6 +25,7 @@ class CtcLoss(tf.keras.losses.Loss):
     ):
         super().__init__(reduction=tf.keras.losses.Reduction.NONE, name=name)
         self.blank = blank
+        logger.info("Use CTC loss")
 
     def call(self, y_true, y_pred):
         return tf.nn.ctc_loss(
