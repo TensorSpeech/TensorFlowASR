@@ -158,8 +158,7 @@ class BaseModel(tf.keras.Model):
             self.remove_gwn(original_weights)
             tape.watch(y_pred["logits"])
             per_sample_loss = self.loss(y_true=y_true, y_pred=y_pred)
-            # loss = tf.nn.compute_average_loss(per_sample_loss, global_batch_size=self._get_global_batch_size(y_pred))
-            loss = per_sample_loss
+            loss = tf.nn.compute_average_loss(per_sample_loss, global_batch_size=self._get_global_batch_size(y_pred))
             if self.use_loss_scale:
                 scaled_loss = self.optimizer.get_scaled_loss(loss)
 
