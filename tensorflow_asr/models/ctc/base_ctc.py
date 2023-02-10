@@ -60,7 +60,6 @@ class CtcModel(BaseModel):
     def call(self, inputs, training=False):
         logits, logits_length = self.encoder([inputs["inputs"], inputs["inputs_length"]], training=training)
         logits, logits_length = self.decoder([logits, logits_length], training=training)
-        logits = tf.cast(logits, tf.float32)  # always cast the output as float32 for stable mxp training
         return data_util.create_logits(logits=logits, logits_length=logits_length)
 
     # -------------------------------- GREEDY -------------------------------------

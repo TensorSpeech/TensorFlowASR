@@ -267,8 +267,8 @@ def compute_rnnt_loss_and_grad_helper(logits, labels, label_length, logit_length
     blank_sl = tf.gather_nd(blank_probs, indices, batch_dims=1)
 
     beta = backward_dp(bp_diags, tp_diags, batch_size, input_max_len, target_max_len, label_length, logit_length, blank_sl) * mask
-    final_state_probs = beta[:, 0, 0]
     beta = nan_to_zero(beta)
+    final_state_probs = beta[:, 0, 0]
 
     # Compute gradients of loss w.r.t. blank log-probabilities.
     grads_blank = (
@@ -327,6 +327,10 @@ def rnnt_loss_tf(
         label_length = tf.convert_to_tensor(label_length, name="label_length")
         logit_length = tf.convert_to_tensor(logit_length, name="logit_length")
 
+        orig_dtype = logits.dtype
+        if orig_dtype in (tf.float16, tf.bfloat16):
+            logits = tf.cast(logits, tf.float32)
+
         args = [logits, labels, label_length, logit_length]
 
         @tf.custom_gradient
@@ -341,8 +345,9 @@ def rnnt_loss_tf(
                 labels=labels_t,
                 label_length=label_length_t,
                 logit_length=logit_length_t,
+                use_cpu=use_cpu,
             )
-            result = compute_rnnt_loss_and_grad_helper(**kwargs, use_cpu=use_cpu)
+            result = compute_rnnt_loss_and_grad_helper(**kwargs)
 
             def grad(grad_loss):
                 grads = [tf.reshape(grad_loss, [-1, 1, 1, 1]) * result[1]]
@@ -351,4 +356,7 @@ def rnnt_loss_tf(
 
             return result[0], grad
 
-        return compute_rnnt_loss_and_grad(*args)
+        loss = compute_rnnt_loss_and_grad(*args)
+        if orig_dtype in (tf.float16, tf.bfloat16):
+            loss = tf.cast(loss, orig_dtype)
+        return loss

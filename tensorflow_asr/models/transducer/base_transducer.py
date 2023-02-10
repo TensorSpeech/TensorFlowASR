@@ -238,7 +238,6 @@ class TransducerJoint(Layer):
             outputs = self.ffn(outputs, training=training)
         outputs = self.activation(outputs, training=training)
         outputs = self.ffn_out(outputs, training=training)
-        outputs = tf.cast(outputs, tf.float32)  # always cast the output as float32 for stable mxp training
         return outputs
 
     def compute_output_shape(self, input_shape):
