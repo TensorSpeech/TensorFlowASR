@@ -36,7 +36,7 @@ def main(
     bs: int = None,
     spx: int = 1,
     devices: list = None,
-    mxp: bool = False,
+    mxp: str = "none",
     jit_compile: bool = False,
     ga_steps: int = None,
 ):

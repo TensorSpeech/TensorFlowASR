@@ -27,7 +27,7 @@ DEFAULT_YAML = os.path.join(os.path.abspath(os.path.dirname(__file__)), "config_
 def main(
     config_path: str = DEFAULT_YAML,
     saved: str = None,
-    mxp: bool = False,
+    mxp: str = "none",
     bs: int = None,
     device: int = 0,
     cpu: bool = False,

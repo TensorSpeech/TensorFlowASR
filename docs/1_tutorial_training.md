@@ -107,7 +107,7 @@ Update config file with:
 ## 7. Run training
 
 ```bash
-python examples/conformer/train.py --mxp --jit-compile --config-path=/path/to/config.j2 --tfrecords
+python examples/conformer/train.py --mxp=auto --jit-compile --config-path=/path/to/config.j2 --tfrecords
 ```
 
 See other options for each example
