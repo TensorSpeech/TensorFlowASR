@@ -7,7 +7,8 @@ These commands are example for librispeech dataset, but we can apply similar to 
 If you use google colab, it's recommended to use the tensorflow version pre-installed on the colab itself
 
 ```bash
-pip install -e ".[tf2.x]"
+pip uninstall -y TensorFlowASR # uninstall for clean install if needed
+pip install ".[tf2.x]"
 ```
 
 ## 2. Prepare transcripts files
@@ -50,6 +51,7 @@ Do the same thing with `--mode=eval` and `--mode=test` if needed, corresponds to
 
 ## 5. Generate vocabulary
 
+This step requires defining path to vocabulary file and other options for generating vocabulary in config file.
 
 Characters:
 
