@@ -14,6 +14,8 @@
 
 import os
 
+import tensorflow as tf
+
 from tensorflow_asr.configs.config import Config
 from tensorflow_asr.helpers import dataset_helpers, exec_helpers, featurizer_helpers
 from tensorflow_asr.models.ctc.deepspeech2 import DeepSpeech2
@@ -34,9 +36,10 @@ def main(
     output: str = "test.tsv",
 ):
     assert saved and output
+    tf.keras.backend.clear_session()
     env_util.setup_seed()
-    env_util.setup_devices([device], cpu=cpu)
     env_util.setup_mxp(mxp=mxp)
+    env_util.setup_devices([device], cpu=cpu)
 
     config = Config(config_path)
 

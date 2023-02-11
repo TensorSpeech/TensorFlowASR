@@ -38,9 +38,10 @@ def main(
     pretrained: str = None,
     jit_compile: bool = True,
 ):
+    tf.keras.backend.clear_session()
     env_util.setup_seed()
-    strategy = env_util.setup_strategy(devices)
     env_util.setup_mxp(mxp=mxp)
+    strategy = env_util.setup_strategy(devices)
 
     config = Config(config_path)
 
