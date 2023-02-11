@@ -339,7 +339,7 @@ class SentencePieceFeaturizer(TextFeaturizer):
         super().__init__(decoder_config)
         self.blank = self.decoder_config.blank_index
         self.tokenizer = tft.SentencepieceTokenizer(self.__load_model(), out_type=tf.int32, add_bos=True, add_eos=True)
-        self.num_classes = self.decoder_config.vocab_size
+        self.num_classes = self.tokenizer.vocab_size()
 
     def __load_model(self):
         with file_util.read_file(self.decoder_config.vocabulary) as path:
@@ -431,7 +431,7 @@ class WordPieceFeaturizer(TextFeaturizer):
             no_pretokenization=True,  # False is limited, so we manually do pretokenization
             support_detokenization=True,
         )
-        self.num_classes = self.decoder_config.vocab_size
+        self.num_classes = len(self.vocab)
 
     @classmethod
     def build_from_corpus(cls, decoder_config: DecoderConfig):
