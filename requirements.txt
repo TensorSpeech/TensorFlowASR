@@ -49,3 +49,13 @@ tensorflow-io>=0.27.0,<0.28.0
 tensorflow-gpu>=2.10.0,<2.11.0
 tensorflow-text>=2.10.0,<2.11.0
 tensorflow-io>=0.27.0,<0.28.0
+
+# extra=tf2.11
+tensorflow>=2.11.0,<2.12.0
+tensorflow-text>=2.11.0,<2.12.0
+tensorflow-io>=0.28.0,<0.31.0
+
+# extra=tf2.11-gpu
+tensorflow-gpu>=2.11.0,<2.12.0
+tensorflow-text>=2.11.0,<2.12.0
+tensorflow-io>=0.28.0,<0.31.0

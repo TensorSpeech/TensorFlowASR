@@ -38,8 +38,8 @@ def main(
     assert saved and output
     tf.keras.backend.clear_session()
     env_util.setup_seed()
-    env_util.setup_mxp(mxp=mxp)
     env_util.setup_devices([device], cpu=cpu)
+    env_util.setup_mxp(mxp=mxp)
 
     config = Config(config_path)
 
