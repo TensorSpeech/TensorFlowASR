@@ -107,7 +107,15 @@ class RnnBlock(tf.keras.layers.Layer):
     ):
         super().__init__(**kwargs)
         RnnClass = layer_util.get_rnn(rnn_type)
-        self.rnn = RnnClass(units, dropout=dropout, unroll=unroll, return_sequences=True, use_bias=True, name=rnn_type)
+        self.rnn = RnnClass(
+            units,
+            dropout=dropout,
+            unroll=unroll,
+            return_sequences=True,
+            use_bias=True,
+            name=rnn_type,
+            dtype=tf.float32 if tf.keras.mixed_precision.global_policy().name == "mixed_bfloat16" else None,
+        )
         if bidirectional:
             self.rnn = tf.keras.layers.Bidirectional(self.rnn, name=f"b{rnn_type}")
         self.bn = SequenceBatchNorm(time_major=False, name="bn")
