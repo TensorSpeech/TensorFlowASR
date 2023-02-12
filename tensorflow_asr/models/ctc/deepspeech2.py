@@ -106,8 +106,8 @@ class RnnBlock(tf.keras.layers.Layer):
         **kwargs,
     ):
         super().__init__(**kwargs)
-        RNN = layer_util.get_rnn(rnn_type)
-        self.rnn = RNN(units, dropout=dropout, unroll=unroll, return_sequences=True, use_bias=True, name=rnn_type)
+        RnnClass = layer_util.get_rnn(rnn_type)
+        self.rnn = RnnClass(units, dropout=dropout, unroll=unroll, return_sequences=True, use_bias=True, name=rnn_type)
         if bidirectional:
             self.rnn = tf.keras.layers.Bidirectional(self.rnn, name=f"b{rnn_type}")
         self.bn = SequenceBatchNorm(time_major=False, name="bn")
@@ -116,7 +116,13 @@ class RnnBlock(tf.keras.layers.Layer):
             self.rowconv = RowConv1D(filters=units, future_context=rowconv, name="rowconv")
 
     def call(self, inputs, training=False):
-        outputs = self.rnn(inputs, training=training)
+        outputs = inputs
+        orig_dtype = outputs.dtype
+        if orig_dtype == tf.bfloat16:
+            outputs = tf.cast(outputs, tf.float32)
+        outputs = self.rnn(outputs, training=training)
+        if orig_dtype == tf.bfloat16:
+            outputs = tf.cast(outputs, orig_dtype)
         outputs = self.bn(outputs, training=training)
         if self.rowconv is not None:
             outputs = self.rowconv(outputs, training=training)
