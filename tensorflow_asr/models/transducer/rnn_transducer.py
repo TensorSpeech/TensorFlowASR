@@ -64,10 +64,11 @@ class RnnTransducerBlock(Layer):
             return_state=True,
             kernel_regularizer=kernel_regularizer,
             bias_regularizer=bias_regularizer,
+            dtype=tf.float32 if tf.keras.mixed_precision.global_policy().name == "mixed_bfloat16" else None,
         )
 
         if layer_norm:
-            self.ln = tf.keras.layers.LayerNormalization(name="ln")
+            self.ln = tf.keras.layers.LayerNormalization(name="ln", gamma_regularizer=kernel_regularizer, beta_regularizer=bias_regularizer)
         else:
             self.ln = None
 

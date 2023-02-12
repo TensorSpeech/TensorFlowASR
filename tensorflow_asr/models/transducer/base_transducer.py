@@ -75,17 +75,23 @@ class TransducerPrediction(Layer):
                 unroll=rnn_unroll,
                 kernel_regularizer=kernel_regularizer,
                 bias_regularizer=bias_regularizer,
+                dtype=tf.float32 if tf.keras.mixed_precision.global_policy().name == "mixed_bfloat16" else None,
             )
-            ln = tf.keras.layers.LayerNormalization(name=f"ln_{i}") if layer_norm else None
-            if projection_units > 0:
-                projection = tf.keras.layers.Dense(
+            ln = (
+                tf.keras.layers.LayerNormalization(name=f"ln_{i}", gamma_regularizer=kernel_regularizer, beta_regularizer=bias_regularizer)
+                if layer_norm
+                else None
+            )
+            projection = (
+                tf.keras.layers.Dense(
                     projection_units,
                     name=f"projection_{i}",
                     kernel_regularizer=kernel_regularizer,
                     bias_regularizer=bias_regularizer,
                 )
-            else:
-                projection = None
+                if projection_units > 0
+                else None
+            )
             self.rnns.append(rnn)
             self.lns.append(ln)
             self.projections.append(projection)

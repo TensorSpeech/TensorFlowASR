@@ -1,3 +1,4 @@
+# pylint:disable=attribute-defined-outside-init
 # Copyright 2020 Huy Le Nguyen (@usimarit)
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -53,9 +54,7 @@ class SequenceBatchNorm(tf.keras.layers.Layer):
         else:
             total_padded_frames = tf.cast(tf.shape(inputs)[1], tf.keras.backend.dtype(mean))
             batch_size = tf.cast(tf.shape(inputs)[0], tf.keras.backend.dtype(mean))
-        total_unpadded_frames_batch = tf.math.count_nonzero(
-            inputs, axis=[0, 1], keepdims=False, dtype=tf.keras.backend.dtype(mean)
-        )
+        total_unpadded_frames_batch = tf.math.count_nonzero(inputs, axis=[0, 1], keepdims=False, dtype=tf.keras.backend.dtype(mean))
         mean = (mean * total_padded_frames * batch_size) / total_unpadded_frames_batch
         variance = (variance * total_padded_frames * batch_size) / total_unpadded_frames_batch
         return tf.nn.batch_normalization(

@@ -60,25 +60,11 @@ class FFModule(Layer):
     ):
         super().__init__(name=name, **kwargs)
         self.fc_factor = fc_factor
-        self.ln = tf.keras.layers.LayerNormalization(
-            name="ln",
-            gamma_regularizer=kernel_regularizer,
-            beta_regularizer=bias_regularizer,
-        )
-        self.ffn1 = tf.keras.layers.Dense(
-            4 * input_dim,
-            name="dense_1",
-            kernel_regularizer=kernel_regularizer,
-            bias_regularizer=bias_regularizer,
-        )
+        self.ln = tf.keras.layers.LayerNormalization(name="ln", gamma_regularizer=kernel_regularizer, beta_regularizer=bias_regularizer)
+        self.ffn1 = tf.keras.layers.Dense(4 * input_dim, name="dense_1", kernel_regularizer=kernel_regularizer, bias_regularizer=bias_regularizer)
         self.swish = tf.keras.layers.Activation(tf.nn.swish, name="swish_activation")
         self.do1 = tf.keras.layers.Dropout(dropout, name="dropout_1")
-        self.ffn2 = tf.keras.layers.Dense(
-            input_dim,
-            name="dense_2",
-            kernel_regularizer=kernel_regularizer,
-            bias_regularizer=bias_regularizer,
-        )
+        self.ffn2 = tf.keras.layers.Dense(input_dim, name="dense_2", kernel_regularizer=kernel_regularizer, bias_regularizer=bias_regularizer)
         self.do2 = tf.keras.layers.Dropout(dropout, name="dropout_2")
         self.res_add = tf.keras.layers.Add(name="add")
 
@@ -120,11 +106,7 @@ class MHSAModule(Layer):
         **kwargs,
     ):
         super().__init__(name=name, **kwargs)
-        self.ln = tf.keras.layers.LayerNormalization(
-            name="ln",
-            gamma_regularizer=kernel_regularizer,
-            beta_regularizer=bias_regularizer,
-        )
+        self.ln = tf.keras.layers.LayerNormalization(name="ln", gamma_regularizer=kernel_regularizer, beta_regularizer=bias_regularizer)
         if mha_type == "relmha":
             self.mha = MultiHeadRelativeAttention(
                 num_heads=num_heads,
@@ -216,11 +198,7 @@ class ConvModule(Layer):
         **kwargs,
     ):
         super().__init__(name=name, **kwargs)
-        self.ln = tf.keras.layers.LayerNormalization(
-            name="ln",
-            gamma_regularizer=kernel_regularizer,
-            beta_regularizer=bias_regularizer,
-        )
+        self.ln = tf.keras.layers.LayerNormalization(name="ln", gamma_regularizer=kernel_regularizer, beta_regularizer=bias_regularizer)
         self.pw_conv_1 = tf.keras.layers.Conv1D(
             filters=2 * input_dim,
             kernel_size=1,
@@ -240,11 +218,7 @@ class ConvModule(Layer):
             depthwise_regularizer=kernel_regularizer,
             bias_regularizer=bias_regularizer,
         )
-        self.bn = tf.keras.layers.BatchNormalization(
-            name="bn",
-            gamma_regularizer=kernel_regularizer,
-            beta_regularizer=bias_regularizer,
-        )
+        self.bn = tf.keras.layers.BatchNormalization(name="bn", gamma_regularizer=kernel_regularizer, beta_regularizer=bias_regularizer)
         self.swish = tf.keras.layers.Activation(tf.nn.swish, name="swish_activation")
         self.pw_conv_2 = tf.keras.layers.Conv1D(
             filters=input_dim,
@@ -334,11 +308,7 @@ class ConformerBlock(Layer):
             kernel_regularizer=kernel_regularizer,
             bias_regularizer=bias_regularizer,
         )
-        self.ln = tf.keras.layers.LayerNormalization(
-            name="ln",
-            gamma_regularizer=kernel_regularizer,
-            beta_regularizer=kernel_regularizer,
-        )
+        self.ln = tf.keras.layers.LayerNormalization(name="ln", gamma_regularizer=kernel_regularizer, beta_regularizer=kernel_regularizer)
 
     def call(
         self,
