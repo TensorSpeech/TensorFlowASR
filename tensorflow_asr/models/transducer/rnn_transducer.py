@@ -82,9 +82,9 @@ class RnnTransducerBlock(Layer):
         if orig_dtype == tf.bfloat16:
             outputs = tf.cast(outputs, tf.float32)
         outputs = self.rnn(outputs, training=training, mask=getattr(outputs, "_keras_mask", None))
+        outputs = outputs[0]
         if orig_dtype == tf.bfloat16:
             outputs = tf.cast(outputs, orig_dtype)
-        outputs = outputs[0]
         if self.ln is not None:
             outputs = self.ln(outputs, training=training)
         outputs = self.projection(outputs, training=training)
