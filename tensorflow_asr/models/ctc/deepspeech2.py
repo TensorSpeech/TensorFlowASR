@@ -22,6 +22,10 @@ from tensorflow_asr.utils import layer_util, math_util
 
 
 class Reshape(tf.keras.layers.Layer):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.supports_masking = True
+
     def call(self, inputs):
         return math_util.merge_two_last_dims(inputs)
 
@@ -33,12 +37,14 @@ class ConvBlock(tf.keras.layers.Layer):
         kernels: list = [11, 41],
         strides: list = [2, 2],
         filters: int = 32,
+        padding: str = "same",
         dropout: float = 0.1,
         **kwargs,
     ):
         super().__init__(**kwargs)
-        CNN = layer_util.get_conv(conv_type)
-        self.conv = CNN(filters=filters, kernel_size=kernels, strides=strides, padding="same", name=conv_type)
+        self.supports_masking = True
+        CnnClass = layer_util.get_conv(conv_type)
+        self.conv = CnnClass(filters=filters, kernel_size=kernels, strides=strides, padding=padding, name=conv_type)
         self.bn = tf.keras.layers.BatchNormalization(name="bn")
         self.relu = tf.keras.layers.ReLU(name="relu")
         self.do = tf.keras.layers.Dropout(dropout, name="dropout")
@@ -58,10 +64,12 @@ class ConvModule(tf.keras.layers.Layer):
         kernels: list = [[11, 41], [11, 21], [11, 21]],
         strides: list = [[2, 2], [1, 2], [1, 2]],
         filters: list = [32, 32, 96],
+        padding: str = "same",
         dropout: float = 0.1,
         **kwargs,
     ):
         super().__init__(**kwargs)
+        self.supports_masking = True
 
         assert len(kernels) == len(strides) == len(filters)
         assert dropout >= 0.0
@@ -71,7 +79,15 @@ class ConvModule(tf.keras.layers.Layer):
             self.preprocess = Reshape(name="preprocess")
 
         self.blocks = [
-            ConvBlock(conv_type=conv_type, kernels=kernels[i], strides=strides[i], filters=filters[i], dropout=dropout, name=f"block_{i}")
+            ConvBlock(
+                conv_type=conv_type,
+                kernels=kernels[i],
+                strides=strides[i],
+                filters=filters[i],
+                dropout=dropout,
+                padding=padding,
+                name=f"block_{i}",
+            )
             for i in range(len(filters))
         ]
 
@@ -106,6 +122,7 @@ class RnnBlock(tf.keras.layers.Layer):
         **kwargs,
     ):
         super().__init__(**kwargs)
+        self.supports_masking = True
         RnnClass = layer_util.get_rnn(rnn_type)
         self.rnn = RnnClass(
             units,
@@ -128,7 +145,7 @@ class RnnBlock(tf.keras.layers.Layer):
         orig_dtype = outputs.dtype
         if orig_dtype == tf.bfloat16:
             outputs = tf.cast(outputs, tf.float32)
-        outputs = self.rnn(outputs, training=training)
+        outputs = self.rnn(outputs, training=training, mask=getattr(outputs, "_keras_mask", None))
         if orig_dtype == tf.bfloat16:
             outputs = tf.cast(outputs, orig_dtype)
         outputs = self.bn(outputs, training=training)
@@ -150,6 +167,7 @@ class RnnModule(tf.keras.layers.Layer):
         **kwargs,
     ):
         super().__init__(**kwargs)
+        self.supports_masking = True
         self.blocks = [
             RnnBlock(rnn_type=rnn_type, units=units, bidirectional=bidirectional, unroll=unroll, rowconv=rowconv, dropout=dropout, name=f"block_{i}")
             for i in range(nlayers)
@@ -170,6 +188,7 @@ class FcBlock(tf.keras.layers.Layer):
         **kwargs,
     ):
         super().__init__(**kwargs)
+        self.supports_masking = True
         self.fc = tf.keras.layers.Dense(units, name="fc")
         self.bn = tf.keras.layers.BatchNormalization(name="bn")
         self.relu = tf.keras.layers.ReLU(name="relu")
@@ -192,6 +211,7 @@ class FcModule(tf.keras.layers.Layer):
         **kwargs,
     ):
         super().__init__(**kwargs)
+        self.supports_masking = True
         self.blocks = [FcBlock(units=units, dropout=dropout, name=f"block_{i}") for i in range(nlayers)]
 
     def call(self, inputs, training=False):
@@ -208,6 +228,7 @@ class DeepSpeech2Encoder(Layer):
         conv_kernels: list = [[11, 41], [11, 21], [11, 21]],
         conv_strides: list = [[2, 2], [1, 2], [1, 2]],
         conv_filters: list = [32, 32, 96],
+        conv_padding: str = "same",
         conv_dropout: float = 0.1,
         rnn_nlayers: int = 5,
         rnn_type: str = "lstm",
@@ -223,7 +244,13 @@ class DeepSpeech2Encoder(Layer):
     ):
         super().__init__(**kwargs)
         self.conv_module = ConvModule(
-            conv_type=conv_type, kernels=conv_kernels, strides=conv_strides, filters=conv_filters, dropout=conv_dropout, name="conv_module"
+            conv_type=conv_type,
+            kernels=conv_kernels,
+            strides=conv_strides,
+            filters=conv_filters,
+            padding=conv_padding,
+            dropout=conv_dropout,
+            name="conv_module",
         )
         self.rnn_module = RnnModule(
             nlayers=rnn_nlayers,
@@ -236,7 +263,12 @@ class DeepSpeech2Encoder(Layer):
             name="rnn_module",
         )
         self._rnn_units = rnn_units
-        self.fc_module = FcModule(nlayers=fc_nlayers, units=fc_units, dropout=fc_dropout, name="fc_module")
+        self.fc_module = FcModule(
+            nlayers=fc_nlayers,
+            units=fc_units,
+            dropout=fc_dropout,
+            name="fc_module",
+        )
         self._fc_nlayers = fc_nlayers
         self._fc_units = fc_units
         self.time_reduction_factor = self.conv_module.reduction_factor
@@ -284,6 +316,7 @@ class DeepSpeech2(CtcModel):
         conv_kernels: list = [[11, 41], [11, 21], [11, 21]],
         conv_strides: list = [[2, 2], [1, 2], [1, 2]],
         conv_filters: list = [32, 32, 96],
+        conv_padding: str = "same",
         conv_dropout: float = 0.1,
         rnn_nlayers: int = 5,
         rnn_type: str = "lstm",
@@ -304,6 +337,7 @@ class DeepSpeech2(CtcModel):
                 conv_kernels=conv_kernels,
                 conv_strides=conv_strides,
                 conv_filters=conv_filters,
+                conv_padding=conv_padding,
                 conv_dropout=conv_dropout,
                 rnn_nlayers=rnn_nlayers,
                 rnn_type=rnn_type,
