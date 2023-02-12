@@ -114,6 +114,7 @@ class RnnBlock(tf.keras.layers.Layer):
     def __init__(
         self,
         rnn_type: str = "lstm",
+        bn_type: str = "sbn",
         units: int = 1024,
         bidirectional: bool = True,
         unroll: bool = False,
@@ -135,7 +136,9 @@ class RnnBlock(tf.keras.layers.Layer):
         )
         if bidirectional:
             self.rnn = tf.keras.layers.Bidirectional(self.rnn, name=f"b{rnn_type}")
-        self.bn = SequenceBatchNorm(time_major=False, name="bn")
+        if bn_type not in ("bn", "sbn"):
+            raise ValueError(f"bn_type must be in {('bn', 'sbn')}")
+        self.bn = SequenceBatchNorm(time_major=False, name="bn") if bn_type == "sbn" else tf.keras.layers.BatchNormalization(name="bn")
         self.rowconv = None
         if not bidirectional and rowconv > 0:
             self.rowconv = RowConv1D(filters=units, future_context=rowconv, name="rowconv")
@@ -159,6 +162,7 @@ class RnnModule(tf.keras.layers.Layer):
         self,
         nlayers: int = 5,
         rnn_type: str = "lstm",
+        bn_type: str = "sbn",
         units: int = 1024,
         bidirectional: bool = True,
         unroll: bool = False,
@@ -169,7 +173,16 @@ class RnnModule(tf.keras.layers.Layer):
         super().__init__(**kwargs)
         self.supports_masking = True
         self.blocks = [
-            RnnBlock(rnn_type=rnn_type, units=units, bidirectional=bidirectional, unroll=unroll, rowconv=rowconv, dropout=dropout, name=f"block_{i}")
+            RnnBlock(
+                rnn_type=rnn_type,
+                bn_type=bn_type,
+                units=units,
+                bidirectional=bidirectional,
+                unroll=unroll,
+                rowconv=rowconv,
+                dropout=dropout,
+                name=f"block_{i}",
+            )
             for i in range(nlayers)
         ]
 
@@ -232,6 +245,7 @@ class DeepSpeech2Encoder(Layer):
         conv_dropout: float = 0.1,
         rnn_nlayers: int = 5,
         rnn_type: str = "lstm",
+        rnn_bn_type: str = "sbn",
         rnn_units: int = 1024,
         rnn_bidirectional: bool = True,
         rnn_unroll: bool = False,
@@ -255,6 +269,7 @@ class DeepSpeech2Encoder(Layer):
         self.rnn_module = RnnModule(
             nlayers=rnn_nlayers,
             rnn_type=rnn_type,
+            bn_type=rnn_bn_type,
             units=rnn_units,
             bidirectional=rnn_bidirectional,
             unroll=rnn_unroll,
@@ -295,11 +310,13 @@ class DeepSpeech2Decoder(Layer):
     def __init__(self, vocab_size: int, **kwargs):
         super().__init__(**kwargs)
         self.vocab = tf.keras.layers.Dense(vocab_size, name="logits")
+        self.bn = tf.keras.layers.BatchNormalization(name="bn")
         self._vocab_size = vocab_size
 
     def call(self, inputs, training=False):
         logits, logits_length = inputs
         logits = self.vocab(logits, training=training)
+        logits = self.bn(logits, training=training)
         return logits, logits_length
 
     def compute_output_shape(self, input_shape):
@@ -320,6 +337,7 @@ class DeepSpeech2(CtcModel):
         conv_dropout: float = 0.1,
         rnn_nlayers: int = 5,
         rnn_type: str = "lstm",
+        rnn_bn_type: str = "sbn",
         rnn_units: int = 1024,
         rnn_bidirectional: bool = True,
         rnn_unroll: bool = False,
@@ -341,6 +359,7 @@ class DeepSpeech2(CtcModel):
                 conv_dropout=conv_dropout,
                 rnn_nlayers=rnn_nlayers,
                 rnn_type=rnn_type,
+                rnn_bn_type=rnn_bn_type,
                 rnn_units=rnn_units,
                 rnn_bidirectional=rnn_bidirectional,
                 rnn_unroll=rnn_unroll,
