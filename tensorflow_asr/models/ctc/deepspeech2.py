@@ -244,9 +244,11 @@ class DeepSpeech2Encoder(Layer):
     def call(self, inputs, training=False):
         outputs, inputs_length = inputs
         outputs = self.conv_module(outputs, training=training)
+        outputs_length = math_util.get_reduced_length(inputs_length, self.time_reduction_factor)
+        outputs = math_util.apply_mask(outputs, mask=tf.sequence_mask(outputs_length, maxlen=tf.shape(outputs)[1], dtype=tf.bool))
         outputs = self.rnn_module(outputs, training=training)
         outputs = self.fc_module(outputs, training=training)
-        return outputs, inputs_length
+        return outputs, outputs_length
 
     def compute_output_shape(self, input_shape):
         inputs_shape, inputs_length_shape = input_shape

@@ -284,7 +284,9 @@ class JasperEncoder(Layer):
 
         outputs = self.second_additional_block(outputs, training=training)
         outputs = self.third_additional_block(outputs, training=training)
-        return outputs, inputs_length
+        outputs_length = math_util.get_reduced_length(inputs_length, self.time_reduction_factor)
+        outputs = math_util.apply_mask(outputs, mask=tf.sequence_mask(outputs_length, maxlen=tf.shape(outputs)[1], dtype=tf.bool))
+        return outputs, outputs_length
 
     def compute_output_shape(self, input_shape):
         inputs_shape, inputs_length_shape = input_shape
