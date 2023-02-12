@@ -169,11 +169,19 @@ class Conv2dSubsampling(Subsampling):
             )
             if norm == "batch":
                 subblock.add(
-                    tf.keras.layers.BatchNormalization(name=f"bn_{i}"), gamma_regularizer=kernel_regularizer, beta_regularizer=bias_regularizer
+                    tf.keras.layers.BatchNormalization(
+                        name=f"bn_{i}",
+                        gamma_regularizer=kernel_regularizer,
+                        beta_regularizer=bias_regularizer,
+                    )
                 )
             elif norm == "layer":
                 subblock.add(
-                    tf.keras.layers.LayerNormalization(name=f"ln_{i}"), gamma_regularizer=kernel_regularizer, beta_regularizer=bias_regularizer
+                    tf.keras.layers.LayerNormalization(
+                        name=f"ln_{i}",
+                        gamma_regularizer=kernel_regularizer,
+                        beta_regularizer=bias_regularizer,
+                    )
                 )
             subblock.add(tf.keras.layers.Activation(activation, name=f"{activation}_{i}"))
             self.convs.append(subblock)
