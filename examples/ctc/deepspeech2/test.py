@@ -44,9 +44,10 @@ def main(
     config = Config(config_path)
 
     speech_featurizer, text_featurizer = featurizer_helpers.prepare_featurizers(config=config)
+    batch_size = bs or config.learning_config.running_config.batch_size
 
     deepspeech2 = DeepSpeech2(**config.model_config, vocab_size=text_featurizer.num_classes)
-    deepspeech2.make(speech_featurizer.shape)
+    deepspeech2.make(speech_featurizer.shape, batch_size=batch_size)
     deepspeech2.load_weights(saved, by_name=file_util.is_hdf5_filepath(saved))
     deepspeech2.summary()
     deepspeech2.add_featurizers(speech_featurizer, text_featurizer)
