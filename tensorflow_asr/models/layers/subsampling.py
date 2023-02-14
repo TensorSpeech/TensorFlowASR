@@ -56,7 +56,7 @@ class TimeReduction(Subsampling):
     def call(self, inputs):
         outputs, inputs_length = inputs
         shape = shape_util.shape_list(outputs)
-        outputs = tf.pad(outputs, [[0, 0], [0, self.padding(shape[1])], [0, 0]])
+        outputs = tf.pad(outputs, [[0, 0], [self.padding(shape[1]), 0], [0, 0]])
         outputs = tf.reshape(outputs, [shape[0], -1, shape[-1] * self.time_reduction_factor])
         outputs, outputs_length = super().call([outputs, inputs_length])
         return outputs, outputs_length
