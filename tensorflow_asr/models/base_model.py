@@ -114,7 +114,7 @@ class BaseModel(tf.keras.Model):
         else:
             self.use_ga = False
         self.apply_gwn_config = apply_gwn_config
-        self.add_metric(metric=tf.keras.metrics.Mean(name="loss", dtype=tf.float32))
+        self.add_metric(metric=tf.keras.metrics.Mean(name="loss"))
         super().compile(optimizer=optimizer, loss=loss, run_eagerly=run_eagerly, **kwargs)
 
     def add_featurizers(self, speech_featurizer: SpeechFeaturizer, text_featurizer: TextFeaturizer):
@@ -137,8 +137,6 @@ class BaseModel(tf.keras.Model):
 
     def _get_global_batch_size(self, y_pred):
         global_batch_size = tf.shape(y_pred["logits"])[0] * tf.distribute.get_strategy().num_replicas_in_sync
-        if self.use_ga:
-            global_batch_size *= self.ga.total_steps
         return global_batch_size
 
     def train_step(self, batch):
@@ -160,7 +158,6 @@ class BaseModel(tf.keras.Model):
             per_sample_loss = self.loss(y_true=y_true, y_pred=y_pred)
             global_batch_size = self._get_global_batch_size(y_pred)
             loss = tf.nn.compute_average_loss(per_sample_loss, global_batch_size=global_batch_size)
-            # loss = per_sample_loss
             if self.use_loss_scale:
                 scaled_loss = self.optimizer.get_scaled_loss(loss)
 
