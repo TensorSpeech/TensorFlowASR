@@ -2,11 +2,14 @@
 
 - [Sentencepiece Contextnet Transducer](#sentencepiece-contextnet-transducer)
   - [2023-02-14](#2023-02-14)
+      - [Config](#config)
+      - [Training](#training)
+      - [Testing](#testing)
 
 
 ## 2023-02-14
 
-Config:
+#### Config
 
 ```python
 config = """
@@ -327,7 +330,7 @@ with open("/path/to/config.j2", "w") as f:
     f.write(config)
 ```
 
-Training:
+#### Training
 
 ```bash
 python /path/to/TensorFlowASR/examples/transducer/contextnet/train.py \
@@ -337,7 +340,64 @@ python /path/to/TensorFlowASR/examples/transducer/contextnet/train.py \
     --tfrecords
 ```
 
-Testing:
+Outputs:
+
+```
+INFO:tensorflow:USING mixed precision policy mixed_bfloat16
+INFO:tensorflow:Loading SentencePiece model ...
+INFO:tensorflow:Loading metadata from /content/TensorFlowASR/vocabularies/librispeech/sentencepiece/train_bpe_1000.metadata.json ...
+INFO:tensorflow:TFRecords're already existed: train
+INFO:tensorflow:Use GPU/TPU implementation for RNNT loss
+Model: "contextnet"
+__________________________________________________________________________________________________________________________________________
+ Layer (type)                                            Output Shape                                      Param #             Trainable  
+==========================================================================================================================================
+ encoder (ContextNetEncoder)                             ((6, 372, 640),                                   6888392             Y          
+                                                          (6,))                                                                           
+                                                                                                                                          
+ prediction (TransducerPrediction)                       (6, 352, 512)                                     3002368             Y          
+                                                                                                                                          
+ joint (TransducerJoint)                                 (6, 372, 352, 1000)                               939496              Y          
+                                                                                                                                          
+==========================================================================================================================================
+Total params: 10,830,258
+Trainable params: 10,771,120
+Non-trainable params: 59,138
+__________________________________________________________________________________________________________________________________________
+Epoch 1/300
+WARNING:tensorflow:From /usr/local/lib/python3.8/dist-packages/tensorflow/python/autograph/pyct/static_analysis/liveness.py:83: Analyzer.lamba_check (from tensorflow.python.autograph.pyct.static_analysis.liveness) is deprecated and will be removed after 2023-09-23.
+Instructions for updating:
+Lambda fuctions will be no more assumed to be used in the statement where they are used, or at least in the same block. https://github.com/tensorflow/tensorflow/issues/56089
+5859/5859 [==============================] - 5086s 795ms/step - loss: 343.9542
+Epoch 2/300
+5859/5859 [==============================] - 4627s 790ms/step - loss: 202.7089
+Epoch 3/300
+5859/5859 [==============================] - 4638s 792ms/step - loss: 131.8161
+Epoch 4/300
+5859/5859 [==============================] - 4625s 789ms/step - loss: 181.3640
+Epoch 5/300
+5859/5859 [==============================] - 4619s 788ms/step - loss: 151.9531
+Epoch 6/300
+5859/5859 [==============================] - 4626s 790ms/step - loss: 129.5108
+Epoch 7/300
+5859/5859 [==============================] - 4623s 789ms/step - loss: 117.3100
+Epoch 8/300
+5859/5859 [==============================] - 4622s 789ms/step - loss: 109.6745
+Epoch 9/300
+5859/5859 [==============================] - 4623s 789ms/step - loss: 104.7053
+Epoch 10/300
+5859/5859 [==============================] - 4623s 789ms/step - loss: 101.1367
+Epoch 11/300
+5859/5859 [==============================] - 4646s 793ms/step - loss: 98.3092
+Epoch 12/300
+5859/5859 [==============================] - 4647s 793ms/step - loss: 96.0514
+Epoch 13/300
+5859/5859 [==============================] - 4632s 791ms/step - loss: 94.2039
+Epoch 14/300
+5859/5859 [==============================] - 4624s 789ms/step - loss: 92.5769
+```
+
+#### Testing
 
 ```bash
 python /path/to/TensorFlowASR/examples/transducer/contextnet/test.py \
