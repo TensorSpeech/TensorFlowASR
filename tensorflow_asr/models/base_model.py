@@ -178,7 +178,9 @@ class BaseModel(tf.keras.Model):
             self.optimizer.apply_gradients(zip(gradients, self.trainable_variables))
 
         self._tfasr_metrics["loss"].update_state(per_sample_loss)
-        return {m.name: m.result() for m in self.metrics}
+        results = {m.name: m.result() for m in self.metrics}
+        results["count"] = self._tfasr_metrics["loss"].count
+        return results
 
     def test_step(self, batch):
         """
@@ -193,7 +195,9 @@ class BaseModel(tf.keras.Model):
         y_pred = self(inputs, training=False)
         per_sample_loss = self.loss(y_true=y_true, y_pred=y_pred)
         self._tfasr_metrics["loss"].update_state(per_sample_loss)
-        return {m.name: m.result() for m in self.metrics}
+        results = {m.name: m.result() for m in self.metrics}
+        results["count"] = self._tfasr_metrics["loss"].count
+        return results
 
     def predict_step(self, batch):
         """
