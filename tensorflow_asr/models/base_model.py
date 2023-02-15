@@ -158,7 +158,8 @@ class BaseModel(tf.keras.Model):
             self.remove_gwn(original_weights)
             tape.watch(y_pred["logits"])
             per_sample_loss = self.loss(y_true=y_true, y_pred=y_pred)
-            loss = tf.nn.compute_average_loss(per_sample_loss, global_batch_size=self._get_global_batch_size(y_pred))
+            global_batch_size = self._get_global_batch_size(y_pred)
+            loss = tf.nn.compute_average_loss(per_sample_loss, global_batch_size=global_batch_size)
             # loss = per_sample_loss
             if self.use_loss_scale:
                 scaled_loss = self.optimizer.get_scaled_loss(loss)
@@ -180,6 +181,9 @@ class BaseModel(tf.keras.Model):
         self._tfasr_metrics["loss"].update_state(per_sample_loss)
         results = {m.name: m.result() for m in self.metrics}
         results["count"] = self._tfasr_metrics["loss"].count
+        results["bs"] = tf.shape(per_sample_loss)[0]
+        results["gbs"] = global_batch_size
+        results["avg_loss"] = loss
         return results
 
     def test_step(self, batch):

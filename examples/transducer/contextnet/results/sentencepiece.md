@@ -1,13 +1,13 @@
 # Sentencepiece Contextnet Transducer
 
 - [Sentencepiece Contextnet Transducer](#sentencepiece-contextnet-transducer)
-  - [2023-02-14](#2023-02-14)
+  - [2023-02-14 (Happy Valentine)](#2023-02-14-happy-valentine)
       - [Config](#config)
       - [Training](#training)
       - [Testing](#testing)
 
 
-## 2023-02-14
+## 2023-02-14 (Happy Valentine)
 
 #### Config
 
