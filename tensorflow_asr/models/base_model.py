@@ -178,12 +178,10 @@ class BaseModel(tf.keras.Model):
         else:
             self.optimizer.apply_gradients(zip(gradients, self.trainable_variables))
 
-        self._tfasr_metrics["loss"].update_state(tf.reduce_sum(per_sample_loss))
+        self._tfasr_metrics["loss"].update_state(per_sample_loss)
         results = {m.name: m.result() for m in self.metrics}
-        results["count"] = self._tfasr_metrics["loss"].count
-        results["bs"] = tf.shape(per_sample_loss)[0]
-        results["gbs"] = global_batch_size
-        results["avg_loss"] = loss
+        results["avg_loss"] = tf.reduce_sum(per_sample_loss)
+        results["avg_loss_scaled"] = loss
         return results
 
     def test_step(self, batch):
