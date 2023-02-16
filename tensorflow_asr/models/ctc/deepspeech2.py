@@ -132,6 +132,7 @@ class RnnBlock(tf.keras.layers.Layer):
             return_sequences=True,
             use_bias=True,
             name=rnn_type,
+            zero_output_for_mask=True,
             dtype=tf.float32 if tf.keras.mixed_precision.global_policy().name == "mixed_bfloat16" else None,
         )
         if bidirectional:

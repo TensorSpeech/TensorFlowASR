@@ -73,6 +73,7 @@ class TransducerPrediction(Layer):
                 return_state=True,
                 implementation=rnn_implementation,
                 unroll=rnn_unroll,
+                zero_output_for_mask=True,
                 kernel_regularizer=kernel_regularizer,
                 bias_regularizer=bias_regularizer,
                 dtype=tf.float32 if tf.keras.mixed_precision.global_policy().name == "mixed_bfloat16" else None,
