@@ -50,7 +50,7 @@ class CtcModel(BaseModel):
         optimizer,
         blank=0,
         run_eagerly=None,
-        mxp=True,
+        mxp="none",
         ga_steps=None,
         **kwargs,
     ):

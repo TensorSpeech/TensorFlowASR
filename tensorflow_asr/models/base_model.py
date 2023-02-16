@@ -94,7 +94,7 @@ class BaseModel(tf.keras.Model):
         loss,
         optimizer,
         run_eagerly=None,
-        mxp=True,
+        mxp="none",
         ga_steps=None,
         apply_gwn_config=None,
         **kwargs,
@@ -103,7 +103,7 @@ class BaseModel(tf.keras.Model):
         if env_util.has_devices("TPU"):
             self.use_loss_scale = False
         else:
-            self.use_loss_scale = mxp
+            self.use_loss_scale = mxp != "none"
             if self.use_loss_scale:
                 optimizer = tf.keras.mixed_precision.LossScaleOptimizer(optimizer)
                 logger.info("Using loss scale")
