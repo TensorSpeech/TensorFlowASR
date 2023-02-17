@@ -1,7 +1,7 @@
 {
   "train": {
     "max_input_length": 2972,
-    "max_label_length": 351,
+    "max_label_length": 231,
     "num_entries": 281241
   }
 }
