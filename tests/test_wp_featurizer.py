@@ -19,6 +19,7 @@ text = "<pad> i'm good but it would have broken down after ten miles of that har
 
 def test_wordpiece_featurizer():
     featurizer = WordPieceFeaturizer(decoder_config=decoder_config)
+    print(featurizer.num_classes)
     print(text)
     indices = featurizer.extract(text)
     print(indices.numpy())

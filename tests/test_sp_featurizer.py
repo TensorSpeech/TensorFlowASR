@@ -9,7 +9,7 @@ from tensorflow_asr.featurizers.text_featurizers import SentencePieceFeaturizer
 decoder_config = DecoderConfig(
     {
         "model_type": "unigram",
-        "vocabulary": f"{os.path.dirname(__file__)}/../vocabularies/librispeech/sentencepiece/train_uni_1000.model",
+        "vocabulary": f"{os.path.dirname(__file__)}/../vocabularies/librispeech/sentencepiece/train_bpe_1000.model",
         "blank_index": 0,
         "pad_token": "<pad>",
         "pad_index": 0,
@@ -27,11 +27,14 @@ text = "i'm good but it would have broken down after ten miles of that hard trai
 
 def test():
     featurizer = SentencePieceFeaturizer(decoder_config=decoder_config)
+    print(featurizer.num_classes)
     print(text)
     indices = featurizer.extract(text)
     print(indices.numpy())
     indices = featurizer.tf_extract(text)
     print(indices.numpy())
+    indices = list(indices.numpy())
+    indices += [0, 0]
     batch_indices = tf.stack([indices, indices], axis=0)
     reversed_text = featurizer.iextract(batch_indices)
     print(reversed_text.numpy())

@@ -338,8 +338,8 @@ class SentencePieceFeaturizer(TextFeaturizer):
     def __init__(self, decoder_config: DecoderConfig):
         super().__init__(decoder_config)
         self.blank = self.decoder_config.blank_index
-        self.tokenizer = tft.SentencepieceTokenizer(self.__load_model(), out_type=tf.int32, add_bos=True, add_eos=True)
-        self.num_classes = self.tokenizer.vocab_size()
+        self.tokenizer = tft.FastSentencepieceTokenizer(self.__load_model())
+        self.num_classes = int(self.tokenizer.vocab_size())
 
     def __load_model(self):
         with file_util.read_file(self.decoder_config.vocabulary) as path:
@@ -381,6 +381,7 @@ class SentencePieceFeaturizer(TextFeaturizer):
         text = self.tf_preprocess_text(text)
         text = tf.strings.split(text)
         indices = self.tokenizer.tokenize(text).merge_dims(0, 1)
+        indices = tf.cast(indices, tf.int32)
         return indices
 
     def iextract(self, indices: tf.Tensor) -> tf.Tensor:
