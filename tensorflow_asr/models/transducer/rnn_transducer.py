@@ -50,11 +50,6 @@ class RnnTransducerBlock(Layer):
     ):
         super().__init__(**kwargs)
 
-        if reduction_factor > 0:
-            self.reduction = TimeReduction(reduction_factor, name="reduction")
-        else:
-            self.reduction = None
-
         RnnClass = layer_util.get_rnn(rnn_type)
         self.rnn = RnnClass(
             units=rnn_units,
@@ -73,12 +68,15 @@ class RnnTransducerBlock(Layer):
         else:
             self.ln = None
 
+        if reduction_factor > 0:
+            self.reduction = TimeReduction(reduction_factor, name="reduction")
+        else:
+            self.reduction = None
+
         self.projection = tf.keras.layers.Dense(dmodel, name="projection", kernel_regularizer=kernel_regularizer, bias_regularizer=bias_regularizer)
 
     def call(self, inputs, training=False):
         outputs, outputs_length = inputs
-        if self.reduction is not None:
-            outputs, outputs_length = self.reduction([outputs, outputs_length])
         orig_dtype = outputs.dtype
         if orig_dtype == tf.bfloat16:
             outputs = tf.cast(outputs, tf.float32)
@@ -88,6 +86,8 @@ class RnnTransducerBlock(Layer):
             outputs = tf.cast(outputs, orig_dtype)
         if self.ln is not None:
             outputs = self.ln(outputs, training=training)
+        if self.reduction is not None:
+            outputs, outputs_length = self.reduction([outputs, outputs_length])
         outputs = self.projection(outputs, training=training)
         return outputs, outputs_length
 
@@ -98,13 +98,13 @@ class RnnTransducerBlock(Layer):
 
     def recognize(self, inputs, states):
         outputs = inputs
-        if self.reduction is not None:
-            outputs, _ = self.reduction([outputs, tf.reshape(tf.shape(outputs)[1], [1])])
         outputs = self.rnn(outputs, training=False, initial_state=states, mask=getattr(outputs, "_keras_mask", None))
         new_states = tf.stack(outputs[1:], axis=0)
         outputs = outputs[0]
         if self.ln is not None:
             outputs = self.ln(outputs, training=False)
+        if self.reduction is not None:
+            outputs, _ = self.reduction([outputs, tf.reshape(tf.shape(outputs)[1], [1])])
         outputs = self.projection(outputs, training=False)
         return outputs, new_states
 
