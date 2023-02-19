@@ -16,7 +16,8 @@
 import math
 
 import tensorflow as tf
-from keras.layers import EinsumDense, MultiHeadAttention
+from keras.layers import EinsumDense
+from keras.layers import MultiHeadAttention as KerasMultiHeadAttention
 
 from tensorflow_asr.utils import math_util
 
@@ -77,6 +78,16 @@ def compute_self_attention_mask(max_length, inputs_length, use_causal_mask=False
     if use_causal_mask:
         attention_mask = attention_mask & compute_causal_mask(qmask, value=qmask)
     return attention_mask
+
+
+class MultiHeadAttention(KerasMultiHeadAttention):
+    def _masked_softmax(self, attention_scores, attention_mask=None):
+        if attention_mask is not None:
+            attention_scores = math_util.masked_fill(attention_scores, mask=attention_mask)
+        attention_scores = self._softmax(attention_scores)
+        if attention_mask is not None:
+            attention_scores = math_util.masked_fill(attention_scores, mask=attention_mask)
+        return attention_scores
 
 
 class MultiHeadRelativeAttention(MultiHeadAttention):
@@ -214,8 +225,6 @@ class MultiHeadRelativeAttention(MultiHeadAttention):
         attention_scores = tf.multiply(attention_sum, 1.0 / math.sqrt(float(self._key_dim)))
 
         attention_scores = self._masked_softmax(attention_scores, attention_mask)
-        if attention_mask is not None:
-            attention_scores = math_util.masked_fill(attention_scores, attention_mask)
 
         attention_output = self._dropout_layer(attention_scores, training=training)
 

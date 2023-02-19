@@ -18,11 +18,7 @@ import tensorflow as tf
 from tensorflow_asr.models.activations.glu import GLU
 from tensorflow_asr.models.layers.base_layer import Layer
 from tensorflow_asr.models.layers.depthwise_conv1d import DepthwiseConv1D
-from tensorflow_asr.models.layers.multihead_attention import (
-    MultiHeadAttention,
-    MultiHeadRelativeAttention,
-    compute_self_attention_mask,
-)
+from tensorflow_asr.models.layers.multihead_attention import MultiHeadAttention, MultiHeadRelativeAttention
 from tensorflow_asr.models.layers.positional_encoding import compute_sinusoid_position_encoding
 from tensorflow_asr.models.layers.subsampling import Conv1dSubsampling, Conv2dSubsampling, VggSubsampling
 from tensorflow_asr.utils import math_util, shape_util
