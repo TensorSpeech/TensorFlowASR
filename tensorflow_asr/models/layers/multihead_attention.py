@@ -18,6 +18,8 @@ import math
 import tensorflow as tf
 from keras.layers import EinsumDense, MultiHeadAttention
 
+from tensorflow_asr.utils import math_util
+
 try:
     from keras.layers.multi_head_attention import _build_proj_equation, _get_output_shape
 except ImportError:
@@ -212,6 +214,8 @@ class MultiHeadRelativeAttention(MultiHeadAttention):
         attention_scores = tf.multiply(attention_sum, 1.0 / math.sqrt(float(self._key_dim)))
 
         attention_scores = self._masked_softmax(attention_scores, attention_mask)
+        if attention_mask:
+            attention_scores = math_util.masked_fill(attention_scores, attention_mask)
 
         attention_output = self._dropout_layer(attention_scores, training=training)
 
