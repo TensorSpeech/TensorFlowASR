@@ -68,6 +68,8 @@ def legacy_get_reduced_length(
     length,
     reduction_factor,
 ):
+    if length is None:
+        return None
     return int(math.ceil(length / reduction_factor))
 
 

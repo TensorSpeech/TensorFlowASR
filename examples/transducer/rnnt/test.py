@@ -46,7 +46,7 @@ def main(
     speech_featurizer, text_featurizer = featurizer_helpers.prepare_featurizers(config=config)
     batch_size = bs or config.learning_config.running_config.batch_size
 
-    rnn_transducer = RnnTransducer(**config.model_config, vocab_size=text_featurizer.num_classes)
+    rnn_transducer = RnnTransducer(**config.model_config, blank=text_featurizer.blank, vocab_size=text_featurizer.num_classes)
     rnn_transducer.make(speech_featurizer.shape, batch_size=batch_size)
     rnn_transducer.load_weights(saved, by_name=file_util.is_hdf5_filepath(saved))
     rnn_transducer.summary()
