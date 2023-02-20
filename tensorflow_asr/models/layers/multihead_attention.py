@@ -83,6 +83,16 @@ def compute_self_attention_mask(max_length, inputs_length, use_causal_mask=False
 class MultiHeadAttention(KerasMultiHeadAttention):
     def _masked_softmax(self, attention_scores, attention_mask=None):
         if attention_mask is not None:
+            # The expand dim happens starting from the `num_heads` dimension,
+            # (<batch_dims>, num_heads, <query_attention_dims,
+            # key_attention_dims>)
+            mask_expansion_axis = -len(self._attention_axes) * 2 - 1
+            for _ in range(
+                len(attention_scores.shape) - len(attention_mask.shape)
+            ):
+                attention_mask = tf.expand_dims(
+                    attention_mask, axis=mask_expansion_axis
+                )
             attention_scores = math_util.masked_fill(attention_scores, mask=attention_mask)
         attention_scores = self._softmax(attention_scores)
         if attention_mask is not None:
