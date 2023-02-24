@@ -171,15 +171,14 @@ class BaseModel(tf.keras.Model):
 
         if self.use_ga:  # perform gradient accumulation
             self.ga.accumulate(gradients=gradients)
-            steps = self.optimizer.apply_gradients(zip(self.ga.gradients, self.trainable_variables))
+            self.optimizer.apply_gradients(zip(self.ga.gradients, self.trainable_variables))
             tf.cond(self.ga.is_apply_step, self.ga.reset, lambda: None)
         else:
-            steps = self.optimizer.apply_gradients(zip(gradients, self.trainable_variables))
+            self.optimizer.apply_gradients(zip(gradients, self.trainable_variables))
 
-        self._tfasr_metrics["loss"].update_state(per_sample_loss)
+        self._tfasr_metrics["loss"].update_state(loss)
         results = {m.name: m.result() for m in self.metrics}
         results["per_batch_avg_loss"] = loss
-        results["steps"] = steps
         return results
 
     def test_step(self, batch):
@@ -194,9 +193,10 @@ class BaseModel(tf.keras.Model):
         inputs, y_true = batch
         y_pred = self(inputs, training=False)
         per_sample_loss = self.loss(y_true=y_true, y_pred=y_pred)
-        self._tfasr_metrics["loss"].update_state(per_sample_loss)
+        global_batch_size = self._get_global_batch_size(y_pred)
+        loss = tf.nn.compute_average_loss(per_sample_loss, global_batch_size=global_batch_size)
+        self._tfasr_metrics["loss"].update_state(loss)
         results = {m.name: m.result() for m in self.metrics}
-        results["count"] = self._tfasr_metrics["loss"].count
         return results
 
     def predict_step(self, batch):
