@@ -170,16 +170,16 @@ class BaseModel(tf.keras.Model):
 
         if self.use_ga:  # perform gradient accumulation
             self.ga.accumulate(gradients=gradients)
-            self.optimizer.apply_gradients(zip(self.ga.gradients, self.trainable_variables))
+            steps = self.optimizer.apply_gradients(zip(self.ga.gradients, self.trainable_variables))
             tf.cond(self.ga.is_apply_step, self.ga.reset, lambda: None)
         else:
-            self.optimizer.apply_gradients(zip(gradients, self.trainable_variables))
+            steps = self.optimizer.apply_gradients(zip(gradients, self.trainable_variables))
 
         self._tfasr_metrics["loss"].update_state(per_sample_loss)
         results = {m.name: m.result() for m in self.metrics}
         results["per_batch_avg_loss"] = tf.reduce_mean(per_sample_loss)
         results["per_batch_avg_loss_scaled"] = loss
-        results["steps"] = self.optimizer.iterations
+        results["steps"] = steps
         return results
 
     def test_step(self, batch):
