@@ -115,6 +115,7 @@ class BaseModel(tf.keras.Model):
             self.use_ga = False
         self.apply_gwn_config = apply_gwn_config
         self.add_metric(metric=tf.keras.metrics.Mean(name="loss"))
+        self.distribute_reduction_method("sum")
         super().compile(optimizer=optimizer, loss=loss, run_eagerly=run_eagerly, **kwargs)
 
     def add_featurizers(self, speech_featurizer: SpeechFeaturizer, text_featurizer: TextFeaturizer):
@@ -177,8 +178,7 @@ class BaseModel(tf.keras.Model):
 
         self._tfasr_metrics["loss"].update_state(per_sample_loss)
         results = {m.name: m.result() for m in self.metrics}
-        results["per_batch_avg_loss"] = tf.reduce_mean(per_sample_loss)
-        results["per_batch_avg_loss_scaled"] = loss
+        results["avg_loss"] = loss
         results["steps"] = steps
         return results
 
