@@ -177,8 +177,9 @@ class BaseModel(tf.keras.Model):
 
         self._tfasr_metrics["loss"].update_state(per_sample_loss)
         results = {m.name: m.result() for m in self.metrics}
-        results["avg_loss"] = tf.reduce_mean(per_sample_loss)
-        results["avg_loss_scaled"] = loss
+        results["per_batch_avg_loss"] = tf.reduce_mean(per_sample_loss)
+        results["per_batch_avg_loss_scaled"] = loss
+        results["steps"] = self.optimizer.iterations
         return results
 
     def test_step(self, batch):
