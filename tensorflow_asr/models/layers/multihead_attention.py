@@ -116,7 +116,7 @@ class MultiHeadAttention(KerasMultiHeadAttention):
             mask_expansion_axis = -len(self._attention_axes) * 2 - 1
             for _ in range(len(attention_scores.shape) - len(attention_mask.shape)):
                 attention_mask = tf.expand_dims(attention_mask, axis=mask_expansion_axis)
-            smallest_negative = math_util.large_compatible_negative(attention_scores.dtype)
+            smallest_negative = tf.convert_to_tensor(math_util.large_compatible_negative(attention_scores.dtype), dtype=attention_scores.dtype)
             attention_scores += (1.0 - tf.cast(attention_mask, attention_scores.dtype)) * smallest_negative
             attention_scores = tf.where(tf.math.is_inf(attention_scores), smallest_negative, attention_scores)
         attention_scores = self._softmax(attention_scores)
