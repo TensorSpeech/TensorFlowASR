@@ -188,10 +188,10 @@ def masked_fill(
     mask,
     value=0,
 ):
-    shape = shape_util.shape_list(tensor)
-    mask = tf.broadcast_to(mask, shape)
-    values = tf.cast(tf.fill(shape, value), tensor.dtype)
-    return tf.where(mask, tensor, values)
+    _mask = tf.cast(mask, tensor.dtype)
+    tensor *= _mask
+    tensor += (1.0 - _mask) * tf.cast(tf.convert_to_tensor(value, tensor.dtype), tensor.dtype)
+    return tensor
 
 
 def large_compatible_negative(
@@ -202,7 +202,10 @@ def large_compatible_negative(
     return -1e9
 
 
-def apply_mask(outputs, mask=None):
+def apply_mask(
+    outputs,
+    mask=None,
+):
     if mask is not None:
         expanded_mask = mask
         for _ in range(len(outputs.shape) - len(mask.shape)):  # expand last axis of mask so that it's dim equals output's dim

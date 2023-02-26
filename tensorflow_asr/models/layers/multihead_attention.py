@@ -13,8 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import math
-
 import tensorflow as tf
 from keras.layers import EinsumDense
 from keras.layers import MultiHeadAttention as KerasMultiHeadAttention
@@ -116,9 +114,9 @@ class MultiHeadAttention(KerasMultiHeadAttention):
             mask_expansion_axis = -len(self._attention_axes) * 2 - 1
             for _ in range(len(attention_scores.shape) - len(attention_mask.shape)):
                 attention_mask = tf.expand_dims(attention_mask, axis=mask_expansion_axis)
-            smallest_negative = tf.convert_to_tensor(math_util.large_compatible_negative(attention_scores.dtype), dtype=attention_scores.dtype)
-            attention_scores += (1.0 - tf.cast(attention_mask, attention_scores.dtype)) * smallest_negative
-            attention_scores = tf.where(tf.math.is_inf(attention_scores), smallest_negative, attention_scores)
+            attention_scores = math_util.masked_fill(
+                attention_scores, mask=attention_mask, value=math_util.large_compatible_negative(attention_scores.dtype)
+            )
         attention_scores = self._softmax(attention_scores)
         return attention_scores
 

@@ -22,11 +22,13 @@ class Subsampling(Layer):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.time_reduction_factor = 1
+        self._do_apply_mask = True
 
     def call(self, inputs):
         outputs, inputs_length = inputs  # outputs already reduced, inputs_length is original
         outputs_length = math_util.get_reduced_length(inputs_length, self.time_reduction_factor)
-        outputs = math_util.apply_mask(outputs, mask=tf.sequence_mask(outputs_length, maxlen=tf.shape(outputs)[1], dtype=tf.bool))
+        if self._do_apply_mask:
+            outputs = math_util.apply_mask(outputs, mask=tf.sequence_mask(outputs_length, maxlen=tf.shape(outputs)[1], dtype=tf.bool))
         return outputs, outputs_length
 
     def compute_mask(self, inputs, mask=None):
@@ -120,6 +122,7 @@ class VggSubsampling(Subsampling):
         )
         self.maxpool2 = tf.keras.layers.MaxPool2D(pool_size=pool_size, strides=strides, padding=padding, name="maxpool_2")
         self.time_reduction_factor = self.maxpool1.pool_size[0] * self.maxpool2.pool_size[0]
+        self._do_apply_mask = False
 
     def call(self, inputs, training=False):
         outputs, inputs_length = inputs
@@ -186,6 +189,7 @@ class Conv2dSubsampling(Subsampling):
             subblock.add(tf.keras.layers.Activation(activation, name=f"{activation}_{i}"))
             self.convs.append(subblock)
             self.time_reduction_factor *= strides
+        self._do_apply_mask = False
 
     def call(self, inputs, training=False):
         outputs, inputs_length = inputs
@@ -234,6 +238,7 @@ class Conv1dSubsampling(Subsampling):
             subblock.add(tf.keras.layers.Activation(activation, name=f"{activation}_{i}"))
             self.convs.append(subblock)
             self.time_reduction_factor *= strides
+        self._do_apply_mask = False
 
     def call(self, inputs, training=False):
         outputs, inputs_length = inputs

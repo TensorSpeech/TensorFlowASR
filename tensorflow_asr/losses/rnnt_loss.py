@@ -52,23 +52,26 @@ class RnntLoss(tf.keras.losses.Loss):
             logger.info("Use GPU/TPU implementation for RNNT loss")
 
     def call(self, y_true, y_pred):
+        # logits, logit_length, labels, label_length = y_pred["logits"], y_pred["logits_length"], y_true["labels"], y_true["labels_length"]
+        logits, labels, label_length = y_pred["logits"], y_true["labels"], y_true["labels_length"]
+        logit_length = tf.repeat(tf.shape(logits)[1], repeats=tf.shape(logits)[0])
         if self.use_cpu:
             with tf.device("/CPU:0"):
                 return rnnt_loss(
-                    logits=y_pred["logits"],
-                    logit_length=y_pred["logits_length"],
-                    labels=y_true["labels"],
-                    label_length=y_true["labels_length"],
+                    logits=logits,
+                    logit_length=logit_length,
+                    labels=labels,
+                    label_length=label_length,
                     blank=self.blank,
                     name=self.name,
                     use_cpu=self.use_cpu,
                 )
         else:
             return rnnt_loss(
-                logits=y_pred["logits"],
-                logit_length=y_pred["logits_length"],
-                labels=y_true["labels"],
-                label_length=y_true["labels_length"],
+                logits=logits,
+                logit_length=logit_length,
+                labels=labels,
+                label_length=label_length,
                 blank=self.blank,
                 name=self.name,
                 use_cpu=self.use_cpu,
