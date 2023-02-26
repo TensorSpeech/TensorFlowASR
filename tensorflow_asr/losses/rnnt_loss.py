@@ -52,9 +52,7 @@ class RnntLoss(tf.keras.losses.Loss):
             logger.info("Use GPU/TPU implementation for RNNT loss")
 
     def call(self, y_true, y_pred):
-        # logits, logit_length, labels, label_length = y_pred["logits"], y_pred["logits_length"], y_true["labels"], y_true["labels_length"]
-        logits, labels, label_length = y_pred["logits"], y_true["labels"], y_true["labels_length"]
-        logit_length = tf.repeat(tf.shape(logits)[1], repeats=tf.shape(logits)[0])
+        logits, logit_length, labels, label_length = y_pred["logits"], y_pred["logits_length"], y_true["labels"], y_true["labels_length"]
         if self.use_cpu:
             with tf.device("/CPU:0"):
                 return rnnt_loss(
@@ -270,8 +268,8 @@ def compute_rnnt_loss_and_grad_helper(logits, labels, label_length, logit_length
     blank_sl = tf.gather_nd(blank_probs, indices, batch_dims=1)
 
     beta = backward_dp(bp_diags, tp_diags, batch_size, input_max_len, target_max_len, label_length, logit_length, blank_sl) * mask
-    beta = nan_to_zero(beta)
     final_state_probs = beta[:, 0, 0]
+    beta = nan_to_zero(beta)
 
     # Compute gradients of loss w.r.t. blank log-probabilities.
     grads_blank = (
