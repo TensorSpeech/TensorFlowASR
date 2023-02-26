@@ -81,23 +81,48 @@ def compute_self_attention_mask(max_length, inputs_length, use_causal_mask=False
 
 
 class MultiHeadAttention(KerasMultiHeadAttention):
-    def _masked_softmax(self, attention_scores, attention_mask=None):
-        if attention_mask is not None:
-            # The expand dim happens starting from the `num_heads` dimension,
-            # (<batch_dims>, num_heads, <query_attention_dims,
-            # key_attention_dims>)
-            mask_expansion_axis = -len(self._attention_axes) * 2 - 1
-            for _ in range(len(attention_scores.shape) - len(attention_mask.shape)):
-                attention_mask = tf.expand_dims(attention_mask, axis=mask_expansion_axis)
-            attention_scores = math_util.masked_fill(
-                attention_scores,
-                mask=attention_mask,
-                value=math_util.large_compatible_negative(attention_scores.dtype),
-            )
-        attention_scores = self._softmax(attention_scores)
-        # if attention_mask is not None:
-        #     attention_scores = math_util.masked_fill(attention_scores, mask=attention_mask, value=0)
-        return attention_scores
+    def _compute_attention(
+        self,
+        query,
+        key,
+        value,
+        attention_mask=None,
+        training=None,
+    ):
+        # Note: Applying scalar multiply at the smaller end of einsum improves
+        # XLA performance, but may introduce slight numeric differences in
+        # the Transformer attention head.
+        scale = 1.0 / tf.sqrt(tf.constant(self._key_dim, dtype=query.dtype))
+
+        # Take the dot product between "query" and "key" to get the raw
+        # attention scores.
+        attention_scores = tf.einsum(self._dot_product_equation, key, query * scale)
+
+        attention_scores = self._masked_softmax(attention_scores, attention_mask)
+
+        # This is actually dropping out entire tokens to attend to, which might
+        # seem a bit unusual, but is taken from the original Transformer paper.
+        attention_scores_dropout = self._dropout_layer(attention_scores, training=training)
+
+        # `context_layer` = [B, T, N, H]
+        attention_output = tf.einsum(self._combine_equation, attention_scores_dropout, value)
+        return attention_output, attention_scores
+
+    # def _masked_softmax(self, attention_scores, attention_mask=None):
+    #     if attention_mask is not None:
+    #         # The expand dim happens starting from the `num_heads` dimension,
+    #         # (<batch_dims>, num_heads, <query_attention_dims,
+    #         # key_attention_dims>)
+    #         mask_expansion_axis = -len(self._attention_axes) * 2 - 1
+    #         for _ in range(len(attention_scores.shape) - len(attention_mask.shape)):
+    #             attention_mask = tf.expand_dims(attention_mask, axis=mask_expansion_axis)
+    #         attention_scores = math_util.masked_fill(
+    #             attention_scores,
+    #             mask=attention_mask,
+    #             value=math_util.large_compatible_negative(attention_scores.dtype),
+    #         )
+    #     attention_scores = self._softmax(attention_scores)
+    #     return attention_scores
 
 
 class MultiHeadRelativeAttention(MultiHeadAttention):
@@ -226,13 +251,12 @@ class MultiHeadRelativeAttention(MultiHeadAttention):
           attention_output: Multi-headed output of attention computation of shape
             `[B, S, N, key_dim]`.
         """
-        content_attention = tf.einsum(self._dot_product_equation, key, query + self.content_attention_bias)  # BSNH,BTNH->BNTS
-        positional_attention = tf.einsum(self._dot_product_equation, position, query + self.positional_attention_bias)  # BRNH,BTNH->BNTR
+        scale = 1.0 / tf.sqrt(tf.constant(self._key_dim, dtype=query.dtype))
+
+        content_attention = tf.einsum(self._dot_product_equation, key, (query + self.content_attention_bias) * scale)  # BSNH,BTNH->BNTS
+        positional_attention = tf.einsum(self._dot_product_equation, position, (query + self.positional_attention_bias) * scale)  # BRNH,BTNH->BNTR
         positional_attention = _rel_shift(positional_attention)
-
-        attention_sum = content_attention + positional_attention
-
-        attention_scores = tf.multiply(attention_sum, 1.0 / math.sqrt(float(self._key_dim)))
+        attention_scores = content_attention + positional_attention
 
         attention_scores = self._masked_softmax(attention_scores, attention_mask)
 
