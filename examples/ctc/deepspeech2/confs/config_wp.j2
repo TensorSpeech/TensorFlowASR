@@ -13,31 +13,25 @@
 # limitations under the License.
 
 {% set repodir = "." %}
-{% set modeldir = "/mnt/Miscellanea/Models/local/jasper" %}
+{% set modeldir = "/mnt/Miscellanea/Models/local/deepspeech2" %}
 {% set datadir = "/mnt/Data/MLDL/Datasets/ASR/LibriSpeech" %}
 
 model_config:
-  name: jasper
-  dense: True
-  first_additional_block_channels: 256
-  first_additional_block_kernels: 11
-  first_additional_block_strides: 2
-  first_additional_block_dilation: 1
-  first_additional_block_dropout: 0.2
-  nsubblocks: 3
-  block_channels: [256, 384, 512, 640, 768]
-  block_kernels: [11, 13, 17, 21, 25]
-  block_dropout: [0.2, 0.2, 0.2, 0.3, 0.3]
-  second_additional_block_channels: 896
-  second_additional_block_kernels: 1
-  second_additional_block_strides: 1
-  second_additional_block_dilation: 2
-  second_additional_block_dropout: 0.4
-  third_additional_block_channels: 1024
-  third_additional_block_kernels: 1
-  third_additional_block_strides: 1
-  third_additional_block_dilation: 1
-  third_additional_block_dropout: 0.4
+  name: deepspeech2
+  conv_type: conv2d
+  conv_kernels: [[11, 41], [11, 21], [11, 11]]
+  conv_strides: [[2, 2], [1, 2], [1, 2]]
+  conv_filters: [32, 32, 96]
+  conv_dropout: 0.1
+  rnn_nlayers: 5
+  rnn_type: lstm
+  rnn_units: 512
+  rnn_bidirectional: True
+  rnn_unroll: False
+  rnn_rowconv: 0
+  rnn_dropout: 0.1
+  fc_nlayers: 0
+  fc_units: 1024
 
 speech_config:
   sample_rate: 16000
@@ -78,9 +72,6 @@ learning_config:
     use_tf: True
     augmentation_config:
       feature_augment:
-        gauss_noise:
-          prob: 0.1
-          stddev: 0.075
         time_masking:
           prob: 0.5
           num_masks: 10

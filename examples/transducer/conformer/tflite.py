@@ -12,26 +12,19 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import os
-
-import fire
 import tensorflow as tf
 
 from tensorflow_asr.configs.config import Config
 from tensorflow_asr.helpers import exec_helpers, featurizer_helpers
-from tensorflow_asr.models.transducer.contextnet import ContextNet
-from tensorflow_asr.utils import env_util
+from tensorflow_asr.models.transducer.conformer import Conformer
+from tensorflow_asr.utils import cli_util, env_util, file_util
 
 logger = env_util.setup_environment()
 
-DEFAULT_YAML = os.path.join(os.path.abspath(os.path.dirname(__file__)), "config_wp.j2")
-
 
 def main(
-    config_path: str = DEFAULT_YAML,
+    config_path: str,
     h5: str = None,
-    subwords: bool = False,
-    sentence_piece: bool = False,
     output: str = None,
 ):
     assert h5 and output
@@ -41,14 +34,14 @@ def main(
     config = Config(config_path)
     speech_featurizer, text_featurizer = featurizer_helpers.prepare_featurizers(config=config)
 
-    contextnet = ContextNet(**config.model_config, vocab_size=text_featurizer.num_classes)
-    contextnet.make(speech_featurizer.shape)
-    contextnet.load_weights(h5, by_name=True)
-    contextnet.summary()
-    contextnet.add_featurizers(speech_featurizer, text_featurizer)
+    conformer = Conformer(**config.model_config, vocab_size=text_featurizer.num_classes)
+    conformer.make(speech_featurizer.shape)
+    conformer.load_weights(h5, by_name=file_util.is_hdf5_filepath(h5))
+    conformer.summary()
+    conformer.add_featurizers(speech_featurizer, text_featurizer)
 
-    exec_helpers.convert_tflite(model=contextnet, output=output)
+    exec_helpers.convert_tflite(model=conformer, output=output)
 
 
 if __name__ == "__main__":
-    fire.Fire(main)
+    cli_util.run(main)

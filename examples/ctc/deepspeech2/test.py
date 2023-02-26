@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import os
 
 import tensorflow as tf
 
@@ -23,11 +22,9 @@ from tensorflow_asr.utils import cli_util, env_util, file_util
 
 logger = env_util.setup_environment()
 
-DEFAULT_YAML = os.path.join(os.path.abspath(os.path.dirname(__file__)), "config_wp.j2")
-
 
 def main(
-    config_path: str = DEFAULT_YAML,
+    config_path: str,
     saved: str = None,
     mxp: str = "none",
     bs: int = None,

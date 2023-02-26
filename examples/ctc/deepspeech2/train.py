@@ -16,8 +16,6 @@ from tensorflow_asr.utils import env_util
 
 logger = env_util.setup_environment()
 
-import os
-
 import tensorflow as tf
 
 from tensorflow_asr.configs.config import Config
@@ -25,11 +23,9 @@ from tensorflow_asr.helpers import dataset_helpers, featurizer_helpers
 from tensorflow_asr.models.ctc.deepspeech2 import DeepSpeech2
 from tensorflow_asr.utils import cli_util, file_util
 
-DEFAULT_YAML = os.path.join(os.path.abspath(os.path.dirname(__file__)), "config_wp.j2")
-
 
 def main(
-    config_path: str = DEFAULT_YAML,
+    config_path: str,
     tfrecords: bool = False,
     bs: int = None,
     spx: int = 1,
