@@ -22,21 +22,28 @@ class Subsampling(Layer):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.time_reduction_factor = 1
-        self._do_apply_mask = True
 
     def call(self, inputs):
-        outputs, inputs_length = inputs  # outputs already reduced, inputs_length is original
-        outputs_length = math_util.get_reduced_length(inputs_length, self.time_reduction_factor)
-        if self._do_apply_mask:
-            outputs = math_util.apply_mask(outputs, mask=tf.sequence_mask(outputs_length, maxlen=tf.shape(outputs)[1], dtype=tf.bool))
+        outputs, outputs_length = inputs
+        outputs = self._create_mask(outputs, outputs_length)
+        outputs, outputs_length = self._update_mask(outputs, outputs_length)
         return outputs, outputs_length
 
-    def compute_mask(self, inputs, mask=None):
-        outputs, outputs_length = inputs
-        maxlen = math_util.get_reduced_length(tf.shape(outputs)[1], self.time_reduction_factor)
-        outputs_length = math_util.get_reduced_length(outputs_length, self.time_reduction_factor)
-        mask = tf.sequence_mask(outputs_length, maxlen=maxlen, dtype=tf.bool)
-        return mask
+    def _create_mask(self, inputs, inputs_length):
+        mask = getattr(inputs, "_keras_mask")
+        if mask is None:
+            mask = tf.sequence_mask(inputs_length, maxlen=tf.shape(inputs)[1], dtype=tf.bool)
+        inputs._keras_mask = mask  # pylint: disable=protected-access
+        return inputs
+
+    def _update_mask(self, inputs, inputs_length):
+        mask = getattr(inputs, "_keras_mask")
+        if mask is None:
+            raise ValueError("_keras_mask is required")
+        mask = tf.slice(mask, begin=[0, 0], size=[-1, tf.shape(inputs)[1]])
+        inputs_length = tf.reduce_sum(tf.cast(mask, inputs_length.dtype), axis=-1)
+        inputs._keras_mask = mask  # pylint: disable=protected-access
+        return inputs, inputs_length
 
     def compute_output_shape(self, input_shape):
         inputs_shape, inputs_length_shape = input_shape
@@ -56,11 +63,12 @@ class TimeReduction(Subsampling):
         return tf.cast(new_time, dtype=tf.int32) - time
 
     def call(self, inputs):
-        outputs, inputs_length = inputs
+        outputs, outputs_length = inputs
+        outputs = self._create_mask(outputs, outputs_length)
         shape = shape_util.shape_list(outputs)
         outputs = tf.pad(outputs, [[0, 0], [0, self.padding(shape[1])], [0, 0]])
         outputs = tf.reshape(outputs, [shape[0], -1, shape[-1] * self.time_reduction_factor])
-        outputs, outputs_length = super().call([outputs, inputs_length])
+        outputs, outputs_length = super().call([outputs, outputs_length])
         return outputs, outputs_length
 
 
@@ -125,7 +133,9 @@ class VggSubsampling(Subsampling):
         self._do_apply_mask = False
 
     def call(self, inputs, training=False):
-        outputs, inputs_length = inputs
+        inputs, inputs_length = inputs
+        outputs = self._create_mask(inputs, inputs_length)
+
         outputs = self.conv1(outputs, training=training)
         outputs = self.conv2(outputs, training=training)
         outputs = self.maxpool1(outputs, training=training)
@@ -192,7 +202,8 @@ class Conv2dSubsampling(Subsampling):
         self._do_apply_mask = False
 
     def call(self, inputs, training=False):
-        outputs, inputs_length = inputs
+        inputs, inputs_length = inputs
+        outputs = self._create_mask(inputs, inputs_length)
         for block in self.convs:
             outputs = block(outputs, training=training)
         outputs = math_util.merge_two_last_dims(outputs)
@@ -241,7 +252,8 @@ class Conv1dSubsampling(Subsampling):
         self._do_apply_mask = False
 
     def call(self, inputs, training=False):
-        outputs, inputs_length = inputs
+        inputs, inputs_length = inputs
+        outputs = self._create_mask(inputs, inputs_length)
         outputs = math_util.merge_two_last_dims(outputs)
         for block in self.convs:
             outputs = block(outputs, training=training)
