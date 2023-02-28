@@ -30,14 +30,14 @@ class Subsampling(Layer):
         return outputs, outputs_length
 
     def _create_mask(self, inputs, inputs_length):
-        mask = getattr(inputs, "_keras_mask")
+        mask = getattr(inputs, "_keras_mask", None)
         if mask is None:
             mask = tf.sequence_mask(inputs_length, maxlen=tf.shape(inputs)[1], dtype=tf.bool)
         inputs._keras_mask = mask  # pylint: disable=protected-access
         return inputs
 
     def _update_mask(self, inputs, inputs_length):
-        mask = getattr(inputs, "_keras_mask")
+        mask = getattr(inputs, "_keras_mask", None)
         if mask is None:
             raise ValueError("_keras_mask is required")
         mask = tf.slice(mask, begin=[0, 0], size=[-1, tf.shape(inputs)[1]])
