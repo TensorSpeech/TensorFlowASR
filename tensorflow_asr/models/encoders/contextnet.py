@@ -197,7 +197,9 @@ class ConvBlock(tf.keras.layers.Layer):
         for conv in self.convs:
             outputs = conv(outputs, training=training)
         outputs = self.last_conv(outputs, training=training)
-        inputs_length = math_util.get_reduced_length(inputs_length, self.last_conv.strides)
+        inputs_length = math_util.conv_output_length(
+            inputs_length, filter_size=self.last_conv.conv.kernel_size[0], padding=self.last_conv.conv.padding, stride=self.last_conv.strides
+        )
         outputs = self.se([outputs, inputs_length], training=training)
         if self.residual is not None:
             res = self.residual(features, training=training)
