@@ -26,24 +26,18 @@ class Subsampling(Layer):
     def call(self, inputs):
         outputs, outputs_length = inputs
         outputs = self._create_mask(outputs, outputs_length)
-        outputs, outputs_length = self._update_mask(outputs, outputs_length)
+        outputs, outputs_length = self._update_mask_and_input_length(outputs, outputs_length)
         return outputs, outputs_length
 
     def _create_mask(self, inputs, inputs_length):
         mask = getattr(inputs, "_keras_mask", None)
         if mask is None:
             mask = tf.sequence_mask(inputs_length, maxlen=tf.shape(inputs)[1], dtype=tf.bool)
-        inputs._keras_mask = mask  # pylint: disable=protected-access
+            inputs._keras_mask = mask  # pylint: disable=protected-access
         return inputs
 
-    def _update_mask(self, inputs, inputs_length):
-        mask = getattr(inputs, "_keras_mask", None)
-        if mask is None:
-            raise ValueError("_keras_mask is required")
-        mask = tf.slice(mask, begin=[0, 0], size=[-1, tf.shape(inputs)[1]])
-        inputs_length = tf.reduce_sum(tf.cast(mask, inputs_length.dtype), axis=-1)
-        inputs._keras_mask = mask  # pylint: disable=protected-access
-        return inputs, inputs_length
+    def _update_mask_and_input_length(self, inputs, inputs_length):
+        raise NotImplementedError()
 
     def compute_output_shape(self, input_shape):
         inputs_shape, inputs_length_shape = input_shape
@@ -61,6 +55,11 @@ class TimeReduction(Subsampling):
     def padding(self, time):
         new_time = tf.math.ceil(time / self.time_reduction_factor) * self.time_reduction_factor
         return tf.cast(new_time, dtype=tf.int32) - time
+
+    def _update_mask_and_input_length(self, inputs, inputs_length):
+        outputs_length = math_util.get_reduced_length(inputs_length, self.time_reduction_factor)
+        outputs = math_util.apply_mask(inputs, mask=tf.sequence_mask(outputs_length, maxlen=tf.shape(inputs)[1], dtype=tf.bool))
+        return outputs, outputs_length
 
     def call(self, inputs):
         outputs, outputs_length = inputs
@@ -130,7 +129,22 @@ class VggSubsampling(Subsampling):
         )
         self.maxpool2 = tf.keras.layers.MaxPool2D(pool_size=pool_size, strides=strides, padding=padding, name="maxpool_2")
         self.time_reduction_factor = self.maxpool1.pool_size[0] * self.maxpool2.pool_size[0]
-        self._do_apply_mask = False
+
+    def _update_mask_and_input_length(self, inputs, inputs_length):
+        outputs_length = math_util.conv_output_length(
+            inputs_length,
+            self.maxpool1.pool_size[0],
+            padding=self.maxpool1.padding,
+            stride=self.maxpool1.strides[0],
+        )
+        outputs_length = math_util.conv_output_length(
+            outputs_length,
+            self.maxpool2.pool_size[0],
+            padding=self.maxpool2.padding,
+            stride=self.maxpool2.strides[0],
+        )
+        outputs = math_util.apply_mask(inputs, mask=tf.sequence_mask(outputs_length, maxlen=tf.shape(inputs)[1], dtype=tf.bool))
+        return outputs, outputs_length
 
     def call(self, inputs, training=False):
         inputs, inputs_length = inputs
@@ -199,7 +213,18 @@ class Conv2dSubsampling(Subsampling):
             subblock.add(tf.keras.layers.Activation(activation, name=f"{activation}_{i}"))
             self.convs.append(subblock)
             self.time_reduction_factor *= strides
-        self._do_apply_mask = False
+
+    def _update_mask_and_input_length(self, inputs, inputs_length):
+        outputs_length = inputs_length
+        for block in self.convs:
+            outputs_length = math_util.conv_output_length(
+                outputs_length,
+                filter_size=block.layers[0].kernel_size[0],
+                padding=block.layers[0].padding,
+                stride=block.layers[0].strides[0],
+            )
+        outputs = math_util.apply_mask(inputs, mask=tf.sequence_mask(outputs_length, maxlen=tf.shape(inputs)[1], dtype=tf.bool))
+        return outputs, outputs_length
 
     def call(self, inputs, training=False):
         inputs, inputs_length = inputs
@@ -243,13 +268,36 @@ class Conv1dSubsampling(Subsampling):
                 )
             )
             if norm == "batch":
-                subblock.add(tf.keras.layers.BatchNormalization(name=f"bn_{i}"))
+                subblock.add(
+                    tf.keras.layers.BatchNormalization(
+                        name=f"bn_{i}",
+                        gamma_regularizer=kernel_regularizer,
+                        beta_regularizer=bias_regularizer,
+                    )
+                )
             elif norm == "layer":
-                subblock.add(tf.keras.layers.LayerNormalization(name=f"ln_{i}"))
+                subblock.add(
+                    tf.keras.layers.LayerNormalization(
+                        name=f"ln_{i}",
+                        gamma_regularizer=kernel_regularizer,
+                        beta_regularizer=bias_regularizer,
+                    )
+                )
             subblock.add(tf.keras.layers.Activation(activation, name=f"{activation}_{i}"))
             self.convs.append(subblock)
             self.time_reduction_factor *= strides
-        self._do_apply_mask = False
+
+    def _update_mask_and_input_length(self, inputs, inputs_length):
+        outputs_length = inputs_length
+        for block in self.convs:
+            outputs_length = math_util.conv_output_length(
+                outputs_length,
+                filter_size=block.layers[0].kernel_size[0],
+                padding=block.layers[0].padding,
+                stride=block.layers[0].strides[0],
+            )
+        outputs = math_util.apply_mask(inputs, mask=tf.sequence_mask(outputs_length, maxlen=tf.shape(inputs)[1], dtype=tf.bool))
+        return outputs, outputs_length
 
     def call(self, inputs, training=False):
         inputs, inputs_length = inputs
