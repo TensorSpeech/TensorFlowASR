@@ -58,7 +58,7 @@ class SpeechConfig:
         self.upper_edge_hertz: float = config.pop("upper_edge_hertz", self.sample_rate / 2)
 
         self.normalize_signal: bool = config.pop("normalize_signal", False)
-        self.normalize_feature: bool = config.pop("normalize_feature", True)
+        self.normalize_feature: bool = config.pop("normalize_feature", False)
         self.normalize_per_frame: bool = config.pop("normalize_per_frame", False)
 
         for k, v in config.items():
