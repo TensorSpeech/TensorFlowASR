@@ -26,7 +26,7 @@ class FreqMasking(AugmentationMethod):
         num_masks: int = 1,
         mask_factor: float = 27,
         prob: float = 1.0,
-        mask_value: str = "mean",
+        mask_value: str = "zero",
     ):
         super().__init__(prob=prob)
         self.num_masks = num_masks
@@ -70,7 +70,7 @@ class TimeMasking(AugmentationMethod):
         mask_factor: float = 100,
         p_upperbound: float = 1.0,
         prob: float = 1.0,
-        mask_value: str = "mean",
+        mask_value: str = "zero",
     ):
         super().__init__(prob=prob)
         self.num_masks = num_masks
