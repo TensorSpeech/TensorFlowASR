@@ -12,8 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import os
-
 import fire
 import tensorflow as tf
 
@@ -24,14 +22,10 @@ from tensorflow_asr.utils import env_util
 
 logger = env_util.setup_environment()
 
-DEFAULT_YAML = os.path.join(os.path.abspath(os.path.dirname(__file__)), "config_wp.j2")
-
 
 def main(
-    config_path: str = DEFAULT_YAML,
+    config_path: str,
     h5: str = None,
-    subwords: bool = False,
-    sentence_piece: bool = False,
     output: str = None,
 ):
     assert h5 and output

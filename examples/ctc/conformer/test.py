@@ -24,14 +24,14 @@ logger = env_util.setup_environment()
 
 def main(
     config_path: str,
-    saved: str = None,
+    h5: str = None,
     mxp: str = "none",
     bs: int = None,
     device: int = 0,
     cpu: bool = False,
     output: str = "test.tsv",
 ):
-    assert saved and output
+    assert h5 and output
     tf.keras.backend.clear_session()
     env_util.setup_seed()
     env_util.setup_devices([device], cpu=cpu)
@@ -44,7 +44,7 @@ def main(
 
     conformer = Conformer(**config.model_config, vocab_size=text_featurizer.num_classes)
     conformer.make(speech_featurizer.shape, batch_size=batch_size)
-    conformer.load_weights(saved, by_name=file_util.is_hdf5_filepath(saved))
+    conformer.load_weights(h5, by_name=file_util.is_hdf5_filepath(h5))
     conformer.summary()
     conformer.add_featurizers(speech_featurizer, text_featurizer)
 

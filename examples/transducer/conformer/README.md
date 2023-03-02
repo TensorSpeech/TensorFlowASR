@@ -2,8 +2,6 @@
 
 Reference: [https://arxiv.org/abs/2005.08100](https://arxiv.org/abs/2005.08100)
 
-![Conformer Architecture](./figs/arch.png)
-
 ## Example Model YAML Config
 
 Go to [config.yml](./config.yml)

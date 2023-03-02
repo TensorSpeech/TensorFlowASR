@@ -106,8 +106,8 @@ class MHSAModule(Layer):
         if mha_type == "relmha":
             self.mha = MultiHeadRelativeAttention(
                 num_heads=num_heads,
-                key_dim=head_size,
-                output_shape=dmodel,
+                head_size=head_size,
+                output_size=dmodel,
                 kernel_regularizer=kernel_regularizer,
                 bias_regularizer=bias_regularizer,
                 name="mhsa",
@@ -115,8 +115,8 @@ class MHSAModule(Layer):
         elif mha_type == "mha":
             self.mha = MultiHeadAttention(
                 num_heads=num_heads,
-                key_dim=head_size,
-                output_shape=dmodel,
+                head_size=head_size,
+                output_size=dmodel,
                 kernel_regularizer=kernel_regularizer,
                 bias_regularizer=bias_regularizer,
                 name="mhsa",
@@ -136,25 +136,8 @@ class MHSAModule(Layer):
         use_causal_mask=False,
     ):
         outputs = self.ln(inputs, training=training)
-        if self.mha_type == "relmha":
-            outputs = self.mha(
-                query=outputs,
-                key=outputs,
-                value=outputs,
-                relative_position_encoding=relative_position_encoding,
-                training=training,
-                attention_mask=attention_mask,
-                use_causal_mask=use_causal_mask,
-            )
-        else:
-            outputs = self.mha(
-                query=outputs,
-                key=outputs,
-                value=outputs,
-                training=training,
-                attention_mask=attention_mask,
-                use_causal_mask=use_causal_mask,
-            )
+        mha_inputs = [outputs, outputs, outputs, relative_position_encoding] if self.mha_type == "relmha" else [outputs, outputs, outputs]
+        outputs = self.mha(mha_inputs, training=training, attention_mask=attention_mask, use_causal_mask=use_causal_mask)
         outputs = self.do(outputs, training=training)
         outputs = self.res_add([inputs, outputs])
         return outputs
