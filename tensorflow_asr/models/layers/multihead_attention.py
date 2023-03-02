@@ -17,6 +17,8 @@ import typing
 
 import tensorflow as tf
 
+from tensorflow_asr.utils import math_util
+
 
 def _rel_shift(x):
     x = tf.transpose(x, perm=[2, 3, 0, 1])  # BHNM -> NMBH
@@ -217,13 +219,10 @@ class MultiHeadAttention(tf.keras.layers.Layer):
                 raise ValueError("mask's last dimension must be equal to the number of elements in 'key'")
         # apply mask
         if attention_mask is not None:
-            attention_mask = tf.cast(attention_mask, logits.dtype)
-
             # possibly expand on the head dimension so broadcasting works
             if len(attention_mask.shape) != len(logits.shape):
                 attention_mask = tf.expand_dims(attention_mask, -3)
-
-            logits += -10e9 * (1.0 - attention_mask)
+            logits = math_util.masked_fill(logits, mask=attention_mask, value=math_util.large_compatible_negative(logits.dtype))
 
         attn_coef = tf.nn.softmax(logits)
 
