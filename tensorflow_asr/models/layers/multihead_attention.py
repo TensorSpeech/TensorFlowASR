@@ -251,7 +251,7 @@ class MultiHeadAttention(tf.keras.layers.Layer):
 
         # Scale dot-product, doing the division to either query or key
         # instead of their product saves some computation
-        depth = tf.constant(self.head_size, dtype=tf.float32)
+        depth = tf.constant(self.head_size, dtype=query.dtype)
         query /= tf.sqrt(depth)
 
         # Calculate dot product attention
@@ -325,7 +325,7 @@ class MultiHeadRelativeAttention(MultiHeadAttention):
 
         logits = logits_with_u + logits_with_v
 
-        depth = tf.constant(self.head_size, dtype=tf.float32)
+        depth = tf.constant(self.head_size, dtype=query.dtype)
         logits /= tf.sqrt(depth)
 
         output, attn_coef = self.call_attention(query, key, value, logits, training=training, attention_mask=attention_mask)
