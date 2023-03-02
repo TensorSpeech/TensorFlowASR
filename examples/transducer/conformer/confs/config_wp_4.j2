@@ -16,50 +16,6 @@
 {% set modeldir = "/Users/nlhuy/Paraphernalia/models/local/conformer" %}
 {% set datadir = "/Users/nlhuy/Paraphernalia/data/LibriSpeech" %}
 
-model_config:
-  name: conformer
-  encoder_subsampling:
-    type: conv2d
-    nlayers: 2
-    filters: 144
-    kernel_size: 3
-    strides: 2
-    padding: same
-    activation: swish
-    norm: batch
-  encoder_dmodel: 144
-  encoder_num_blocks: 16
-  encoder_head_size: 36 # == dmodel // num_heads
-  encoder_num_heads: 4
-  encoder_mha_type: relmha
-  encoder_use_attention_causal_mask: False
-  encoder_kernel_size: 32
-  encoder_fc_factor: 0.5
-  encoder_dropout: 0.1
-  encoder_padding: same
-  prediction_label_encode_mode: embedding
-  prediction_embed_dim: 320
-  prediction_num_rnns: 1
-  prediction_rnn_units: 320
-  prediction_rnn_type: lstm
-  prediction_rnn_implementation: 2
-  prediction_rnn_unroll: False # False to use with CUDA or dynamic length, True to use with TPU and static length
-  prediction_layer_norm: False
-  prediction_projection_units: 0
-  joint_dim: 320
-  prejoint_encoder_linear: True
-  prejoint_prediction_linear: True
-  postjoint_linear: False
-  joint_activation: tanh
-  joint_mode: add
-
-speech_config:
-  sample_rate: 16000
-  frame_ms: 25
-  stride_ms: 10
-  num_feature_bins: 80
-  feature_type: log_mel_spectrogram
-
 decoder_config:
   type: wordpiece
 
@@ -85,6 +41,51 @@ decoder_config:
     - {{datadir}}/train-clean-360/transcripts.tsv
     - {{datadir}}/train-other-500/transcripts.tsv
 
+speech_config:
+  sample_rate: 16000
+  frame_ms: 25
+  stride_ms: 10
+  num_feature_bins: 80
+  feature_type: log_mel_spectrogram
+  normalize_feature: True
+
+model_config:
+  name: conformer
+  encoder_subsampling:
+    type: conv2d
+    filters: 144
+    nlayers: 2
+    kernel_size: 3
+    strides: 2
+    padding: same
+    norm: batch
+    activation: swish
+  encoder_dmodel: 144
+  encoder_num_blocks: 2
+  encoder_head_size: 36 # == dmodel // num_heads
+  encoder_num_heads: 4
+  encoder_mha_type: relmha
+  encoder_use_attention_causal_mask: False
+  encoder_kernel_size: 32
+  encoder_fc_factor: 0.5
+  encoder_dropout: 0.1
+  encoder_padding: causal
+  prediction_label_encode_mode: embedding
+  prediction_embed_dim: 320
+  prediction_num_rnns: 1
+  prediction_rnn_units: 320
+  prediction_rnn_type: lstm
+  prediction_rnn_implementation: 2
+  prediction_rnn_unroll: False # False to use with CUDA or dynamic length, True to use with TPU and static length
+  prediction_layer_norm: False
+  prediction_projection_units: 144
+  joint_dim: 320
+  prejoint_encoder_linear: False
+  prejoint_prediction_linear: False
+  postjoint_linear: True
+  joint_activation: tanh
+  joint_mode: add
+
 learning_config:
   train_dataset_config:
     enabled: True
@@ -92,14 +93,16 @@ learning_config:
     augmentation_config:
       feature_augment:
         time_masking:
-          prob: 0.5
+          prob: 1.0
           num_masks: 10
           mask_factor: 100
           p_upperbound: 0.05
+          mask_value: zero
         freq_masking:
-          prob: 0.5
+          prob: 1.0
           num_masks: 1
           mask_factor: 27
+          mask_value: zero
     data_paths:
       - {{datadir}}/dev-clean/transcripts.tsv
     tfrecords_dir: {{datadir}}/tfrecords
@@ -108,7 +111,6 @@ learning_config:
     buffer_size: 100
     drop_remainder: True
     stage: train
-    metadata: {{repodir}}/vocabularies/librispeech/wordpiece/train_1000_50.metadata.json
 
   eval_dataset_config:
     enabled: False
@@ -121,7 +123,6 @@ learning_config:
     buffer_size: 100
     drop_remainder: True
     stage: eval
-    metadata: {{repodir}}/vocabularies/librispeech/wordpiece/train_1000_50.metadata.json
 
   test_dataset_config:
     enabled: False

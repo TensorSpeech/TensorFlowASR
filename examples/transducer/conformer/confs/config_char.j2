@@ -16,17 +16,38 @@
 {% set modeldir = "/Users/nlhuy/Paraphernalia/models/local/conformer" %}
 {% set datadir = "/Users/nlhuy/Paraphernalia/data/LibriSpeech" %}
 
+decoder_config:
+  type: characters
+
+  blank_index: 0
+
+  beam_width: 0
+  norm_score: True
+  lm_config: null
+
+  vocabulary: {{repodir}}/vocabularies/english.characters
+
+speech_config:
+  sample_rate: 16000
+  frame_ms: 25
+  stride_ms: 10
+  num_feature_bins: 80
+  feature_type: log_mel_spectrogram
+  normalize_feature: True
+
 model_config:
   name: conformer
   encoder_subsampling:
     type: conv2d
     filters: 144
+    nlayers: 2
     kernel_size: 3
     strides: 2
     padding: same
-    activation: relu
+    norm: batch
+    activation: swish
   encoder_dmodel: 144
-  encoder_num_blocks: 16
+  encoder_num_blocks: 2
   encoder_head_size: 36 # == dmodel // num_heads
   encoder_num_heads: 4
   encoder_mha_type: relmha
@@ -51,24 +72,6 @@ model_config:
   joint_activation: tanh
   joint_mode: add
 
-speech_config:
-  sample_rate: 16000
-  frame_ms: 25
-  stride_ms: 10
-  num_feature_bins: 80
-  feature_type: log_mel_spectrogram
-
-decoder_config:
-  type: characters
-
-  blank_index: 0
-
-  beam_width: 0
-  norm_score: True
-  lm_config: null
-
-  vocabulary: {{repodir}}/vocabularies/english.characters
-
 learning_config:
   train_dataset_config:
     enabled: True
@@ -76,14 +79,16 @@ learning_config:
     augmentation_config:
       feature_augment:
         time_masking:
-          prob: 0.5
+          prob: 1.0
           num_masks: 10
           mask_factor: 100
           p_upperbound: 0.05
+          mask_value: zero
         freq_masking:
-          prob: 0.5
+          prob: 1.0
           num_masks: 1
           mask_factor: 27
+          mask_value: zero
     data_paths:
       - {{datadir}}/dev-clean/transcripts.tsv
     tfrecords_dir: {{datadir}}/tfrecords
