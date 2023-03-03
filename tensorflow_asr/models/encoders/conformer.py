@@ -386,9 +386,13 @@ class ConformerEncoder(Layer):
             )
             self.conformer_blocks.append(conformer_block)
 
-    def _compute_relpos(self, batch_size, max_length):
+    def _compute_relpos(self, inputs):
         if self._mha_type == "relmha":
+            batch_size, max_length, _ = shape_util.shape_list(inputs)
             relative_position_encoding = compute_sinusoid_position_encoding(batch_size, max_length, self._dmodel, dtype=self.compute_dtype)
+            mask = getattr(inputs, "_keras_mask", None)
+            if mask is not None:
+                relative_position_encoding = math_util.apply_mask(relative_position_encoding, mask=mask)
             return relative_position_encoding
         return None
 
@@ -397,8 +401,7 @@ class ConformerEncoder(Layer):
         outputs, inputs_length = self.conv_subsampling([outputs, inputs_length], training=training)
         outputs = self.linear(outputs, training=training)
         outputs = self.do(outputs, training=training)
-        batch_size, max_length, _ = shape_util.shape_list(outputs)
-        relative_position_encoding = self._compute_relpos(batch_size, max_length)
+        relative_position_encoding = self._compute_relpos(outputs)
         for _, cblock in enumerate(self.conformer_blocks):
             outputs = cblock(
                 outputs,
