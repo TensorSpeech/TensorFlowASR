@@ -26,8 +26,9 @@ def compute_sinusoid_position_encoding(
     dtype=tf.float32,
 ):
     # length of sequence is the second last dimension of the inputs
+    mask = tf.sequence_mask(input_length, max_length, dtype=dtype)
     position = tf.cast(tf.range(input_length - 1, -(max_length - input_length + 1), -1), dtype=dtype)
-    position *= tf.sequence_mask(input_length, max_length, dtype=dtype)
+    position *= mask
     min_freq = tf.cast(1.0 / 10000.0, dtype=dtype)
     timescales = tf.pow(min_freq, ((tf.cast(tf.range(0, dmodel, 1), dtype=dtype) // 2) * 2) / tf.cast(dmodel, dtype=dtype))
     angles = tf.einsum("i,d->id", position, timescales)
@@ -36,6 +37,7 @@ def compute_sinusoid_position_encoding(
     sin_mask = 1 - cos_mask
     # embedding shape is [seq_length, hidden_size]
     positional_encodings = tf.sin(angles) * sin_mask + tf.cos(angles) * cos_mask
+    positional_encodings *= mask[..., None]
     return positional_encodings
     # return tf.tile(positional_encodings[None, :, :], [batch_size, 1, 1])
 
@@ -47,14 +49,19 @@ class SinusoidPositionalEncoding(Layer):
     def call(self, inputs):
         outputs, outputs_length = inputs
         _, max_length, dmodel = shape_util.shape_list(outputs)
+
+        def _fn(input_length):
+            return compute_sinusoid_position_encoding(input_length, max_length, dmodel, dtype=outputs.dtype)
+
         pe = tf.map_fn(
-            lambda input_length: compute_sinusoid_position_encoding(input_length, max_length, dmodel, dtype=outputs.dtype),
+            fn=_fn,
             elems=outputs_length,
-            dtype=outputs.dtype,
+            fn_output_signature=tf.TensorSpec(shape=outputs.shape.as_list()[1:], dtype=outputs.dtype),
         )
         mask = getattr(outputs, "_keras_mask", None)
         if mask is not None:
             pe = math_util.apply_mask(pe, mask=mask)
+
         return pe
 
     def compute_output_shape(self, input_shape):
