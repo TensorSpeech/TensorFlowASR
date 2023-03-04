@@ -19,9 +19,9 @@ from tensorflow_asr.models.activations.glu import GLU
 from tensorflow_asr.models.layers.base_layer import Layer
 from tensorflow_asr.models.layers.depthwise_conv1d import DepthwiseConv1D
 from tensorflow_asr.models.layers.multihead_attention import MultiHeadAttention, MultiHeadRelativeAttention
-from tensorflow_asr.models.layers.positional_encoding import compute_sinusoid_position_encoding
+from tensorflow_asr.models.layers.positional_encoding import SinusoidPositionalEncoding
 from tensorflow_asr.models.layers.subsampling import Conv1dSubsampling, Conv2dSubsampling, VggSubsampling
-from tensorflow_asr.utils import math_util, shape_util
+from tensorflow_asr.utils import math_util
 
 L2 = tf.keras.regularizers.l2(1e-6)
 
@@ -368,6 +368,9 @@ class ConformerEncoder(Layer):
         self._head_size = head_size
         self._use_attention_causal_mask = use_attention_causal_mask
 
+        if self._mha_type == "relmha":
+            self.relpe = SinusoidPositionalEncoding(name="relpe")
+
         self.conformer_blocks = []
         for i in range(self._num_blocks):
             conformer_block = ConformerBlock(
@@ -386,22 +389,15 @@ class ConformerEncoder(Layer):
             )
             self.conformer_blocks.append(conformer_block)
 
-    def _compute_relpos(self, inputs):
-        if self._mha_type == "relmha":
-            batch_size, max_length, _ = shape_util.shape_list(inputs)
-            relative_position_encoding = compute_sinusoid_position_encoding(batch_size, max_length, self._dmodel, dtype=self.compute_dtype)
-            mask = getattr(inputs, "_keras_mask", None)
-            if mask is not None:
-                relative_position_encoding = math_util.apply_mask(relative_position_encoding, mask=mask)
-            return relative_position_encoding
-        return None
-
     def call(self, inputs, training=False):
-        outputs, inputs_length = inputs
-        outputs, inputs_length = self.conv_subsampling([outputs, inputs_length], training=training)
+        outputs, outputs_length = inputs
+        outputs, outputs_length = self.conv_subsampling([outputs, outputs_length], training=training)
         outputs = self.linear(outputs, training=training)
         outputs = self.do(outputs, training=training)
-        relative_position_encoding = self._compute_relpos(outputs)
+        if self._mha_type == "relmha":
+            relative_position_encoding = self.relpe([outputs, outputs_length])
+        else:
+            relative_position_encoding = None
         for _, cblock in enumerate(self.conformer_blocks):
             outputs = cblock(
                 outputs,
@@ -409,7 +405,7 @@ class ConformerEncoder(Layer):
                 training=training,
                 use_causal_mask=self._use_attention_causal_mask,
             )
-        return outputs, inputs_length
+        return outputs, outputs_length
 
     def compute_output_shape(self, input_shape):
         inputs_shape, inputs_length_shape = input_shape
