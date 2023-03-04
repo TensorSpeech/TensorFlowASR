@@ -26,9 +26,9 @@ def compute_sinusoid_position_encoding(
     dtype=tf.float32,
 ):
     # length of sequence is the second last dimension of the inputs
-    mask = tf.sequence_mask(input_length, max_length, dtype=dtype)
-    position = tf.cast(tf.range(input_length - 1, -(max_length - input_length + 1), -1), dtype=dtype)
-    position *= mask
+    position = tf.cast(tf.range(max_length - 1, -1, -1), dtype=dtype)
+    position = tf.roll(position, shift=-(max_length - input_length), axis=0)
+    position *= tf.sequence_mask(input_length, max_length, dtype=dtype)
     min_freq = tf.cast(1.0 / 10000.0, dtype=dtype)
     timescales = tf.pow(min_freq, ((tf.cast(tf.range(0, dmodel, 1), dtype=dtype) // 2) * 2) / tf.cast(dmodel, dtype=dtype))
     angles = tf.einsum("i,d->id", position, timescales)
@@ -37,7 +37,6 @@ def compute_sinusoid_position_encoding(
     sin_mask = 1 - cos_mask
     # embedding shape is [seq_length, hidden_size]
     positional_encodings = tf.sin(angles) * sin_mask + tf.cos(angles) * cos_mask
-    positional_encodings *= mask[..., None]
     return positional_encodings
     # return tf.tile(positional_encodings[None, :, :], [batch_size, 1, 1])
 
