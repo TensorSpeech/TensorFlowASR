@@ -199,6 +199,8 @@ def large_compatible_negative(
 ):
     if tensor_type == tf.float16:
         return tf.float16.min
+    if tensor_type == tf.bfloat16:
+        return tf.bfloat16.min
     return -1e9
 
 

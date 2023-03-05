@@ -148,19 +148,20 @@ class MultiHeadAttention(KerasMultiHeadAttention):
         attention_output = tf.einsum(self._combine_equation, attention_scores_dropout, value)
         return attention_output, attention_scores
 
-    # def _masked_softmax(self, attention_scores, attention_mask=None):
-    #     if attention_mask is not None:
-    #         # The expand dim happens starting from the `num_heads` dimension,
-    #         # (<batch_dims>, num_heads, <query_attention_dims,
-    #         # key_attention_dims>)
-    #         mask_expansion_axis = -len(self._attention_axes) * 2 - 1
-    #         for _ in range(len(attention_scores.shape) - len(attention_mask.shape)):
-    #             attention_mask = tf.expand_dims(attention_mask, axis=mask_expansion_axis)
-    #         attention_scores = math_util.masked_fill(
-    #             attention_scores, mask=attention_mask, value=math_util.large_compatible_negative(attention_scores.dtype)
-    #         )
-    #     attention_scores = self._softmax(attention_scores)
-    #     return attention_scores
+    def _masked_softmax(self, attention_scores, attention_mask=None):
+        if attention_mask is not None:
+            # The expand dim happens starting from the `num_heads` dimension,
+            # (<batch_dims>, num_heads, <query_attention_dims,
+            # key_attention_dims>)
+            mask_expansion_axis = -len(self._attention_axes) * 2 - 1
+            for _ in range(len(attention_scores.shape) - len(attention_mask.shape)):
+                attention_mask = tf.expand_dims(attention_mask, axis=mask_expansion_axis)
+            adder = (1.0 - tf.cast(attention_mask, attention_scores.dtype)) * math_util.large_compatible_negative(attention_scores.dtype)
+            # Since we are adding it to the raw scores before the softmax, this
+            # is effectively the same as removing these entirely.
+            attention_scores += adder
+        attention_scores = self._softmax(attention_scores)
+        return attention_scores
 
 
 class MultiHeadRelativeAttention(MultiHeadAttention):
