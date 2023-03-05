@@ -25,16 +25,32 @@ except ImportError:
     from keras.layers.attention.multi_head_attention import _build_proj_equation, _get_output_shape
 
 
-def _rel_shift(x):
-    x = tf.transpose(x, perm=[2, 3, 0, 1])  # BHNM -> NMBH
-    x_shape = tf.shape(x)
+# def _rel_shift(x):
+#     x = tf.transpose(x, perm=[2, 3, 0, 1])  # BHNM -> NMBH
+#     x_shape = tf.shape(x)
 
-    x = tf.pad(x, [[0, 0], [1, 0], [0, 0], [0, 0]])  # shift on position time dimension M
-    x = tf.reshape(x, [x_shape[1] + 1, x_shape[0], x_shape[2], x_shape[3]])
+#     x = tf.pad(x, [[0, 0], [1, 0], [0, 0], [0, 0]])  # shift on position time dimension M
+#     x = tf.reshape(x, [x_shape[1] + 1, x_shape[0], x_shape[2], x_shape[3]])
+#     x = tf.slice(x, [1, 0, 0, 0], [-1, -1, -1, -1])
+#     x = tf.reshape(x, x_shape)
+
+#     x = tf.transpose(x, perm=[2, 3, 0, 1])  # NMBH -> BHNM
+#     return x
+
+
+def _rel_shift(x, klen=-1):
+    """Performs relative shift to form the relative attention score."""
+
+    x = tf.transpose(x, perm=[2, 3, 0, 1])
+    x_size = tf.shape(x)
+
+    x = tf.reshape(x, [x_size[1], x_size[0], x_size[2], x_size[3]])
     x = tf.slice(x, [1, 0, 0, 0], [-1, -1, -1, -1])
-    x = tf.reshape(x, x_shape)
+    x = tf.reshape(x, [x_size[0], x_size[1] - 1, x_size[2], x_size[3]])
+    x = tf.slice(x, [0, 0, 0, 0], [-1, klen, -1, -1])
 
-    x = tf.transpose(x, perm=[2, 3, 0, 1])  # NMBH -> BHNM
+    x = tf.transpose(x, perm=[2, 3, 0, 1])
+
     return x
 
 
@@ -148,19 +164,19 @@ class MultiHeadAttention(KerasMultiHeadAttention):
         attention_output = tf.einsum(self._combine_equation, attention_scores_dropout, value)
         return attention_output, attention_scores
 
-    def _masked_softmax(self, attention_scores, attention_mask=None):
-        if attention_mask is not None:
-            # The expand dim happens starting from the `num_heads` dimension,
-            # (<batch_dims>, num_heads, <query_attention_dims,
-            # key_attention_dims>)
-            mask_expansion_axis = -len(self._attention_axes) * 2 - 1
-            for _ in range(len(attention_scores.shape) - len(attention_mask.shape)):
-                attention_mask = tf.expand_dims(attention_mask, axis=mask_expansion_axis)
-            attention_scores = math_util.masked_fill(
-                attention_scores, mask=attention_mask, value=math_util.large_compatible_negative(attention_scores.dtype)
-            )
-        attention_scores = self._softmax(attention_scores)
-        return attention_scores
+    # def _masked_softmax(self, attention_scores, attention_mask=None):
+    #     if attention_mask is not None:
+    #         # The expand dim happens starting from the `num_heads` dimension,
+    #         # (<batch_dims>, num_heads, <query_attention_dims,
+    #         # key_attention_dims>)
+    #         mask_expansion_axis = -len(self._attention_axes) * 2 - 1
+    #         for _ in range(len(attention_scores.shape) - len(attention_mask.shape)):
+    #             attention_mask = tf.expand_dims(attention_mask, axis=mask_expansion_axis)
+    #         attention_scores = math_util.masked_fill(
+    #             attention_scores, mask=attention_mask, value=math_util.large_compatible_negative(attention_scores.dtype)
+    #         )
+    #     attention_scores = self._softmax(attention_scores)
+    #     return attention_scores
 
 
 class MultiHeadRelativeAttention(MultiHeadAttention):
@@ -233,7 +249,7 @@ class MultiHeadRelativeAttention(MultiHeadAttention):
 
         content_attention = tf.einsum(self._dot_product_equation, key, (query + self.content_attention_bias))  # BSNH,BTNH->BNTS
         positional_attention = tf.einsum(self._dot_product_equation, position, (query + self.positional_attention_bias))  # BRNH,BTNH->BNTR
-        positional_attention = _rel_shift(positional_attention)
+        positional_attention = _rel_shift(positional_attention, klen=tf.shape(content_attention)[3])
         attention_scores = content_attention + positional_attention
         attention_scores = tf.multiply(attention_scores, scale)
 
