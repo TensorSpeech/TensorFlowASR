@@ -25,32 +25,16 @@ except ImportError:
     from keras.layers.attention.multi_head_attention import _build_proj_equation, _get_output_shape
 
 
-# def _rel_shift(x):
-#     x = tf.transpose(x, perm=[2, 3, 0, 1])  # BHNM -> NMBH
-#     x_shape = tf.shape(x)
+def _rel_shift(x):
+    x = tf.transpose(x, perm=[2, 3, 0, 1])  # BHNM -> NMBH
+    x_shape = tf.shape(x)
 
-#     x = tf.pad(x, [[0, 0], [1, 0], [0, 0], [0, 0]])  # shift on position time dimension M
-#     x = tf.reshape(x, [x_shape[1] + 1, x_shape[0], x_shape[2], x_shape[3]])
-#     x = tf.slice(x, [1, 0, 0, 0], [-1, -1, -1, -1])
-#     x = tf.reshape(x, x_shape)
-
-#     x = tf.transpose(x, perm=[2, 3, 0, 1])  # NMBH -> BHNM
-#     return x
-
-
-def _rel_shift(x, klen=-1):
-    """Performs relative shift to form the relative attention score."""
-
-    x = tf.transpose(x, perm=[2, 3, 0, 1])
-    x_size = tf.shape(x)
-
-    x = tf.reshape(x, [x_size[1], x_size[0], x_size[2], x_size[3]])
+    x = tf.pad(x, [[0, 0], [1, 0], [0, 0], [0, 0]])  # shift on position time dimension M
+    x = tf.reshape(x, [x_shape[1] + 1, x_shape[0], x_shape[2], x_shape[3]])
     x = tf.slice(x, [1, 0, 0, 0], [-1, -1, -1, -1])
-    x = tf.reshape(x, [x_size[0], x_size[1] - 1, x_size[2], x_size[3]])
-    x = tf.slice(x, [0, 0, 0, 0], [-1, klen, -1, -1])
+    x = tf.reshape(x, x_shape)
 
-    x = tf.transpose(x, perm=[2, 3, 0, 1])
-
+    x = tf.transpose(x, perm=[2, 3, 0, 1])  # NMBH -> BHNM
     return x
 
 
@@ -219,22 +203,6 @@ class MultiHeadRelativeAttention(MultiHeadAttention):
                 name="encoding",
                 **common_kwargs,
             )
-            self.content_attention_bias = self.add_weight(
-                name="content_attention_bias",
-                shape=[self._num_heads, self._key_dim],
-                dtype=self.dtype,
-                trainable=True,
-                initializer="zeros",
-                regularizer=self._bias_regularizer,
-            )
-            self.positional_attention_bias = self.add_weight(
-                name="positional_attention_bias",
-                shape=[self._num_heads, self._key_dim],
-                dtype=self.dtype,
-                trainable=True,
-                initializer="zeros",
-                regularizer=self._bias_regularizer,
-            )
 
     def _compute_attention(
         self,
@@ -242,14 +210,16 @@ class MultiHeadRelativeAttention(MultiHeadAttention):
         key,
         value,
         position,
+        content_attention_bias,
+        positional_attention_bias,
         attention_mask=None,
         training=None,
     ):
         scale = 1.0 / tf.sqrt(tf.constant(self._key_dim, dtype=query.dtype))
 
-        content_attention = tf.einsum(self._dot_product_equation, key, (query + self.content_attention_bias))  # BSNH,BTNH->BNTS
-        positional_attention = tf.einsum(self._dot_product_equation, position, (query + self.positional_attention_bias))  # BRNH,BTNH->BNTR
-        positional_attention = _rel_shift(positional_attention, klen=tf.shape(content_attention)[3])
+        content_attention = tf.einsum(self._dot_product_equation, key, (query + content_attention_bias))  # BSNH,BTNH->BNTS
+        positional_attention = tf.einsum(self._dot_product_equation, position, (query + positional_attention_bias))  # BRNH,BTNH->BNTR
+        positional_attention = _rel_shift(positional_attention)
         attention_scores = content_attention + positional_attention
         attention_scores = tf.multiply(attention_scores, scale)
 
@@ -265,6 +235,8 @@ class MultiHeadRelativeAttention(MultiHeadAttention):
         query,
         value,
         relative_position_encoding,
+        content_attention_bias,
+        positional_attention_bias,
         key=None,
         state=None,
         attention_mask=None,
@@ -295,7 +267,14 @@ class MultiHeadRelativeAttention(MultiHeadAttention):
         position = self._encoding_dense(relative_position_encoding)
 
         attention_output = self._compute_attention(
-            query=query, key=key, value=value, position=position, attention_mask=attention_mask, training=training
+            query=query,
+            key=key,
+            value=value,
+            position=position,
+            content_attention_bias=content_attention_bias,
+            positional_attention_bias=positional_attention_bias,
+            attention_mask=attention_mask,
+            training=training,
         )
 
         # `attention_output` = [B, S, N, H]
