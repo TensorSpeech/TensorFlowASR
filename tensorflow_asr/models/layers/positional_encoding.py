@@ -56,6 +56,7 @@ class SinusoidPositionalEncoding(Layer):
             elems=outputs_length,
             fn_output_signature=tf.TensorSpec(shape=outputs.shape.as_list()[1:], dtype=outputs.dtype),
         )
+        pe = tf.stop_gradient(pe)
 
         return pe
 
