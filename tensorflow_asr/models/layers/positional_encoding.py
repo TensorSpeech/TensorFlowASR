@@ -38,7 +38,6 @@ def compute_sinusoid_position_encoding(
     # embedding shape is [seq_length, hidden_size]
     positional_encodings = tf.sin(angles) * sin_mask + tf.cos(angles) * cos_mask
     return positional_encodings
-    # return tf.tile(positional_encodings[None, :, :], [batch_size, 1, 1])
 
 
 class SinusoidPositionalEncoding(Layer):
@@ -64,7 +63,7 @@ class SinusoidPositionalEncoding(Layer):
         # return pe
 
         positional_encodings = compute_sinusoid_position_encoding(max_length, dmodel, dtype=outputs.dtype)
-        return tf.tile(positional_encodings[None, :, :], [batch_size, 1, 1])
+        return tf.repeat(positional_encodings[None, :, :], repeats=batch_size, axis=0)
 
     def compute_output_shape(self, input_shape):
         output_shape, _ = input_shape
