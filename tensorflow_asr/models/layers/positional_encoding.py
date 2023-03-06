@@ -23,6 +23,7 @@ def compute_sinusoid_position_encoding(
     max_length,
     dmodel,
     input_length=None,
+    interleave=False,
     dtype=tf.float32,
 ):
     # length of sequence is the second last dimension of the inputs
@@ -31,13 +32,16 @@ def compute_sinusoid_position_encoding(
         position = tf.roll(position, shift=-(max_length - input_length), axis=0)
         position *= tf.sequence_mask(input_length, max_length, dtype=dtype)
     min_freq = tf.cast(1.0 / 10000.0, dtype=dtype)
-    timescales = tf.pow(min_freq, ((tf.cast(tf.range(0, dmodel, 1), dtype=dtype) // 2) * 2) / tf.cast(dmodel, dtype=dtype))
+    timescales = tf.pow(min_freq, (tf.cast(tf.range(0, dmodel, 2.0), dtype=dtype) / tf.cast(dmodel, dtype=dtype)))
     angles = tf.einsum("i,d->id", position, timescales)
-    # even indices are sine, odd are cosine
-    cos_mask = tf.cast(tf.range(0, dmodel, 1) % 2, dtype=dtype)
-    sin_mask = 1 - cos_mask
-    # embedding shape is [seq_length, hidden_size]
-    positional_encodings = tf.sin(angles) * sin_mask + tf.cos(angles) * cos_mask
+    if interleave:
+        # even indices are sine, odd are cosine
+        cos_mask = tf.cast(tf.range(0, dmodel, 1) % 2, dtype=dtype)
+        sin_mask = 1 - cos_mask
+        # embedding shape is [seq_length, hidden_size]
+        positional_encodings = tf.sin(angles) * sin_mask + tf.cos(angles) * cos_mask
+    else:
+        positional_encodings = tf.concat([tf.sin(angles), tf.cos(angles)], -1)
     return positional_encodings
 
 
@@ -45,23 +49,25 @@ class SinusoidPositionalEncoding(Layer):
     def __init__(
         self,
         dynamic_encoding=True,
+        interleave=False,
         **kwargs,
     ):
         super().__init__(trainable=False, **kwargs)
         self._dynamic_encoding = dynamic_encoding
+        self._interleave = interleave
 
     def call(self, inputs):
         outputs, outputs_length = inputs
         batch_size, max_length, dmodel = shape_util.shape_list(outputs)
 
         if not self._dynamic_encoding:
-            pe = compute_sinusoid_position_encoding(max_length, dmodel, input_length=None, dtype=outputs.dtype)
+            pe = compute_sinusoid_position_encoding(max_length, dmodel, input_length=None, interleave=self._interleave, dtype=outputs.dtype)
             pe = tf.repeat(pe[None, :, :], repeats=batch_size, axis=0)
             pe = tf.stop_gradient(pe)
             return pe
 
         def _fn(input_length):
-            return compute_sinusoid_position_encoding(max_length, dmodel, input_length=input_length, dtype=outputs.dtype)
+            return compute_sinusoid_position_encoding(max_length, dmodel, input_length=input_length, interleave=self._interleave, dtype=outputs.dtype)
 
         pe = tf.map_fn(
             fn=_fn,

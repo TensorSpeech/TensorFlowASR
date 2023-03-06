@@ -23,16 +23,16 @@ except ImportError:
     from keras.layers.attention.multi_head_attention import _build_proj_equation, _get_output_shape
 
 
-def _rel_shift(x):
-    x = tf.transpose(x, perm=[2, 3, 0, 1])  # BHNM -> NMBH
+def rel_shift(x):
+    x = tf.transpose(x, perm=[2, 3, 0, 1])  # BHTR -> TRBH
     x_shape = tf.shape(x)
 
-    x = tf.pad(x, [[0, 0], [1, 0], [0, 0], [0, 0]])  # shift on position time dimension M
+    x = tf.pad(x, [[0, 0], [0, 1], [0, 0], [0, 0]])  # shift on position time dimension R
     x = tf.reshape(x, [x_shape[1] + 1, x_shape[0], x_shape[2], x_shape[3]])
-    x = tf.slice(x, [1, 0, 0, 0], [-1, -1, -1, -1])
+    x = tf.slice(x, [0, 0, 0, 0], [x_shape[1], -1, -1, -1])
     x = tf.reshape(x, x_shape)
 
-    x = tf.transpose(x, perm=[2, 3, 0, 1])  # NMBH -> BHNM
+    x = tf.transpose(x, perm=[2, 3, 0, 1])  # TRBH -> BHTR
     return x
 
 
@@ -218,7 +218,7 @@ class MultiHeadRelativeAttention(MultiHeadAttention):
 
         content_attention = tf.einsum(self._dot_product_equation, key, (query + content_attention_bias))  # BSNH,BTNH->BNTS
         positional_attention = tf.einsum(self._dot_product_equation, position, (query + positional_attention_bias))  # BRNH,BTNH->BNTR
-        positional_attention = _rel_shift(positional_attention)
+        positional_attention = rel_shift(positional_attention)
         attention_scores = content_attention + positional_attention
         attention_scores = tf.multiply(attention_scores, scale)
 
