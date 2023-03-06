@@ -136,6 +136,7 @@ class MHSAModule(Layer):
         training=False,
         attention_mask=None,
         use_causal_mask=False,
+        use_auto_mask=True,
     ):
         outputs = self.ln(inputs, training=training)
         mha_inputs = (
@@ -150,7 +151,13 @@ class MHSAModule(Layer):
             if self.mha_type == "relmha"
             else dict(query=outputs, key=outputs, value=outputs)
         )
-        outputs = self.mha(**mha_inputs, training=training, attention_mask=attention_mask, use_causal_mask=use_causal_mask)
+        outputs = self.mha(
+            **mha_inputs,
+            training=training,
+            attention_mask=attention_mask,
+            use_causal_mask=use_causal_mask,
+            use_auto_mask=use_auto_mask,
+        )
         outputs = self.do(outputs, training=training)
         outputs = self.res_add([inputs, outputs])
         return outputs
@@ -311,6 +318,7 @@ class ConformerBlock(Layer):
         training=False,
         attention_mask=None,
         use_causal_mask=False,
+        use_auto_mask=True,
     ):
         outputs = self.ffm1(inputs, training=training)
         outputs = self.mhsam(
@@ -321,6 +329,7 @@ class ConformerBlock(Layer):
             training=training,
             attention_mask=attention_mask,
             use_causal_mask=use_causal_mask,
+            use_auto_mask=use_auto_mask,
         )
         outputs = self.convm(outputs, training=training)
         outputs = self.ffm2(outputs, training=training)
@@ -343,6 +352,7 @@ class ConformerEncoder(Layer):
         dynamic_relpe=True,
         interleave_relpe=False,
         use_attention_causal_mask=False,
+        use_attention_auto_mask=True,
         fc_factor=0.5,
         dropout=0.0,
         kernel_regularizer=L2,
@@ -386,6 +396,7 @@ class ConformerEncoder(Layer):
         self._num_heads = num_heads
         self._key_dim = head_size
         self._use_attention_causal_mask = use_attention_causal_mask
+        self._use_attention_auto_mask = use_attention_auto_mask
 
         if self._mha_type == "relmha":
             self.relpe = SinusoidPositionalEncoding(dynamic_encoding=dynamic_relpe, interleave=interleave_relpe, name="relpe")
@@ -443,6 +454,7 @@ class ConformerEncoder(Layer):
                 positional_attention_bias=self.positional_attention_bias,
                 training=training,
                 use_causal_mask=self._use_attention_causal_mask,
+                use_auto_mask=self._use_attention_auto_mask,
             )
         return outputs, outputs_length
 

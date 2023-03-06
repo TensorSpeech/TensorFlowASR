@@ -146,20 +146,77 @@ class MultiHeadAttention(KerasMultiHeadAttention):
         attention_output = tf.einsum(self._combine_equation, attention_scores_dropout, value)
         return attention_output, attention_scores
 
-    def _masked_softmax(self, attention_scores, attention_mask=None):
-        if attention_mask is not None:
-            # The expand dim happens starting from the `num_heads` dimension,
-            # (<batch_dims>, num_heads, <query_attention_dims,
-            # key_attention_dims>)
-            mask_expansion_axis = -len(self._attention_axes) * 2 - 1
-            for _ in range(len(attention_scores.shape) - len(attention_mask.shape)):
-                attention_mask = tf.expand_dims(attention_mask, axis=mask_expansion_axis)
-            adder = (1.0 - tf.cast(attention_mask, attention_scores.dtype)) * attention_scores.dtype.min
-            # Since we are adding it to the raw scores before the softmax, this
-            # is effectively the same as removing these entirely.
-            attention_scores += adder
-        attention_scores = self._softmax(attention_scores)
-        return attention_scores
+    # def _masked_softmax(self, attention_scores, attention_mask=None):
+    #     if attention_mask is not None:
+    #         # The expand dim happens starting from the `num_heads` dimension,
+    #         # (<batch_dims>, num_heads, <query_attention_dims,
+    #         # key_attention_dims>)
+    #         mask_expansion_axis = -len(self._attention_axes) * 2 - 1
+    #         for _ in range(len(attention_scores.shape) - len(attention_mask.shape)):
+    #             attention_mask = tf.expand_dims(attention_mask, axis=mask_expansion_axis)
+    #         adder = (1.0 - tf.cast(attention_mask, attention_scores.dtype)) * attention_scores.dtype.min
+    #         # Since we are adding it to the raw scores before the softmax, this
+    #         # is effectively the same as removing these entirely.
+    #         attention_scores += adder
+    #     attention_scores = self._softmax(attention_scores)
+    #     return attention_scores
+
+    def call(
+        self,
+        query,
+        value,
+        key=None,
+        attention_mask=None,
+        return_attention_scores=False,
+        training=None,
+        use_causal_mask=False,
+        use_auto_mask=True,
+    ):
+        if hasattr(self, "_compute_attention_mask") and use_auto_mask:
+            attention_mask = self._compute_attention_mask(query, value, key=key, attention_mask=attention_mask, use_causal_mask=use_causal_mask)
+
+        if not self._built_from_signature:
+            self._build_from_signature(query=query, value=value, key=key)
+        if key is None:
+            key = value
+
+        query_is_ragged = isinstance(query, tf.RaggedTensor)
+        if query_is_ragged:
+            query_lengths = query.nested_row_lengths()
+            query = query.to_tensor()
+
+        key_is_ragged = isinstance(key, tf.RaggedTensor)
+        value_is_ragged = isinstance(value, tf.RaggedTensor)
+        if key_is_ragged and value_is_ragged:
+            # Ensure they have the same shape.
+            bounding_shape = tf.math.maximum(key.bounding_shape(), value.bounding_shape())
+            key = key.to_tensor(shape=bounding_shape)
+            value = value.to_tensor(shape=bounding_shape)
+        elif key_is_ragged:
+            key = key.to_tensor(shape=tf.shape(value))
+        elif value_is_ragged:
+            value = value.to_tensor(shape=tf.shape(key))
+
+        #   N = `num_attention_heads`
+        #   H = `size_per_head`
+        # `query` = [B, T, N ,H]
+        query = self._query_dense(query)
+
+        # `key` = [B, S, N, H]
+        key = self._key_dense(key)
+
+        # `value` = [B, S, N, H]
+        value = self._value_dense(value)
+
+        attention_output, attention_scores = self._compute_attention(query, key, value, attention_mask, training)
+        attention_output = self._output_dense(attention_output)
+
+        if query_is_ragged:
+            attention_output = tf.RaggedTensor.from_tensor(attention_output, lengths=query_lengths)
+
+        if return_attention_scores:
+            return attention_output, attention_scores
+        return attention_output
 
 
 class MultiHeadRelativeAttention(MultiHeadAttention):
@@ -241,6 +298,7 @@ class MultiHeadRelativeAttention(MultiHeadAttention):
         attention_mask=None,
         training=None,
         use_causal_mask=False,
+        use_auto_mask=True,
     ):
         if not self._built_from_signature:
             self._build_from_signature(query, value, key=key)
@@ -250,7 +308,7 @@ class MultiHeadRelativeAttention(MultiHeadAttention):
             value = tf.concat([state, value], 1)
             key = tf.concat([state, key], 1)
 
-        if hasattr(self, "_compute_attention_mask"):
+        if hasattr(self, "_compute_attention_mask") and use_auto_mask:
             attention_mask = self._compute_attention_mask(query, value, key=key, attention_mask=attention_mask, use_causal_mask=use_causal_mask)
 
         # `query` = [B, T, N ,H]
