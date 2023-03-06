@@ -20,15 +20,16 @@ from tensorflow_asr.utils import shape_util
 
 
 def compute_sinusoid_position_encoding(
-    input_length,
     max_length,
     dmodel,
+    input_length=None,
     dtype=tf.float32,
 ):
     # length of sequence is the second last dimension of the inputs
     position = tf.cast(tf.range(max_length - 1, -1, -1), dtype=dtype)
-    position = tf.roll(position, shift=-(max_length - input_length), axis=0)
-    position *= tf.sequence_mask(input_length, max_length, dtype=dtype)
+    if input_length is not None:
+        position = tf.roll(position, shift=-(max_length - input_length), axis=0)
+        position *= tf.sequence_mask(input_length, max_length, dtype=dtype)
     min_freq = tf.cast(1.0 / 10000.0, dtype=dtype)
     timescales = tf.pow(min_freq, ((tf.cast(tf.range(0, dmodel, 1), dtype=dtype) // 2) * 2) / tf.cast(dmodel, dtype=dtype))
     angles = tf.einsum("i,d->id", position, timescales)
@@ -41,15 +42,26 @@ def compute_sinusoid_position_encoding(
 
 
 class SinusoidPositionalEncoding(Layer):
-    def __init__(self, **kwargs):
+    def __init__(
+        self,
+        dynamic_encoding=True,
+        **kwargs,
+    ):
         super().__init__(trainable=False, **kwargs)
+        self._dynamic_encoding = dynamic_encoding
 
     def call(self, inputs):
         outputs, outputs_length = inputs
-        _, max_length, dmodel = shape_util.shape_list(outputs)
+        batch_size, max_length, dmodel = shape_util.shape_list(outputs)
+
+        if not self._dynamic_encoding:
+            pe = compute_sinusoid_position_encoding(max_length, dmodel, input_length=None, dtype=outputs.dtype)
+            pe = tf.repeat(pe[None, :, :], repeats=batch_size, axis=0)
+            pe = tf.stop_gradient(pe)
+            return pe
 
         def _fn(input_length):
-            return compute_sinusoid_position_encoding(input_length, max_length, dmodel, dtype=outputs.dtype)
+            return compute_sinusoid_position_encoding(max_length, dmodel, input_length=input_length, dtype=outputs.dtype)
 
         pe = tf.map_fn(
             fn=_fn,
@@ -57,11 +69,7 @@ class SinusoidPositionalEncoding(Layer):
             fn_output_signature=tf.TensorSpec(shape=outputs.shape.as_list()[1:], dtype=outputs.dtype),
         )
         pe = tf.stop_gradient(pe)
-
         return pe
-
-        # positional_encodings = compute_sinusoid_position_encoding(max_length, dmodel, dtype=outputs.dtype)
-        # return tf.repeat(positional_encodings[None, :, :], repeats=batch_size, axis=0)
 
     def compute_output_shape(self, input_shape):
         output_shape, _ = input_shape

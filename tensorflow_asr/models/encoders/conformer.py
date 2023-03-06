@@ -340,6 +340,7 @@ class ConformerEncoder(Layer):
         kernel_size=32,
         depth_multiplier=1,
         padding="causal",
+        dynamic_relpe=True,
         use_attention_causal_mask=False,
         fc_factor=0.5,
         dropout=0.0,
@@ -386,7 +387,7 @@ class ConformerEncoder(Layer):
         self._use_attention_causal_mask = use_attention_causal_mask
 
         if self._mha_type == "relmha":
-            self.relpe = SinusoidPositionalEncoding(name="relpe")
+            self.relpe = SinusoidPositionalEncoding(dynamic_encoding=dynamic_relpe, name="relpe")
 
         self.conformer_blocks = []
         for i in range(self._num_blocks):
