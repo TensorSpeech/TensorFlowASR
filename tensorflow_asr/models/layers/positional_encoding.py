@@ -16,7 +16,7 @@
 import tensorflow as tf
 
 from tensorflow_asr.models.layers.base_layer import Layer
-from tensorflow_asr.utils import math_util, shape_util
+from tensorflow_asr.utils import shape_util
 
 
 def compute_sinusoid_position_encoding(
