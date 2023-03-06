@@ -17,8 +17,6 @@ import tensorflow as tf
 from keras.layers import EinsumDense
 from keras.layers import MultiHeadAttention as KerasMultiHeadAttention
 
-from tensorflow_asr.utils import math_util
-
 try:
     from keras.layers.multi_head_attention import _build_proj_equation, _get_output_shape
 except ImportError:
@@ -156,7 +154,7 @@ class MultiHeadAttention(KerasMultiHeadAttention):
             mask_expansion_axis = -len(self._attention_axes) * 2 - 1
             for _ in range(len(attention_scores.shape) - len(attention_mask.shape)):
                 attention_mask = tf.expand_dims(attention_mask, axis=mask_expansion_axis)
-            adder = (1.0 - tf.cast(attention_mask, attention_scores.dtype)) * math_util.large_compatible_negative(attention_scores.dtype)
+            adder = (1.0 - tf.cast(attention_mask, attention_scores.dtype)) * attention_scores.dtype.min
             # Since we are adding it to the raw scores before the softmax, this
             # is effectively the same as removing these entirely.
             attention_scores += adder
@@ -252,8 +250,8 @@ class MultiHeadRelativeAttention(MultiHeadAttention):
             value = tf.concat([state, value], 1)
             key = tf.concat([state, key], 1)
 
-        if hasattr(self, "_compute_attention_mask"):
-            attention_mask = self._compute_attention_mask(query, value, key=key, attention_mask=attention_mask, use_causal_mask=use_causal_mask)
+        # if hasattr(self, "_compute_attention_mask"):
+        #     attention_mask = self._compute_attention_mask(query, value, key=key, attention_mask=attention_mask, use_causal_mask=use_causal_mask)
 
         # `query` = [B, T, N ,H]
         query = self._query_dense(query)
