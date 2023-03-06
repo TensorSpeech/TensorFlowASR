@@ -56,9 +56,6 @@ class SinusoidPositionalEncoding(Layer):
             elems=outputs_length,
             fn_output_signature=tf.TensorSpec(shape=outputs.shape.as_list()[1:], dtype=outputs.dtype),
         )
-        mask = getattr(outputs, "_keras_mask", None)
-        if mask is not None:
-            pe = math_util.apply_mask(pe, mask=mask)
 
         return pe
 
