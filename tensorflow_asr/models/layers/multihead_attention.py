@@ -18,6 +18,7 @@ import math
 import tensorflow as tf
 from keras.layers import EinsumDense
 from keras.layers import MultiHeadAttention as KerasMultiHeadAttention
+from keras.utils import tf_utils
 
 try:
     from keras.layers.multi_head_attention import _build_proj_equation, _get_output_shape
@@ -26,7 +27,7 @@ except ImportError:
 
 
 def rel_shift(x):
-    x = tf.transpose(x, perm=[2, 3, 0, 1])  # BHTR -> TRBH
+    x = tf.transpose(x, perm=[2, 3, 0, 1])  # BNTR -> TRBN
     x_shape = tf.shape(x)
 
     x = tf.pad(x, [[0, 0], [0, 1], [0, 0], [0, 0]])  # shift on position time dimension R
@@ -34,7 +35,7 @@ def rel_shift(x):
     x = tf.slice(x, [0, 0, 0, 0], [x_shape[1], -1, -1, -1])
     x = tf.reshape(x, x_shape)
 
-    x = tf.transpose(x, perm=[2, 3, 0, 1])  # TRBH -> BHTR
+    x = tf.transpose(x, perm=[2, 3, 0, 1])  # TRBN -> BNTR
     return x
 
 
@@ -186,19 +187,14 @@ class MultiHeadRelativeAttention(MultiHeadAttention):
         **kwargs,
     ):
         super().__init__(kernel_initializer=kernel_initializer, **kwargs)
+        self._relative_position_encoding_shape = None
 
-    def _build_from_signature(self, query, value, key=None):
+    def _build_from_signature(self, query, value, relative_position_encoding, key=None):
         super()._build_from_signature(query=query, value=value, key=key)
-        if hasattr(value, "shape"):
-            value_shape = tf.TensorShape(value.shape)
+        if hasattr(relative_position_encoding, "shape"):
+            self._relative_position_encoding_shape = tf.TensorShape(relative_position_encoding.shape)
         else:
-            value_shape = value
-        if key is None:
-            key_shape = value_shape
-        elif hasattr(key, "shape"):
-            key_shape = tf.TensorShape(key.shape)
-        else:
-            key_shape = key
+            self._relative_position_encoding_shape = tf.TensorShape(relative_position_encoding)
 
         common_kwargs = dict(
             kernel_initializer=self._kernel_initializer,
@@ -210,12 +206,14 @@ class MultiHeadRelativeAttention(MultiHeadAttention):
             bias_constraint=self._bias_constraint,
         )
 
-        with tf.init_scope():  # pylint: disable=not-context-manager
-            einsum_equation, _, output_rank = _build_proj_equation(key_shape.rank - 1, bound_dims=1, output_dims=2)
+        with tf_utils.maybe_init_scope(self):  # pylint: disable=not-context-manager
+            einsum_equation, bias_axes, output_rank = _build_proj_equation(
+                self._relative_position_encoding_shape.rank - 1, bound_dims=1, output_dims=2
+            )
             self._encoding_dense = EinsumDense(
                 einsum_equation,
                 output_shape=_get_output_shape(output_rank - 1, [self._num_heads, self._key_dim]),
-                bias_axes=None,
+                bias_axes=bias_axes if self._use_bias else None,
                 name="encoding",
                 **common_kwargs,
             )
@@ -260,7 +258,7 @@ class MultiHeadRelativeAttention(MultiHeadAttention):
         use_auto_mask=True,
     ):
         if not self._built_from_signature:
-            self._build_from_signature(query, value, key=key)
+            self._build_from_signature(query, value, relative_position_encoding, key=key)
         if key is None:
             key = value
         if state is not None and state.shape.ndims > 1:
