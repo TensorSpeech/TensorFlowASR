@@ -459,4 +459,7 @@ class ConformerEncoder(Layer):
         return outputs, outputs_length
 
     def compute_output_shape(self, input_shape):
-        return self.conv_subsampling.compute_output_shape(input_shape)
+        outputs_shape, outputs_length_shape = self.conv_subsampling.compute_output_shape(input_shape)
+        outputs_shape = list(outputs_shape)
+        outputs_shape[-1] = self._dmodel
+        return tuple(outputs_shape), outputs_length_shape
