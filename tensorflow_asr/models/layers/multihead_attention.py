@@ -229,16 +229,15 @@ class MultiHeadRelativeAttention(MultiHeadAttention):
         attention_mask=None,
         training=None,
     ):
-
-        content_attention = tf.einsum(self._dot_product_equation, key, (query + content_attention_bias))  # BSNH,BTNH->BNTS
-        positional_attention = tf.einsum(self._dot_product_equation, position, (query + positional_attention_bias))  # BRNH,BTNH->BNTR
+        scale = 1.0 / math.sqrt(float(self._key_dim))
+        content_attention = tf.einsum(self._dot_product_equation, key, tf.multiply(query + content_attention_bias, scale))  # BSNH,BTNH->BNTS
+        positional_attention = tf.einsum(
+            self._dot_product_equation, position, tf.multiply(query + positional_attention_bias, scale)
+        )  # BRNH,BTNH->BNTR
         positional_attention = rel_shift(positional_attention)
         attention_scores = content_attention + positional_attention
-        attention_scores = tf.multiply(attention_scores, 1.0 / math.sqrt(float(self._key_dim)))
 
         attention_scores = self._masked_softmax(attention_scores, attention_mask)
-        tf.print(tf.reduce_any(tf.math.is_inf(attention_scores)))
-        tf.print(tf.reduce_any(tf.math.is_nan(attention_scores)))
 
         attention_output = self._dropout_layer(attention_scores, training=training)
 
