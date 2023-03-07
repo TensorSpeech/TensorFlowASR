@@ -30,9 +30,9 @@ def rel_shift(x):
     x = tf.transpose(x, perm=[2, 3, 0, 1])  # BNTR -> TRBN
     x_shape = tf.shape(x)
 
-    x = tf.pad(x, [[0, 0], [0, 1], [0, 0], [0, 0]])  # shift on position time dimension R
+    x = tf.pad(x, [[0, 0], [1, 0], [0, 0], [0, 0]])  # shift on position time dimension R
     x = tf.reshape(x, [x_shape[1] + 1, x_shape[0], x_shape[2], x_shape[3]])
-    x = tf.slice(x, [0, 0, 0, 0], [x_shape[1], -1, -1, -1])
+    x = tf.slice(x, [1, 0, 0, 0], [-1, -1, -1, -1])
     x = tf.reshape(x, x_shape)
 
     x = tf.transpose(x, perm=[2, 3, 0, 1])  # TRBN -> BNTR
@@ -229,13 +229,11 @@ class MultiHeadRelativeAttention(MultiHeadAttention):
         attention_mask=None,
         training=None,
     ):
-        scale = 1.0 / math.sqrt(float(self._key_dim))
-        content_attention = tf.einsum(self._dot_product_equation, key, tf.multiply(query + content_attention_bias, scale))  # BSNH,BTNH->BNTS
-        positional_attention = tf.einsum(
-            self._dot_product_equation, position, tf.multiply(query + positional_attention_bias, scale)
-        )  # BRNH,BTNH->BNTR
+        content_attention = tf.einsum(self._dot_product_equation, key, (query + content_attention_bias))  # BSNH,BTNH->BNTS
+        positional_attention = tf.einsum(self._dot_product_equation, position, (query + positional_attention_bias))  # BRNH,BTNH->BNTR
         positional_attention = rel_shift(positional_attention)
         attention_scores = content_attention + positional_attention
+        attention_scores = tf.multiply(attention_scores, 1.0 / math.sqrt(float(self._key_dim)))
 
         attention_scores = self._masked_softmax(attention_scores, attention_mask)
 
