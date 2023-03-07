@@ -237,6 +237,8 @@ class MultiHeadRelativeAttention(MultiHeadAttention):
         attention_scores = tf.multiply(attention_scores, 1.0 / math.sqrt(float(self._key_dim)))
 
         attention_scores = self._masked_softmax(attention_scores, attention_mask)
+        tf.print(tf.reduce_any(tf.math.is_inf(attention_scores)))
+        tf.print(tf.reduce_any(tf.math.is_nan(attention_scores)))
 
         attention_output = self._dropout_layer(attention_scores, training=training)
 
