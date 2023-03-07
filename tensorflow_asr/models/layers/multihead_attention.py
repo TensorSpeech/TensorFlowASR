@@ -13,6 +13,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import math
+
 import tensorflow as tf
 from keras.layers import EinsumDense
 from keras.layers import MultiHeadAttention as KerasMultiHeadAttention
@@ -119,48 +121,6 @@ def compute_attention_mask(query, value, key=None, attention_mask=None, use_caus
 
 
 class MultiHeadAttention(KerasMultiHeadAttention):
-    def _compute_attention(
-        self,
-        query,
-        key,
-        value,
-        attention_mask=None,
-        training=None,
-    ):
-        # Note: Applying scalar multiply at the smaller end of einsum improves
-        # XLA performance, but may introduce slight numeric differences in
-        # the Transformer attention head.
-        scale = 1.0 / tf.sqrt(tf.constant(self._key_dim, dtype=query.dtype))
-
-        # Take the dot product between "query" and "key" to get the raw
-        # attention scores.
-        attention_scores = tf.einsum(self._dot_product_equation, key, query * scale)
-
-        attention_scores = self._masked_softmax(attention_scores, attention_mask)
-
-        # This is actually dropping out entire tokens to attend to, which might
-        # seem a bit unusual, but is taken from the original Transformer paper.
-        attention_scores_dropout = self._dropout_layer(attention_scores, training=training)
-
-        # `context_layer` = [B, T, N, H]
-        attention_output = tf.einsum(self._combine_equation, attention_scores_dropout, value)
-        return attention_output, attention_scores
-
-    # def _masked_softmax(self, attention_scores, attention_mask=None):
-    #     if attention_mask is not None:
-    #         # The expand dim happens starting from the `num_heads` dimension,
-    #         # (<batch_dims>, num_heads, <query_attention_dims,
-    #         # key_attention_dims>)
-    #         mask_expansion_axis = -len(self._attention_axes) * 2 - 1
-    #         for _ in range(len(attention_scores.shape) - len(attention_mask.shape)):
-    #             attention_mask = tf.expand_dims(attention_mask, axis=mask_expansion_axis)
-    #         adder = (1.0 - tf.cast(attention_mask, attention_scores.dtype)) * attention_scores.dtype.min
-    #         # Since we are adding it to the raw scores before the softmax, this
-    #         # is effectively the same as removing these entirely.
-    #         attention_scores += adder
-    #     attention_scores = self._softmax(attention_scores)
-    #     return attention_scores
-
     def call(
         self,
         query,
@@ -271,13 +231,12 @@ class MultiHeadRelativeAttention(MultiHeadAttention):
         attention_mask=None,
         training=None,
     ):
-        scale = 1.0 / tf.sqrt(tf.constant(self._key_dim, dtype=query.dtype))
 
         content_attention = tf.einsum(self._dot_product_equation, key, (query + content_attention_bias))  # BSNH,BTNH->BNTS
         positional_attention = tf.einsum(self._dot_product_equation, position, (query + positional_attention_bias))  # BRNH,BTNH->BNTR
         positional_attention = rel_shift(positional_attention)
         attention_scores = content_attention + positional_attention
-        attention_scores = tf.multiply(attention_scores, scale)
+        attention_scores = tf.multiply(attention_scores, 1.0 / math.sqrt(float(self._key_dim)))
 
         attention_scores = self._masked_softmax(attention_scores, attention_mask)
 
