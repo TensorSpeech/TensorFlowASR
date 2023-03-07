@@ -162,6 +162,27 @@ class VggSubsampling(Subsampling):
         outputs, outputs_length = super().call([outputs, inputs_length])
         return outputs, outputs_length
 
+    def compute_output_shape(self, input_shape):
+        inputs_shape, inputs_length_shape = input_shape
+        reduced_time = None
+        if inputs_shape[1] is not None:
+            reduced_time = inputs_shape[1]
+            reduced_time = math_util.conv_output_length(
+                reduced_time,
+                self.maxpool1.pool_size[0],
+                padding=self.maxpool1.padding,
+                stride=self.maxpool1.strides[0],
+            )
+            reduced_time = math_util.conv_output_length(
+                reduced_time,
+                self.maxpool2.pool_size[0],
+                padding=self.maxpool2.padding,
+                stride=self.maxpool2.strides[0],
+            )
+        inputs_shape = list(inputs_shape)
+        inputs_shape[1] = reduced_time
+        return tuple(inputs_shape), inputs_length_shape
+
 
 class Conv2dSubsampling(Subsampling):
     def __init__(
@@ -235,6 +256,22 @@ class Conv2dSubsampling(Subsampling):
         outputs, outputs_length = super().call([outputs, inputs_length])
         return outputs, outputs_length
 
+    def compute_output_shape(self, input_shape):
+        inputs_shape, inputs_length_shape = input_shape
+        reduced_time = None
+        if inputs_shape[1] is not None:
+            reduced_time = inputs_shape[1]
+            for block in self.convs:
+                reduced_time = math_util.conv_output_length(
+                    reduced_time,
+                    filter_size=block.layers[0].kernel_size[0],
+                    padding=block.layers[0].padding,
+                    stride=block.layers[0].strides[0],
+                )
+        inputs_shape = list(inputs_shape)
+        inputs_shape[1] = reduced_time
+        return tuple(inputs_shape), inputs_length_shape
+
 
 class Conv1dSubsampling(Subsampling):
     def __init__(
@@ -307,3 +344,19 @@ class Conv1dSubsampling(Subsampling):
             outputs = block(outputs, training=training)
         outputs, outputs_length = super().call([outputs, inputs_length])
         return outputs, outputs_length
+
+    def compute_output_shape(self, input_shape):
+        inputs_shape, inputs_length_shape = input_shape
+        reduced_time = None
+        if inputs_shape[1] is not None:
+            reduced_time = inputs_shape[1]
+            for block in self.convs:
+                reduced_time = math_util.conv_output_length(
+                    reduced_time,
+                    filter_size=block.layers[0].kernel_size[0],
+                    padding=block.layers[0].padding,
+                    stride=block.layers[0].strides[0],
+                )
+        inputs_shape = list(inputs_shape)
+        inputs_shape[1] = reduced_time
+        return tuple(inputs_shape), inputs_length_shape

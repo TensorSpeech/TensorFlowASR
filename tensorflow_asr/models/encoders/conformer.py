@@ -459,9 +459,4 @@ class ConformerEncoder(Layer):
         return outputs, outputs_length
 
     def compute_output_shape(self, input_shape):
-        inputs_shape, inputs_length_shape = input_shape
-        outputs_size = self._dmodel
-        outputs_time = None if inputs_shape[1] is None else math_util.legacy_get_reduced_length(inputs_shape[1], self.time_reduction_factor)
-        outputs_batch = inputs_shape[0]
-        outputs_shape = [outputs_batch, outputs_time, outputs_size]
-        return tuple(outputs_shape), tuple(inputs_length_shape)
+        return self.conv_subsampling.compute_output_shape(input_shape)
