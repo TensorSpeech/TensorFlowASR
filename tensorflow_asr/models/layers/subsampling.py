@@ -44,7 +44,7 @@ class Subsampling(Layer):
         reduced_time = math_util.legacy_get_reduced_length(inputs_shape[1], self.time_reduction_factor)
         inputs_shape = list(inputs_shape)
         inputs_shape[1] = reduced_time
-        return tuple(inputs_shape), inputs_length_shape
+        return tuple(inputs_shape), tuple(inputs_length_shape)
 
 
 class TimeReduction(Subsampling):
@@ -181,7 +181,7 @@ class VggSubsampling(Subsampling):
             )
         inputs_shape = list(inputs_shape)
         inputs_shape[1] = reduced_time
-        return tuple(inputs_shape), inputs_length_shape
+        return tuple(inputs_shape), tuple(inputs_length_shape)
 
 
 class Conv2dSubsampling(Subsampling):
@@ -270,7 +270,7 @@ class Conv2dSubsampling(Subsampling):
                 )
         inputs_shape = list(inputs_shape)
         inputs_shape[1] = reduced_time
-        return tuple(inputs_shape), inputs_length_shape
+        return tuple(inputs_shape), tuple(inputs_length_shape)
 
 
 class Conv1dSubsampling(Subsampling):
@@ -359,4 +359,4 @@ class Conv1dSubsampling(Subsampling):
                 )
         inputs_shape = list(inputs_shape)
         inputs_shape[1] = reduced_time
-        return tuple(inputs_shape), inputs_length_shape
+        return tuple(inputs_shape), tuple(inputs_length_shape)
