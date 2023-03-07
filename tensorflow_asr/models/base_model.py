@@ -137,7 +137,7 @@ class BaseModel(tf.keras.Model):
         pass
 
     def _get_global_batch_size(self, y_pred):
-        global_batch_size = tf.shape(y_pred["logits"])[0] * tf.distribute.get_strategy().num_replicas_in_sync
+        global_batch_size = tf.shape(y_pred["logits"])[0] * self.distribute_strategy.num_replicas_in_sync
         return global_batch_size
 
     def train_step(self, batch):
@@ -162,12 +162,11 @@ class BaseModel(tf.keras.Model):
             if self.use_loss_scale:
                 scaled_loss = self.optimizer.get_scaled_loss(loss)
 
-        unconnedted_gradients = tf.UnconnectedGradients.ZERO if self.use_ga else tf.UnconnectedGradients.NONE
         if self.use_loss_scale:
-            gradients = tape.gradient(scaled_loss, self.trainable_weights, unconnected_gradients=unconnedted_gradients)
+            gradients = tape.gradient(scaled_loss, self.trainable_weights, unconnected_gradients=tf.UnconnectedGradients.ZERO)
             gradients = self.optimizer.get_unscaled_gradients(gradients)
         else:
-            gradients = tape.gradient(loss, self.trainable_weights, unconnected_gradients=unconnedted_gradients)
+            gradients = tape.gradient(loss, self.trainable_weights, unconnected_gradients=tf.UnconnectedGradients.ZERO)
 
         if self.use_ga:  # perform gradient accumulation
             self.ga.accumulate(gradients=gradients)
