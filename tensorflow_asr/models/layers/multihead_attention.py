@@ -28,7 +28,28 @@ except ImportError:
     from keras.layers.attention.multi_head_attention import _build_proj_equation, _get_output_shape
 
 
-def rel_shift(x):
+def rel_left_shift(x):
+    """
+    Relative left shift
+
+    Input:
+    tf.Tensor(
+    [[1 2 3]
+    [4 5 6]
+    [7 8 9]], shape=(3, 3), dtype=int32)
+
+    Output:
+    tf.Tensor(
+    [[3 0 0]
+    [5 6 0]
+    [7 8 9]], shape=(3, 3), dtype=int32)
+
+    Args:
+        x (tf.Tensor): shape BNTR
+
+    Returns:
+        x: left shifted, shape BNTR
+    """
     x = tf.transpose(x, perm=[2, 3, 0, 1])  # BNTR -> TRBN
     x_shape = tf.shape(x)
 
@@ -38,6 +59,7 @@ def rel_shift(x):
     x = tf.reshape(x, x_shape)
 
     x = tf.transpose(x, perm=[2, 3, 0, 1])  # TRBN -> BNTR
+    x *= tf.linalg.band_part(tf.ones((1, 1, x_shape[0], x_shape[1]), x.dtype), -1, 0)
     return x
 
 
@@ -251,7 +273,7 @@ class MultiHeadRelativeAttention(MultiHeadAttention):
     ):
         content_attention = tf.einsum(self._dot_product_equation, key, (query + content_attention_bias))  # BSNH,BTNH->BNTS
         positional_attention = tf.einsum(self._dot_product_equation, position, (query + positional_attention_bias))  # BRNH,BTNH->BNTR
-        positional_attention = rel_shift(positional_attention)
+        positional_attention = rel_left_shift(positional_attention)
         attention_scores = content_attention + positional_attention
         attention_scores = tf.multiply(attention_scores, 1.0 / math.sqrt(float(self._key_dim)))
 

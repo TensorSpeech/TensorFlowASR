@@ -1,7 +1,7 @@
 import tensorflow as tf
 
 from tensorflow_asr.models.layers import positional_encoding
-from tensorflow_asr.models.layers.multihead_attention import rel_shift
+from tensorflow_asr.models.layers.multihead_attention import rel_left_shift
 from tensorflow_asr.utils import math_util, plot_util
 
 
@@ -18,7 +18,7 @@ def test_relshift():
     print(a)
     a = a[None, ...]
     a = a[None, ...]
-    b = rel_shift(a)
+    b = rel_left_shift(a)
     b = tf.squeeze(b, 0)
     b = tf.squeeze(b, 0)
     print(b)
