@@ -328,6 +328,7 @@ class Conv1dSubsampling(Subsampling):
 
     def compute_output_shape(self, input_shape):
         outputs_shape, inputs_length_shape = input_shape
+        outputs_shape = outputs_shape[:2] + [outputs_shape[2] * outputs_shape[3]]
         for block in self.convs:
             outputs_shape = block.layers[0].compute_output_shape(outputs_shape)
         return tuple(outputs_shape), tuple(inputs_length_shape)
