@@ -146,6 +146,46 @@ def compute_attention_mask(query, value, key=None, attention_mask=None, use_caus
 
 
 class MultiHeadAttention(KerasMultiHeadAttention):
+    def __init__(
+        self,
+        num_heads,
+        key_dim,
+        value_dim=None,
+        dropout=0,
+        use_bias=True,
+        output_shape=None,
+        attention_axes=None,
+        kernel_initializer="glorot_uniform",
+        bias_initializer="zeros",
+        kernel_regularizer=None,
+        bias_regularizer=None,
+        activity_regularizer=None,
+        kernel_constraint=None,
+        bias_constraint=None,
+        **kwargs,
+    ):
+        super().__init__(
+            num_heads,
+            key_dim,
+            value_dim,
+            dropout,
+            use_bias,
+            output_shape,
+            attention_axes,
+            kernel_initializer,
+            bias_initializer,
+            kernel_regularizer,
+            bias_regularizer,
+            activity_regularizer,
+            kernel_constraint,
+            bias_constraint,
+            **kwargs,
+        )
+        if not hasattr(self, "_compute_attention_mask"):
+            self._compute_attention_mask = compute_attention_mask
+        if not hasattr(self, "_compute_causal_mask"):
+            self._compute_causal_mask = compute_causal_mask
+
     def _masked_softmax(self, attention_scores, attention_mask=None):
         # Normalize the attention scores to probabilities.
         # `attention_scores` = [B, N, T, S]
@@ -225,10 +265,39 @@ class MultiHeadAttention(KerasMultiHeadAttention):
 class MultiHeadRelativeAttention(MultiHeadAttention):
     def __init__(
         self,
+        num_heads,
+        key_dim,
+        value_dim=None,
+        dropout=0,
+        use_bias=True,
+        output_shape=None,
+        attention_axes=None,
         kernel_initializer="variance_scaling",
+        bias_initializer="zeros",
+        kernel_regularizer=None,
+        bias_regularizer=None,
+        activity_regularizer=None,
+        kernel_constraint=None,
+        bias_constraint=None,
         **kwargs,
     ):
-        super().__init__(kernel_initializer=kernel_initializer, **kwargs)
+        super().__init__(
+            num_heads,
+            key_dim,
+            value_dim,
+            dropout,
+            use_bias,
+            output_shape,
+            attention_axes,
+            kernel_initializer,
+            bias_initializer,
+            kernel_regularizer,
+            bias_regularizer,
+            activity_regularizer,
+            kernel_constraint,
+            bias_constraint,
+            **kwargs,
+        )
         self._relative_position_encoding_shape = None
 
     def _build_from_signature(self, query, value, relative_position_encoding, key=None):
