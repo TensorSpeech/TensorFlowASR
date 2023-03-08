@@ -215,7 +215,7 @@ class MultiHeadAttention(KerasMultiHeadAttention):
         use_causal_mask=False,
         use_auto_mask=True,
     ):
-        if hasattr(self, "_compute_attention_mask") and use_auto_mask:
+        if use_auto_mask:
             attention_mask = self._compute_attention_mask(query, value, key=key, attention_mask=attention_mask, use_causal_mask=use_causal_mask)
 
         if not self._built_from_signature:
@@ -375,7 +375,7 @@ class MultiHeadRelativeAttention(MultiHeadAttention):
             value = tf.concat([state, value], 1)
             key = tf.concat([state, key], 1)
 
-        if hasattr(self, "_compute_attention_mask") and use_auto_mask:
+        if use_auto_mask:
             attention_mask = self._compute_attention_mask(query, value, key=key, attention_mask=attention_mask, use_causal_mask=use_causal_mask)
 
         # `query` = [B, T, N ,H]
