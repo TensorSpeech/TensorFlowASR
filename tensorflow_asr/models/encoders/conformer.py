@@ -110,6 +110,7 @@ class MHSAModule(Layer):
                 output_shape=dmodel,
                 kernel_regularizer=kernel_regularizer,
                 bias_regularizer=bias_regularizer,
+                dtype=tf.float32 if tf.keras.mixed_precision.global_policy().name == "mixed_bfloat16" else None,
                 name="mhsa",
             )
         elif mha_type == "mha":
@@ -119,6 +120,7 @@ class MHSAModule(Layer):
                 output_shape=dmodel,
                 kernel_regularizer=kernel_regularizer,
                 bias_regularizer=bias_regularizer,
+                dtype=tf.float32 if tf.keras.mixed_precision.global_policy().name == "mixed_bfloat16" else None,
                 name="mhsa",
             )
         else:
