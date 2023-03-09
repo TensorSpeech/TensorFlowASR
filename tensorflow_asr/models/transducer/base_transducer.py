@@ -806,10 +806,10 @@ class Transducer(BaseModel):
         tflite: bool = False,
     ):
         with tf.name_scope("beam_search"):
-            beam_width = tf.cond(
+            beam_width = tf.where(
                 tf.less(self.text_featurizer.decoder_config.beam_width, self.text_featurizer.num_classes),
-                true_fn=lambda: self.text_featurizer.decoder_config.beam_width,
-                false_fn=lambda: self.text_featurizer.num_classes - 1,
+                self.text_featurizer.decoder_config.beam_width,
+                self.text_featurizer.num_classes - 1,
             )
             total = encoded_length
 
@@ -898,7 +898,7 @@ class Transducer(BaseModel):
                         ),
                         states=A.states.unstack(tf.gather_nd(A.states.stack(), remain_indices)),
                     )
-                    A_i = tf.cond(tf.equal(A_i, 0), true_fn=lambda: A_i, false_fn=lambda: A_i - 1)
+                    A_i = tf.where(tf.equal(A_i, 0), A_i, A_i - 1)
 
                     ytu, new_states = self.decoder_inference(encoded=encoded_t, predicted=y_hat_index, states=y_hat_states, tflite=tflite)
 
