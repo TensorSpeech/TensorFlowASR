@@ -186,23 +186,23 @@ class MultiHeadAttention(KerasMultiHeadAttention):
         if not hasattr(self, "_compute_causal_mask"):
             self._compute_causal_mask = compute_causal_mask
 
-    def _masked_softmax(self, attention_scores, attention_mask=None):
-        # Normalize the attention scores to probabilities.
-        # `attention_scores` = [B, N, T, S]
-        if attention_mask is not None:
-            # The expand dim happens starting from the `num_heads` dimension,
-            # (<batch_dims>, num_heads, <query_attention_dims,
-            # key_attention_dims>)
-            mask_expansion_axis = -len(self._attention_axes) * 2 - 1
-            for _ in range(len(attention_scores.shape) - len(attention_mask.shape)):
-                attention_mask = tf.expand_dims(attention_mask, axis=mask_expansion_axis)
-            attention_scores = math_util.masked_fill(
-                attention_scores, mask=attention_mask, value=math_util.large_compatible_negative(attention_scores.dtype)
-            )
-        attention_scores = self._softmax(attention_scores)
-        if attention_mask is not None:
-            attention_scores = math_util.masked_fill(attention_scores, mask=attention_mask, value=0)
-        return attention_scores
+    # def _masked_softmax(self, attention_scores, attention_mask=None):
+    #     # Normalize the attention scores to probabilities.
+    #     # `attention_scores` = [B, N, T, S]
+    #     if attention_mask is not None:
+    #         # The expand dim happens starting from the `num_heads` dimension,
+    #         # (<batch_dims>, num_heads, <query_attention_dims,
+    #         # key_attention_dims>)
+    #         mask_expansion_axis = -len(self._attention_axes) * 2 - 1
+    #         for _ in range(len(attention_scores.shape) - len(attention_mask.shape)):
+    #             attention_mask = tf.expand_dims(attention_mask, axis=mask_expansion_axis)
+    #         attention_scores = math_util.masked_fill(
+    #             attention_scores, mask=attention_mask, value=math_util.large_compatible_negative(attention_scores.dtype)
+    #         )
+    #     attention_scores = self._softmax(attention_scores)
+    #     if attention_mask is not None:
+    #         attention_scores = math_util.masked_fill(attention_scores, mask=attention_mask, value=0)
+    #     return attention_scores
 
     def call(
         self,
