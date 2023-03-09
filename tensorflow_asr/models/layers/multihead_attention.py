@@ -186,22 +186,19 @@ class MultiHeadAttention(KerasMultiHeadAttention):
 
     def call(
         self,
-        query,
-        value,
-        key=None,
+        inputs,
         attention_mask=None,
         return_attention_scores=False,
         training=None,
         use_causal_mask=False,
         use_auto_mask=True,
     ):
+        query, key, value = inputs
         if use_auto_mask:
             attention_mask = self._compute_attention_mask(query, value, key=key, attention_mask=attention_mask, use_causal_mask=use_causal_mask)
 
         if not self._built_from_signature:
             self._build_from_signature(query=query, value=value, key=key)
-        if key is None:
-            key = value
 
         query_is_ragged = isinstance(query, tf.RaggedTensor)
         if query_is_ragged:
@@ -335,25 +332,18 @@ class MultiHeadRelativeAttention(MultiHeadAttention):
 
     def call(
         self,
-        query,
-        value,
-        relative_position_encoding,
+        inputs,
         content_attention_bias,
         positional_attention_bias,
-        key=None,
-        state=None,
         attention_mask=None,
         training=None,
         use_causal_mask=False,
         use_auto_mask=True,
     ):
+        query, key, value, relative_position_encoding = inputs
+
         if not self._built_from_signature:
             self._build_from_signature(query, value, relative_position_encoding, key=key)
-        if key is None:
-            key = value
-        if state is not None and state.shape.ndims > 1:
-            value = tf.concat([state, value], 1)
-            key = tf.concat([state, key], 1)
 
         if use_auto_mask:
             attention_mask = self._compute_attention_mask(query, value, key=key, attention_mask=attention_mask, use_causal_mask=use_causal_mask)
