@@ -21,9 +21,9 @@ from keras.layers import MultiHeadAttention as KerasMultiHeadAttention
 from keras.utils import tf_utils
 
 try:
-    from keras.layers.multi_head_attention import _build_proj_equation, _get_output_shape
+    from keras.layers.multi_head_attention import _build_attention_equation, _build_proj_equation, _get_output_shape
 except ImportError:
-    from keras.layers.attention.multi_head_attention import _build_proj_equation, _get_output_shape
+    from keras.layers.attention.multi_head_attention import _build_attention_equation, _build_proj_equation, _get_output_shape
 
 
 def rel_left_shift(x):
@@ -184,6 +184,31 @@ class MultiHeadAttention(KerasMultiHeadAttention):
         if not hasattr(self, "_compute_causal_mask"):
             self._compute_causal_mask = compute_causal_mask
 
+    def _build_attention(self, rank):
+        """Builds multi-head dot-product attention computations.
+
+        This function builds attributes necessary for `_compute_attention` to
+        customize attention computation to replace the default dot-product
+        attention.
+
+        Args:
+          rank: the rank of query, key, value tensors.
+        """
+        if self._attention_axes is None:
+            self._attention_axes = tuple(range(1, rank - 2))
+        else:
+            self._attention_axes = tuple(self._attention_axes)
+        (
+            self._dot_product_equation,
+            self._combine_equation,
+            attn_scores_rank,
+        ) = _build_attention_equation(rank, attn_axes=self._attention_axes)
+        norm_axes = tuple(range(attn_scores_rank - len(self._attention_axes), attn_scores_rank))
+        self._softmax = tf.keras.layers.Softmax(
+            axis=norm_axes, dtype=tf.float32 if tf.keras.mixed_precision.global_policy().name == "mixed_bfloat16" else None
+        )
+        self._dropout_layer = tf.keras.layers.Dropout(rate=self._dropout)
+
     def call(
         self,
         inputs,
@@ -317,8 +342,16 @@ class MultiHeadRelativeAttention(MultiHeadAttention):
         attention_mask=None,
         training=None,
     ):
-        content_attention = tf.einsum(self._dot_product_equation, key, (query + content_attention_bias))  # BSNH,BTNH->BNTS
-        positional_attention = tf.einsum(self._dot_product_equation, position, (query + positional_attention_bias))  # BRNH,BTNH->BNTR
+        content_attention = tf.einsum(
+            self._dot_product_equation,
+            key,
+            (query + tf.cast(content_attention_bias, query.dtype)),
+        )  # BSNH,BTNH->BNTS
+        positional_attention = tf.einsum(
+            self._dot_product_equation,
+            position,
+            (query + tf.cast(positional_attention_bias, query.dtype)),
+        )  # BRNH,BTNH->BNTR
         positional_attention = rel_left_shift(positional_attention)
         attention_scores = content_attention + positional_attention
         attention_scores = tf.multiply(attention_scores, 1.0 / math.sqrt(float(self._key_dim)))
