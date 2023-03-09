@@ -176,7 +176,9 @@ class BaseModel(tf.keras.Model):
             self.optimizer.apply_gradients(zip(gradients, self.trainable_variables))
 
         self._tfasr_metrics["loss"].update_state(per_sample_loss)
-        return {m.name: m.result() / tf.distribute.get_strategy().num_replicas_in_sync for m in self.metrics}
+        result = {m.name: m.result() / tf.distribute.get_strategy().num_replicas_in_sync for m in self.metrics}
+        result["batch_loss"] = loss
+        return result
 
     def test_step(self, batch):
         """
