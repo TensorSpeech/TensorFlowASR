@@ -20,12 +20,10 @@ from keras.layers import EinsumDense
 from keras.layers import MultiHeadAttention as KerasMultiHeadAttention
 from keras.utils import tf_utils
 
-from tensorflow_asr.utils import math_util
-
 try:
-    from keras.layers.multi_head_attention import _build_proj_equation, _get_output_shape
+    from keras.layers.multi_head_attention import _build_attention_equation, _build_proj_equation, _get_output_shape
 except ImportError:
-    from keras.layers.attention.multi_head_attention import _build_proj_equation, _get_output_shape
+    from keras.layers.attention.multi_head_attention import _build_attention_equation, _build_proj_equation, _get_output_shape
 
 
 def rel_left_shift(x):
@@ -186,23 +184,28 @@ class MultiHeadAttention(KerasMultiHeadAttention):
         if not hasattr(self, "_compute_causal_mask"):
             self._compute_causal_mask = compute_causal_mask
 
-    # def _masked_softmax(self, attention_scores, attention_mask=None):
-    #     # Normalize the attention scores to probabilities.
-    #     # `attention_scores` = [B, N, T, S]
-    #     if attention_mask is not None:
-    #         # The expand dim happens starting from the `num_heads` dimension,
-    #         # (<batch_dims>, num_heads, <query_attention_dims,
-    #         # key_attention_dims>)
-    #         mask_expansion_axis = -len(self._attention_axes) * 2 - 1
-    #         for _ in range(len(attention_scores.shape) - len(attention_mask.shape)):
-    #             attention_mask = tf.expand_dims(attention_mask, axis=mask_expansion_axis)
-    #         attention_scores = math_util.masked_fill(
-    #             attention_scores, mask=attention_mask, value=math_util.large_compatible_negative(attention_scores.dtype)
-    #         )
-    #     attention_scores = self._softmax(attention_scores)
-    #     if attention_mask is not None:
-    #         attention_scores = math_util.masked_fill(attention_scores, mask=attention_mask, value=0)
-    #     return attention_scores
+    def _build_attention(self, rank):
+        """Builds multi-head dot-product attention computations.
+
+        This function builds attributes necessary for `_compute_attention` to
+        customize attention computation to replace the default dot-product
+        attention.
+
+        Args:
+          rank: the rank of query, key, value tensors.
+        """
+        if self._attention_axes is None:
+            self._attention_axes = tuple(range(1, rank - 2))
+        else:
+            self._attention_axes = tuple(self._attention_axes)
+        (
+            self._dot_product_equation,
+            self._combine_equation,
+            attn_scores_rank,
+        ) = _build_attention_equation(rank, attn_axes=self._attention_axes)
+        norm_axes = tuple(range(attn_scores_rank - len(self._attention_axes), attn_scores_rank))
+        self._softmax = tf.keras.layers.Softmax(axis=norm_axes, dtype=tf.float32)  # for numeric stability
+        self._dropout_layer = tf.keras.layers.Dropout(rate=self._dropout)
 
     def call(
         self,
