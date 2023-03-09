@@ -135,9 +135,9 @@ class ConvBlock(tf.keras.layers.Layer):
     ):
         super().__init__(**kwargs)
 
-        self.dmodel = filters
         self.time_reduction_factor = strides
         filters = int(filters * alpha)
+        self.dmodel = filters
 
         self.convs = []
         for i in range(nlayers - 1):
