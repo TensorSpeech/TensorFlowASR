@@ -153,6 +153,8 @@ class MHSAModule(Layer):
             if self.mha_type == "relmha"
             else dict(query=outputs, key=outputs, value=outputs)
         )
+        org_dtype = outputs.dtype
+        outputs = tf.cast(outputs, tf.float32) if org_dtype == tf.bfloat16 else outputs
         outputs = self.mha(
             **mha_inputs,
             training=training,
@@ -160,6 +162,7 @@ class MHSAModule(Layer):
             use_causal_mask=use_causal_mask,
             use_auto_mask=use_auto_mask,
         )
+        outputs = tf.cast(outputs, org_dtype) if org_dtype == tf.bfloat16 else outputs
         outputs = self.do(outputs, training=training)
         outputs = self.res_add([inputs, outputs])
         return outputs
