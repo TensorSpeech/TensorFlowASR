@@ -39,15 +39,17 @@ def compute_sinusoid_position_encoding(
             position = tf.roll(position, shift=-(max_length - input_length), axis=0)
             position *= tf.sequence_mask(input_length, max_length, dtype=dtype)
     min_freq = tf.cast(1.0 / 10000.0, dtype=dtype)
-    timescales = tf.pow(min_freq, (tf.cast(tf.range(0, dmodel, 2.0), dtype=dtype) / tf.cast(dmodel, dtype=dtype)))
-    angles = tf.einsum("i,d->id", position, timescales)
     if interleave:
+        timescales = tf.pow(min_freq, (2 * (tf.cast(tf.range(0, dmodel, 1.0), dtype=dtype) // 2)) / tf.cast(dmodel, dtype=dtype))
+        angles = tf.einsum("i,d->id", position, timescales)
         # even indices are sine, odd are cosine
         cos_mask = tf.cast(tf.range(0, dmodel, 1) % 2, dtype=dtype)
         sin_mask = 1 - cos_mask
         # embedding shape is [seq_length, hidden_size]
         positional_encodings = tf.sin(angles) * sin_mask + tf.cos(angles) * cos_mask
     else:
+        timescales = tf.pow(min_freq, (tf.cast(tf.range(0, dmodel, 2.0), dtype=dtype) / tf.cast(dmodel, dtype=dtype)))
+        angles = tf.einsum("i,d->id", position, timescales)
         positional_encodings = tf.concat([tf.sin(angles), tf.cos(angles)], -1)
     if input_length is not None:
         positional_encodings *= tf.sequence_mask(input_length, max_length, dtype=positional_encodings.dtype)[..., None]

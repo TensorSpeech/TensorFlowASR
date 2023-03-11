@@ -7,7 +7,7 @@ from tensorflow_asr.utils import plot_util
 
 def test():
     _, input_length, max_length, dmodel = 1, 450, 500, 144
-    pe = positional_encoding.compute_sinusoid_position_encoding(max_length, dmodel, input_length, direction="backward")
+    pe = positional_encoding.compute_sinusoid_position_encoding(max_length, dmodel, input_length, interleave=True, direction="backward")
     pe = pe.numpy().T
     print(pe.shape)
     plot_util.plotmesh(pe, title="sinusoid position encoding")
