@@ -24,13 +24,20 @@ def compute_sinusoid_position_encoding(
     dmodel,
     input_length=None,
     interleave=False,
+    direction="backward",
     dtype=tf.float32,
 ):
+    assert direction in ["forward", "backward"]
     # length of sequence is the second last dimension of the inputs
-    position = tf.cast(tf.range(max_length - 1, -1, -1), dtype=dtype)
-    if input_length is not None:
-        position = tf.roll(position, shift=-(max_length - input_length), axis=0)
-        position *= tf.sequence_mask(input_length, max_length, dtype=dtype)
+    if direction == "forward":
+        position = tf.cast(tf.range(0, max_length, 1), dtype=dtype)
+        if input_length is not None:
+            position *= tf.sequence_mask(input_length, max_length, dtype=dtype)
+    else:
+        position = tf.cast(tf.range(max_length - 1, -1, -1), dtype=dtype)
+        if input_length is not None:
+            position = tf.roll(position, shift=-(max_length - input_length), axis=0)
+            position *= tf.sequence_mask(input_length, max_length, dtype=dtype)
     min_freq = tf.cast(1.0 / 10000.0, dtype=dtype)
     timescales = tf.pow(min_freq, (tf.cast(tf.range(0, dmodel, 2.0), dtype=dtype) / tf.cast(dmodel, dtype=dtype)))
     angles = tf.einsum("i,d->id", position, timescales)
@@ -42,6 +49,8 @@ def compute_sinusoid_position_encoding(
         positional_encodings = tf.sin(angles) * sin_mask + tf.cos(angles) * cos_mask
     else:
         positional_encodings = tf.concat([tf.sin(angles), tf.cos(angles)], -1)
+    if input_length is not None:
+        positional_encodings *= tf.sequence_mask(input_length, max_length, dtype=positional_encodings.dtype)[..., None]
     return positional_encodings
 
 
@@ -50,24 +59,30 @@ class SinusoidPositionalEncoding(Layer):
         self,
         dynamic_encoding=True,
         interleave=False,
+        direction="backward",
         **kwargs,
     ):
         super().__init__(trainable=False, **kwargs)
         self._dynamic_encoding = dynamic_encoding
         self._interleave = interleave
+        self._direction = direction
 
     def call(self, inputs):
         outputs, outputs_length = inputs
         batch_size, max_length, dmodel = shape_util.shape_list(outputs)
 
         if not self._dynamic_encoding:
-            pe = compute_sinusoid_position_encoding(max_length, dmodel, input_length=None, interleave=self._interleave, dtype=outputs.dtype)
+            pe = compute_sinusoid_position_encoding(
+                max_length, dmodel, input_length=None, interleave=self._interleave, direction=self._direction, dtype=outputs.dtype
+            )
             pe = tf.repeat(pe[None, :, :], repeats=batch_size, axis=0)
             pe = tf.stop_gradient(pe)
             return pe
 
         def _fn(input_length):
-            return compute_sinusoid_position_encoding(max_length, dmodel, input_length=input_length, interleave=self._interleave, dtype=outputs.dtype)
+            return compute_sinusoid_position_encoding(
+                max_length, dmodel, input_length=input_length, interleave=self._interleave, direction=self._direction, dtype=outputs.dtype
+            )
 
         pe = tf.map_fn(
             fn=_fn,
