@@ -14,15 +14,17 @@
 
 import tensorflow as tf
 
+from tensorflow_asr.models.layers import recurrent
+
 
 def get_rnn(
     rnn_type: str,
 ):
     assert rnn_type in ["lstm", "gru", "rnn"]
     if rnn_type == "lstm":
-        return tf.keras.layers.LSTM
+        return recurrent.LSTM
     if rnn_type == "gru":
-        return tf.keras.layers.GRU
+        return recurrent.GRU
     return tf.keras.layers.SimpleRNN
 
 
