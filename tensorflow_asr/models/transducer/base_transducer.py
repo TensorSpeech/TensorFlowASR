@@ -76,7 +76,7 @@ class TransducerPrediction(Layer):
                 zero_output_for_mask=True,
                 kernel_regularizer=kernel_regularizer,
                 bias_regularizer=bias_regularizer,
-                dtype=tf.float32 if tf.keras.mixed_precision.global_policy().name == "mixed_bfloat16" else None,
+                # dtype=tf.float32 if tf.keras.mixed_precision.global_policy().name == "mixed_bfloat16" else None,
             )
             ln = (
                 tf.keras.layers.LayerNormalization(name=f"ln_{i}", gamma_regularizer=kernel_regularizer, beta_regularizer=bias_regularizer)
@@ -115,13 +115,13 @@ class TransducerPrediction(Layer):
         outputs = self.label_encoder(outputs, training=training)
         outputs = math_util.apply_mask(outputs, mask=tf.sequence_mask(prediction_length, maxlen=tf.shape(outputs)[1], dtype=tf.bool))
         for i, rnn in enumerate(self.rnns):
-            orig_dtype = outputs.dtype
-            if orig_dtype == tf.bfloat16:
-                outputs = tf.cast(outputs, tf.float32)
+            # orig_dtype = outputs.dtype
+            # if orig_dtype == tf.bfloat16:
+            #     outputs = tf.cast(outputs, tf.float32)
             outputs = rnn(outputs, training=training, mask=getattr(outputs, "_keras_mask", None))
             outputs = outputs[0]
-            if orig_dtype == tf.bfloat16:
-                outputs = tf.cast(outputs, orig_dtype)
+            # if orig_dtype == tf.bfloat16:
+            #     outputs = tf.cast(outputs, orig_dtype)
             if self.lns[i] is not None:
                 outputs = self.lns[i](outputs, training=training)
             if self.projections[i] is not None:
