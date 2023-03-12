@@ -33,7 +33,6 @@ class Scale(tf.keras.layers.Layer):
         self._scale = self.add_weight(
             name="scale",
             shape=[],
-            dtype=self.dtype,
             initializer=self._initializer,
             regularizer=self._regularizer,
             trainable=True,

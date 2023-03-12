@@ -42,7 +42,6 @@ class RowConv1D(tf.keras.layers.Conv1D):
             regularizer=self.kernel_regularizer,
             constraint=self.kernel_constraint,
             trainable=True,
-            dtype=self.dtype,
         )
         # Add mask to remove weights on half of the kernel to the left
         # (only keep future
@@ -62,7 +61,6 @@ class RowConv1D(tf.keras.layers.Conv1D):
                 regularizer=self.bias_regularizer,
                 constraint=self.bias_constraint,
                 trainable=True,
-                dtype=self.dtype,
             )
         else:
             self.bias = None
