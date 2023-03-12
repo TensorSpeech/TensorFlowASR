@@ -41,6 +41,7 @@ def main(
     env_util.setup_seed()
     strategy = env_util.setup_strategy(devices)
     env_util.setup_mxp(mxp=mxp)
+    tf.compat.v1.disable_eager_execution()
 
     config = Config(config_path)
 

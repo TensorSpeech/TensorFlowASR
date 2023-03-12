@@ -1,5 +1,5 @@
 SoundFile==0.10.3.post1
-tensorflow-datasets==4.6.0
+tensorflow-datasets>=4.6.0
 nltk==3.7
 numpy>=1.21.6
 sentencepiece==0.1.97

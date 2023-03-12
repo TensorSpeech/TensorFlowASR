@@ -31,7 +31,6 @@ logger.propagate = False
 
 def setup_environment():
     """Setting tensorflow running environment"""
-    tf.compat.v1.disable_eager_execution()
     warnings.simplefilter("ignore")
     return tf.get_logger()
 
