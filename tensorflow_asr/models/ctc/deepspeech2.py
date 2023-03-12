@@ -133,7 +133,6 @@ class RnnBlock(tf.keras.layers.Layer):
             use_bias=True,
             name=rnn_type,
             zero_output_for_mask=True,
-            dtype=tf.float32 if tf.keras.mixed_precision.global_policy().name == "mixed_bfloat16" else None,
         )
         if bidirectional:
             self.rnn = tf.keras.layers.Bidirectional(self.rnn, name=f"b{rnn_type}")
@@ -146,12 +145,7 @@ class RnnBlock(tf.keras.layers.Layer):
 
     def call(self, inputs, training=False):
         outputs = inputs
-        orig_dtype = outputs.dtype
-        if orig_dtype == tf.bfloat16:
-            outputs = tf.cast(outputs, tf.float32)
         outputs = self.rnn(outputs, training=training, mask=getattr(outputs, "_keras_mask", None))
-        if orig_dtype == tf.bfloat16:
-            outputs = tf.cast(outputs, orig_dtype)
         outputs = self.bn(outputs, training=training)
         if self.rowconv is not None:
             outputs = self.rowconv(outputs, training=training)

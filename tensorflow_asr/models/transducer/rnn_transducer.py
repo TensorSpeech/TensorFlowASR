@@ -60,7 +60,6 @@ class RnnTransducerBlock(Layer):
             zero_output_for_mask=True,
             kernel_regularizer=kernel_regularizer,
             bias_regularizer=bias_regularizer,
-            dtype=tf.float32 if tf.keras.mixed_precision.global_policy().name == "mixed_bfloat16" else None,
         )
 
         if layer_norm:
@@ -77,13 +76,8 @@ class RnnTransducerBlock(Layer):
 
     def call(self, inputs, training=False):
         outputs, outputs_length = inputs
-        orig_dtype = outputs.dtype
-        if orig_dtype == tf.bfloat16:
-            outputs = tf.cast(outputs, tf.float32)
         outputs = self.rnn(outputs, training=training, mask=getattr(outputs, "_keras_mask", None))
         outputs = outputs[0]
-        if orig_dtype == tf.bfloat16:
-            outputs = tf.cast(outputs, orig_dtype)
         if self.ln is not None:
             outputs = self.ln(outputs, training=training)
         if self.reduction is not None:
