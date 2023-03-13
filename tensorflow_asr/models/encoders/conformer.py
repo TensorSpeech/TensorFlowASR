@@ -110,6 +110,7 @@ class MHSAModule(Layer):
                 output_shape=dmodel,
                 kernel_regularizer=kernel_regularizer,
                 bias_regularizer=bias_regularizer,
+                dtype=tf.float32, # for stable training
                 name="mhsa",
             )
         elif mha_type == "mha":
@@ -119,6 +120,7 @@ class MHSAModule(Layer):
                 output_shape=dmodel,
                 kernel_regularizer=kernel_regularizer,
                 bias_regularizer=bias_regularizer,
+                dtype=tf.float32, # for stable training
                 name="mhsa",
             )
         else:
