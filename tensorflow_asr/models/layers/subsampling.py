@@ -223,7 +223,7 @@ class Conv2dSubsampling(Subsampling):
                 )
             subblock.add(tf.keras.layers.Activation(activation, name=f"{activation}_{i}"))
             self.convs.append(subblock)
-            self.time_reduction_factor *= strides
+            self.time_reduction_factor *= subblock.layers[0].strides[0]
 
     def _update_mask_and_input_length(self, inputs, inputs_length):
         outputs_length = inputs_length
@@ -303,7 +303,7 @@ class Conv1dSubsampling(Subsampling):
                 )
             subblock.add(tf.keras.layers.Activation(activation, name=f"{activation}_{i}"))
             self.convs.append(subblock)
-            self.time_reduction_factor *= strides
+            self.time_reduction_factor *= subblock.layers[0].strides[0]
 
     def _update_mask_and_input_length(self, inputs, inputs_length):
         outputs_length = inputs_length

@@ -385,7 +385,7 @@ class ConformerEncoder(Layer):
         self._bias_regularizer = bias_regularizer
         self._num_blocks = num_blocks
 
-        subsampling_name = subsampling.pop("type", "conv2d")
+        subsampling_name = subsampling.pop("type", None)
         if subsampling_name == "vgg":
             subsampling_class = VggSubsampling
         elif subsampling_name == "conv2d":
