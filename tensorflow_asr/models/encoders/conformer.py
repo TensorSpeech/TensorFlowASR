@@ -21,7 +21,6 @@ from tensorflow_asr.models.layers.depthwise_conv1d import DepthwiseConv1D
 from tensorflow_asr.models.layers.multihead_attention import MultiHeadAttention, MultiHeadRelativeAttention
 from tensorflow_asr.models.layers.positional_encoding import SinusoidPositionalEncoding
 from tensorflow_asr.models.layers.subsampling import Conv1dSubsampling, Conv2dSubsampling, VggSubsampling
-from tensorflow_asr.utils import math_util
 
 L2 = tf.keras.regularizers.l2(1e-6)
 
@@ -110,7 +109,7 @@ class MHSAModule(Layer):
                 output_shape=dmodel,
                 kernel_regularizer=kernel_regularizer,
                 bias_regularizer=bias_regularizer,
-                dtype=tf.float32, # for stable training
+                dtype=tf.float32,  # for stable training
                 name="mhsa",
             )
         elif mha_type == "mha":
@@ -120,7 +119,7 @@ class MHSAModule(Layer):
                 output_shape=dmodel,
                 kernel_regularizer=kernel_regularizer,
                 bias_regularizer=bias_regularizer,
-                dtype=tf.float32, # for stable training
+                dtype=tf.float32,  # for stable training
                 name="mhsa",
             )
         else:
@@ -190,6 +189,7 @@ class ConvModule(Layer):
         dropout=0.0,
         depth_multiplier=1,
         padding="causal",
+        dense_as_pointwise=False,
         kernel_regularizer=L2,
         bias_regularizer=L2,
         name="conv_module",
@@ -197,15 +197,23 @@ class ConvModule(Layer):
     ):
         super().__init__(name=name, **kwargs)
         self.ln = tf.keras.layers.LayerNormalization(name="ln", gamma_regularizer=kernel_regularizer, beta_regularizer=bias_regularizer)
-        self.pw_conv_1 = tf.keras.layers.Conv1D(
-            filters=2 * input_dim,
-            kernel_size=1,
-            strides=1,
-            padding=padding,
-            name="pw_conv_1",
-            kernel_regularizer=kernel_regularizer,
-            bias_regularizer=bias_regularizer,
-        )
+        if dense_as_pointwise:
+            self.pw_conv_1 = tf.keras.layers.Dense(
+                units=2 * input_dim,
+                name="pw_conv_1",
+                kernel_regularizer=kernel_regularizer,
+                bias_regularizer=bias_regularizer,
+            )
+        else:
+            self.pw_conv_1 = tf.keras.layers.Conv1D(
+                filters=2 * input_dim,
+                kernel_size=1,
+                strides=1,
+                padding=padding,
+                name="pw_conv_1",
+                kernel_regularizer=kernel_regularizer,
+                bias_regularizer=bias_regularizer,
+            )
         self.glu = GLU(axis=-1, name="glu_activation")
         self.dw_conv = DepthwiseConv1D(
             kernel_size=kernel_size,
@@ -218,15 +226,23 @@ class ConvModule(Layer):
         )
         self.bn = tf.keras.layers.BatchNormalization(name="bn", gamma_regularizer=kernel_regularizer, beta_regularizer=bias_regularizer)
         self.swish = tf.keras.layers.Activation(tf.nn.swish, name="swish_activation")
-        self.pw_conv_2 = tf.keras.layers.Conv1D(
-            filters=input_dim,
-            kernel_size=1,
-            strides=1,
-            padding=padding,
-            name="pw_conv_2",
-            kernel_regularizer=kernel_regularizer,
-            bias_regularizer=bias_regularizer,
-        )
+        if dense_as_pointwise:
+            self.pw_conv_2 = tf.keras.layers.Dense(
+                units=input_dim,
+                name="pw_conv_2",
+                kernel_regularizer=kernel_regularizer,
+                bias_regularizer=bias_regularizer,
+            )
+        else:
+            self.pw_conv_2 = tf.keras.layers.Conv1D(
+                filters=input_dim,
+                kernel_size=1,
+                strides=1,
+                padding=padding,
+                name="pw_conv_2",
+                kernel_regularizer=kernel_regularizer,
+                bias_regularizer=bias_regularizer,
+            )
         self.do = tf.keras.layers.Dropout(dropout, name="dropout")
         self.res_add = tf.keras.layers.Add(name="add")
 
@@ -244,11 +260,11 @@ class ConvModule(Layer):
 
 
 class ConformerBlock(Layer):
-    """
+    r"""
     architecture::
       x = x + 1/2 * FFN(x)
       x = x + MHSA(x)
-      x = x + Lconv(x)
+      x = x + Conv(x)
       x = x + 1/2 * FFN(x)
       y = ln(x)
     """
@@ -264,6 +280,7 @@ class ConformerBlock(Layer):
         kernel_size=32,
         depth_multiplier=1,
         padding="causal",
+        dense_as_pointwise=False,
         kernel_regularizer=L2,
         bias_regularizer=L2,
         name="conformer_block",
@@ -295,6 +312,7 @@ class ConformerBlock(Layer):
             name="conv_module",
             depth_multiplier=depth_multiplier,
             padding=padding,
+            dense_as_pointwise=dense_as_pointwise,
             kernel_regularizer=kernel_regularizer,
             bias_regularizer=bias_regularizer,
         )
@@ -355,6 +373,7 @@ class ConformerEncoder(Layer):
         use_attention_auto_mask=True,
         fc_factor=0.5,
         dropout=0.0,
+        dense_as_pointwise=False,
         kernel_regularizer=L2,
         bias_regularizer=L2,
         name="conformer_encoder",
@@ -415,6 +434,7 @@ class ConformerEncoder(Layer):
                 kernel_size=kernel_size,
                 depth_multiplier=depth_multiplier,
                 padding=padding,
+                dense_as_pointwise=dense_as_pointwise,
                 kernel_regularizer=kernel_regularizer,
                 bias_regularizer=bias_regularizer,
                 name=f"block_{i}",

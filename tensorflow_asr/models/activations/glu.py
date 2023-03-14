@@ -29,3 +29,10 @@ class GLU(tf.keras.layers.Layer):
         a, b = tf.split(inputs, 2, axis=self.axis)
         b = tf.nn.sigmoid(b)
         return tf.multiply(a, b)
+
+    def build(self, input_shape):
+        self._output_shape = self.compute_output_shape(input_shape)  # pylint: disable=attribute-defined-outside-init
+        super().build(input_shape)
+
+    def compute_output_shape(self, input_shape):
+        return tuple(input_shape)

@@ -26,8 +26,7 @@ class DepthwiseConv1D(tf.keras.layers.DepthwiseConv1D):
     def _validate_init(self):  # removed check padding causal
         if self.filters is not None and self.filters % self.groups != 0:
             raise ValueError(
-                "The number of filters must be evenly divisible by the number of groups. "
-                f"Received: groups={self.groups}, filters={self.filters}"
+                f"The number of filters must be evenly divisible by the number of groups. Received: groups={self.groups}, filters={self.filters}"
             )
         if not all(self.kernel_size):
             raise ValueError(f"The argument `kernel_size` cannot contain 0(s). Received: {(self.kernel_size,)}")
