@@ -358,6 +358,7 @@ class ConformerEncoder(Layer):
     def __init__(
         self,
         subsampling,
+        subsampling_dropout=0.0,
         dmodel=144,
         num_blocks=16,
         mha_type="relmha",
@@ -409,7 +410,7 @@ class ConformerEncoder(Layer):
             kernel_regularizer=kernel_regularizer,
             bias_regularizer=bias_regularizer,
         )
-        self.do = tf.keras.layers.Dropout(dropout, name="dropout")
+        self.do = tf.keras.layers.Dropout(subsampling_dropout, name="dropout")
 
         self._mha_type = mha_type
         self._num_heads = num_heads
@@ -461,11 +462,11 @@ class ConformerEncoder(Layer):
         outputs, outputs_length = inputs
         outputs, outputs_length = self.conv_subsampling([outputs, outputs_length], training=training)
         outputs = self.linear(outputs, training=training)
-        outputs = self.do(outputs, training=training)
         if self._mha_type == "relmha":
             relative_position_encoding = self.relpe([outputs, outputs_length])
         else:
             relative_position_encoding = None
+        outputs = self.do(outputs, training=training)
         for _, cblock in enumerate(self.conformer_blocks):
             outputs = cblock(
                 outputs,

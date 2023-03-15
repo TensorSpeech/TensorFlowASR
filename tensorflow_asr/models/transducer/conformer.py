@@ -22,6 +22,7 @@ class Conformer(Transducer):
         blank: int,
         vocab_size: int,
         encoder_subsampling: dict,
+        encoder_subsampling_dropout: float = 0.0,
         encoder_dmodel: int = 144,
         encoder_num_blocks: int = 16,
         encoder_head_size: int = 36,
@@ -64,6 +65,7 @@ class Conformer(Transducer):
         super().__init__(
             encoder=ConformerEncoder(
                 subsampling=encoder_subsampling,
+                subsampling_dropout=encoder_subsampling_dropout,
                 dmodel=encoder_dmodel,
                 num_blocks=encoder_num_blocks,
                 head_size=encoder_head_size,
