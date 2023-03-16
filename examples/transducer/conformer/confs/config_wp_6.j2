@@ -52,22 +52,20 @@ speech_config:
 model_config:
   name: conformer
   encoder_subsampling:
-    type: conv1d
-    nlayers: 1
+    type: conv2d
+    nlayers: 2
     filters: 144
-    kernel_size: 11
-    strides: 4
-    padding: causal
-    norm: batch
-    activation: swish
+    kernel_size: 3
+    strides: 2
+    padding: same
+    norm: none
+    activation: relu
   encoder_dmodel: 144
   encoder_num_blocks: 16
   encoder_head_size: 36
   encoder_num_heads: 4
-  encoder_mha_type: relmha
-  encoder_dynamic_relpe: True
+  encoder_mha_type: mha
   encoder_interleave_relpe: True
-  encoder_direction_relpe: forward
   encoder_use_attention_causal_mask: False
   encoder_use_attention_auto_mask: True
   encoder_kernel_size: 32
@@ -75,8 +73,8 @@ model_config:
   encoder_dropout: 0.1
   encoder_padding: causal
   encoder_dense_as_pointwise: False
-  prediction_label_encode_mode: one_hot
-  prediction_embed_dim: 512
+  prediction_label_encode_mode: embedding
+  prediction_embed_dim: 320
   prediction_num_rnns: 1
   prediction_rnn_units: 320
   prediction_rnn_type: lstm

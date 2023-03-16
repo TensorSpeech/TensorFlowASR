@@ -351,7 +351,7 @@ class MultiHeadRelativeAttention(MultiHeadAttention):
             (query + tf.cast(positional_attention_bias, query.dtype)),
         )  # BRNH,BTNH->BNTR
         positional_attention = rel_left_shift(positional_attention)
-        attention_scores = content_attention + positional_attention
+        attention_scores = content_attention + tf.slice(positional_attention, begin=[0, 0, 0, 0], size=tf.shape(content_attention))
         attention_scores = tf.multiply(attention_scores, 1.0 / math.sqrt(float(self._key_dim)))
 
         attention_scores = self._masked_softmax(attention_scores, attention_mask)

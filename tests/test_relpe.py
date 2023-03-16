@@ -6,9 +6,10 @@ from tensorflow_asr.utils import plot_util
 
 
 def test():
-    _, input_length, max_length, dmodel = 1, 450, 500, 144
-    pe = positional_encoding.compute_sinusoid_position_encoding(max_length, dmodel, input_length, interleave=True, direction="backward")
-    pe = pe.numpy().T
+    batch_size, input_length, max_length, dmodel = 1, 450, 500, 144
+    position = positional_encoding.compute_position(max_length - 1, -max_length, -1)
+    pe = positional_encoding.compute_sinusoid_position_encoding(position, batch_size, dmodel, interleave=True)
+    pe = pe[0].numpy().T
     print(pe.shape)
     plot_util.plotmesh(pe, title="sinusoid position encoding")
 

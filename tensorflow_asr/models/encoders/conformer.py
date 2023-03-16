@@ -19,7 +19,7 @@ from tensorflow_asr.models.activations.glu import GLU
 from tensorflow_asr.models.layers.base_layer import Layer
 from tensorflow_asr.models.layers.depthwise_conv1d import DepthwiseConv1D
 from tensorflow_asr.models.layers.multihead_attention import MultiHeadAttention, MultiHeadRelativeAttention
-from tensorflow_asr.models.layers.positional_encoding import SinusoidPositionalEncoding
+from tensorflow_asr.models.layers.positional_encoding import PositionalEncoding, RelativePositionalEncoding
 from tensorflow_asr.models.layers.subsampling import Conv1dSubsampling, Conv2dSubsampling, VggSubsampling
 
 L2 = tf.keras.regularizers.l2(1e-6)
@@ -367,9 +367,7 @@ class ConformerEncoder(Layer):
         kernel_size=32,
         depth_multiplier=1,
         padding="causal",
-        dynamic_relpe=True,
         interleave_relpe=True,
-        direction_relpe="forward",
         use_attention_causal_mask=False,
         use_attention_auto_mask=True,
         fc_factor=0.5,
@@ -419,9 +417,9 @@ class ConformerEncoder(Layer):
         self._use_attention_auto_mask = use_attention_auto_mask
 
         if self._mha_type == "relmha":
-            self.relpe = SinusoidPositionalEncoding(
-                dynamic_encoding=dynamic_relpe, interleave=interleave_relpe, direction=direction_relpe, name="relpe"
-            )
+            self.relpe = RelativePositionalEncoding(interleave=interleave_relpe, name="relpe")
+        else:
+            self.relpe = PositionalEncoding(interleave=interleave_relpe, name="pe")
 
         self.conformer_blocks = []
         for i in range(self._num_blocks):
@@ -462,10 +460,7 @@ class ConformerEncoder(Layer):
         outputs, outputs_length = inputs
         outputs, outputs_length = self.conv_subsampling([outputs, outputs_length], training=training)
         outputs = self.linear(outputs, training=training)
-        if self._mha_type == "relmha":
-            relative_position_encoding = self.relpe([outputs, outputs_length])
-        else:
-            relative_position_encoding = None
+        outputs, relative_position_encoding = self.relpe(outputs, training=training)
         outputs = self.do(outputs, training=training)
         for _, cblock in enumerate(self.conformer_blocks):
             outputs = cblock(
