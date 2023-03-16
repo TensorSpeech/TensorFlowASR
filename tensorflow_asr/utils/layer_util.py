@@ -43,7 +43,7 @@ def add_gwn(
 ):
     original_weights = []
     for weight in trainable_weights:
-        noise = tf.random.normal(mean=0, stddev=stddev, shape=weight.shape, dtype=weight.dtype)
+        noise = tf.stop_gradient(tf.random.normal(mean=0, stddev=stddev, shape=weight.shape, dtype=weight.dtype))
         original_weights.append(weight.value())
         weight.assign_add(noise)
     return original_weights
