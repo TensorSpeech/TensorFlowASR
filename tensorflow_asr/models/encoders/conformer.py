@@ -16,10 +16,11 @@
 import tensorflow as tf
 
 from tensorflow_asr.models.activations.glu import GLU
-from tensorflow_asr.models.layers.base_layer import Layer
+from tensorflow_asr.models.base_layer import Layer
 from tensorflow_asr.models.layers.depthwise_conv1d import DepthwiseConv1D
 from tensorflow_asr.models.layers.multihead_attention import MultiHeadAttention, MultiHeadRelativeAttention
 from tensorflow_asr.models.layers.positional_encoding import PositionalEncoding, RelativePositionalEncoding
+from tensorflow_asr.models.layers.residual import Residual
 from tensorflow_asr.models.layers.subsampling import Conv1dSubsampling, Conv2dSubsampling, VggSubsampling
 
 L2 = tf.keras.regularizers.l2(1e-6)
@@ -47,21 +48,20 @@ class FFModule(Layer):
         self,
         input_dim,
         dropout=0.0,
-        fc_factor=0.5,
+        residual_factor=0.5,
         kernel_regularizer=L2,
         bias_regularizer=L2,
         name="ff_module",
         **kwargs,
     ):
         super().__init__(name=name, **kwargs)
-        self.fc_factor = fc_factor
         self.ln = tf.keras.layers.LayerNormalization(name="ln", gamma_regularizer=kernel_regularizer, beta_regularizer=bias_regularizer)
         self.ffn1 = tf.keras.layers.Dense(4 * input_dim, name="dense_1", kernel_regularizer=kernel_regularizer, bias_regularizer=bias_regularizer)
         self.swish = tf.keras.layers.Activation(tf.nn.swish, name="swish_activation")
         self.do1 = tf.keras.layers.Dropout(dropout, name="dropout_1")
         self.ffn2 = tf.keras.layers.Dense(input_dim, name="dense_2", kernel_regularizer=kernel_regularizer, bias_regularizer=bias_regularizer)
         self.do2 = tf.keras.layers.Dropout(dropout, name="dropout_2")
-        self.res_add = tf.keras.layers.Add(name="add")
+        self.residual = Residual(factor=residual_factor, regularizer=bias_regularizer, name="residual")
 
     def call(self, inputs, training=False):
         outputs = self.ln(inputs, training=training)
@@ -70,7 +70,7 @@ class FFModule(Layer):
         outputs = self.do1(outputs, training=training)
         outputs = self.ffn2(outputs, training=training)
         outputs = self.do2(outputs, training=training)
-        outputs = self.res_add([inputs, self.fc_factor * outputs])
+        outputs = self.residual([inputs, outputs], training=training)
         return outputs
 
 
@@ -93,6 +93,7 @@ class MHSAModule(Layer):
         dmodel,
         head_size,
         num_heads,
+        residual_factor=1.0,
         dropout=0.0,
         mha_type="relmha",
         kernel_regularizer=L2,
@@ -125,7 +126,7 @@ class MHSAModule(Layer):
         else:
             raise ValueError("mha_type must be either 'mha' or 'relmha'")
         self.do = tf.keras.layers.Dropout(dropout, name="dropout")
-        self.res_add = tf.keras.layers.Add(name="add")
+        self.residual = Residual(factor=residual_factor, regularizer=bias_regularizer, name="residual")
         self.mha_type = mha_type
 
     def call(
@@ -157,7 +158,7 @@ class MHSAModule(Layer):
             use_auto_mask=use_auto_mask,
         )
         outputs = self.do(outputs, training=training)
-        outputs = self.res_add([inputs, outputs])
+        outputs = self.residual([inputs, outputs], training=training)
         return outputs
 
 
@@ -189,6 +190,7 @@ class ConvModule(Layer):
         dropout=0.0,
         depth_multiplier=1,
         padding="causal",
+        residual_factor=1.0,
         dense_as_pointwise=False,
         kernel_regularizer=L2,
         bias_regularizer=L2,
@@ -244,7 +246,7 @@ class ConvModule(Layer):
                 bias_regularizer=bias_regularizer,
             )
         self.do = tf.keras.layers.Dropout(dropout, name="dropout")
-        self.res_add = tf.keras.layers.Add(name="add")
+        self.residual = Residual(factor=residual_factor, regularizer=bias_regularizer, name="residual")
 
     def call(self, inputs, training=False):
         outputs = self.ln(inputs, training=training)
@@ -255,7 +257,7 @@ class ConvModule(Layer):
         outputs = self.swish(outputs)
         outputs = self.pw_conv_2(outputs, training=training)
         outputs = self.do(outputs, training=training)
-        outputs = self.res_add([inputs, outputs])
+        outputs = self.residual([inputs, outputs], training=training)
         return outputs
 
 
@@ -273,14 +275,16 @@ class ConformerBlock(Layer):
         self,
         input_dim,
         dropout=0.0,
-        fc_factor=0.5,
+        ffm_residual_factor=0.5,
         head_size=36,
         num_heads=4,
         mha_type="relmha",
+        mhsam_residual_factor=1.0,
         kernel_size=32,
         depth_multiplier=1,
         padding="causal",
         dense_as_pointwise=False,
+        convm_residual_factor=1.0,
         kernel_regularizer=L2,
         bias_regularizer=L2,
         name="conformer_block",
@@ -290,7 +294,7 @@ class ConformerBlock(Layer):
         self.ffm1 = FFModule(
             input_dim=input_dim,
             dropout=dropout,
-            fc_factor=fc_factor,
+            residual_factor=ffm_residual_factor,
             name="ff_module_1",
             kernel_regularizer=kernel_regularizer,
             bias_regularizer=bias_regularizer,
@@ -299,6 +303,7 @@ class ConformerBlock(Layer):
             dmodel=input_dim,
             head_size=head_size,
             num_heads=num_heads,
+            residual_factor=mhsam_residual_factor,
             dropout=dropout,
             mha_type=mha_type,
             kernel_regularizer=kernel_regularizer,
@@ -313,13 +318,14 @@ class ConformerBlock(Layer):
             depth_multiplier=depth_multiplier,
             padding=padding,
             dense_as_pointwise=dense_as_pointwise,
+            residual_factor=convm_residual_factor,
             kernel_regularizer=kernel_regularizer,
             bias_regularizer=bias_regularizer,
         )
         self.ffm2 = FFModule(
             input_dim=input_dim,
             dropout=dropout,
-            fc_factor=fc_factor,
+            residual_factor=ffm_residual_factor,
             name="ff_module_2",
             kernel_regularizer=kernel_regularizer,
             bias_regularizer=bias_regularizer,
@@ -358,7 +364,6 @@ class ConformerEncoder(Layer):
     def __init__(
         self,
         subsampling,
-        subsampling_dropout=0.0,
         dmodel=144,
         num_blocks=16,
         mha_type="relmha",
@@ -370,8 +375,10 @@ class ConformerEncoder(Layer):
         interleave_relpe=True,
         use_attention_causal_mask=False,
         use_attention_auto_mask=True,
-        fc_factor=0.5,
-        dropout=0.0,
+        ffm_residual_factor=0.5,
+        mhsam_residual_factor=1.0,
+        convm_residual_factor=1.0,
+        dropout=0.1,
         dense_as_pointwise=False,
         kernel_regularizer=L2,
         bias_regularizer=L2,
@@ -408,7 +415,7 @@ class ConformerEncoder(Layer):
             kernel_regularizer=kernel_regularizer,
             bias_regularizer=bias_regularizer,
         )
-        self.do = tf.keras.layers.Dropout(subsampling_dropout, name="dropout")
+        self.do = tf.keras.layers.Dropout(dropout, name="dropout")
 
         self._mha_type = mha_type
         self._num_heads = num_heads
@@ -426,14 +433,16 @@ class ConformerEncoder(Layer):
             conformer_block = ConformerBlock(
                 input_dim=dmodel,
                 dropout=dropout,
-                fc_factor=fc_factor,
+                ffm_residual_factor=ffm_residual_factor,
                 head_size=head_size,
                 num_heads=num_heads,
                 mha_type=mha_type,
+                mhsam_residual_factor=mhsam_residual_factor,
                 kernel_size=kernel_size,
                 depth_multiplier=depth_multiplier,
                 padding=padding,
                 dense_as_pointwise=dense_as_pointwise,
+                convm_residual_factor=convm_residual_factor,
                 kernel_regularizer=kernel_regularizer,
                 bias_regularizer=bias_regularizer,
                 name=f"block_{i}",
@@ -478,4 +487,4 @@ class ConformerEncoder(Layer):
         outputs_shape, outputs_length_shape = self.conv_subsampling.compute_output_shape(input_shape)
         outputs_shape = list(outputs_shape)
         outputs_shape[-1] = self._dmodel
-        return tuple(outputs_shape), outputs_length_shape
+        return outputs_shape, outputs_length_shape

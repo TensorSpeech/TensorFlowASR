@@ -20,8 +20,8 @@ from typing import Dict
 import tensorflow as tf
 
 from tensorflow_asr.losses.rnnt_loss import RnntLoss
+from tensorflow_asr.models.base_layer import Layer
 from tensorflow_asr.models.base_model import BaseModel
-from tensorflow_asr.models.layers.base_layer import Layer
 from tensorflow_asr.models.layers.embedding import Embedding
 from tensorflow_asr.models.layers.one_hot_blank import OneHotBlank
 from tensorflow_asr.utils import data_util, layer_util, math_util, shape_util

@@ -16,7 +16,7 @@ from typing import List
 
 import tensorflow as tf
 
-from tensorflow_asr.models.layers.base_layer import Layer
+from tensorflow_asr.models.base_layer import Layer
 from tensorflow_asr.utils import math_util
 
 L2 = tf.keras.regularizers.l2(1e-6)

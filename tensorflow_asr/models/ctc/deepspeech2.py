@@ -14,8 +14,8 @@
 
 import tensorflow as tf
 
+from tensorflow_asr.models.base_layer import Layer
 from tensorflow_asr.models.ctc.base_ctc import CtcModel
-from tensorflow_asr.models.layers.base_layer import Layer
 from tensorflow_asr.models.layers.row_conv_1d import RowConv1D
 from tensorflow_asr.models.layers.sequence_wise_bn import SequenceBatchNorm
 from tensorflow_asr.utils import layer_util, math_util
@@ -297,8 +297,8 @@ class DeepSpeech2Encoder(Layer):
         outputs_time = None if inputs_shape[1] is None else math_util.legacy_get_reduced_length(inputs_shape[1], self.time_reduction_factor)
         outputs_batch = inputs_shape[0]
         outputs_size = self._fc_units if self._fc_nlayers > 0 else self._rnn_units
-        outputs_shape = [outputs_batch, outputs_time, outputs_size]
-        return tuple(outputs_shape), tuple(inputs_length_shape)
+        outputs_shape = (outputs_batch, outputs_time, outputs_size)
+        return outputs_shape, inputs_length_shape
 
 
 class DeepSpeech2Decoder(Layer):

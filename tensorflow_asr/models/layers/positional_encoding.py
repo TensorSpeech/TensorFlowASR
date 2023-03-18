@@ -15,7 +15,7 @@
 
 import tensorflow as tf
 
-from tensorflow_asr.models.layers.base_layer import Layer
+from tensorflow_asr.models.base_layer import Layer
 from tensorflow_asr.utils import shape_util
 
 
@@ -54,7 +54,13 @@ def compute_sinusoid_position_encoding(
 
 
 class PositionalEncoding(Layer):
-    def __init__(self, dropout=0.0, scale=None, interleave=False, **kwargs):
+    def __init__(
+        self,
+        dropout=0.0,
+        scale=None,
+        interleave=False,
+        **kwargs,
+    ):
         super().__init__(trainable=False, **kwargs)
         self.do = tf.keras.layers.Dropout(dropout, name="dropout")
         self._scale = scale
@@ -78,8 +84,7 @@ class PositionalEncoding(Layer):
         return outputs, pe
 
     def compute_output_shape(self, input_shape):
-        output_shape = input_shape
-        return tuple(output_shape), tuple(output_shape)
+        return input_shape, input_shape
 
 
 class RelativePositionalEncoding(PositionalEncoding):
@@ -98,3 +103,8 @@ class RelativePositionalEncoding(PositionalEncoding):
         )
         pe = self.do(pe, training=training)
         return outputs, pe
+
+    def compute_output_shape(self, input_shape):
+        B, T, V = input_shape
+        T = None if T is None else T * 2 - 1
+        return input_shape, (B, T, V)

@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import keras.layers
+from keras.utils import tf_utils
 
 
 class Layer(keras.layers.Layer):
@@ -35,8 +36,8 @@ class Layer(keras.layers.Layer):
         return self._output_shape
 
     def build(self, input_shape):
-        self._output_shape = self.compute_output_shape(input_shape)
+        self._output_shape = tf_utils.convert_shapes(self.compute_output_shape(input_shape), to_tuples=True)
         super().build(input_shape)
 
     def compute_output_shape(self, input_shape):
-        return tuple(input_shape)
+        return input_shape

@@ -14,7 +14,7 @@
 
 import tensorflow as tf
 
-from tensorflow_asr.models.layers.base_layer import Layer
+from tensorflow_asr.models.base_layer import Layer
 from tensorflow_asr.utils import math_util, shape_util
 
 
@@ -44,7 +44,7 @@ class Subsampling(Layer):
         reduced_time = math_util.legacy_get_reduced_length(inputs_shape[1], self.time_reduction_factor)
         inputs_shape = list(inputs_shape)
         inputs_shape[1] = reduced_time
-        return tuple(inputs_shape), tuple(inputs_length_shape)
+        return inputs_shape, inputs_length_shape
 
 
 class TimeReduction(Subsampling):
@@ -170,8 +170,8 @@ class VggSubsampling(Subsampling):
         outputs_shape = self.conv3.compute_output_shape(outputs_shape)
         outputs_shape = self.conv4.compute_output_shape(outputs_shape)
         outputs_shape = self.maxpool2.compute_output_shape(outputs_shape)
-        outputs_shape = outputs_shape[:2] + [outputs_shape[2] * outputs_shape[3]]
-        return tuple(outputs_shape), tuple(inputs_length_shape)
+        outputs_shape = list(outputs_shape[:2]) + [outputs_shape[2] * outputs_shape[3]]
+        return outputs_shape, inputs_length_shape
 
 
 class Conv2dSubsampling(Subsampling):
@@ -250,8 +250,8 @@ class Conv2dSubsampling(Subsampling):
         outputs_shape, inputs_length_shape = input_shape
         for block in self.convs:
             outputs_shape = block.layers[0].compute_output_shape(outputs_shape)
-        outputs_shape = outputs_shape[:2] + [outputs_shape[2] * outputs_shape[3]]
-        return tuple(outputs_shape), tuple(inputs_length_shape)
+        outputs_shape = list(outputs_shape[:2]) + [outputs_shape[2] * outputs_shape[3]]
+        return tuple(outputs_shape), inputs_length_shape
 
 
 class Conv1dSubsampling(Subsampling):
@@ -328,7 +328,7 @@ class Conv1dSubsampling(Subsampling):
 
     def compute_output_shape(self, input_shape):
         outputs_shape, inputs_length_shape = input_shape
-        outputs_shape = outputs_shape[:2] + [outputs_shape[2] * outputs_shape[3]]
+        outputs_shape = list(outputs_shape[:2]) + [outputs_shape[2] * outputs_shape[3]]
         for block in self.convs:
             outputs_shape = block.layers[0].compute_output_shape(outputs_shape)
-        return tuple(outputs_shape), tuple(inputs_length_shape)
+        return tuple(outputs_shape), inputs_length_shape

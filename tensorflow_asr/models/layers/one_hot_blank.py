@@ -14,7 +14,7 @@
 
 import tensorflow as tf
 
-from tensorflow_asr.models.layers.base_layer import Layer
+from tensorflow_asr.models.base_layer import Layer
 
 
 class OneHotBlank(Layer):

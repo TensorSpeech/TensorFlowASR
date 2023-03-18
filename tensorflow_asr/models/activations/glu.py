@@ -14,14 +14,11 @@
 
 import tensorflow as tf
 
+from tensorflow_asr.models.base_layer import Layer
 
-class GLU(tf.keras.layers.Layer):
-    def __init__(
-        self,
-        axis=-1,
-        name="glu_activation",
-        **kwargs,
-    ):
+
+class GLU(Layer):
+    def __init__(self, axis=-1, name="glu_activation", **kwargs):
         super().__init__(name=name, **kwargs)
         self.axis = axis
 
@@ -30,9 +27,6 @@ class GLU(tf.keras.layers.Layer):
         b = tf.nn.sigmoid(b)
         return tf.multiply(a, b)
 
-    def build(self, input_shape):
-        self._output_shape = self.compute_output_shape(input_shape)  # pylint: disable=attribute-defined-outside-init
-        super().build(input_shape)
-
     def compute_output_shape(self, input_shape):
-        return tuple(input_shape)
+        B, T, V = input_shape
+        return (B, T, V // 2)

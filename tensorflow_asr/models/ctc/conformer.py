@@ -14,9 +14,9 @@
 
 import tensorflow as tf
 
+from tensorflow_asr.models.base_layer import Layer
 from tensorflow_asr.models.ctc.base_ctc import CtcModel
 from tensorflow_asr.models.encoders.conformer import L2, ConformerEncoder
-from tensorflow_asr.models.layers.base_layer import Layer
 
 
 class ConformerDecoder(Layer):
@@ -52,7 +52,6 @@ class Conformer(CtcModel):
         self,
         vocab_size: int,
         encoder_subsampling: dict,
-        encoder_subsampling_dropout: float = 0.0,
         encoder_dmodel: int = 144,
         encoder_num_blocks: int = 16,
         encoder_head_size: int = 36,
@@ -64,8 +63,10 @@ class Conformer(CtcModel):
         encoder_kernel_size: int = 32,
         encoder_depth_multiplier: int = 1,
         encoder_padding: str = "causal",
-        encoder_fc_factor: float = 0.5,
-        encoder_dropout: float = 0,
+        encoder_ffm_residual_factor: float = 0.5,
+        encoder_mhsam_residual_factor: float = 1.0,
+        encoder_convm_residual_factor: float = 1.0,
+        encoder_dropout: float = 0.1,
         encoder_dense_as_pointwise: bool = False,
         encoder_trainable: bool = True,
         kernel_regularizer=L2,
@@ -76,7 +77,6 @@ class Conformer(CtcModel):
         super().__init__(
             encoder=ConformerEncoder(
                 subsampling=encoder_subsampling,
-                subsampling_dropout=encoder_subsampling_dropout,
                 dmodel=encoder_dmodel,
                 num_blocks=encoder_num_blocks,
                 head_size=encoder_head_size,
@@ -88,7 +88,9 @@ class Conformer(CtcModel):
                 kernel_size=encoder_kernel_size,
                 depth_multiplier=encoder_depth_multiplier,
                 padding=encoder_padding,
-                fc_factor=encoder_fc_factor,
+                ffm_residual_factor=encoder_ffm_residual_factor,
+                mhsam_residual_factor=encoder_mhsam_residual_factor,
+                convm_residual_factor=encoder_convm_residual_factor,
                 dropout=encoder_dropout,
                 dense_as_pointwise=encoder_dense_as_pointwise,
                 kernel_regularizer=kernel_regularizer,

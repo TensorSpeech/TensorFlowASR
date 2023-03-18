@@ -43,17 +43,21 @@ model_config:
     nlayers: 2
     kernel_size: 3
     strides: 2
-    padding: valid
-    norm: batch
-    activation: swish
+    padding: same
+    norm: none
+    activation: relu
+  encoder_ffm_residual_factor: 0.5
+  encoder_mhsam_residual_factor: 1.0
+  encoder_convm_residual_factor: 1.0
   encoder_dmodel: 144
   encoder_num_blocks: 2
   encoder_head_size: 36 # == dmodel // num_heads
   encoder_num_heads: 4
   encoder_mha_type: relmha
+  encoder_interleave_relpe: True
   encoder_use_attention_causal_mask: False
+  encoder_use_attention_auto_mask: True
   encoder_kernel_size: 32
-  encoder_fc_factor: 0.5
   encoder_dropout: 0.1
   encoder_padding: causal
   prediction_label_encode_mode: embedding
