@@ -377,7 +377,7 @@ class Transducer(BaseModel):
                     lambda: self.joint_net.trainable_weights,
                 )
             return original_weights
-        return []
+        return {}
 
     def remove_gwn(self, original_weights):
         if self.apply_gwn_config:

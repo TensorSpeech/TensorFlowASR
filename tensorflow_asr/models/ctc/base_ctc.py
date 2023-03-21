@@ -19,7 +19,7 @@ import tensorflow as tf
 
 from tensorflow_asr.losses.ctc_loss import CtcLoss
 from tensorflow_asr.models.base_model import BaseModel
-from tensorflow_asr.utils import data_util, math_util, shape_util
+from tensorflow_asr.utils import data_util, layer_util, math_util, shape_util
 
 
 class CtcModel(BaseModel):
@@ -56,6 +56,39 @@ class CtcModel(BaseModel):
     ):
         loss = CtcLoss(blank=blank)
         super().compile(loss=loss, optimizer=optimizer, run_eagerly=run_eagerly, mxp=mxp, ga_steps=ga_steps, **kwargs)
+
+    def apply_gwn(self):
+        if self.apply_gwn_config:
+            original_weights = {}
+            if self.apply_gwn_config.get("encoder_step") is not None and self.apply_gwn_config.get("encoder_stddev") is not None:
+                original_weights["encoder"] = tf.cond(
+                    tf.greater_equal((self.optimizer.iterations), self.apply_gwn_config["encoder_step"]),
+                    lambda: layer_util.add_gwn(self.encoder.trainable_weights, stddev=self.apply_gwn_config["encoder_stddev"]),
+                    lambda: self.encoder.trainable_weights,
+                )
+            if self.apply_gwn_config.get("decoder_step") is not None and self.apply_gwn_config.get("decoder_stddev") is not None:
+                original_weights["decoder"] = tf.cond(
+                    tf.greater_equal((self.optimizer.iterations), self.apply_gwn_config["decoder_step"]),
+                    lambda: layer_util.add_gwn(self.decoder.trainable_weights, stddev=self.apply_gwn_config["decoder_stddev"]),
+                    lambda: self.decoder.trainable_weights,
+                )
+            return original_weights
+        return {}
+
+    def remove_gwn(self, original_weights):
+        if self.apply_gwn_config:
+            if original_weights.get("encoder") is not None:
+                tf.cond(
+                    tf.greater_equal((self.optimizer.iterations), self.apply_gwn_config["encoder_step"]),
+                    lambda: layer_util.sub_gwn(original_weights["encoder"], self.encoder.trainable_weights),
+                    lambda: None,
+                )
+            if original_weights.get("decoder") is not None:
+                tf.cond(
+                    tf.greater_equal((self.optimizer.iterations), self.apply_gwn_config["decoder_step"]),
+                    lambda: layer_util.sub_gwn(original_weights["decoder"], self.decoder.trainable_weights),
+                    lambda: None,
+                )
 
     def call(self, inputs, training=False):
         logits, logits_length = self.encoder([inputs["inputs"], inputs["inputs_length"]], training=training)
