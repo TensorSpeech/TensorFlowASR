@@ -48,15 +48,28 @@ class FFModule(Layer):
         self,
         input_dim,
         dropout=0.0,
+        scale_factor=4,
         residual_factor=0.5,
+        norm_position="pre",
         kernel_regularizer=L2,
         bias_regularizer=L2,
         name="ff_module",
         **kwargs,
     ):
         super().__init__(name=name, **kwargs)
-        self.ln = tf.keras.layers.LayerNormalization(name="ln", gamma_regularizer=kernel_regularizer, beta_regularizer=bias_regularizer)
-        self.ffn1 = tf.keras.layers.Dense(4 * input_dim, name="dense_1", kernel_regularizer=kernel_regularizer, bias_regularizer=bias_regularizer)
+        assert norm_position in ("pre", "post", "none")
+        self._norm_position = norm_position
+        self.norm = (
+            None
+            if norm_position == "none"
+            else tf.keras.layers.LayerNormalization(name="ln", gamma_regularizer=kernel_regularizer, beta_regularizer=bias_regularizer)
+        )
+        self.ffn1 = tf.keras.layers.Dense(
+            scale_factor * input_dim,
+            name="dense_1",
+            kernel_regularizer=kernel_regularizer,
+            bias_regularizer=bias_regularizer,
+        )
         self.swish = tf.keras.layers.Activation(tf.nn.swish, name="swish_activation")
         self.do1 = tf.keras.layers.Dropout(dropout, name="dropout_1")
         self.ffn2 = tf.keras.layers.Dense(input_dim, name="dense_2", kernel_regularizer=kernel_regularizer, bias_regularizer=bias_regularizer)
@@ -64,12 +77,13 @@ class FFModule(Layer):
         self.residual = Residual(factor=residual_factor, regularizer=bias_regularizer, name="residual")
 
     def call(self, inputs, training=False):
-        outputs = self.ln(inputs, training=training)
+        outputs = self.norm(inputs, training=training) if self._norm_position == "pre" else inputs
         outputs = self.ffn1(outputs, training=training)
         outputs = self.swish(outputs)
         outputs = self.do1(outputs, training=training)
         outputs = self.ffn2(outputs, training=training)
         outputs = self.do2(outputs, training=training)
+        outputs = self.norm(outputs, training=training) if self._norm_position == "post" else outputs
         outputs = self.residual([inputs, outputs], training=training)
         return outputs
 
@@ -96,13 +110,20 @@ class MHSAModule(Layer):
         residual_factor=1.0,
         dropout=0.0,
         mha_type="relmha",
+        norm_position="pre",
         kernel_regularizer=L2,
         bias_regularizer=L2,
         name="mhsa_module",
         **kwargs,
     ):
         super().__init__(name=name, **kwargs)
-        self.ln = tf.keras.layers.LayerNormalization(name="ln", gamma_regularizer=kernel_regularizer, beta_regularizer=bias_regularizer)
+        assert norm_position in ("pre", "post", "none")
+        self._norm_position = norm_position
+        self.norm = (
+            None
+            if norm_position == "none"
+            else tf.keras.layers.LayerNormalization(name="ln", gamma_regularizer=kernel_regularizer, beta_regularizer=bias_regularizer)
+        )
         if mha_type == "relmha":
             self.mha = MultiHeadRelativeAttention(
                 num_heads=num_heads,
@@ -140,7 +161,7 @@ class MHSAModule(Layer):
         use_causal_mask=False,
         use_auto_mask=True,
     ):
-        outputs = self.ln(inputs, training=training)
+        outputs = self.norm(inputs, training=training) if self._norm_position == "pre" else inputs
         mha_inputs = (
             dict(
                 inputs=[outputs, outputs, outputs, relative_position_encoding],
@@ -158,6 +179,7 @@ class MHSAModule(Layer):
             use_auto_mask=use_auto_mask,
         )
         outputs = self.do(outputs, training=training)
+        outputs = self.norm(outputs, training=training) if self._norm_position == "post" else outputs
         outputs = self.residual([inputs, outputs], training=training)
         return outputs
 
@@ -190,25 +212,33 @@ class ConvModule(Layer):
         dropout=0.0,
         depth_multiplier=1,
         padding="causal",
+        scale_factor=2,
         residual_factor=1.0,
         dense_as_pointwise=False,
+        norm_position="pre",
         kernel_regularizer=L2,
         bias_regularizer=L2,
         name="conv_module",
         **kwargs,
     ):
         super().__init__(name=name, **kwargs)
-        self.ln = tf.keras.layers.LayerNormalization(name="ln", gamma_regularizer=kernel_regularizer, beta_regularizer=bias_regularizer)
+        assert norm_position in ("pre", "post", "none")
+        self._norm_position = norm_position
+        self.norm = (
+            None
+            if norm_position == "none"
+            else tf.keras.layers.LayerNormalization(name="ln", gamma_regularizer=kernel_regularizer, beta_regularizer=bias_regularizer)
+        )
         if dense_as_pointwise:
             self.pw_conv_1 = tf.keras.layers.Dense(
-                units=2 * input_dim,
+                units=scale_factor * input_dim,
                 name="pw_conv_1",
                 kernel_regularizer=kernel_regularizer,
                 bias_regularizer=bias_regularizer,
             )
         else:
             self.pw_conv_1 = tf.keras.layers.Conv1D(
-                filters=2 * input_dim,
+                filters=scale_factor * input_dim,
                 kernel_size=1,
                 strides=1,
                 padding=padding,
@@ -249,7 +279,7 @@ class ConvModule(Layer):
         self.residual = Residual(factor=residual_factor, regularizer=bias_regularizer, name="residual")
 
     def call(self, inputs, training=False):
-        outputs = self.ln(inputs, training=training)
+        outputs = self.norm(inputs, training=training) if self._norm_position == "pre" else inputs
         outputs = self.pw_conv_1(outputs, training=training)
         outputs = self.glu(outputs)
         outputs = self.dw_conv(outputs, training=training)
@@ -257,6 +287,7 @@ class ConvModule(Layer):
         outputs = self.swish(outputs)
         outputs = self.pw_conv_2(outputs, training=training)
         outputs = self.do(outputs, training=training)
+        outputs = self.norm(outputs, training=training) if self._norm_position == "post" else outputs
         outputs = self.residual([inputs, outputs], training=training)
         return outputs
 
@@ -275,6 +306,7 @@ class ConformerBlock(Layer):
         self,
         input_dim,
         dropout=0.0,
+        ffm_scale_factor=4,
         ffm_residual_factor=0.5,
         head_size=36,
         num_heads=4,
@@ -284,17 +316,29 @@ class ConformerBlock(Layer):
         depth_multiplier=1,
         padding="causal",
         dense_as_pointwise=False,
+        convm_scale_factor=2,
         convm_residual_factor=1.0,
+        module_norm_position="pre",
+        block_norm_position="post",
         kernel_regularizer=L2,
         bias_regularizer=L2,
         name="conformer_block",
         **kwargs,
     ):
         super().__init__(name=name, **kwargs)
+        assert block_norm_position in ("pre", "post", "none")
+        self._norm_position = block_norm_position
+        self.norm = (
+            None
+            if block_norm_position == "none"
+            else tf.keras.layers.LayerNormalization(name="ln", gamma_regularizer=kernel_regularizer, beta_regularizer=kernel_regularizer)
+        )
         self.ffm1 = FFModule(
             input_dim=input_dim,
             dropout=dropout,
+            scale_factor=ffm_scale_factor,
             residual_factor=ffm_residual_factor,
+            norm_position=module_norm_position,
             name="ff_module_1",
             kernel_regularizer=kernel_regularizer,
             bias_regularizer=bias_regularizer,
@@ -306,6 +350,7 @@ class ConformerBlock(Layer):
             residual_factor=mhsam_residual_factor,
             dropout=dropout,
             mha_type=mha_type,
+            norm_position=module_norm_position,
             kernel_regularizer=kernel_regularizer,
             bias_regularizer=bias_regularizer,
             name="mhsa_module",
@@ -318,19 +363,22 @@ class ConformerBlock(Layer):
             depth_multiplier=depth_multiplier,
             padding=padding,
             dense_as_pointwise=dense_as_pointwise,
+            scale_factor=convm_scale_factor,
             residual_factor=convm_residual_factor,
+            norm_position=module_norm_position,
             kernel_regularizer=kernel_regularizer,
             bias_regularizer=bias_regularizer,
         )
         self.ffm2 = FFModule(
             input_dim=input_dim,
             dropout=dropout,
+            scale_factor=ffm_scale_factor,
             residual_factor=ffm_residual_factor,
+            norm_position=module_norm_position,
             name="ff_module_2",
             kernel_regularizer=kernel_regularizer,
             bias_regularizer=bias_regularizer,
         )
-        self.ln = tf.keras.layers.LayerNormalization(name="ln", gamma_regularizer=kernel_regularizer, beta_regularizer=kernel_regularizer)
 
     def call(
         self,
@@ -343,7 +391,8 @@ class ConformerBlock(Layer):
         use_causal_mask=False,
         use_auto_mask=True,
     ):
-        outputs = self.ffm1(inputs, training=training)
+        outputs = self.norm(inputs, training=training) if self._norm_position == "pre" else inputs
+        outputs = self.ffm1(outputs, training=training)
         outputs = self.mhsam(
             outputs,
             relative_position_encoding=relative_position_encoding,
@@ -356,7 +405,7 @@ class ConformerBlock(Layer):
         )
         outputs = self.convm(outputs, training=training)
         outputs = self.ffm2(outputs, training=training)
-        outputs = self.ln(outputs, training=training)
+        outputs = self.norm(outputs, training=training) if self._norm_position == "post" else outputs
         return outputs
 
 
@@ -375,11 +424,15 @@ class ConformerEncoder(Layer):
         interleave_relpe=True,
         use_attention_causal_mask=False,
         use_attention_auto_mask=True,
+        ffm_scale_factor=4,
         ffm_residual_factor=0.5,
         mhsam_residual_factor=1.0,
+        convm_scale_factor=2,
         convm_residual_factor=1.0,
         dropout=0.1,
         dense_as_pointwise=False,
+        module_norm_position="pre",
+        block_norm_position="post",
         kernel_regularizer=L2,
         bias_regularizer=L2,
         name="conformer_encoder",
@@ -433,6 +486,7 @@ class ConformerEncoder(Layer):
             conformer_block = ConformerBlock(
                 input_dim=dmodel,
                 dropout=dropout,
+                ffm_scale_factor=ffm_scale_factor,
                 ffm_residual_factor=ffm_residual_factor,
                 head_size=head_size,
                 num_heads=num_heads,
@@ -442,7 +496,10 @@ class ConformerEncoder(Layer):
                 depth_multiplier=depth_multiplier,
                 padding=padding,
                 dense_as_pointwise=dense_as_pointwise,
+                convm_scale_factor=convm_scale_factor,
                 convm_residual_factor=convm_residual_factor,
+                module_norm_position=module_norm_position,
+                block_norm_position=block_norm_position,
                 kernel_regularizer=kernel_regularizer,
                 bias_regularizer=bias_regularizer,
                 name=f"block_{i}",
