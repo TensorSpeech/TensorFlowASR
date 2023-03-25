@@ -215,6 +215,7 @@ class ConvModule(Layer):
         scale_factor=2,
         residual_factor=1.0,
         dense_as_pointwise=False,
+        depthwise_as_groupwise=False,
         norm_position="pre",
         kernel_regularizer=L2,
         bias_regularizer=L2,
@@ -247,15 +248,27 @@ class ConvModule(Layer):
                 bias_regularizer=bias_regularizer,
             )
         self.glu = GLU(axis=-1, name="glu_activation")
-        self.dw_conv = DepthwiseConv1D(
-            kernel_size=kernel_size,
-            strides=1,
-            padding=padding,
-            name="dw_conv",
-            depth_multiplier=depth_multiplier,
-            depthwise_regularizer=kernel_regularizer,
-            bias_regularizer=bias_regularizer,
-        )
+        if depthwise_as_groupwise:
+            self.dw_conv = Conv1D(
+                filters=input_dim,
+                kernel_size=kernel_size,
+                strides=1,
+                groups=input_dim,
+                padding=padding,
+                name="dw_conv",
+                kernel_regularizer=kernel_regularizer,
+                bias_regularizer=bias_regularizer,
+            )
+        else:
+            self.dw_conv = DepthwiseConv1D(
+                kernel_size=kernel_size,
+                strides=1,
+                padding=padding,
+                name="dw_conv",
+                depth_multiplier=depth_multiplier,
+                depthwise_regularizer=kernel_regularizer,
+                bias_regularizer=bias_regularizer,
+            )
         self.bn = tf.keras.layers.BatchNormalization(name="bn", gamma_regularizer=kernel_regularizer, beta_regularizer=bias_regularizer)
         self.swish = tf.keras.layers.Activation(tf.nn.swish, name="swish_activation")
         if dense_as_pointwise:
@@ -316,6 +329,7 @@ class ConformerBlock(Layer):
         depth_multiplier=1,
         padding="causal",
         dense_as_pointwise=False,
+        depthwise_as_groupwise=False,
         convm_scale_factor=2,
         convm_residual_factor=1.0,
         module_norm_position="pre",
@@ -363,6 +377,7 @@ class ConformerBlock(Layer):
             depth_multiplier=depth_multiplier,
             padding=padding,
             dense_as_pointwise=dense_as_pointwise,
+            depthwise_as_groupwise=depthwise_as_groupwise,
             scale_factor=convm_scale_factor,
             residual_factor=convm_residual_factor,
             norm_position=module_norm_position,
@@ -431,6 +446,7 @@ class ConformerEncoder(Layer):
         convm_residual_factor=1.0,
         dropout=0.1,
         dense_as_pointwise=False,
+        depthwise_as_groupwise=False,
         module_norm_position="pre",
         block_norm_position="post",
         kernel_regularizer=L2,
@@ -496,6 +512,7 @@ class ConformerEncoder(Layer):
                 depth_multiplier=depth_multiplier,
                 padding=padding,
                 dense_as_pointwise=dense_as_pointwise,
+                depthwise_as_groupwise=depthwise_as_groupwise,
                 convm_scale_factor=convm_scale_factor,
                 convm_residual_factor=convm_residual_factor,
                 module_norm_position=module_norm_position,
