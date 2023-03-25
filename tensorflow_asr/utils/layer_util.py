@@ -14,7 +14,7 @@
 
 import tensorflow as tf
 
-from tensorflow_asr.models.layers import recurrent
+from tensorflow_asr.models.layers import convolution, recurrent
 
 
 def get_rnn(
@@ -33,8 +33,8 @@ def get_conv(
 ):
     assert conv_type in ["conv1d", "conv2d"]
     if conv_type == "conv1d":
-        return tf.keras.layers.Conv1D
-    return tf.keras.layers.Conv2D
+        return convolution.Conv1D
+    return convolution.Conv2D
 
 
 def add_gwn(

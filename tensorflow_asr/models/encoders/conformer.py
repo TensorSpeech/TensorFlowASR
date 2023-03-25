@@ -17,7 +17,7 @@ import tensorflow as tf
 
 from tensorflow_asr.models.activations.glu import GLU
 from tensorflow_asr.models.base_layer import Layer
-from tensorflow_asr.models.layers.depthwise_conv1d import DepthwiseConv1D
+from tensorflow_asr.models.layers.convolution import Conv1D, DepthwiseConv1D
 from tensorflow_asr.models.layers.multihead_attention import MultiHeadAttention, MultiHeadRelativeAttention
 from tensorflow_asr.models.layers.positional_encoding import PositionalEncoding, RelativePositionalEncoding
 from tensorflow_asr.models.layers.residual import Residual
@@ -237,7 +237,7 @@ class ConvModule(Layer):
                 bias_regularizer=bias_regularizer,
             )
         else:
-            self.pw_conv_1 = tf.keras.layers.Conv1D(
+            self.pw_conv_1 = Conv1D(
                 filters=scale_factor * input_dim,
                 kernel_size=1,
                 strides=1,
@@ -266,7 +266,7 @@ class ConvModule(Layer):
                 bias_regularizer=bias_regularizer,
             )
         else:
-            self.pw_conv_2 = tf.keras.layers.Conv1D(
+            self.pw_conv_2 = Conv1D(
                 filters=input_dim,
                 kernel_size=1,
                 strides=1,

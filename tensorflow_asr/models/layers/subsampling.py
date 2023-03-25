@@ -15,6 +15,7 @@
 import tensorflow as tf
 
 from tensorflow_asr.models.base_layer import Layer
+from tensorflow_asr.models.layers.convolution import Conv1D, Conv2D
 from tensorflow_asr.utils import math_util, shape_util
 
 
@@ -86,7 +87,7 @@ class VggSubsampling(Subsampling):
         **kwargs,
     ):
         super().__init__(name=name, **kwargs)
-        self.conv1 = tf.keras.layers.Conv2D(
+        self.conv1 = Conv2D(
             filters=filters[0],
             kernel_size=kernel_size,
             strides=1,
@@ -96,7 +97,7 @@ class VggSubsampling(Subsampling):
             bias_regularizer=bias_regularizer,
             activation=activation,
         )
-        self.conv2 = tf.keras.layers.Conv2D(
+        self.conv2 = Conv2D(
             filters=filters[0],
             kernel_size=kernel_size,
             strides=1,
@@ -107,7 +108,7 @@ class VggSubsampling(Subsampling):
             activation=activation,
         )
         self.maxpool1 = tf.keras.layers.MaxPool2D(pool_size=pool_size, strides=strides, padding=padding, name="maxpool_1")
-        self.conv3 = tf.keras.layers.Conv2D(
+        self.conv3 = Conv2D(
             filters=filters[1],
             kernel_size=kernel_size,
             strides=1,
@@ -117,7 +118,7 @@ class VggSubsampling(Subsampling):
             bias_regularizer=bias_regularizer,
             activation=activation,
         )
-        self.conv4 = tf.keras.layers.Conv2D(
+        self.conv4 = Conv2D(
             filters=filters[1],
             kernel_size=kernel_size,
             strides=1,
@@ -195,7 +196,7 @@ class Conv2dSubsampling(Subsampling):
         for i in range(nlayers):
             subblock = tf.keras.Sequential(name=f"block_{i}")
             subblock.add(
-                tf.keras.layers.Conv2D(
+                Conv2D(
                     filters=filters,
                     kernel_size=kernel_size,
                     strides=strides,
@@ -275,7 +276,7 @@ class Conv1dSubsampling(Subsampling):
         for i in range(nlayers):
             subblock = tf.keras.Sequential(name=f"block_{i}")
             subblock.add(
-                tf.keras.layers.Conv1D(
+                Conv1D(
                     filters=filters,
                     kernel_size=kernel_size,
                     strides=strides,

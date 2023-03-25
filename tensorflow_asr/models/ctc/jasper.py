@@ -16,6 +16,7 @@ import tensorflow as tf
 
 from tensorflow_asr.models.base_layer import Layer
 from tensorflow_asr.models.ctc.base_ctc import CtcModel
+from tensorflow_asr.models.layers.convolution import Conv1D
 from tensorflow_asr.utils import math_util
 
 
@@ -31,18 +32,19 @@ class JasperSubBlock(tf.keras.layers.Layer):
         kernels: int = 11,
         strides: int = 1,
         dropout: float = 0.1,
+        padding: str = "causal",
         dilation: int = 1,
         kernel_regularizer=None,
         bias_regularizer=None,
         **kwargs,
     ):
         super().__init__(**kwargs)
-        self.conv1d = tf.keras.layers.Conv1D(
+        self.conv1d = Conv1D(
             filters=channels,
             kernel_size=kernels,
             strides=strides,
             dilation_rate=dilation,
-            padding="same",
+            padding=padding,
             kernel_regularizer=kernel_regularizer,
             bias_regularizer=bias_regularizer,
             name="conv1d",
@@ -65,16 +67,17 @@ class JasperResidual(tf.keras.layers.Layer):
     def __init__(
         self,
         channels: int = 256,
+        padding: str = "causal",
         kernel_regularizer=None,
         bias_regularizer=None,
         **kwargs,
     ):
         super().__init__(**kwargs)
-        self.pointwise_conv1d = tf.keras.layers.Conv1D(
+        self.pointwise_conv1d = Conv1D(
             filters=channels,
             kernel_size=1,
             strides=1,
-            padding="same",
+            padding=padding,
             kernel_regularizer=kernel_regularizer,
             bias_regularizer=bias_regularizer,
             name="pointwise_conv1d",
@@ -94,6 +97,7 @@ class JasperSubBlockResidual(JasperSubBlock):
         kernels: int = 11,
         strides: int = 1,
         dropout: float = 0.1,
+        padding: str = "causal",
         dilation: int = 1,
         nresiduals: int = 1,
         kernel_regularizer=None,
@@ -105,6 +109,7 @@ class JasperSubBlockResidual(JasperSubBlock):
             kernels=kernels,
             strides=strides,
             dropout=dropout,
+            padding=padding,
             dilation=dilation,
             kernel_regularizer=kernel_regularizer,
             bias_regularizer=bias_regularizer,
@@ -114,6 +119,7 @@ class JasperSubBlockResidual(JasperSubBlock):
         self.residuals = [
             JasperResidual(
                 channels=channels,
+                padding=padding,
                 kernel_regularizer=kernel_regularizer,
                 bias_regularizer=bias_regularizer,
                 name=f"residual_{i}",
@@ -142,6 +148,7 @@ class JasperBlock(tf.keras.layers.Layer):
         channels: int = 256,
         kernels: int = 11,
         dropout: float = 0.1,
+        padding: str = "causal",
         dense: bool = False,
         nresiduals: int = 1,
         kernel_regularizer=None,
@@ -157,6 +164,7 @@ class JasperBlock(tf.keras.layers.Layer):
                 channels=channels,
                 kernels=kernels,
                 dropout=dropout,
+                padding=padding,
                 kernel_regularizer=kernel_regularizer,
                 bias_regularizer=bias_regularizer,
                 name=f"subordinate_{i}",
@@ -193,6 +201,7 @@ class JasperEncoder(Layer):
     def __init__(
         self,
         dense: bool = False,
+        padding: str = "causal",
         first_additional_block_channels: int = 256,
         first_additional_block_kernels: int = 11,
         first_additional_block_strides: int = 2,
@@ -227,6 +236,7 @@ class JasperEncoder(Layer):
             kernels=first_additional_block_kernels,
             strides=first_additional_block_strides,
             dropout=first_additional_block_dropout,
+            padding=padding,
             dilation=first_additional_block_dilation,
             kernel_regularizer=kernel_regularizer,
             bias_regularizer=bias_regularizer,
@@ -253,6 +263,7 @@ class JasperEncoder(Layer):
             kernels=second_additional_block_kernels,
             strides=second_additional_block_strides,
             dropout=second_additional_block_dropout,
+            padding=padding,
             dilation=second_additional_block_dilation,
             kernel_regularizer=kernel_regularizer,
             bias_regularizer=bias_regularizer,
@@ -264,6 +275,7 @@ class JasperEncoder(Layer):
             kernels=third_additional_block_kernels,
             strides=third_additional_block_strides,
             dropout=third_additional_block_dropout,
+            padding=padding,
             dilation=third_additional_block_dilation,
             kernel_regularizer=kernel_regularizer,
             bias_regularizer=bias_regularizer,
@@ -301,16 +313,17 @@ class JasperDecoder(Layer):
     def __init__(
         self,
         vocab_size: int,
+        padding: str = "causal",
         kernel_regularizer=None,
         bias_regularizer=None,
         **kwargs,
     ):
         super().__init__(**kwargs)
-        self.vocab = tf.keras.layers.Conv1D(
+        self.vocab = Conv1D(
             filters=vocab_size,
             kernel_size=1,
             strides=1,
-            padding="same",
+            padding=padding,
             kernel_regularizer=kernel_regularizer,
             bias_regularizer=bias_regularizer,
             name="logits",
@@ -333,6 +346,7 @@ class Jasper(CtcModel):
         self,
         vocab_size: int,
         dense: bool = False,
+        padding: str = "causal",
         first_additional_block_channels: int = 256,
         first_additional_block_kernels: int = 11,
         first_additional_block_strides: int = 2,
@@ -360,6 +374,7 @@ class Jasper(CtcModel):
         super().__init__(
             encoder=JasperEncoder(
                 dense=dense,
+                padding=padding,
                 first_additional_block_channels=first_additional_block_channels,
                 first_additional_block_kernels=first_additional_block_kernels,
                 first_additional_block_strides=first_additional_block_strides,
@@ -383,7 +398,13 @@ class Jasper(CtcModel):
                 bias_regularizer=bias_regularizer,
                 name="encoder",
             ),
-            decoder=JasperDecoder(vocab_size=vocab_size, kernel_regularizer=kernel_regularizer, bias_regularizer=bias_regularizer, name="decoder"),
+            decoder=JasperDecoder(
+                vocab_size=vocab_size,
+                padding=padding,
+                kernel_regularizer=kernel_regularizer,
+                bias_regularizer=bias_regularizer,
+                name="decoder",
+            ),
             name=name,
             **kwargs,
         )
