@@ -26,29 +26,17 @@ def prepare_training_datasets(
 ):
     if tfrecords:
         train_dataset = asr_dataset.ASRTFRecordDataset(
-            speech_featurizer=speech_featurizer,
-            text_featurizer=text_featurizer,
-            **vars(config.learning_config.train_dataset_config),
-            indefinite=True
+            speech_featurizer=speech_featurizer, text_featurizer=text_featurizer, **vars(config.learning_config.train_dataset_config), indefinite=True
         )
         eval_dataset = asr_dataset.ASRTFRecordDataset(
-            speech_featurizer=speech_featurizer,
-            text_featurizer=text_featurizer,
-            **vars(config.learning_config.eval_dataset_config),
-            indefinite=True
+            speech_featurizer=speech_featurizer, text_featurizer=text_featurizer, **vars(config.learning_config.eval_dataset_config), indefinite=True
         )
     else:
         train_dataset = asr_dataset.ASRSliceDataset(
-            speech_featurizer=speech_featurizer,
-            text_featurizer=text_featurizer,
-            **vars(config.learning_config.train_dataset_config),
-            indefinite=True
+            speech_featurizer=speech_featurizer, text_featurizer=text_featurizer, **vars(config.learning_config.train_dataset_config), indefinite=True
         )
         eval_dataset = asr_dataset.ASRSliceDataset(
-            speech_featurizer=speech_featurizer,
-            text_featurizer=text_featurizer,
-            **vars(config.learning_config.eval_dataset_config),
-            indefinite=True
+            speech_featurizer=speech_featurizer, text_featurizer=text_featurizer, **vars(config.learning_config.eval_dataset_config), indefinite=True
         )
     return train_dataset, eval_dataset
 
@@ -59,9 +47,7 @@ def prepare_testing_datasets(
     text_featurizer: TextFeaturizer,
 ):
     test_dataset = asr_dataset.ASRSliceDataset(
-        speech_featurizer=speech_featurizer,
-        text_featurizer=text_featurizer,
-        **vars(config.learning_config.test_dataset_config)
+        speech_featurizer=speech_featurizer, text_featurizer=text_featurizer, **vars(config.learning_config.test_dataset_config)
     )
     return test_dataset
 

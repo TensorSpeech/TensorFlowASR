@@ -15,6 +15,8 @@
 import keras.layers
 from keras.utils import tf_utils
 
+from tensorflow_asr.utils import math_util
+
 
 class Layer(keras.layers.Layer):
     def __init__(
@@ -41,3 +43,12 @@ class Layer(keras.layers.Layer):
 
     def compute_output_shape(self, input_shape):
         return input_shape
+
+
+class Reshape(Layer):
+    def call(self, inputs):
+        return math_util.merge_two_last_dims(inputs)
+
+    def compute_output_shape(self, input_shape):
+        b, h, w, d = input_shape
+        return (b, h, w * d)

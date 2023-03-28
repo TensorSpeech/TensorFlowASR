@@ -120,9 +120,9 @@ def erb_point(
     # All of the following expressions are derived in Apple TR #35, "An
     # Efficient Implementation of the Patterson-Holdsworth Cochlear Filter
     # Bank." See pages 33-34.
-    erb_point = -ear_q * min_bw + tf.exp(
-        fraction * (-tf.math.log(high_freq + ear_q * min_bw) + tf.math.log(low_freq + ear_q * min_bw))
-    ) * (high_freq + ear_q * min_bw)
+    erb_point = -ear_q * min_bw + tf.exp(fraction * (-tf.math.log(high_freq + ear_q * min_bw) + tf.math.log(low_freq + ear_q * min_bw))) * (
+        high_freq + ear_q * min_bw
+    )
 
     return tf.cast(erb_point, tf.complex64)
 
@@ -200,7 +200,7 @@ def make_erb_filters(
     min_bw = 24.7
     order = 1
 
-    erb = width * ((centre_freqs / ear_q) ** order + min_bw ** order) ** (1 / order)
+    erb = width * ((centre_freqs / ear_q) ** order + min_bw**order) ** (1 / order)
     B = 1.019 * 2 * pi * erb
 
     arg = 2 * centre_freqs * pi * T
@@ -212,8 +212,8 @@ def make_erb_filters(
     B1 = -2 * tf.cos(arg) / tf.exp(B * T)
     B2 = tf.exp(-2 * B * T)
 
-    rt_pos = tf.cast(tf.sqrt(3 + 2 ** 1.5), tf.complex64)
-    rt_neg = tf.cast(tf.sqrt(3 - 2 ** 1.5), tf.complex64)
+    rt_pos = tf.cast(tf.sqrt(3 + 2**1.5), tf.complex64)
+    rt_neg = tf.cast(tf.sqrt(3 - 2**1.5), tf.complex64)
 
     common = -T * tf.exp(-(B * T))
 
