@@ -56,6 +56,46 @@ from keras.layers.convolutional import Conv1D, Conv2D  # pylint: disable=unused-
 
 
 class DepthwiseConv1D(keras.layers.convolutional.DepthwiseConv1D):
+    def __init__(
+        self,
+        kernel_size,
+        strides=1,
+        padding="valid",
+        depth_multiplier=1,
+        data_format=None,
+        dilation_rate=1,
+        activation=None,
+        use_bias=True,
+        depthwise_initializer="glorot_uniform",
+        bias_initializer="zeros",
+        depthwise_regularizer=None,
+        bias_regularizer=None,
+        activity_regularizer=None,
+        depthwise_constraint=None,
+        bias_constraint=None,
+        **kwargs,
+    ):
+        super().__init__(
+            kernel_size,
+            strides,
+            padding,
+            depth_multiplier,
+            data_format,
+            dilation_rate,
+            activation,
+            use_bias,
+            depthwise_initializer,
+            bias_initializer,
+            depthwise_regularizer,
+            bias_regularizer,
+            activity_regularizer,
+            depthwise_constraint,
+            bias_constraint,
+            **kwargs,
+        )
+        if self._is_causal:
+            self.padding = "VALID"
+
     def call(self, inputs):
         if self._is_causal:
             inputs = tf.pad(inputs, self._compute_causal_padding(inputs))
@@ -63,6 +103,46 @@ class DepthwiseConv1D(keras.layers.convolutional.DepthwiseConv1D):
 
 
 class DepthwiseConv2D(keras.layers.convolutional.DepthwiseConv2D):
+    def __init__(
+        self,
+        kernel_size,
+        strides=...,
+        padding="valid",
+        depth_multiplier=1,
+        data_format=None,
+        dilation_rate=...,
+        activation=None,
+        use_bias=True,
+        depthwise_initializer="glorot_uniform",
+        bias_initializer="zeros",
+        depthwise_regularizer=None,
+        bias_regularizer=None,
+        activity_regularizer=None,
+        depthwise_constraint=None,
+        bias_constraint=None,
+        **kwargs,
+    ):
+        super().__init__(
+            kernel_size,
+            strides,
+            padding,
+            depth_multiplier,
+            data_format,
+            dilation_rate,
+            activation,
+            use_bias,
+            depthwise_initializer,
+            bias_initializer,
+            depthwise_regularizer,
+            bias_regularizer,
+            activity_regularizer,
+            depthwise_constraint,
+            bias_constraint,
+            **kwargs,
+        )
+        if self._is_causal:
+            self.padding = "VALID"
+
     def call(self, inputs):
         if self._is_causal:
             inputs = tf.pad(inputs, self._compute_causal_padding(inputs))

@@ -13,8 +13,8 @@
 # limitations under the License.
 
 {% set repodir = "." %}
-{% set modeldir = "/Users/nlhuy/Paraphernalia/models/local/conformer" %}
-{% set datadir = "/Users/nlhuy/Paraphernalia/data/LibriSpeech" %}
+{% set modeldir = "/Volumes/Data/Miscellanea/Models/local/conformer" %}
+{% set datadir = "/Volumes/Data/MLDL/Datasets/ASR/LibriSpeech" %}
 
 decoder_config:
   type: wordpiece
@@ -57,12 +57,12 @@ model_config:
     filters: 144
     kernel_size: 3
     strides: 2
-    padding: same
+    padding: causal
     norm: none
     activation: relu
-  encoder_ffm_residual_factor: rezero
-  encoder_mhsam_residual_factor: rezero
-  encoder_convm_residual_factor: rezero
+  encoder_ffm_residual_factor: 0.5
+  encoder_mhsam_residual_factor: 1
+  encoder_convm_residual_factor: 1
   encoder_dmodel: 144
   encoder_num_blocks: 16
   encoder_head_size: 36

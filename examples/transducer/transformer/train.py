@@ -89,6 +89,10 @@ def main(
         )
         transformer.summary()
 
+    for weight in transformer.non_trainable_weights:
+        print(weight.name)
+    return
+
     callbacks = [
         tf.keras.callbacks.TerminateOnNaN(),
         tf.keras.callbacks.ModelCheckpoint(**config.learning_config.running_config.checkpoint),

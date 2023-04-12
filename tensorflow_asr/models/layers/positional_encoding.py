@@ -93,7 +93,7 @@ class RelativePositionalEncoding(PositionalEncoding):
         if self._scale is not None:
             outputs *= self._scale
         batch_size, length, dmodel = shape_util.shape_list(outputs)
-        position = compute_position(start=length - 1, end=-length, step=-1, dtype=outputs.dtype)
+        position = compute_position(start=0, end=length, step=1, dtype=outputs.dtype)
         pe = compute_sinusoid_position_encoding(
             position=position,
             batch_size=batch_size,

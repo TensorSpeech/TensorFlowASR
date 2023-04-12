@@ -127,8 +127,8 @@ class MHSAModule(Layer):
         if mha_type == "relmha":
             self.mha = MultiHeadRelativeAttention(
                 num_heads=num_heads,
-                key_dim=head_size,
-                output_shape=dmodel,
+                head_size=head_size,
+                output_size=dmodel,
                 kernel_regularizer=kernel_regularizer,
                 bias_regularizer=bias_regularizer,
                 dtype=tf.float32,  # for stable training
@@ -137,8 +137,8 @@ class MHSAModule(Layer):
         elif mha_type == "mha":
             self.mha = MultiHeadAttention(
                 num_heads=num_heads,
-                key_dim=head_size,
-                output_shape=dmodel,
+                head_size=head_size,
+                output_size=dmodel,
                 kernel_regularizer=kernel_regularizer,
                 bias_regularizer=bias_regularizer,
                 dtype=tf.float32,  # for stable training

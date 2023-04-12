@@ -82,8 +82,8 @@ class TransformerBlock(Layer):
         self.mha = (
             MultiHeadAttention(
                 num_heads=num_heads,
-                key_dim=head_size,
-                output_shape=dmodel,
+                head_size=head_size,
+                output_size=dmodel,
                 kernel_regularizer=kernel_regularizer,
                 bias_regularizer=bias_regularizer,
                 dtype=tf.float32,  # stable training
@@ -92,8 +92,8 @@ class TransformerBlock(Layer):
             if mha_type == "mha"
             else MultiHeadRelativeAttention(
                 num_heads=num_heads,
-                key_dim=head_size,
-                output_shape=dmodel,
+                head_size=head_size,
+                output_size=dmodel,
                 kernel_regularizer=kernel_regularizer,
                 bias_regularizer=bias_regularizer,
                 dtype=tf.float32,  # stable training
