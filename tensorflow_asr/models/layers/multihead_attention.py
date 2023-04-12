@@ -170,8 +170,8 @@ class MultiHeadAttention(Layer):
         self.use_projection_bias = use_projection_bias
         self.return_attn_coef = return_attn_coef
 
-        self.dropout = tf.keras.layers.Dropout(dropout, name="dropout")
-        self.softmax = tf.keras.layers.Softmax(dtype=tf.float32, name="softmax")
+        self.dropout = tf.keras.layers.Dropout(rate=dropout, dtype=self.dtype, name="dropout")
+        self.softmax = tf.keras.layers.Softmax(axis=-1, dtype=tf.float32, name="softmax")
         self._droput_rate = dropout
 
     def build(self, input_shape):
