@@ -171,6 +171,7 @@ class MultiHeadAttention(Layer):
         self.return_attn_coef = return_attn_coef
 
         self.dropout = tf.keras.layers.Dropout(dropout, name="dropout")
+        self.softmax = tf.keras.layers.Softmax(dtype=tf.float32, name="softmax")
         self._droput_rate = dropout
 
     def build(self, input_shape):
@@ -220,7 +221,7 @@ class MultiHeadAttention(Layer):
     def call_qkv(self, query, key, value):
         # verify shapes
         if key.shape[-2] != value.shape[-2]:
-            raise ValueError("the number of elements in 'key' must be equal to " "the same as the number of elements in 'value'")
+            raise ValueError("the number of elements in 'key' must be equal to the same as the number of elements in 'value'")
         # Linear transformations
         query = tf.einsum("BNI,HIO->BNHO", query, self.query_kernel)
         key = tf.einsum("BMI,HIO->BMHO", key, self.key_kernel)
@@ -245,9 +246,7 @@ class MultiHeadAttention(Layer):
             if len(attention_mask.shape) != len(logits.shape):
                 attention_mask = tf.expand_dims(attention_mask, -3)
 
-            logits += -10e9 * (1.0 - attention_mask)
-
-        attn_coef = tf.nn.softmax(logits)
+        attn_coef = self.softmax(logits, mask=attention_mask)
 
         # attention dropout
         attn_coef_dropout = self.dropout(attn_coef, training=training)
