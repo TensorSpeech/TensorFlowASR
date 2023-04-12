@@ -60,9 +60,6 @@ model_config:
     padding: causal
     norm: batch
     activation: swish
-  encoder_ffm_residual_factor: 0.5
-  encoder_mhsam_residual_factor: 1
-  encoder_convm_residual_factor: 1
   encoder_dmodel: 144
   encoder_num_blocks: 16
   encoder_head_size: 36
@@ -75,6 +72,12 @@ model_config:
   encoder_dropout: 0.1
   encoder_padding: causal
   encoder_dense_as_pointwise: False
+  encoder_depthwise_as_groupwise: False
+  encoder_ffm_residual_factor: 0.5
+  encoder_mhsam_residual_factor: 1.0
+  encoder_convm_residual_factor: 1.0
+  encoder_module_norm_position: pre
+  encoder_block_norm_position: post
   prediction_label_encode_mode: embedding
   prediction_embed_dim: 320
   prediction_num_rnns: 1

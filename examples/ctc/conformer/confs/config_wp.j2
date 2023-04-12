@@ -24,19 +24,27 @@ model_config:
     filters: 144
     kernel_size: 3
     strides: 2
-    padding: same
-    activation: swish
+    padding: causal
     norm: batch
+    activation: swish
   encoder_dmodel: 144
   encoder_num_blocks: 16
-  encoder_head_size: 36 # == dmodel // num_heads
+  encoder_head_size: 36
   encoder_num_heads: 4
   encoder_mha_type: relmha
-  encoder_use_attention_mask: False
+  encoder_interleave_relpe: True
+  encoder_use_attention_causal_mask: False
+  encoder_use_attention_auto_mask: True
   encoder_kernel_size: 32
-  encoder_fc_factor: 0.5
   encoder_dropout: 0.1
-  encoder_padding: same
+  encoder_padding: causal
+  encoder_dense_as_pointwise: False
+  encoder_depthwise_as_groupwise: False
+  encoder_ffm_residual_factor: 0.5
+  encoder_mhsam_residual_factor: 1.0
+  encoder_convm_residual_factor: 1.0
+  encoder_module_norm_position: pre
+  encoder_block_norm_position: post
 
 speech_config:
   sample_rate: 16000
