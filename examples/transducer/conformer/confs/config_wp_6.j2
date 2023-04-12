@@ -58,8 +58,8 @@ model_config:
     kernel_size: 3
     strides: 2
     padding: causal
-    norm: none
-    activation: relu
+    norm: batch
+    activation: swish
   encoder_ffm_residual_factor: 0.5
   encoder_mhsam_residual_factor: 1
   encoder_convm_residual_factor: 1
