@@ -59,3 +59,13 @@ tensorflow-io>=0.28.0,<0.31.0
 tensorflow-gpu>=2.11.0,<2.12.0
 tensorflow-text>=2.11.0,<2.12.0
 tensorflow-io>=0.28.0,<0.31.0
+
+# extra=tf2.12
+tensorflow>=2.12.0,<2.13.0
+tensorflow-text>=2.12.0,<2.13.0
+tensorflow-io>=0.32.0,<0.33.0
+
+# extra=tf2.12-gpu
+tensorflow-gpu>=2.12.0,<2.13.0
+tensorflow-text>=2.12.0,<2.13.0
+tensorflow-io>=0.32.0,<0.33.0
