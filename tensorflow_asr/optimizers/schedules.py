@@ -16,12 +16,12 @@ import tensorflow as tf
 
 
 class TransformerSchedule(tf.keras.optimizers.schedules.LearningRateSchedule):
-    def __init__(self, d_model, warmup_steps=4000, max_lr=None):
-        super(TransformerSchedule, self).__init__()
-
+    def __init__(self, d_model, warmup_steps=4000, max_lr=None, min_lr=None):
+        super().__init__()
         self.d_model = d_model
         self.d_model = tf.cast(self.d_model, tf.float32)
         self.max_lr = max_lr
+        self.min_lr = min_lr
         self.warmup_steps = warmup_steps
 
     def __call__(self, step):
@@ -31,17 +31,25 @@ class TransformerSchedule(tf.keras.optimizers.schedules.LearningRateSchedule):
         arg2 = step * (self.warmup_steps**-1.5)
         lr = tf.math.rsqrt(self.d_model) * tf.math.minimum(arg1, arg2)
         if self.max_lr is not None:
-            return tf.math.minimum(self.max_lr, lr)
+            lr = tf.math.minimum(self.max_lr, lr)
+        if self.min_lr is not None:
+            lr = tf.math.maximum(self.min_lr, lr)
         return lr
+
+    def get_config(self):
+        return {
+            "d_model": self.d_model,
+            "warmup_steps": self.warmup_steps,
+            "max_lr": self.max_lr,
+            "min_lr": self.min_lr,
+        }
 
 
 class SANSchedule(tf.keras.optimizers.schedules.LearningRateSchedule):
     def __init__(self, lamb, d_model, warmup_steps=4000):
-        super(SANSchedule, self).__init__()
-
+        super().__init__()
         self.lamb = tf.cast(lamb, tf.float32)
         self.d_model = tf.cast(d_model, tf.float32)
-
         self.warmup_steps = tf.cast(warmup_steps, tf.float32)
 
     def __call__(self, step):
@@ -49,6 +57,13 @@ class SANSchedule(tf.keras.optimizers.schedules.LearningRateSchedule):
         arg1 = step / (self.warmup_steps**1.5)
         arg2 = 1 / tf.math.sqrt(step)
         return (self.lamb / tf.math.sqrt(self.d_model)) * tf.math.minimum(arg1, arg2)
+
+    def get_config(self):
+        return {
+            "lamb": self.lamb,
+            "d_model": self.d_model,
+            "warmup_steps": self.warmup_steps,
+        }
 
 
 class BoundExponentialDecay(tf.keras.optimizers.schedules.ExponentialDecay):
@@ -69,6 +84,11 @@ class BoundExponentialDecay(tf.keras.optimizers.schedules.ExponentialDecay):
                 p = tf.math.floor(p)
             new_lr = tf.multiply(initial_learning_rate, tf.pow(decay_rate, p), name=name)
             return tf.maximum(self.min_lr, new_lr)
+
+    def get_config(self):
+        return {
+            "min_lr": self.min_lr,
+        }
 
 
 class CyclicTransformerSchedule(tf.keras.optimizers.schedules.LearningRateSchedule):
@@ -100,7 +120,6 @@ class CyclicTransformerSchedule(tf.keras.optimizers.schedules.LearningRateSchedu
         step_size: The size of the cyclic triangular half cycle.
         """
         super().__init__()
-
         self.d_model = tf.cast(d_model, tf.float32)
         self.warmup_steps = tf.cast(warmup_steps, tf.float32)
         self.max_lr = tf.cast(max_lr, tf.float32)
@@ -117,3 +136,11 @@ class CyclicTransformerSchedule(tf.keras.optimizers.schedules.LearningRateSchedu
         lr = lr * (0.5 + tf.math.maximum(0.0, x))
         lr = tf.math.minimum(self.max_lr, tf.math.minimum(lr, warmup))
         return lr
+
+    def get_config(self):
+        return {
+            "d_model": self.d_model,
+            "warmup_steps": self.warmup_steps,
+            "max_lr": self.max_lr,
+            "step_size": self.step_size,
+        }
