@@ -84,16 +84,18 @@ class PositionalEncoding(Layer):
         return outputs, pe
 
     def compute_output_shape(self, input_shape):
-        return input_shape, input_shape
+        output_shape = input_shape
+        return output_shape, output_shape
 
 
 class RelativePositionalEncoding(PositionalEncoding):
-    def call(self, inputs, training=False):
+    def call(self, inputs, training=False, memory_length=None):
         outputs = inputs
         if self._scale is not None:
             outputs *= self._scale
         batch_size, length, dmodel = shape_util.shape_list(outputs)
-        position = compute_position(start=0, end=length, step=1, dtype=outputs.dtype)
+        start = tf.constant(0, dtype=tf.int32) if memory_length is None else -tf.convert_to_tensor(memory_length, dtype=tf.int32)
+        position = compute_position(start=start, end=length, step=1, dtype=outputs.dtype)
         pe = compute_sinusoid_position_encoding(
             position=position,
             batch_size=batch_size,
@@ -105,6 +107,7 @@ class RelativePositionalEncoding(PositionalEncoding):
         return outputs, pe
 
     def compute_output_shape(self, input_shape):
-        B, T, V = input_shape
-        T = None if T is None else T * 2 - 1
-        return input_shape, (B, T, V)
+        output_shape = input_shape
+        B, T, V = output_shape
+        pT = (self._memory_length + T) if (self._memory_length is not None and T is not None) else None
+        return output_shape, (B, pT, V)
