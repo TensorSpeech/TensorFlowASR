@@ -25,7 +25,7 @@ try:
 except ImportError:
     from keras.layers.attention.multi_head_attention import _build_attention_equation, _build_proj_equation, _get_output_shape
 
-from tensorflow_asr.utils import shape_util
+from tensorflow_asr.utils import math_util, shape_util
 
 
 def rel_left_shift(x):
@@ -409,6 +409,9 @@ class MultiHeadRelativeAttention(MultiHeadAttention):
             memory_ragged = tf.RaggedTensor.from_tensor(memory, lengths=memory_lengths)  # [B, M, D]
         else:
             memory_ragged = tf.RaggedTensor.from_tensor(memory)
+            memory_lengths = tf.repeat(tf.shape(memory, tf.int32)[1][None, ...], B, axis=0)
+        memory = tf.stop_gradient(memory)
+        memory_ragged = tf.stop_gradient(memory_ragged)
 
         _, kT, _ = shape_util.shape_list(key)  # [B, Tmax, D]
         key_mask = getattr(key, "_keras_mask", None)
@@ -420,6 +423,8 @@ class MultiHeadRelativeAttention(MultiHeadAttention):
             key_ragged = tf.RaggedTensor.from_tensor(key)
         key_ragged = tf.concat([memory_ragged, key_ragged], 1)  # [B, M + T, D]
         key = key_ragged.to_tensor(shape=(B, M + kT, D))  # [B, Mmax + Tmax, D]
+        if key_mask is not None:
+            key = math_util.apply_mask(key, mask=tf.sequence_mask(memory_lengths + key_lengths, M + kT), multiply=False)
 
         _, vT, _ = shape_util.shape_list(value)  # [B, Tmax, D]
         value_mask = getattr(value, "_keras_mask", None)
@@ -431,6 +436,8 @@ class MultiHeadRelativeAttention(MultiHeadAttention):
             value_ragged = tf.RaggedTensor.from_tensor(value)
         value_ragged = tf.concat([memory_ragged, value_ragged], 1)  # [B, M + T, D]
         value = value_ragged.to_tensor(shape=(B, M + vT, D))  # [B, Mmax + Tmax, D]
+        if value_mask is not None:
+            value = math_util.apply_mask(value, mask=tf.sequence_mask(memory_lengths + value_lengths, M + vT), multiply=False)
 
         query_mask = getattr(query, "_keras_mask", None)
         if query_mask is not None:
@@ -442,13 +449,16 @@ class MultiHeadRelativeAttention(MultiHeadAttention):
 
         # construct new memory, without paddings (move the padding to the end of new memory)
         new_memory = tf.concat([memory_ragged, query_ragged], 1)
-        new_memory_row_lengths = new_memory.row_lengths(axis=1)
+        new_memory_row_lengths = tf.cast(new_memory.row_lengths(axis=1), memory_lengths.dtype)
         new_memory_shifts = tf.maximum(0, new_memory_row_lengths - memory_lengths)
-        new_memory, new_memory_shifts = tf.map_fn(lambda x, shift: (tf.roll(x, shift=-shift, axis=0), shift), (new_memory, new_memory_shifts))
+        new_memory, new_memory_shifts = tf.map_fn(lambda x: (tf.roll(x[0], shift=-x[1], axis=0), x[1]), (new_memory, new_memory_shifts))
         new_memory = new_memory.to_tensor(shape=tf.shape(memory))
-        new_memory._keras_mask = tf.sequence_mask(new_memory_row_lengths - new_memory_shifts, memory_lengths)  # pylint:disable=protected-access
-        new_memory *= tf.cast(new_memory._keras_mask, dtype=new_memory.dtype)  # pylint: disable=protected-access
-
+        new_memory = math_util.apply_mask(
+            new_memory,
+            mask=tf.sequence_mask(new_memory_row_lengths - new_memory_shifts, tf.shape(memory, tf.int32)[1]),
+            multiply=True,
+        )
+        new_memory = tf.stop_gradient(new_memory)
         return query, key, value, new_memory
 
     def call(
@@ -464,6 +474,9 @@ class MultiHeadRelativeAttention(MultiHeadAttention):
         return_attention_scores=False,
     ):
         query, key, value, relative_position_encoding = inputs
+
+        query, key, value, memory = self._update_memory(query, key, value, memory)
+
         if use_auto_mask:
             attention_mask = self._compute_attention_mask(query, value, key=key, attention_mask=attention_mask, use_causal_mask=use_causal_mask)
 
@@ -490,8 +503,6 @@ class MultiHeadRelativeAttention(MultiHeadAttention):
         pos_is_ragged = isinstance(relative_position_encoding, tf.RaggedTensor)
         if pos_is_ragged:
             relative_position_encoding = relative_position_encoding.to_tensor()
-
-        query, key, value, memory = self._update_memory(query, key, value, memory)
 
         #   N = `num_attention_heads`
         #   H = `size_per_head`

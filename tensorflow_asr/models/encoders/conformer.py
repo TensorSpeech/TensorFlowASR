@@ -502,7 +502,7 @@ class ConformerEncoder(Layer):
         self._use_attention_auto_mask = use_attention_auto_mask
 
         if self._mha_type == "relmha":
-            self.relpe = RelativePositionalEncoding(interleave=interleave_relpe, name="relpe")
+            self.relpe = RelativePositionalEncoding(interleave=interleave_relpe, memory_length=memory_length, name="relpe")
         else:
             self.relpe = PositionalEncoding(interleave=interleave_relpe, name="pe")
 
@@ -552,16 +552,16 @@ class ConformerEncoder(Layer):
 
     def _build_from_signature(self, outputs):
         with tf_utils.maybe_init_scope(self):  # pylint: disable=not-context-manager
-            if self._memory_length is None and self._mha_type == "relmha":
-                batch_size, self._memory_length, dmodel = shape_util.shape_list(outputs)
+            if self._mha_type == "relmha" and self._memory_length is not None:
+                batch_size, _, dmodel = outputs.shape.as_list()
                 self._memory = [
                     self.add_weight(
                         name=f"memory_{i}",
                         shape=[batch_size, self._memory_length, dmodel],
                         dtype=outputs.dtype,
                         trainable=False,
-                        synchronization=tf.VariableSynchronization.NONE,
-                        aggregation=tf.VariableAggregation.NONE,
+                        synchronization=tf.VariableSynchronization.ON_WRITE,
+                        aggregation=tf.VariableAggregation.ONLY_FIRST_REPLICA,
                     )
                     for i in range(self._num_blocks)
                 ]

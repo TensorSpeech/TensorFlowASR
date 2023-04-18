@@ -89,12 +89,23 @@ class PositionalEncoding(Layer):
 
 
 class RelativePositionalEncoding(PositionalEncoding):
-    def call(self, inputs, training=False, memory_length=None):
+    def __init__(
+        self,
+        dropout=0,
+        scale=None,
+        interleave=False,
+        memory_length=None,
+        **kwargs,
+    ):
+        super().__init__(dropout, scale, interleave, **kwargs)
+        self._memory_length = memory_length
+
+    def call(self, inputs, training=False):
         outputs = inputs
         if self._scale is not None:
             outputs *= self._scale
         batch_size, length, dmodel = shape_util.shape_list(outputs)
-        start = tf.constant(0, dtype=tf.int32) if memory_length is None else -tf.convert_to_tensor(memory_length, dtype=tf.int32)
+        start = tf.constant(0, dtype=tf.int32) if self._memory_length is None else -tf.convert_to_tensor(self._memory_length, dtype=tf.int32)
         position = compute_position(start=start, end=length, step=1, dtype=outputs.dtype)
         pe = compute_sinusoid_position_encoding(
             position=position,
