@@ -558,7 +558,7 @@ class ConformerEncoder(Layer):
                     self.add_weight(
                         name=f"memory_{i}",
                         shape=[batch_size, self._memory_length, dmodel],
-                        dtype=outputs.dtype,
+                        dtype=self.dtype,
                         trainable=False,
                         synchronization=tf.VariableSynchronization.ON_WRITE,
                         aggregation=tf.VariableAggregation.ONLY_FIRST_REPLICA,
@@ -589,7 +589,7 @@ class ConformerEncoder(Layer):
                 use_auto_mask=self._use_attention_auto_mask,
             )
             if self._memory:
-                self._memory[i].assign(memory)
+                self._memory[i].assign(tf.cast(memory, self.dtype))
         return outputs, outputs_length
 
     def compute_output_shape(self, input_shape):
