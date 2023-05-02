@@ -55,7 +55,7 @@ class Memory(Layer):
         total_length = tf.cast(tf.shape(per_batch_input)[0] + self.memory_length, tf.int32)  # T + M
         real_length = tf.cast(tf.shape(per_batch_new_inputs)[0], tf.int32)
 
-        shift = total_length - real_length
+        shift = tf.maximum(total_length - real_length, 0)
         per_batch_new_inputs = tf.pad(per_batch_new_inputs, paddings=[[0, shift], [0, 0]])
         if not pad_right:
             per_batch_new_inputs = tf.roll(per_batch_new_inputs, shift=shift, axis=0)
