@@ -12,8 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import math
-
 import tensorflow as tf
 
 from tensorflow_asr.models.base_layer import Layer
@@ -57,21 +55,22 @@ class Memory(Layer):
         real_length = tf.cast(tf.shape(per_batch_new_inputs)[0], tf.int32)
         per_batch_new_inputs = tf.pad(per_batch_new_inputs, paddings=[[0, tf.maximum(total_length - real_length, 0)], [0, 0]])
         per_batch_new_inputs_mask = tf.sequence_mask(real_length, total_length)
-        return [per_batch_new_inputs, per_batch_new_inputs_mask]
+        return per_batch_new_inputs, per_batch_new_inputs_mask
 
     def attach_memory(self, inputs):
         inputs_mask = getattr(inputs, "_keras_mask", None)
         max_length = tf.shape(inputs)[1]
+        max_length_shape = inputs.shape.as_list()[1]
         if inputs_mask is None:
             inputs_mask = tf.ones([self.batch_size, max_length], dtype=tf.bool)
         memory = tf.stop_gradient(tf.cast(self.memory, inputs.dtype))
         memory_mask = tf.stop_gradient(self.memory_mask)
         new_inputs, new_inputs_mask = tf.map_fn(
             self._attach_memory_item,
-            elems=[memory, memory_mask, inputs, inputs_mask],
+            elems=(memory, memory_mask, inputs, inputs_mask),
             fn_output_signature=[
-                tf.TensorSpec([None if inputs.shape[1] is None else inputs.shape[1] + self.memory_length, self.dmodel], dtype=inputs.dtype),
-                tf.TensorSpec([None if inputs.shape[1] is None else inputs.shape[1] + self.memory_length], dtype=tf.bool),
+                tf.TensorSpec([None if max_length_shape is None else max_length_shape + self.memory_length, self.dmodel], dtype=inputs.dtype),
+                tf.TensorSpec([None if max_length_shape is None else max_length_shape + self.memory_length], dtype=tf.bool),
             ],
         )
         new_inputs._keras_mask = new_inputs_mask  # pylint: disable=protected-access
@@ -98,7 +97,9 @@ class Memory(Layer):
         real_memory_length = tf.cast(tf.shape(per_batch_new_memory)[0], tf.int32)
         per_batch_new_memory = tf.pad(per_batch_new_memory, paddings=[[0, memory_length - real_memory_length], [0, 0]])
         per_batch_new_memory_mask = tf.sequence_mask(real_memory_length, memory_length)  # [M]
-        return [per_batch_new_memory, per_batch_new_memory_mask]
+        per_batch_new_memory = tf.stop_gradient(per_batch_new_memory)
+        per_batch_new_memory_mask = tf.stop_gradient(per_batch_new_memory_mask)
+        return per_batch_new_memory, per_batch_new_memory_mask
 
     def call(self, inputs):
         inputs_mask = getattr(inputs, "_keras_mask", None)
@@ -106,11 +107,11 @@ class Memory(Layer):
             inputs_mask = tf.ones([self.batch_size, tf.shape(inputs)[1]], dtype=tf.bool)
         new_memory, new_memory_mask = tf.map_fn(
             self._update_memory_item,
-            elems=[self.memory, self.memory_mask, inputs, inputs_mask],
-            fn_output_signature=[
+            elems=(self.memory, self.memory_mask, inputs, inputs_mask),
+            fn_output_signature=(
                 tf.TensorSpec([self.memory_length, self.dmodel], dtype=inputs.dtype),
                 tf.TensorSpec([self.memory_length], dtype=tf.bool),
-            ],
+            ),
         )
         self.add_update([tf.keras.backend.update(self.memory, new_memory), tf.keras.backend.update(self.memory_mask, new_memory_mask)])
         new_memory._keras_mask = new_memory_mask  # pylint: disable=protected-access
