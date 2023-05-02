@@ -15,6 +15,7 @@
 import tensorflow as tf
 
 from tensorflow_asr.models.base_layer import Layer
+from tensorflow_asr.utils import math_util
 
 
 class Memory(Layer):
@@ -48,21 +49,16 @@ class Memory(Layer):
         per_batch_input_mask,  # [T]
         pad_right=True,
     ):
-        per_batch_real_memory = tf.boolean_mask(per_batch_memory, per_batch_memory_mask)
-        per_batch_real_input = tf.boolean_mask(per_batch_input, per_batch_input_mask)
+        memory_mask_count = math_util.count(per_batch_memory_mask, value=False)
+        input_mask_count = math_util.count(per_batch_input_mask, value=False)
 
-        per_batch_new_inputs = tf.concat([tf.stop_gradient(per_batch_real_memory), per_batch_real_input], 0)  # [m + t, D]
-        total_length = tf.cast(tf.shape(per_batch_input)[0] + self.memory_length, tf.int32)  # T + M
-        real_length = tf.cast(tf.shape(per_batch_new_inputs)[0], tf.int32)
+        # [M + T, D]
+        per_batch_new_inputs = tf.concat([tf.stop_gradient(tf.roll(per_batch_memory, shift=memory_mask_count, axis=0)), per_batch_input], 0)
+        per_batch_new_inputs_mask = tf.concat([tf.roll(per_batch_memory_mask, shift=memory_mask_count, axis=0), per_batch_input_mask], 0)
 
-        shift = tf.maximum(total_length - real_length, 0)
-        per_batch_new_inputs = tf.pad(per_batch_new_inputs, paddings=[[0, shift], [0, 0]])
         if not pad_right:
-            per_batch_new_inputs = tf.roll(per_batch_new_inputs, shift=shift, axis=0)
-
-        per_batch_new_inputs_mask = tf.sequence_mask(real_length, total_length)
-        if not pad_right:
-            per_batch_new_inputs_mask = tf.roll(per_batch_new_inputs_mask, shift=shift, axis=0)
+            per_batch_new_inputs = tf.roll(per_batch_new_inputs, shift=input_mask_count, axis=0)
+            per_batch_new_inputs_mask = tf.roll(per_batch_new_inputs_mask, shift=input_mask_count, axis=0)
 
         return per_batch_memory, per_batch_memory_mask, per_batch_new_inputs, per_batch_new_inputs_mask
 
