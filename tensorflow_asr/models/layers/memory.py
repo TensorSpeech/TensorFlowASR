@@ -64,7 +64,7 @@ class Memory(Layer):
             inputs_mask = tf.ones([self.batch_size, max_length], dtype=tf.bool)
         memory = tf.stop_gradient(tf.cast(self.memory, inputs.dtype))
         memory_mask = tf.stop_gradient(self.memory_mask)
-        _, _, new_inputs, new_inputs_mask = tf.vectorized_map(self._attach_memory_item, elems=(memory, memory_mask, inputs, inputs_mask), warn=False)
+        _, _, new_inputs, new_inputs_mask = tf.vectorized_map(self._attach_memory_item, elems=(memory, memory_mask, inputs, inputs_mask))
         new_inputs._keras_mask = new_inputs_mask  # pylint: disable=protected-access
         return new_inputs
 
@@ -97,11 +97,7 @@ class Memory(Layer):
         inputs_mask = getattr(inputs, "_keras_mask", None)
         if inputs_mask is None:
             inputs_mask = tf.ones([self.batch_size, tf.shape(inputs)[1]], dtype=tf.bool)
-        new_memory, new_memory_mask, _, _ = tf.vectorized_map(
-            self._update_memory_item,
-            elems=(self.memory, self.memory_mask, inputs, inputs_mask),
-            warn=False,
-        )
+        new_memory, new_memory_mask, _, _ = tf.vectorized_map(self._update_memory_item, elems=(self.memory, self.memory_mask, inputs, inputs_mask))
         self.add_update([tf.keras.backend.update(self.memory, new_memory), tf.keras.backend.update(self.memory_mask, new_memory_mask)])
         new_memory._keras_mask = new_memory_mask  # pylint: disable=protected-access
         return new_memory
