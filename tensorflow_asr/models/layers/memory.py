@@ -87,8 +87,16 @@ class Memory(Layer):
             elems=(self.memory, self.memory_mask, inputs, inputs_mask),
             warn=False,
         )
-        new_memory = tf.slice(new_memory, begin=[0, tf.shape(new_memory)[1], 0], size=[-1, self.memory_length, -1])
-        new_memory_mask = tf.slice(new_memory_mask, begin=[0, tf.shape(new_memory_mask)[1], 0], size=[-1, self.memory_length, -1])
+        new_memory = tf.slice(
+            new_memory,
+            begin=[0, tf.shape(new_memory)[1] - self.memory_length, 0],
+            size=[-1, self.memory_length, -1],
+        )
+        new_memory_mask = tf.slice(
+            new_memory_mask,
+            begin=[0, tf.shape(new_memory_mask)[1] - self.memory_length],
+            size=[-1, self.memory_length],
+        )
         self.add_update([tf.keras.backend.update(self.memory, new_memory), tf.keras.backend.update(self.memory_mask, new_memory_mask)])
         new_memory._keras_mask = new_memory_mask  # pylint: disable=protected-access
         return new_memory
