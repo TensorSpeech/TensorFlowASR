@@ -34,7 +34,7 @@ class Memory(Layer):
         )
         self.memory_mask = self.add_weight(
             shape=(self.batch_size, self.memory_length),
-            initializer="ones",
+            initializer="zeros",
             trainable=False,
             dtype=tf.bool,
             name="memory_mask",
@@ -71,9 +71,11 @@ class Memory(Layer):
         max_length = tf.shape(inputs)[1]
         if inputs_mask is None:
             inputs_mask = tf.ones([self.batch_size, max_length], dtype=tf.bool)
-        memory = tf.stop_gradient(self.memory)
+        memory = tf.stop_gradient(self.memory.value())
         _, _, new_inputs, new_inputs_mask = tf.vectorized_map(
-            lambda item: self._prepend_memory_item(*item), elems=(memory, self.memory_mask, inputs, inputs_mask), warn=False
+            lambda item: self._prepend_memory_item(*item),
+            elems=(memory, self.memory_mask.value(), inputs, inputs_mask),
+            warn=False,
         )
         new_inputs._keras_mask = new_inputs_mask  # pylint: disable=protected-access
         return new_inputs
@@ -83,7 +85,9 @@ class Memory(Layer):
         if inputs_mask is None:
             inputs_mask = tf.ones([self.batch_size, tf.shape(inputs)[1]], dtype=tf.bool)
         _, _, new_memory, new_memory_mask = tf.vectorized_map(
-            lambda item: self._prepend_memory_item(*item, pad_right=False), elems=(self.memory, self.memory_mask, inputs, inputs_mask), warn=False
+            lambda item: self._prepend_memory_item(*item, pad_right=False),
+            elems=(self.memory.value(), self.memory_mask.value(), inputs, inputs_mask),
+            warn=False,
         )
         new_memory = tf.slice(
             new_memory,
