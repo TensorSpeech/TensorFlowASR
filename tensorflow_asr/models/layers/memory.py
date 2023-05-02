@@ -49,8 +49,8 @@ class Memory(Layer):
         per_batch_input_mask,  # [T]
         pad_right=True,
     ):
-        memory_mask_count = math_util.count(per_batch_memory_mask, value=False)
-        input_mask_count = math_util.count(per_batch_input_mask, value=False)
+        memory_mask_count = math_util.count(tf.cast(per_batch_memory_mask, tf.int32), value=0)
+        input_mask_count = math_util.count(tf.cast(per_batch_input_mask, tf.int32), value=0)
 
         # [M + T, D]
         per_batch_new_inputs = tf.concat([tf.stop_gradient(tf.roll(per_batch_memory, shift=memory_mask_count, axis=0)), per_batch_input], 0)
