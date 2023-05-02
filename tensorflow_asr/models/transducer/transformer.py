@@ -104,4 +104,4 @@ class Transformer(Transducer):
             **kwargs,
         )
         self.dmodel = encoder_dmodel
-        self.time_reduction_factor = 1
+        self.time_reduction_factor = self.encoder.time_reduction_factor

@@ -23,7 +23,7 @@ from tensorflow_asr.models.layers.multihead_attention import MultiHeadAttention,
 from tensorflow_asr.models.layers.positional_encoding import PositionalEncoding, RelativePositionalEncoding
 from tensorflow_asr.models.layers.residual import Residual
 from tensorflow_asr.models.layers.subsampling import Conv1dSubsampling, Conv2dSubsampling, VggSubsampling
-from tensorflow_asr.utils import shape_util
+from tensorflow_asr.utils import data_util, shape_util
 
 L2 = tf.keras.regularizers.l2(1e-6)
 
@@ -113,6 +113,7 @@ class MHSAModule(Layer):
         dropout=0.0,
         mha_type="relmha",
         norm_position="pre",
+        memory_length=None,
         kernel_regularizer=L2,
         bias_regularizer=L2,
         name="mhsa_module",
@@ -131,6 +132,7 @@ class MHSAModule(Layer):
                 num_heads=num_heads,
                 key_dim=head_size,
                 output_shape=dmodel,
+                memory_length=memory_length,
                 kernel_regularizer=kernel_regularizer,
                 bias_regularizer=bias_regularizer,
                 dtype=tf.float32,  # for stable training
@@ -141,6 +143,7 @@ class MHSAModule(Layer):
                 num_heads=num_heads,
                 key_dim=head_size,
                 output_shape=dmodel,
+                memory_length=memory_length,
                 kernel_regularizer=kernel_regularizer,
                 bias_regularizer=bias_regularizer,
                 dtype=tf.float32,  # for stable training
@@ -158,7 +161,6 @@ class MHSAModule(Layer):
         relative_position_encoding=None,
         content_attention_bias=None,
         positional_attention_bias=None,
-        memory=None,
         training=False,
         attention_mask=None,
         use_causal_mask=False,
@@ -170,12 +172,11 @@ class MHSAModule(Layer):
                 inputs=[outputs, outputs, outputs, relative_position_encoding],
                 content_attention_bias=content_attention_bias,
                 positional_attention_bias=positional_attention_bias,
-                memory=memory,
             )
             if self.mha_type == "relmha"
             else dict(inputs=[outputs, outputs, outputs])
         )
-        outputs, memory = self.mha(
+        outputs = self.mha(
             **mha_inputs,
             training=training,
             attention_mask=attention_mask,
@@ -185,7 +186,7 @@ class MHSAModule(Layer):
         outputs = self.do(outputs, training=training)
         outputs = self.norm(outputs, training=training) if self._norm_position == "post" else outputs
         outputs = self.residual([inputs, outputs], training=training)
-        return outputs, memory
+        return outputs
 
 
 class ConvModule(Layer):
@@ -338,6 +339,7 @@ class ConformerBlock(Layer):
         convm_residual_factor=1.0,
         module_norm_position="pre",
         block_norm_position="post",
+        memory_length=None,
         kernel_regularizer=L2,
         bias_regularizer=L2,
         name="conformer_block",
@@ -369,6 +371,7 @@ class ConformerBlock(Layer):
             dropout=dropout,
             mha_type=mha_type,
             norm_position=module_norm_position,
+            memory_length=memory_length,
             kernel_regularizer=kernel_regularizer,
             bias_regularizer=bias_regularizer,
             name="mhsa_module",
@@ -405,7 +408,6 @@ class ConformerBlock(Layer):
         relative_position_encoding=None,
         content_attention_bias=None,
         positional_attention_bias=None,
-        memory=None,
         training=False,
         attention_mask=None,
         use_causal_mask=False,
@@ -413,12 +415,11 @@ class ConformerBlock(Layer):
     ):
         outputs = self.norm(inputs, training=training) if self._norm_position == "pre" else inputs
         outputs = self.ffm1(outputs, training=training)
-        outputs, memory = self.mhsam(
+        outputs = self.mhsam(
             outputs,
             relative_position_encoding=relative_position_encoding,
             content_attention_bias=content_attention_bias,
             positional_attention_bias=positional_attention_bias,
-            memory=memory,
             training=training,
             attention_mask=attention_mask,
             use_causal_mask=use_causal_mask,
@@ -427,7 +428,7 @@ class ConformerBlock(Layer):
         outputs = self.convm(outputs, training=training)
         outputs = self.ffm2(outputs, training=training)
         outputs = self.norm(outputs, training=training) if self._norm_position == "post" else outputs
-        return outputs, memory
+        return outputs
 
 
 class ConformerEncoder(Layer):
@@ -466,8 +467,6 @@ class ConformerEncoder(Layer):
         self._kernel_regularizer = kernel_regularizer
         self._bias_regularizer = bias_regularizer
         self._num_blocks = num_blocks
-        self._memory_length = memory_length
-        self._memory = None
 
         subsampling_name = subsampling.pop("type", None)
         if subsampling_name == "vgg":
@@ -526,6 +525,7 @@ class ConformerEncoder(Layer):
                 convm_residual_factor=convm_residual_factor,
                 module_norm_position=module_norm_position,
                 block_norm_position=block_norm_position,
+                memory_length=memory_length,
                 kernel_regularizer=kernel_regularizer,
                 bias_regularizer=bias_regularizer,
                 name=f"block_{i}",
@@ -548,48 +548,24 @@ class ConformerEncoder(Layer):
         else:
             self.content_attention_bias, self.positional_attention_bias = None, None
 
-        self._built_from_signature = False
-
-    def _build_from_signature(self, outputs):
-        with tf_utils.maybe_init_scope(self):  # pylint: disable=not-context-manager
-            if self._mha_type == "relmha" and self._memory_length is not None:
-                batch_size, _, dmodel = outputs.shape.as_list()
-                self._memory = [
-                    self.add_weight(
-                        name=f"memory_{i}",
-                        shape=[batch_size, self._memory_length, dmodel],
-                        dtype=self.dtype,
-                        trainable=False,
-                        synchronization=tf.VariableSynchronization.ON_WRITE,
-                        aggregation=tf.VariableAggregation.ONLY_FIRST_REPLICA,
-                    )
-                    for i in range(self._num_blocks)
-                ]
-        self._built_from_signature = True
-
     def call(self, inputs, training=False):
         outputs, outputs_length = inputs
         outputs, outputs_length = self.conv_subsampling([outputs, outputs_length], training=training)
         outputs = self.linear(outputs, training=training)
-
-        if not self._built_from_signature:
-            self._build_from_signature(outputs)
-
         outputs, relative_position_encoding = self.relpe(outputs, training=training)
         outputs = self.do(outputs, training=training)
-        for i, cblock in enumerate(self.conformer_blocks):
-            outputs, memory = cblock(
+
+        for _, cblock in enumerate(self.conformer_blocks):
+            outputs = cblock(
                 outputs,
                 relative_position_encoding=relative_position_encoding,
                 content_attention_bias=self.content_attention_bias,
                 positional_attention_bias=self.positional_attention_bias,
-                memory=self._memory[i] if self._memory else None,
                 training=training,
                 use_causal_mask=self._use_attention_causal_mask,
                 use_auto_mask=self._use_attention_auto_mask,
             )
-            if self._memory:
-                self._memory[i].assign(tf.cast(memory, self.dtype))
+
         return outputs, outputs_length
 
     def compute_output_shape(self, input_shape):

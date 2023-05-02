@@ -36,7 +36,10 @@ def create_logits(
     logits,
     logits_length,
 ) -> dict:
-    return {"logits": logits, "logits_length": logits_length}
+    return {
+        "logits": logits,
+        "logits_length": logits_length,
+    }
 
 
 def create_labels(
