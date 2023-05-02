@@ -40,21 +40,27 @@ class Memory(Layer):
             name="memory_mask",
         )
 
-    def _attach_memory_item(self, item):
-        (
-            per_batch_memory,  # [M, D]
-            per_batch_memory_mask,  # [M]
-            per_batch_input,  # [T, D]
-            per_batch_input_mask,  # [T]
-        ) = item
-
-        total_length = tf.cast(tf.shape(per_batch_input)[0] + self.memory_length, tf.int32)
+    def _prepend_memory_item(
+        self,
+        per_batch_memory,
+        per_batch_memory_mask,  # [M]
+        per_batch_input,  # [T, D]
+        per_batch_input_mask,  # [T]
+        pad_right=True,
+    ):
         per_batch_real_memory = tf.boolean_mask(per_batch_memory, per_batch_memory_mask)
         per_batch_real_input = tf.boolean_mask(per_batch_input, per_batch_input_mask)
+
         per_batch_new_inputs = tf.concat([tf.stop_gradient(per_batch_real_memory), per_batch_real_input], 0)  # [m + t, D]
+        total_length = tf.cast(tf.shape(per_batch_input)[0] + self.memory_length, tf.int32)
         real_length = tf.cast(tf.shape(per_batch_new_inputs)[0], tf.int32)
-        per_batch_new_inputs = tf.pad(per_batch_new_inputs, paddings=[[0, tf.maximum(total_length - real_length, 0)], [0, 0]])
+
+        paddings = [[0, tf.maximum(total_length - real_length, 0)], [0, 0]] if pad_right else [[tf.maximum(total_length - real_length, 0), 0], [0, 0]]
+        per_batch_new_inputs = tf.pad(per_batch_new_inputs, paddings=paddings)
+
         per_batch_new_inputs_mask = tf.sequence_mask(real_length, total_length)
+        per_batch_new_inputs_mask = per_batch_new_inputs_mask if pad_right else tf.reverse(per_batch_new_inputs_mask, [0])
+
         return per_batch_memory, per_batch_memory_mask, per_batch_new_inputs, per_batch_new_inputs_mask
 
     def attach_memory(self, inputs):
@@ -64,40 +70,25 @@ class Memory(Layer):
             inputs_mask = tf.ones([self.batch_size, max_length], dtype=tf.bool)
         memory = tf.stop_gradient(tf.cast(self.memory, inputs.dtype))
         memory_mask = tf.stop_gradient(self.memory_mask)
-        _, _, new_inputs, new_inputs_mask = tf.vectorized_map(self._attach_memory_item, elems=(memory, memory_mask, inputs, inputs_mask))
+        _, _, new_inputs, new_inputs_mask = tf.vectorized_map(
+            lambda item: self._prepend_memory_item(*item),
+            elems=(memory, memory_mask, inputs, inputs_mask),
+            warn=False,
+        )
         new_inputs._keras_mask = new_inputs_mask  # pylint: disable=protected-access
         return new_inputs
-
-    def _update_memory_item(self, item):
-        (
-            per_batch_memory,  # [M, D]
-            per_batch_memory_mask,  # [M]
-            per_batch_input,  # [T, D]
-            per_batch_input_mask,  # [T]
-        ) = item
-
-        memory_length = tf.convert_to_tensor(self.memory_length, tf.int32)
-        per_batch_real_memory = tf.boolean_mask(per_batch_memory, per_batch_memory_mask)
-        per_batch_real_input = tf.boolean_mask(per_batch_input, per_batch_input_mask)
-        per_batch_new_memory = tf.concat([per_batch_real_memory, per_batch_real_input], 0)  # [m + t, D]
-        real_memory_length = tf.cast(tf.shape(per_batch_new_memory)[0], tf.int32)
-        per_batch_new_memory = tf.slice(
-            per_batch_new_memory,
-            begin=[tf.maximum(real_memory_length - memory_length, 0), 0],
-            size=[tf.minimum(memory_length, real_memory_length), self.dmodel],
-        )  # [M, D] if M > m+t else [m+t, D]
-        real_memory_length = tf.cast(tf.shape(per_batch_new_memory)[0], tf.int32)
-        per_batch_new_memory = tf.pad(per_batch_new_memory, paddings=[[0, memory_length - real_memory_length], [0, 0]])
-        per_batch_new_memory_mask = tf.sequence_mask(real_memory_length, memory_length)  # [M]
-        per_batch_new_memory = tf.stop_gradient(per_batch_new_memory)
-        per_batch_new_memory_mask = tf.stop_gradient(per_batch_new_memory_mask)
-        return per_batch_new_memory, per_batch_new_memory_mask, per_batch_input, per_batch_input_mask
 
     def call(self, inputs):
         inputs_mask = getattr(inputs, "_keras_mask", None)
         if inputs_mask is None:
             inputs_mask = tf.ones([self.batch_size, tf.shape(inputs)[1]], dtype=tf.bool)
-        new_memory, new_memory_mask, _, _ = tf.vectorized_map(self._update_memory_item, elems=(self.memory, self.memory_mask, inputs, inputs_mask))
+        _, _, new_memory, new_memory_mask = tf.vectorized_map(
+            lambda item: self._prepend_memory_item(*item, pad_right=False),
+            elems=(self.memory, self.memory_mask, inputs, inputs_mask),
+            warn=False,
+        )
+        new_memory = tf.slice(new_memory, begin=[0, tf.shape(new_memory)[1], 0], size=[-1, self.memory_length, -1])
+        new_memory_mask = tf.slice(new_memory_mask, begin=[0, tf.shape(new_memory_mask)[1], 0], size=[-1, self.memory_length, -1])
         self.add_update([tf.keras.backend.update(self.memory, new_memory), tf.keras.backend.update(self.memory_mask, new_memory_mask)])
         new_memory._keras_mask = new_memory_mask  # pylint: disable=protected-access
         return new_memory
