@@ -234,7 +234,7 @@ class MultiHeadAttention(KerasMultiHeadAttention):
         with tf_utils.maybe_init_scope(self):  # pylint: disable=not-context-manager
             batch_size, _, dmodel = self._query_shape
             if self._memory_length is not None:
-                self._memory = Memory(batch_size=batch_size, memory_length=self._memory_length, dmodel=dmodel, name="memory")
+                self._memory = Memory(batch_size=batch_size, memory_length=self._memory_length, dmodel=dmodel, name="memory", dtype=self.dtype)
             else:
                 self._memory = None
 
