@@ -57,7 +57,7 @@ class Memory(Layer):
         real_length = tf.cast(tf.shape(per_batch_new_inputs)[0], tf.int32)
         per_batch_new_inputs = tf.pad(per_batch_new_inputs, paddings=[[0, tf.maximum(total_length - real_length, 0)], [0, 0]])
         per_batch_new_inputs_mask = tf.sequence_mask(real_length, total_length)
-        return per_batch_new_inputs, per_batch_new_inputs_mask
+        return [per_batch_new_inputs, per_batch_new_inputs_mask]
 
     def attach_memory(self, inputs):
         inputs_mask = getattr(inputs, "_keras_mask", None)
@@ -98,7 +98,7 @@ class Memory(Layer):
         real_memory_length = tf.cast(tf.shape(per_batch_new_memory)[0], tf.int32)
         per_batch_new_memory = tf.pad(per_batch_new_memory, paddings=[[0, memory_length - real_memory_length], [0, 0]])
         per_batch_new_memory_mask = tf.sequence_mask(real_memory_length, memory_length)  # [M]
-        return per_batch_new_memory, per_batch_new_memory_mask
+        return [per_batch_new_memory, per_batch_new_memory_mask]
 
     def call(self, inputs):
         inputs_mask = getattr(inputs, "_keras_mask", None)
