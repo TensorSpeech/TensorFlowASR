@@ -55,8 +55,11 @@ class Memory(Layer):
         total_length = tf.cast(tf.shape(per_batch_input)[0] + self.memory_length, tf.int32)
         real_length = tf.cast(tf.shape(per_batch_new_inputs)[0], tf.int32)
 
-        paddings = [[0, tf.maximum(total_length - real_length, 0)], [0, 0]] if pad_right else [[tf.maximum(total_length - real_length, 0), 0], [0, 0]]
-        per_batch_new_inputs = tf.pad(per_batch_new_inputs, paddings=paddings)
+        if not pad_right:
+            per_batch_new_inputs = tf.reverse(per_batch_new_inputs, [0])
+        per_batch_new_inputs = tf.pad(per_batch_new_inputs, paddings=[[0, tf.maximum(total_length - real_length, 0)], [0, 0]])
+        if not pad_right:
+            per_batch_new_inputs = tf.reverse(per_batch_new_inputs, [0])
 
         per_batch_new_inputs_mask = tf.sequence_mask(real_length, total_length)
         per_batch_new_inputs_mask = per_batch_new_inputs_mask if pad_right else tf.reverse(per_batch_new_inputs_mask, [0])
@@ -70,7 +73,9 @@ class Memory(Layer):
             inputs_mask = tf.ones([self.batch_size, max_length], dtype=tf.bool)
         memory = tf.stop_gradient(tf.cast(self.memory, inputs.dtype))
         memory_mask = tf.stop_gradient(self.memory_mask)
-        _, _, new_inputs, new_inputs_mask = tf.map_fn(lambda item: self._prepend_memory_item(*item), elems=(memory, memory_mask, inputs, inputs_mask))
+        _, _, new_inputs, new_inputs_mask = tf.vectorized_map(
+            lambda item: self._prepend_memory_item(*item), elems=(memory, memory_mask, inputs, inputs_mask), warn=False
+        )
         new_inputs._keras_mask = new_inputs_mask  # pylint: disable=protected-access
         return new_inputs
 
@@ -78,8 +83,8 @@ class Memory(Layer):
         inputs_mask = getattr(inputs, "_keras_mask", None)
         if inputs_mask is None:
             inputs_mask = tf.ones([self.batch_size, tf.shape(inputs)[1]], dtype=tf.bool)
-        _, _, new_memory, new_memory_mask = tf.map_fn(
-            lambda item: self._prepend_memory_item(*item, pad_right=False), elems=(self.memory, self.memory_mask, inputs, inputs_mask)
+        _, _, new_memory, new_memory_mask = tf.vectorized_map(
+            lambda item: self._prepend_memory_item(*item, pad_right=False), elems=(self.memory, self.memory_mask, inputs, inputs_mask), warn=False
         )
         new_memory = tf.slice(
             new_memory,
