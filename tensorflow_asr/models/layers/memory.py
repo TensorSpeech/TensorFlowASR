@@ -68,10 +68,10 @@ class Memory(Layer):
         new_inputs, new_inputs_mask = tf.map_fn(
             self._attach_memory_item,
             elems=(memory, memory_mask, inputs, inputs_mask),
-            fn_output_signature=[
+            fn_output_signature=(
                 tf.TensorSpec([None if max_length_shape is None else max_length_shape + self.memory_length, self.dmodel], dtype=inputs.dtype),
                 tf.TensorSpec([None if max_length_shape is None else max_length_shape + self.memory_length], dtype=tf.bool),
-            ],
+            ),
         )
         new_inputs._keras_mask = new_inputs_mask  # pylint: disable=protected-access
         return new_inputs
