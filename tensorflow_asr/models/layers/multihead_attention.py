@@ -26,7 +26,6 @@ except ImportError:
     from keras.layers.attention.multi_head_attention import _build_attention_equation, _build_proj_equation, _get_output_shape
 
 from tensorflow_asr.models.layers.memory import Memory
-from tensorflow_asr.utils import math_util, shape_util
 
 
 def rel_left_shift(x):
@@ -232,11 +231,12 @@ class MultiHeadAttention(KerasMultiHeadAttention):
 
     def _build_from_signature(self, query, value, key=None):
         super()._build_from_signature(query, value, key)
-        batch_size, _, dmodel = self._query_shape
-        if self._memory_length is not None:
-            self._memory = Memory(batch_size=batch_size, memory_length=self._memory_length, dmodel=dmodel, name="memory")
-        else:
-            self._memory = None
+        with tf_utils.maybe_init_scope(self):  # pylint: disable=not-context-manager
+            batch_size, _, dmodel = self._query_shape
+            if self._memory_length is not None:
+                self._memory = Memory(batch_size=batch_size, memory_length=self._memory_length, dmodel=dmodel, name="memory")
+            else:
+                self._memory = None
 
     def _update_with_memory(self, query, key, value):
         if self._memory is None:
