@@ -68,11 +68,11 @@ class Memory(Layer):
         memory_mask = tf.stop_gradient(self.memory_mask)
         new_inputs, new_inputs_mask = tf.map_fn(
             self._attach_memory_item,
-            elems=(memory, memory_mask, inputs, inputs_mask),
-            fn_output_signature=(
+            elems=[memory, memory_mask, inputs, inputs_mask],
+            fn_output_signature=[
                 tf.TensorSpec([None if inputs.shape[1] is None else inputs.shape[1] + self.memory_length, self.dmodel], dtype=inputs.dtype),
                 tf.TensorSpec([None if inputs.shape[1] is None else inputs.shape[1] + self.memory_length], dtype=tf.bool),
-            ),
+            ],
         )
         new_inputs._keras_mask = new_inputs_mask  # pylint: disable=protected-access
         return new_inputs
@@ -106,11 +106,11 @@ class Memory(Layer):
             inputs_mask = tf.ones([self.batch_size, tf.shape(inputs)[1]], dtype=tf.bool)
         new_memory, new_memory_mask = tf.map_fn(
             self._update_memory_item,
-            elems=(self.memory, self.memory_mask, inputs, inputs_mask),
-            fn_output_signature=(
+            elems=[self.memory, self.memory_mask, inputs, inputs_mask],
+            fn_output_signature=[
                 tf.TensorSpec([self.memory_length, self.dmodel], dtype=inputs.dtype),
                 tf.TensorSpec([self.memory_length], dtype=tf.bool),
-            ),
+            ],
         )
         self.add_update([tf.keras.backend.update(self.memory, new_memory), tf.keras.backend.update(self.memory_mask, new_memory_mask)])
         new_memory._keras_mask = new_memory_mask  # pylint: disable=protected-access
