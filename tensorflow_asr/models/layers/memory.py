@@ -93,7 +93,7 @@ class Memory(Layer):
         per_batch_new_memory = tf.slice(
             per_batch_new_memory,
             begin=[tf.maximum(real_memory_length - memory_length, 0), 0],
-            size=[tf.minimum(memory_length, real_memory_length), -1],
+            size=[tf.minimum(memory_length, real_memory_length), self.dmodel],
         )  # [M, D] if M > m+t else [m+t, D]
         real_memory_length = tf.cast(tf.shape(per_batch_new_memory)[0], tf.int32)
         per_batch_new_memory = tf.pad(per_batch_new_memory, paddings=[[0, memory_length - real_memory_length], [0, 0]])
