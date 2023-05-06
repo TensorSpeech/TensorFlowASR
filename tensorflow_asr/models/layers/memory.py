@@ -18,30 +18,18 @@ from tensorflow_asr.models.base_layer import Layer
 from tensorflow_asr.utils import math_util
 
 
-def _prepend_memory_item(
-    per_batch_memory,  # [M, D]
-    per_batch_memory_mask,  # [M]
-    per_batch_input,  # [T, D]
-    per_batch_input_mask,  # [T]
-    pad_right=True,
-):
-    memory_mask_count = math_util.count(tf.cast(per_batch_memory_mask, tf.int32), value=0)
-    input_mask_count = math_util.count(tf.cast(per_batch_input_mask, tf.int32), value=0)
+def _create_num_masked(tensor_mask):
+    return tf.vectorized_map(lambda x: math_util.count(tf.cast(x, tf.int32), value=0), elems=tensor_mask, warn=False)
 
-    # [M + T, D]
-    per_batch_new_inputs = tf.concat([tf.stop_gradient(tf.roll(per_batch_memory, shift=memory_mask_count, axis=0)), per_batch_input], 0)
-    per_batch_new_inputs_mask = tf.concat([tf.roll(per_batch_memory_mask, shift=memory_mask_count, axis=0), per_batch_input_mask], 0)
 
-    if not pad_right:
-        per_batch_new_inputs = tf.roll(per_batch_new_inputs, shift=input_mask_count, axis=0)
-        per_batch_new_inputs_mask = tf.roll(per_batch_new_inputs_mask, shift=input_mask_count, axis=0)
-
-    return per_batch_memory, per_batch_memory_mask, per_batch_new_inputs, per_batch_new_inputs_mask
+def _shift(tensor, shift):
+    shifted_tensor, _ = tf.vectorized_map(lambda x: (tf.roll(x[0], shift=x[1], axis=0), x[1]), elems=(tensor, shift), warn=False)
+    return shifted_tensor
 
 
 class Memory(Layer):
     def __init__(self, batch_size, memory_length, dmodel, **kwargs):
-        super().__init__(**kwargs)
+        super().__init__(trainable=False, **kwargs)
         assert memory_length > 0, "memory_length must be integer"
         self.batch_size = batch_size
         self.memory_length = memory_length
@@ -62,24 +50,40 @@ class Memory(Layer):
             name="memory_mask",
         )
 
-    def attach_memory(self, inputs):
+    def _get_inputs(self, inputs):
         inputs_mask = getattr(inputs, "_keras_mask", None)
         max_length = tf.shape(inputs)[1]
         if inputs_mask is None:
             inputs_mask = tf.ones([self.batch_size, max_length], dtype=tf.bool)
-        _, _, new_inputs, new_inputs_mask = tf.vectorized_map(
-            lambda item: _prepend_memory_item(*item), elems=(tf.stop_gradient(self.memory), self.memory_mask, inputs, inputs_mask), warn=False
-        )
-        new_inputs._keras_mask = new_inputs_mask  # pylint: disable=protected-access
+        return inputs, inputs_mask
+
+    def attach_memory(self, inputs):
+        inputs, inputs_mask = self._get_inputs(inputs)
+        # shift memory and stop grad
+        memory_shift = _create_num_masked(self.memory_mask)
+        memory = _shift(self.memory, shift=memory_shift)
+        memory = tf.stop_gradient(memory)
+        memory_mask = _shift(self.memory_mask, shift=memory_shift)
+        memory_mask = tf.stop_gradient(memory_mask)
+        # prepend memory and inputs
+        new_inputs = tf.concat([memory, inputs], 1)
+        new_inputs._keras_mask = tf.concat([memory_mask, inputs_mask], 1)  # pylint: disable=protected-access
         return new_inputs
 
     def call(self, inputs):
-        inputs_mask = getattr(inputs, "_keras_mask", None)
-        if inputs_mask is None:
-            inputs_mask = tf.ones([self.batch_size, tf.shape(inputs)[1]], dtype=tf.bool)
-        _, _, new_memory, new_memory_mask = tf.vectorized_map(
-            lambda item: _prepend_memory_item(*item, pad_right=False), elems=(self.memory, self.memory_mask, inputs, inputs_mask), warn=False
-        )
+        inputs, inputs_mask = self._get_inputs(inputs)
+        # shift by memory mask
+        shift = _create_num_masked(self.memory_mask)
+        new_memory = _shift(self.memory, shift=shift)
+        new_memory_mask = _shift(self.memory_mask, shift=shift)
+        # prepend memory to inputs
+        new_memory = tf.concat([new_memory, inputs], 1)
+        new_memory_mask = tf.concat([new_memory_mask, inputs_mask], 1)
+        # shift by inputs mask
+        shift = _create_num_masked(inputs_mask)
+        new_memory = _shift(new_memory, shift=shift)
+        new_memory_mask = _shift(new_memory_mask, shift=shift)
+        # slice combination of memory and inputs into memory_length
         new_memory = tf.slice(
             new_memory,
             begin=[0, tf.shape(new_memory)[1] - self.memory_length, 0],

@@ -208,7 +208,7 @@ class TransformerEncoder(Layer):
         self.do = tf.keras.layers.Dropout(dropout, name="dropout")
 
         if mha_type == "relmha":
-            self.relpe = RelativePositionalEncoding(interleave=interleave_relpe, name="relpe")
+            self.relpe = RelativePositionalEncoding(interleave=interleave_relpe, memory_length=memory_length, name="relpe")
         else:
             self.relpe = PositionalEncoding(interleave=interleave_relpe, name="pe")
 
@@ -236,12 +236,14 @@ class TransformerEncoder(Layer):
                 name="content_attention_bias",
                 shape=[num_heads, head_size],
                 trainable=True,
+                initializer="zeros",
                 regularizer=bias_regularizer,
             )
             self.positional_attention_bias = self.add_weight(
                 name="positional_attention_bias",
                 shape=[num_heads, head_size],
                 trainable=True,
+                initializer="zeros",
                 regularizer=bias_regularizer,
             )
         else:

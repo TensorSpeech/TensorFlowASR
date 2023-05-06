@@ -13,8 +13,8 @@
 # limitations under the License.
 
 {% set repodir = "." %}
-{% set modeldir = "/Users/nlhuy/Paraphernalia/models/local/transformer-transducer" %}
-{% set datadir = "/Users/nlhuy/Paraphernalia/data/LibriSpeech" %}
+{% set modeldir = "/Volumes/Data/Miscellanea/Models/local/tranformer-transducer" %}
+{% set datadir = "/Volumes/Data/MLDL/Datasets/ASR/LibriSpeech" %}
 
 decoder_config:
   type: wordpiece
@@ -51,7 +51,7 @@ model_config:
   encoder_subsampling:
     type: conv2d
     nlayers: 2
-    filters: 144
+    filters: 512
     kernel_size: 3
     strides: 2
     padding: causal
@@ -65,11 +65,12 @@ model_config:
   encoder_num_blocks: 6
   encoder_head_size: 128
   encoder_num_heads: 4
-  encoder_mha_type: mha
+  encoder_mha_type: relmha
   encoder_interleave_relpe: True
   encoder_use_attention_causal_mask: False
   encoder_use_attention_auto_mask: True
   encoder_pwffn_activation: relu
+  encoder_memory_length: 512
   prediction_label_encode_mode: embedding
   prediction_embed_dim: 512
   prediction_num_rnns: 1

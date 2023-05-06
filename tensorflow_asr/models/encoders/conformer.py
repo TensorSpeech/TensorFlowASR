@@ -14,7 +14,6 @@
 # limitations under the License.
 
 import tensorflow as tf
-from keras.utils import tf_utils
 
 from tensorflow_asr.models.activations.glu import GLU
 from tensorflow_asr.models.base_layer import Layer
@@ -23,7 +22,6 @@ from tensorflow_asr.models.layers.multihead_attention import MultiHeadAttention,
 from tensorflow_asr.models.layers.positional_encoding import PositionalEncoding, RelativePositionalEncoding
 from tensorflow_asr.models.layers.residual import Residual
 from tensorflow_asr.models.layers.subsampling import Conv1dSubsampling, Conv2dSubsampling, VggSubsampling
-from tensorflow_asr.utils import data_util, shape_util
 
 L2 = tf.keras.regularizers.l2(1e-6)
 
@@ -537,12 +535,14 @@ class ConformerEncoder(Layer):
                 name="content_attention_bias",
                 shape=[self._num_heads, self._key_dim],
                 trainable=True,
+                initializer="zeros",
                 regularizer=self._bias_regularizer,
             )
             self.positional_attention_bias = self.add_weight(
                 name="positional_attention_bias",
                 shape=[self._num_heads, self._key_dim],
                 trainable=True,
+                initializer="zeros",
                 regularizer=self._bias_regularizer,
             )
         else:

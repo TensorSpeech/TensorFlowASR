@@ -263,10 +263,10 @@ class MultiHeadAttention(KerasMultiHeadAttention):
         if not self._built_from_signature:
             self._build_from_signature(query=query, value=value, key=key)
 
+        query, key, value = self._update_with_memory(query, key, value)
+
         if use_auto_mask:
             attention_mask = self._compute_attention_mask(query, value, key=key, attention_mask=attention_mask, use_causal_mask=use_causal_mask)
-
-        query, key, value = self._update_with_memory(query, key, value)
 
         #   N = `num_attention_heads`
         #   H = `size_per_head`
@@ -375,7 +375,7 @@ class MultiHeadRelativeAttention(MultiHeadAttention):
 
         attention_output = self._dropout_layer(attention_scores, training=training)
 
-        attention_output = tf.einsum(self._combine_equation, attention_output, value)  # BNTS,BVNH->BTNH
+        attention_output = tf.einsum(self._combine_equation, attention_output, value)  # BNTS,BSNH->BTNH
         return attention_output, attention_scores
 
     def call(
@@ -394,10 +394,10 @@ class MultiHeadRelativeAttention(MultiHeadAttention):
         if not self._built_from_signature:
             self._build_from_signature(query, value, relative_position_encoding, key=key)
 
+        query, key, value = self._update_with_memory(query, key, value)
+
         if use_auto_mask:
             attention_mask = self._compute_attention_mask(query, value, key=key, attention_mask=attention_mask, use_causal_mask=use_causal_mask)
-
-        query, key, value = self._update_with_memory(query, key, value)
 
         #   N = `num_attention_heads`
         #   H = `size_per_head`

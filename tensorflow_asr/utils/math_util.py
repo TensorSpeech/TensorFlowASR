@@ -83,6 +83,7 @@ def count_non_blank(
         axis=axis,
     )
 
+
 def count(
     tensor: tf.Tensor,
     value: float or int or tf.Tensor = 0,
@@ -92,6 +93,7 @@ def count(
         tf.where(tf.equal(tensor, value), x=tf.ones_like(tensor), y=tf.zeros_like(tensor)),
         axis=axis,
     )
+
 
 def merge_two_last_dims(x):
     b, _, f, c = shape_util.shape_list(x)

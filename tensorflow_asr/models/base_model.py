@@ -80,7 +80,7 @@ class BaseModel(tf.keras.Model):
             self._tfasr_metrics = {}
         return list(self._tfasr_metrics.values())
 
-    def add_metric(self, metric: tf.keras.metrics.Metric):
+    def add_custom_metric(self, metric: tf.keras.metrics.Metric):
         if not hasattr(self, "_tfasr_metrics"):
             self._tfasr_metrics = {}
         self._tfasr_metrics[metric.name] = metric
@@ -114,7 +114,7 @@ class BaseModel(tf.keras.Model):
         else:
             self.use_ga = False
         self.apply_gwn_config = apply_gwn_config
-        self.add_metric(metric=tf.keras.metrics.Mean(name="loss"))
+        self.add_custom_metric(metric=tf.keras.metrics.Mean(name="loss"))
         self.distribute_reduction_method = "sum"
         super().compile(optimizer=optimizer, loss=loss, run_eagerly=run_eagerly, **kwargs)
 
