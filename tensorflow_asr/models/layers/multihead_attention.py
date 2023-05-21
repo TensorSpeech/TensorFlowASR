@@ -249,6 +249,16 @@ class MultiHeadAttention(KerasMultiHeadAttention):
 
         return query, key, value
 
+    def get_states(self):
+        if self._memory is None:
+            return (None, None)
+        return self._memory.get_states()
+
+    def reset_states(self, states=(None, None)):
+        if self._memory is None:
+            return
+        self._memory.reset_states(states)
+
     def call(
         self,
         inputs,

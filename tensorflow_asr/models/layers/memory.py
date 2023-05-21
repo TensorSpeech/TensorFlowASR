@@ -70,6 +70,17 @@ class Memory(Layer):
         new_inputs._keras_mask = tf.concat([memory_mask, inputs_mask], 1)  # pylint: disable=protected-access
         return new_inputs
 
+    def get_states(self):
+        return (self.memory, self.memory_mask)
+
+    def reset_states(self, states=(None, None)):
+        memory, memory_mask = states
+        if memory is None:
+            memory = tf.zeros(shape=(self.batch_size, self.memory_length, self.dmodel), dtype=self.dtype)
+        if memory_mask is None:
+            memory_mask = tf.zeros(shape=(self.batch_size, self.memory_length), dtype=self.dtype)
+        self.add_update([tf.keras.backend.update(self.memory, memory), tf.keras.backend.update(self.memory_mask, memory_mask)])
+
     def call(self, inputs):
         inputs, inputs_mask = self._get_inputs(inputs)
         # shift by memory mask

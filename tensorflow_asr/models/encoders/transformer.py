@@ -187,6 +187,7 @@ class TransformerEncoder(Layer):
         super().__init__(name=name, **kwargs)
         self._use_attention_causal_mask = use_attention_causal_mask
         self._use_attention_auto_mask = use_attention_auto_mask
+        self._num_blocks = num_blocks
 
         subsampling_name = subsampling.pop("type", None)
         if subsampling_name == "vgg":
@@ -228,7 +229,7 @@ class TransformerEncoder(Layer):
                 bias_regularizer=bias_regularizer,
                 name=f"block_{i}",
             )
-            for i in range(num_blocks)
+            for i in range(self._num_blocks)
         ]
 
         if mha_type == "relmha":
@@ -248,6 +249,15 @@ class TransformerEncoder(Layer):
             )
         else:
             self.content_attention_bias, self.positional_attention_bias = None, None
+
+    def get_states(self):
+        return [block.mha.get_states() for block in self.blocks]
+
+    def reset_states(self, states=None):
+        if states is None:
+            states = [(None, None) for _ in range(self._num_blocks)]
+        for i, memory_states in enumerate(states):
+            self.blocks[i].mha.reset_states(memory_states)
 
     def call(self, inputs, training=False):
         outputs, outputs_length = inputs

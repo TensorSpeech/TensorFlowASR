@@ -548,6 +548,15 @@ class ConformerEncoder(Layer):
         else:
             self.content_attention_bias, self.positional_attention_bias = None, None
 
+    def get_states(self):
+        return [block.mhsam.mha.get_states() for block in self.conformer_blocks]
+
+    def reset_states(self, states=None):
+        if states is None:
+            states = [(None, None) for _ in range(self._num_blocks)]
+        for i, memory_states in enumerate(states):
+            self.conformer_blocks[i].mhsam.mha.reset_states(memory_states)
+
     def call(self, inputs, training=False):
         outputs, outputs_length = inputs
         outputs, outputs_length = self.conv_subsampling([outputs, outputs_length], training=training)
