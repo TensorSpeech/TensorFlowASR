@@ -187,6 +187,7 @@ class MultiHeadAttention(KerasMultiHeadAttention):
         if not hasattr(self, "_compute_causal_mask"):
             self._compute_causal_mask = compute_causal_mask
         self._memory_length = memory_length
+        self.stateful = self._memory_length is not None
 
     def _get_common_kwargs_for_sublayer(self):
         common_kwargs = dict(

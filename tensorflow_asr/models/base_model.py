@@ -188,6 +188,7 @@ class BaseModel(tf.keras.Model):
             Dict[tf.Tensor]: a dict of validation metrics with keys are the name of metric prefixed with "val_"
 
         """
+        self.reset_states()
         inputs, y_true = batch
         y_pred = self(inputs, training=False)
         per_sample_loss = self.loss(y_true=y_true, y_pred=y_pred)
