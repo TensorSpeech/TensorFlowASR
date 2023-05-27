@@ -78,7 +78,7 @@ class Memory(Layer):
         if memory is None:
             memory = tf.zeros(shape=(self.batch_size, self.memory_length, self.dmodel), dtype=self.dtype)
         if memory_mask is None:
-            memory_mask = tf.zeros(shape=(self.batch_size, self.memory_length), dtype=self.dtype)
+            memory_mask = tf.zeros(shape=(self.batch_size, self.memory_length), dtype=tf.bool)
         self.add_update([tf.keras.backend.update(self.memory, memory), tf.keras.backend.update(self.memory_mask, memory_mask)])
 
     def call(self, inputs):
