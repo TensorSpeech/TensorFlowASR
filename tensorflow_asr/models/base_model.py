@@ -80,6 +80,10 @@ class BaseModel(tf.keras.Model):
             self._tfasr_metrics = {}
         return list(self._tfasr_metrics.values())
 
+    def reset_metrics(self):
+        super().reset_metrics()
+        self.reset_states()  # reset all stateful states also
+
     def add_custom_metric(self, metric: tf.keras.metrics.Metric):
         if not hasattr(self, "_tfasr_metrics"):
             self._tfasr_metrics = {}
@@ -188,7 +192,6 @@ class BaseModel(tf.keras.Model):
             Dict[tf.Tensor]: a dict of validation metrics with keys are the name of metric prefixed with "val_"
 
         """
-        self.reset_states()
         inputs, y_true = batch
         y_pred = self(inputs, training=False)
         per_sample_loss = self.loss(y_true=y_true, y_pred=y_pred)
