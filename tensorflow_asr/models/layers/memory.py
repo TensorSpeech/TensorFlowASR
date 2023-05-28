@@ -35,18 +35,14 @@ class Memory(Layer):
         self.memory_length = memory_length
         self.dmodel = dmodel
         self.stateful = True
-        self.memory = self.add_weight(
-            shape=(self.batch_size, self.memory_length, self.dmodel),
-            initializer="zeros",
+        self.memory = tf.Variable(
+            initial_value=tf.zeros(shape=(self.batch_size, self.memory_length, self.dmodel), dtype=self.dtype),
             trainable=False,
-            dtype=self.dtype,
             name="memory",
         )
-        self.memory_mask = self.add_weight(
-            shape=(self.batch_size, self.memory_length),
-            initializer="zeros",
+        self.memory_mask = tf.Variable(
+            initial_value=tf.zeros(shape=(self.batch_size, self.memory_length), dtype=tf.bool),
             trainable=False,
-            dtype=tf.bool,
             name="memory_mask",
         )
 
