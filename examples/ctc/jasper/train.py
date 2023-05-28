@@ -76,6 +76,7 @@ def main(
         tf.keras.callbacks.ModelCheckpoint(**config.learning_config.running_config.checkpoint),
         tf.keras.callbacks.BackupAndRestore(**config.learning_config.running_config.backup_and_restore),
         tf.keras.callbacks.TensorBoard(**config.learning_config.running_config.tensorboard),
+        tf.keras.callbacks.EarlyStopping(**config.learning_config.running_config.early_stopping),
     ]
 
     jasper.fit(

@@ -130,6 +130,7 @@ class RunningConfig:
         self.checkpoint: dict = {}
         self.backup_and_restore: dict = {}
         self.tensorboard: dict = {}
+        self.early_stopping: dict = {}
         for k, v in config.items():
             setattr(self, k, v)
             if k == "checkpoint":
