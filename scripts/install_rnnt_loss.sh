@@ -5,7 +5,7 @@ cd ./externals || exit
 
 # Install rnnt_loss
 if [ ! -d warp-transducer ]; then
-    git clone https://github.com/usimarit/warp-transducer.git
+    git clone https://github.com/nglehuy/warp-transducer.git
 fi
 
 cd ./warp-transducer || exit

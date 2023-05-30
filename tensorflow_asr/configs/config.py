@@ -1,4 +1,4 @@
-# Copyright 2020 Huy Le Nguyen (@usimarit)
+# Copyright 2020 Huy Le Nguyen (@nglehuy)
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -124,9 +124,9 @@ class RunningConfig:
     def __init__(self, config: dict = None):
         if not config:
             config = {}
-        self.batch_size: int = config.pop("batch_size", 1)
-        self.accumulation_steps: int = config.pop("accumulation_steps", 1)
-        self.num_epochs: int = config.pop("num_epochs", 20)
+        self.batch_size: int = config.pop("batch_size", 2)
+        self.ga_steps: int = config.pop("ga_steps", None)
+        self.num_epochs: int = config.pop("num_epochs", 100)
         self.checkpoint: dict = {}
         self.backup_and_restore: dict = {}
         self.tensorboard: dict = {}
@@ -155,7 +155,6 @@ class LearningConfig:
         self.eval_dataset_config = DatasetConfig(config.pop("eval_dataset_config", {}))
         self.test_dataset_config = DatasetConfig(config.pop("test_dataset_config", {}))
         self.optimizer_config: dict = config.pop("optimizer_config", {})
-        self.learning_rate_config: dict = config.pop("learning_rate_config", {})
         self.running_config = RunningConfig(config.pop("running_config", {}))
         self.apply_gwn_config = config.pop("apply_gwn_config", None)
         for k, v in config.items():

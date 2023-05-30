@@ -1,4 +1,4 @@
-# Copyright 2020 Huy Le Nguyen (@usimarit)
+# Copyright 2020 Huy Le Nguyen (@nglehuy)
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,10 +14,13 @@
 
 from typing import List
 
+import tensorflow as tf
+
 from tensorflow_asr.models.encoders.contextnet import L2, ContextNetEncoder
 from tensorflow_asr.models.transducer.base_transducer import Transducer
 
 
+@tf.keras.utils.register_keras_serializable("tensorflow_asr.models.transducer")
 class ContextNet(Transducer):
     def __init__(
         self,

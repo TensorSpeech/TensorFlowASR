@@ -1,4 +1,4 @@
-# Copyright 2020 Huy Le Nguyen (@usimarit)
+# Copyright 2020 Huy Le Nguyen (@nglehuy)
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -34,7 +34,7 @@ class CtcModel(BaseModel):
         self.decoder = decoder
         self.time_reduction_factor = 1
 
-    def make(self, input_shape, batch_size=None):
+    def make(self, input_shape, batch_size=None, **kwargs):
         inputs = tf.keras.Input(input_shape, batch_size=batch_size, dtype=tf.float32)
         inputs_length = tf.keras.Input(shape=[], batch_size=batch_size, dtype=tf.int32)
         self(

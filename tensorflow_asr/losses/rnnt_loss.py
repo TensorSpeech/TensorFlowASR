@@ -1,5 +1,5 @@
 # pylint: disable=no-name-in-module,unexpected-keyword-arg,no-value-for-parameter
-# Copyright 2020 Huy Le Nguyen (@usimarit) and M. Yusuf Sarıgöz (@monatis)
+# Copyright 2020 Huy Le Nguyen (@nglehuy) and M. Yusuf Sarıgöz (@monatis)
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.

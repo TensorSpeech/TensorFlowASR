@@ -1,5 +1,5 @@
 # pylint: disable=attribute-defined-outside-init,too-many-lines
-# Copyright 2020 Huy Le Nguyen (@usimarit)
+# Copyright 2020 Huy Le Nguyen (@nglehuy)
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -319,7 +319,7 @@ class Transducer(BaseModel):
         self.decoder_gwn_step = None
         self.decoder_gwn_stddev = None
 
-    def make(self, input_shape, prediction_shape=[None], batch_size=None):
+    def make(self, input_shape, prediction_shape=[None], batch_size=None, **kwargs):
         inputs = tf.keras.Input(shape=input_shape, batch_size=batch_size, dtype=tf.float32)
         inputs_length = tf.keras.Input(shape=[], batch_size=batch_size, dtype=tf.int32)
         predictions = tf.keras.Input(shape=prediction_shape, batch_size=batch_size, dtype=tf.int32)

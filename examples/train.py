@@ -16,14 +16,10 @@ from tensorflow_asr.utils import env_util
 
 logger = env_util.setup_environment()
 
-import math
-
 import tensorflow as tf
 
 from tensorflow_asr.configs.config import Config
 from tensorflow_asr.helpers import dataset_helpers, featurizer_helpers
-from tensorflow_asr.models.transducer.transformer import Transformer
-from tensorflow_asr.optimizers.schedules import TransformerSchedule
 from tensorflow_asr.utils import cli_util, file_util
 
 
@@ -62,32 +58,24 @@ def main(
     )
 
     with strategy.scope():
-        transformer = Transformer(**config.model_config, blank=text_featurizer.blank, vocab_size=text_featurizer.num_classes)
-        transformer.make(speech_featurizer.shape, prediction_shape=text_featurizer.prepand_shape, batch_size=global_batch_size)
+        model = tf.keras.models.model_from_config(config.model_config)
+        model.make(speech_featurizer.shape, prediction_shape=text_featurizer.prepand_shape, batch_size=global_batch_size)
         if config.learning_config.pretrained:
-            transformer.load_weights(
+            model.load_weights(
                 config.learning_config.pretrained,
                 by_name=file_util.is_hdf5_filepath(config.learning_config.pretrained),
                 skip_mismatch=True,
             )
-        optimizer = tf.keras.optimizers.Adam(
-            TransformerSchedule(
-                d_model=transformer.dmodel,
-                warmup_steps=config.learning_config.learning_rate_config.get("warmup_steps"),
-                max_lr=(config.learning_config.learning_rate_config.get("max_lr_numerator") / math.sqrt(transformer.dmodel)),
-            ),
-            **config.learning_config.optimizer_config,
-        )
-        transformer.compile(
-            optimizer=optimizer,
+        model.compile(
+            optimizer=tf.keras.optimizers.get(config.learning_config.optimizer_config),
             steps_per_execution=spx,
             blank=text_featurizer.blank,
             jit_compile=jit_compile,
             mxp=mxp,
-            ga_steps=ga_steps,
+            ga_steps=ga_steps or config.learning_config.running_config.ga_steps,
             apply_gwn_config=config.learning_config.apply_gwn_config,
         )
-        transformer.summary()
+        model.summary()
 
     callbacks = [
         tf.keras.callbacks.TerminateOnNaN(),
@@ -97,7 +85,7 @@ def main(
         tf.keras.callbacks.EarlyStopping(**config.learning_config.running_config.early_stopping),
     ]
 
-    transformer.fit(
+    model.fit(
         train_data_loader,
         epochs=config.learning_config.running_config.num_epochs,
         validation_data=eval_data_loader,

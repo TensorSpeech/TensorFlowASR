@@ -1,4 +1,4 @@
-# Copyright 2020 Huy Le Nguyen (@usimarit)
+# Copyright 2020 Huy Le Nguyen (@nglehuy)
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -320,6 +320,7 @@ class DeepSpeech2Decoder(Layer):
         return tuple(outputs_shape), tuple(logits_length_shape)
 
 
+@tf.keras.utils.register_keras_serializable("tensorflow_asr.models.ctc")
 class DeepSpeech2(CtcModel):
     def __init__(
         self,

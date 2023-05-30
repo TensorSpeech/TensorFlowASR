@@ -1,4 +1,4 @@
-# Copyright 2020 Huy Le Nguyen (@usimarit) and Huy Phan (@pquochuy)
+# Copyright 2020 Huy Le Nguyen (@nglehuy) and Huy Phan (@pquochuy)
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.

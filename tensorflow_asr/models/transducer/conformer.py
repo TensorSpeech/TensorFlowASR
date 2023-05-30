@@ -1,4 +1,4 @@
-# Copyright 2020 Huy Le Nguyen (@usimarit)
+# Copyright 2020 Huy Le Nguyen (@nglehuy)
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,10 +12,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+
+import tensorflow as tf
+
 from tensorflow_asr.models.encoders.conformer import L2, ConformerEncoder
 from tensorflow_asr.models.transducer.base_transducer import Transducer
 
 
+@tf.keras.utils.register_keras_serializable("tensorflow_asr.models.transducer")
 class Conformer(Transducer):
     def __init__(
         self,

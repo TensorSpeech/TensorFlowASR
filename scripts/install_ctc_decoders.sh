@@ -5,7 +5,7 @@ cd ./externals || exit
 
 # Install baidu's beamsearch_with_lm
 if [ ! -d ctc_decoders ]; then
-    git clone https://github.com/usimarit/ctc_decoders.git
+    git clone https://github.com/nglehuy/ctc_decoders.git
 
     cd ./ctc_decoders || exit
     chmod a+x setup.sh

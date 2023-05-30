@@ -1,4 +1,4 @@
-# Copyright 2020 Huy Le Nguyen (@usimarit)
+# Copyright 2020 Huy Le Nguyen (@nglehuy)
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -36,45 +36,48 @@ speech_config:
   normalize_feature: True
 
 model_config:
-  name: conformer
-  encoder_subsampling:
-    type: conv2d
-    filters: 144
-    nlayers: 2
-    kernel_size: 3
-    strides: 2
-    padding: same
-    norm: none
-    activation: relu
-  encoder_ffm_residual_factor: 0.5
-  encoder_mhsam_residual_factor: 1.0
-  encoder_convm_residual_factor: 1.0
-  encoder_dmodel: 144
-  encoder_num_blocks: 2
-  encoder_head_size: 36 # == dmodel // num_heads
-  encoder_num_heads: 4
-  encoder_mha_type: relmha
-  encoder_interleave_relpe: True
-  encoder_use_attention_causal_mask: False
-  encoder_use_attention_auto_mask: True
-  encoder_kernel_size: 32
-  encoder_dropout: 0.1
-  encoder_padding: causal
-  prediction_label_encode_mode: embedding
-  prediction_embed_dim: 320
-  prediction_num_rnns: 1
-  prediction_rnn_units: 320
-  prediction_rnn_type: lstm
-  prediction_rnn_implementation: 2
-  prediction_rnn_unroll: False # False to use with CUDA or dynamic length, True to use with TPU and static length
-  prediction_layer_norm: False
-  prediction_projection_units: 144
-  joint_dim: 320
-  prejoint_encoder_linear: False
-  prejoint_prediction_linear: False
-  postjoint_linear: True
-  joint_activation: tanh
-  joint_mode: add
+  class_name: tensorflow_asr.models.transducer>Conformer
+  config:
+    encoder_subsampling:
+      type: conv2d
+      filters: 144
+      nlayers: 2
+      kernel_size: 3
+      strides: 2
+      padding: same
+      norm: none
+      activation: relu
+    encoder_ffm_residual_factor: 0.5
+    encoder_mhsam_residual_factor: 1.0
+    encoder_convm_residual_factor: 1.0
+    encoder_dmodel: 144
+    encoder_num_blocks: 2
+    encoder_head_size: 36 # == dmodel // num_heads
+    encoder_num_heads: 4
+    encoder_mha_type: relmha
+    encoder_interleave_relpe: True
+    encoder_use_attention_causal_mask: False
+    encoder_use_attention_auto_mask: True
+    encoder_kernel_size: 32
+    encoder_dropout: 0.1
+    encoder_padding: causal
+    prediction_label_encode_mode: embedding
+    prediction_embed_dim: 320
+    prediction_num_rnns: 1
+    prediction_rnn_units: 320
+    prediction_rnn_type: lstm
+    prediction_rnn_implementation: 2
+    prediction_rnn_unroll: False # False to use with CUDA or dynamic length, True to use with TPU and static length
+    prediction_layer_norm: False
+    prediction_projection_units: 144
+    joint_dim: 320
+    prejoint_encoder_linear: False
+    prejoint_prediction_linear: False
+    postjoint_linear: True
+    joint_activation: tanh
+    joint_mode: add
+    blank: 0
+    vocab_size: 29
 
 learning_config:
   train_dataset_config:
@@ -127,13 +130,19 @@ learning_config:
     stage: test
 
   optimizer_config:
-    beta_1: 0.9
-    beta_2: 0.98
-    epsilon: 1e-9
-
-  learning_rate_config:
-    warmup_steps: 10000
-    max_lr_numerator: 0.05
+    class_name: adam
+    config:
+      learning_rate:
+        class_name: tensorflow_asr.optimizers.schedule>TransformerSchedule
+        config:
+          dmodel: 144
+          initial_lr: 1.0
+          warmup_steps: 10000
+          max_lr: 0.00035
+          min_lr: 1e-6
+      beta_1: 0.9
+      beta_2: 0.98
+      epsilon: 1e-9
 
   apply_gwn_config:
     predict_net_step: 20000

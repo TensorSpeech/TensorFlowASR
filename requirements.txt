@@ -10,14 +10,14 @@ jinja2==3.1.2
 fire==0.4.0
 
 # extra=dev
-pytest==7.1.2
-black==22.6.0
-pylint==2.15.2
-matplotlib==3.5.3
+pytest==7.3.1
+black==23.3.0
+pylint==2.17.4
+matplotlib==3.7.1
 pydot==1.4.2
+netron==6.9.2
 graphviz==0.20.1
-netron==6.0.8
-tf2onnx==1.13.0
+tf2onnx==1.14.0
 
 # extra=tf2.8
 tensorflow>=2.8.0,<2.9.0
