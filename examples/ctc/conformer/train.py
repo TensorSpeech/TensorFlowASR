@@ -68,7 +68,7 @@ def main(
         if pretrained:
             conformer.load_weights(pretrained, by_name=file_util.is_hdf5_filepath(pretrained), skip_mismatch=True)
         optimizer = tf.keras.optimizers.Adam(
-            TransformerSchedule(d_model=conformer.dmodel, **config.learning_config.learning_rate_config),
+            TransformerSchedule(dmodel=conformer.dmodel, **config.learning_config.learning_rate_config),
             **config.learning_config.optimizer_config,
         )
         conformer.compile(

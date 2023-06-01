@@ -12,27 +12,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import os
-
-os.environ["TF_CPP_MIN_LOG_LEVEL"] = os.environ.get("TF_CPP_MIN_LOG_LEVEL", "2")
-os.environ["TF_FORCE_GPU_ALLOW_GROWTH"] = os.environ.get("TF_FORCE_GPU_ALLOW_GROWTH", "true")
 
 import random
-import warnings
 from typing import List, Union
 
 import numpy as np
 import tensorflow as tf
 
 logger = tf.get_logger()
-logger.setLevel(os.environ.get("LOG_LEVEL", "info").upper())
-logger.propagate = False
-
-
-def setup_environment():
-    """Setting tensorflow running environment"""
-    warnings.simplefilter("ignore")
-    return tf.get_logger()
 
 
 def setup_devices(
