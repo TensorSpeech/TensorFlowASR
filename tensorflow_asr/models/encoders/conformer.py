@@ -217,7 +217,6 @@ class ConvModule(Layer):
         padding="causal",
         scale_factor=2,
         residual_factor=1.0,
-        dense_as_pointwise=False,
         depthwise_as_groupwise=False,
         norm_position="pre",
         kernel_regularizer=L2,
@@ -233,23 +232,15 @@ class ConvModule(Layer):
             if norm_position == "none"
             else tf.keras.layers.LayerNormalization(name="ln", gamma_regularizer=kernel_regularizer, beta_regularizer=bias_regularizer)
         )
-        if dense_as_pointwise:
-            self.pw_conv_1 = tf.keras.layers.Dense(
-                units=scale_factor * input_dim,
-                name="pw_conv_1",
-                kernel_regularizer=kernel_regularizer,
-                bias_regularizer=bias_regularizer,
-            )
-        else:
-            self.pw_conv_1 = Conv1D(
-                filters=scale_factor * input_dim,
-                kernel_size=1,
-                strides=1,
-                padding=padding,
-                name="pw_conv_1",
-                kernel_regularizer=kernel_regularizer,
-                bias_regularizer=bias_regularizer,
-            )
+        self.pw_conv_1 = Conv1D(
+            filters=scale_factor * input_dim,
+            kernel_size=1,
+            strides=1,
+            padding=padding,
+            name="pw_conv_1",
+            kernel_regularizer=kernel_regularizer,
+            bias_regularizer=bias_regularizer,
+        )
         self.glu = GLU(axis=-1, name="glu_activation")
         if depthwise_as_groupwise:
             self.dw_conv = Conv1D(
@@ -272,25 +263,19 @@ class ConvModule(Layer):
                 depthwise_regularizer=kernel_regularizer,
                 bias_regularizer=bias_regularizer,
             )
-        self.bn = tf.keras.layers.BatchNormalization(name="bn", gamma_regularizer=kernel_regularizer, beta_regularizer=bias_regularizer)
+        self.bn = tf.keras.layers.BatchNormalization(
+            name="bn", gamma_regularizer=kernel_regularizer, beta_regularizer=bias_regularizer, synchronized=True
+        )
         self.swish = tf.keras.layers.Activation(tf.nn.swish, name="swish_activation")
-        if dense_as_pointwise:
-            self.pw_conv_2 = tf.keras.layers.Dense(
-                units=input_dim,
-                name="pw_conv_2",
-                kernel_regularizer=kernel_regularizer,
-                bias_regularizer=bias_regularizer,
-            )
-        else:
-            self.pw_conv_2 = Conv1D(
-                filters=input_dim,
-                kernel_size=1,
-                strides=1,
-                padding=padding,
-                name="pw_conv_2",
-                kernel_regularizer=kernel_regularizer,
-                bias_regularizer=bias_regularizer,
-            )
+        self.pw_conv_2 = Conv1D(
+            filters=input_dim,
+            kernel_size=1,
+            strides=1,
+            padding=padding,
+            name="pw_conv_2",
+            kernel_regularizer=kernel_regularizer,
+            bias_regularizer=bias_regularizer,
+        )
         self.do = tf.keras.layers.Dropout(dropout, name="dropout")
         self.residual = Residual(factor=residual_factor, regularizer=bias_regularizer, name="residual")
 
@@ -331,7 +316,6 @@ class ConformerBlock(Layer):
         kernel_size=32,
         depth_multiplier=1,
         padding="causal",
-        dense_as_pointwise=False,
         depthwise_as_groupwise=False,
         convm_scale_factor=2,
         convm_residual_factor=1.0,
@@ -381,7 +365,6 @@ class ConformerBlock(Layer):
             name="conv_module",
             depth_multiplier=depth_multiplier,
             padding=padding,
-            dense_as_pointwise=dense_as_pointwise,
             depthwise_as_groupwise=depthwise_as_groupwise,
             scale_factor=convm_scale_factor,
             residual_factor=convm_residual_factor,
@@ -450,7 +433,6 @@ class ConformerEncoder(Layer):
         convm_scale_factor=2,
         convm_residual_factor=1.0,
         dropout=0.1,
-        dense_as_pointwise=False,
         depthwise_as_groupwise=False,
         module_norm_position="pre",
         block_norm_position="post",
@@ -517,7 +499,6 @@ class ConformerEncoder(Layer):
                 kernel_size=kernel_size,
                 depth_multiplier=depth_multiplier,
                 padding=padding,
-                dense_as_pointwise=dense_as_pointwise,
                 depthwise_as_groupwise=depthwise_as_groupwise,
                 convm_scale_factor=convm_scale_factor,
                 convm_residual_factor=convm_residual_factor,
