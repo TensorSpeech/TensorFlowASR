@@ -183,7 +183,8 @@ def forward_dp(
         blank_probs = trans_probs[0]
         truth_probs = trans_probs[1]
 
-        x_b = tf.concat([LOG_0 * tf.ones(shape=[batch_size, 1]), x[:, :-1] + blank_probs], axis=1)
+        # x_b = tf.concat([LOG_0 * tf.ones(shape=[batch_size, 1]), x[:, :-1] + blank_probs], axis=1)
+        x_b = tf.concat([LOG_0 * tf.ones(shape=[batch_size, 1]), tf.slice(x, begin=[0, 0], size=[-1, tf.shape(x)[1] - 1]) + blank_probs], axis=1)
         x_t = x + truth_probs
 
         x = tf.math.reduce_logsumexp(tf.stack([x_b, x_t], axis=0), axis=0)
@@ -217,8 +218,10 @@ def backward_dp(
     def next_state(x, mask_and_trans_probs):
         mask_s, blank_probs_s, truth_probs = mask_and_trans_probs
 
-        beta_b = tf.concat([x[:, 1:] + blank_probs_s, LOG_0 * tf.ones(shape=[batch_size, 1])], axis=1)
-        beta_t = tf.concat([x[:, :-1] + truth_probs, LOG_0 * tf.ones(shape=[batch_size, 1])], axis=1)
+        # beta_b = tf.concat([x[:, 1:] + blank_probs_s, LOG_0 * tf.ones(shape=[batch_size, 1])], axis=1)
+        # beta_t = tf.concat([x[:, :-1] + truth_probs, LOG_0 * tf.ones(shape=[batch_size, 1])], axis=1)
+        beta_b = tf.concat([tf.slice(x, begin=[0, 1], size=[-1, tf.shape(x)[1] - 1]) + blank_probs_s, LOG_0 * tf.ones(shape=[batch_size, 1])], axis=1)
+        beta_t = tf.concat([tf.slice(x, begin=[0, 0], size=[-1, tf.shape(x)[1] - 1]) + truth_probs, LOG_0 * tf.ones(shape=[batch_size, 1])], axis=1)
 
         beta_next = reduce_logsumexp(tf.stack([beta_b, beta_t], axis=0), axis=0)
         masked_beta_next = nan_to_zero(beta_next * tf.expand_dims(mask_s, axis=1)) + nan_to_zero(x * tf.expand_dims((1.0 - mask_s), axis=1))
