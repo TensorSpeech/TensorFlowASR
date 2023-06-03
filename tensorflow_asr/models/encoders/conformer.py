@@ -213,11 +213,9 @@ class ConvModule(Layer):
         input_dim,
         kernel_size=32,
         dropout=0.0,
-        depth_multiplier=1,
         padding="causal",
         scale_factor=2,
         residual_factor=1.0,
-        depthwise_as_groupwise=False,
         norm_position="pre",
         kernel_regularizer=L2,
         bias_regularizer=L2,
@@ -242,27 +240,16 @@ class ConvModule(Layer):
             bias_regularizer=bias_regularizer,
         )
         self.glu = GLU(axis=-1, name="glu_activation")
-        if depthwise_as_groupwise:
-            self.dw_conv = Conv1D(
-                filters=input_dim,
-                kernel_size=kernel_size,
-                strides=1,
-                groups=input_dim,
-                padding=padding,
-                name="dw_conv",
-                kernel_regularizer=kernel_regularizer,
-                bias_regularizer=bias_regularizer,
-            )
-        else:
-            self.dw_conv = DepthwiseConv1D(
-                kernel_size=kernel_size,
-                strides=1,
-                padding=padding,
-                name="dw_conv",
-                depth_multiplier=depth_multiplier,
-                depthwise_regularizer=kernel_regularizer,
-                bias_regularizer=bias_regularizer,
-            )
+        self.dw_conv = Conv1D(
+            filters=input_dim,
+            kernel_size=kernel_size,
+            strides=1,
+            groups=input_dim,
+            padding=padding,
+            name="dw_conv",
+            kernel_regularizer=kernel_regularizer,
+            bias_regularizer=bias_regularizer,
+        )
         self.bn = tf.keras.layers.BatchNormalization(
             name="bn", gamma_regularizer=kernel_regularizer, beta_regularizer=bias_regularizer, synchronized=True
         )
@@ -314,14 +301,13 @@ class ConformerBlock(Layer):
         mha_type="relmha",
         mhsam_residual_factor=1.0,
         kernel_size=32,
-        depth_multiplier=1,
         padding="causal",
-        depthwise_as_groupwise=False,
         convm_scale_factor=2,
         convm_residual_factor=1.0,
         module_norm_position="pre",
         block_norm_position="post",
         memory_length=None,
+        mhsam_before_convm=True,
         kernel_regularizer=L2,
         bias_regularizer=L2,
         name="conformer_block",
@@ -330,6 +316,7 @@ class ConformerBlock(Layer):
         super().__init__(name=name, **kwargs)
         assert block_norm_position in ("pre", "post", "none")
         self._norm_position = block_norm_position
+        self._mhsam_before_convm = mhsam_before_convm
         self.norm = (
             None
             if block_norm_position == "none"
@@ -363,9 +350,7 @@ class ConformerBlock(Layer):
             kernel_size=kernel_size,
             dropout=dropout,
             name="conv_module",
-            depth_multiplier=depth_multiplier,
             padding=padding,
-            depthwise_as_groupwise=depthwise_as_groupwise,
             scale_factor=convm_scale_factor,
             residual_factor=convm_residual_factor,
             norm_position=module_norm_position,
@@ -396,17 +381,30 @@ class ConformerBlock(Layer):
     ):
         outputs = self.norm(inputs, training=training) if self._norm_position == "pre" else inputs
         outputs = self.ffm1(outputs, training=training)
-        outputs = self.mhsam(
-            outputs,
-            relative_position_encoding=relative_position_encoding,
-            content_attention_bias=content_attention_bias,
-            positional_attention_bias=positional_attention_bias,
-            training=training,
-            attention_mask=attention_mask,
-            use_causal_mask=use_causal_mask,
-            use_auto_mask=use_auto_mask,
-        )
-        outputs = self.convm(outputs, training=training)
+        if self._mhsam_before_convm:
+            outputs = self.mhsam(
+                outputs,
+                relative_position_encoding=relative_position_encoding,
+                content_attention_bias=content_attention_bias,
+                positional_attention_bias=positional_attention_bias,
+                training=training,
+                attention_mask=attention_mask,
+                use_causal_mask=use_causal_mask,
+                use_auto_mask=use_auto_mask,
+            )
+            outputs = self.convm(outputs, training=training)
+        else:
+            outputs = self.convm(outputs, training=training)
+            outputs = self.mhsam(
+                outputs,
+                relative_position_encoding=relative_position_encoding,
+                content_attention_bias=content_attention_bias,
+                positional_attention_bias=positional_attention_bias,
+                training=training,
+                attention_mask=attention_mask,
+                use_causal_mask=use_causal_mask,
+                use_auto_mask=use_auto_mask,
+            )
         outputs = self.ffm2(outputs, training=training)
         outputs = self.norm(outputs, training=training) if self._norm_position == "post" else outputs
         return outputs
@@ -422,7 +420,6 @@ class ConformerEncoder(Layer):
         head_size=36,
         num_heads=4,
         kernel_size=32,
-        depth_multiplier=1,
         padding="causal",
         interleave_relpe=True,
         use_attention_causal_mask=False,
@@ -433,10 +430,10 @@ class ConformerEncoder(Layer):
         convm_scale_factor=2,
         convm_residual_factor=1.0,
         dropout=0.1,
-        depthwise_as_groupwise=False,
         module_norm_position="pre",
         block_norm_position="post",
         memory_length=None,
+        mhsam_before_convm=True,
         kernel_regularizer=L2,
         bias_regularizer=L2,
         name="conformer_encoder",
@@ -497,14 +494,13 @@ class ConformerEncoder(Layer):
                 mha_type=mha_type,
                 mhsam_residual_factor=mhsam_residual_factor,
                 kernel_size=kernel_size,
-                depth_multiplier=depth_multiplier,
                 padding=padding,
-                depthwise_as_groupwise=depthwise_as_groupwise,
                 convm_scale_factor=convm_scale_factor,
                 convm_residual_factor=convm_residual_factor,
                 module_norm_position=module_norm_position,
                 block_norm_position=block_norm_position,
                 memory_length=memory_length,
+                mhsam_before_convm=mhsam_before_convm,
                 kernel_regularizer=kernel_regularizer,
                 bias_regularizer=bias_regularizer,
                 name=f"block_{i}",

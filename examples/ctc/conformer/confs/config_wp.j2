@@ -17,34 +17,35 @@
 {% set datadir = "/Users/nlhuy/Paraphernalia/data/LibriSpeech" %}
 
 model_config:
-  name: conformer
-  encoder_subsampling:
-    type: conv2d
-    nlayers: 2
-    filters: 144
-    kernel_size: 3
-    strides: 2
-    padding: causal
-    norm: batch
-    activation: swish
-  encoder_dmodel: 144
-  encoder_num_blocks: 16
-  encoder_head_size: 36
-  encoder_num_heads: 4
-  encoder_mha_type: relmha
-  encoder_interleave_relpe: True
-  encoder_use_attention_causal_mask: False
-  encoder_use_attention_auto_mask: True
-  encoder_kernel_size: 32
-  encoder_dropout: 0.1
-  encoder_padding: causal
-  encoder_dense_as_pointwise: False
-  encoder_depthwise_as_groupwise: False
-  encoder_ffm_residual_factor: 0.5
-  encoder_mhsam_residual_factor: 1.0
-  encoder_convm_residual_factor: 1.0
-  encoder_module_norm_position: pre
-  encoder_block_norm_position: post
+  class_name: tensorflow_asr.models.ctc>Conformer
+  config:
+    name: conformer
+    encoder_subsampling:
+      type: conv2d
+      nlayers: 2
+      filters: 144
+      kernel_size: 3
+      strides: 2
+      padding: causal
+      norm: none
+      activation: relu
+    encoder_dmodel: 144
+    encoder_num_blocks: 16
+    encoder_head_size: 36
+    encoder_num_heads: 4
+    encoder_mha_type: relmha
+    encoder_interleave_relpe: True
+    encoder_use_attention_causal_mask: False
+    encoder_use_attention_auto_mask: True
+    encoder_kernel_size: 32
+    encoder_dropout: 0.1
+    encoder_padding: causal
+    encoder_depthwise_as_groupwise: False
+    encoder_ffm_residual_factor: 0.5
+    encoder_mhsam_residual_factor: 1.0
+    encoder_convm_residual_factor: 1.0
+    encoder_module_norm_position: pre
+    encoder_block_norm_position: post
 
 speech_config:
   sample_rate: 16000
@@ -55,15 +56,12 @@ speech_config:
 
 decoder_config:
   type: wordpiece
-
   blank_index: 0
   unknown_token: "<unk>"
   unknown_index: 1
-
   beam_width: 0
   norm_score: True
   lm_config: null
-
   vocabulary: {{repodir}}/vocabularies/librispeech/wordpiece/train_1000_50.tokens
   vocab_size: 1000
   max_token_length: 50
@@ -73,7 +71,6 @@ decoder_config:
     - "<unk>"
   normalization_form: NFKC
   num_iterations: 4
-
   corpus_files:
     - {{datadir}}/train-clean-100/transcripts.tsv
     - {{datadir}}/train-clean-360/transcripts.tsv
@@ -129,14 +126,18 @@ learning_config:
     stage: test
 
   optimizer_config:
-    beta_1: 0.9
-    beta_2: 0.98
-    epsilon: 1e-9
-
-  learning_rate_config:
-    warmup_steps: 10000
-    max_lr: 0.00035
-    min_lr: 1e-6
+    class_name: adam
+    config:
+      learning_rate:
+        class_name: tensorflow_asr.optimizers.schedules>TransformerSchedule
+        config:
+          dmodel: 144
+          warmup_steps: 10000
+          max_lr: 0.00035
+          min_lr: 1e-6
+      beta_1: 0.9
+      beta_2: 0.98
+      epsilon: 1e-9
 
   running_config:
     batch_size: 2
@@ -156,7 +157,7 @@ learning_config:
       write_graph: True
       write_images: True
       update_freq: epoch
-      profile_batch: 2
+      profile_batch: 100
     early_stopping:
       monitor: val_loss
       min_delta: 0
