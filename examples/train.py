@@ -1,4 +1,4 @@
-# Copyright 2020 Huy Le Nguyen (@nglehuy)
+# Copyright 2023 Huy Le Nguyen (@nglehuy)
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,13 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import tensorflow as tf
-
+from tensorflow_asr import tf  # import to aid logging messages
 from tensorflow_asr.configs.config import Config
 from tensorflow_asr.helpers import dataset_helpers, featurizer_helpers
 from tensorflow_asr.utils import cli_util, env_util, file_util
-
-logger = tf.get_logger()
 
 
 def main(
