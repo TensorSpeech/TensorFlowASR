@@ -38,4 +38,5 @@ def prepare_featurizers(
         text_featurizer = text_featurizers.CharFeaturizer(config.decoder_config)
     else:
         raise ValueError(f"type must be in {text_featurizers.TEXT_FEATURIZER_TYPES}, received {config.decoder_config.type}")
+    config.model_config["config"]["vocab_size"] = text_featurizer.num_classes
     return speech_featurizer, text_featurizer
