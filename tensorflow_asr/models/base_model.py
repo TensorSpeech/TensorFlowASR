@@ -14,6 +14,7 @@
 # limitations under the License.
 
 import tensorflow as tf
+from keras.models import Model
 
 from tensorflow_asr.featurizers.speech_featurizers import SpeechFeaturizer
 from tensorflow_asr.featurizers.text_featurizers import TextFeaturizer
@@ -23,7 +24,17 @@ from tensorflow_asr.utils import env_util, file_util
 logger = tf.get_logger()
 
 
-class BaseModel(tf.keras.Model):
+class BaseModelLayer(Model):  # pylint: disable=abstract-method
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._output_shape = None
+        self.supports_masking = True
+
+    def compute_output_shape(self, input_shape):
+        return input_shape
+
+
+class BaseModel(Model):
     def summary(
         self,
         line_length=127,

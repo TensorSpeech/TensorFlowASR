@@ -120,5 +120,7 @@ class RelativePositionalEncoding(PositionalEncoding):
     def compute_output_shape(self, input_shape):
         output_shape = input_shape
         B, T, V = output_shape
-        pT = (self._memory_length + T) if (self._memory_length is not None and T is not None) else None
+        pT = T
+        if self._memory_length is not None and T is not None:
+            pT += self._memory_length
         return output_shape, (B, pT, V)

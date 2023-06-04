@@ -13,8 +13,8 @@
 # limitations under the License.
 
 {% set repodir = "." %}
-{% set modeldir = "/Users/nlhuy/Paraphernalia/models/local/conformer-ctc" %}
-{% set datadir = "/Users/nlhuy/Paraphernalia/data/LibriSpeech" %}
+{% set modeldir = "/Volumes/Data/Miscellanea/Models/local/conformer" %}
+{% set datadir = "/Volumes/Data/MLDL/Datasets/ASR/LibriSpeech" %}
 
 model_config:
   class_name: tensorflow_asr.models.ctc>Conformer
@@ -30,7 +30,7 @@ model_config:
       norm: none
       activation: relu
     encoder_dmodel: 144
-    encoder_num_blocks: 16
+    encoder_num_blocks: 1
     encoder_head_size: 36
     encoder_num_heads: 4
     encoder_mha_type: relmha
@@ -40,12 +40,13 @@ model_config:
     encoder_kernel_size: 32
     encoder_dropout: 0.1
     encoder_padding: causal
-    encoder_depthwise_as_groupwise: False
     encoder_ffm_residual_factor: 0.5
     encoder_mhsam_residual_factor: 1.0
     encoder_convm_residual_factor: 1.0
     encoder_module_norm_position: pre
     encoder_block_norm_position: post
+    encoder_memory_length: null
+    vocab_size: 1000
 
 speech_config:
   sample_rate: 16000
@@ -126,7 +127,7 @@ learning_config:
     stage: test
 
   optimizer_config:
-    class_name: adam
+    class_name: Custom>AdamW
     config:
       learning_rate:
         class_name: tensorflow_asr.optimizers.schedules>TransformerSchedule
@@ -135,6 +136,7 @@ learning_config:
           warmup_steps: 10000
           max_lr: 0.00035
           min_lr: 1e-6
+      weight_decay: 0.0
       beta_1: 0.9
       beta_2: 0.98
       epsilon: 1e-9

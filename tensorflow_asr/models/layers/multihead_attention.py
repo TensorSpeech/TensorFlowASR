@@ -269,7 +269,7 @@ class MultiHeadAttention(KerasMultiHeadAttention):
         use_causal_mask=False,
         use_auto_mask=True,
     ):
-        query, key, value = inputs
+        query, key, value, *_ = inputs
 
         if not self._built_from_signature:
             self._build_from_signature(query=query, value=value, key=key)
@@ -296,6 +296,10 @@ class MultiHeadAttention(KerasMultiHeadAttention):
         if return_attention_scores:
             return attention_output, attention_scores
         return attention_output
+
+    def compute_output_shape(self, input_shape):
+        query_shape, *_ = input_shape
+        return tf.TensorShape(query_shape)
 
 
 class MultiHeadRelativeAttention(MultiHeadAttention):
@@ -392,15 +396,13 @@ class MultiHeadRelativeAttention(MultiHeadAttention):
     def call(
         self,
         inputs,
-        content_attention_bias,
-        positional_attention_bias,
         attention_mask=None,
         training=None,
         use_causal_mask=False,
         use_auto_mask=True,
         return_attention_scores=False,
     ):
-        query, key, value, relative_position_encoding = inputs
+        query, key, value, relative_position_encoding, content_attention_bias, positional_attention_bias, *_ = inputs
 
         if not self._built_from_signature:
             self._build_from_signature(query, value, relative_position_encoding, key=key)

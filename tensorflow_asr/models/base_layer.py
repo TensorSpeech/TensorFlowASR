@@ -1,4 +1,4 @@
-# Copyright 2022 Huy Le Nguyen (@nglehuy)
+# Copyright 2023 Huy Le Nguyen (@nglehuy)
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,7 +13,6 @@
 # limitations under the License.
 
 import keras.layers
-from keras.utils import tf_utils
 
 from tensorflow_asr.utils import math_util
 
@@ -28,21 +27,7 @@ class Layer(keras.layers.Layer):
         **kwargs,
     ):
         super().__init__(trainable, name, dtype, dynamic, **kwargs)
-        self._output_shape = None
         self.supports_masking = True
-
-    @property
-    def output_shape(self):
-        if self._output_shape is None:
-            raise AttributeError(f"The layer {self.name} has never been called and thus has no defined output shape.")
-        return self._output_shape
-
-    def build(self, input_shape):
-        self._output_shape = tf_utils.convert_shapes(self.compute_output_shape(input_shape), to_tuples=True)
-        super().build(input_shape)
-
-    def compute_output_shape(self, input_shape):
-        return input_shape
 
 
 class Reshape(Layer):

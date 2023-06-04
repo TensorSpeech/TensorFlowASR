@@ -18,7 +18,7 @@ from tensorflow_asr.models.base_layer import Layer
 
 
 class GLU(Layer):
-    def __init__(self, axis=-1, name="glu_activation", **kwargs):
+    def __init__(self, axis=-1, name="glu", **kwargs):
         super().__init__(name=name, **kwargs)
         self.axis = axis
 
