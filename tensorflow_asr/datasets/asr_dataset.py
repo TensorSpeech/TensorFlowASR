@@ -166,11 +166,11 @@ class ASRDataset(BaseDataset):
         with tf.device("/CPU:0"):
             signal = tf_read_raw_audio(audio, self.speech_featurizer.speech_config.sample_rate)
             signal = self.augmentations.signal_augment(signal)
-            features = self.speech_featurizer.tf_extract(signal)
+            features = self.speech_featurizer.extract(signal)
             features = self.augmentations.feature_augment(features)
             input_length = tf.shape(features, out_type=tf.int32)[0]
 
-            label = self.text_featurizer.tf_extract(transcript)
+            label = self.text_featurizer.extract(transcript)
             label_length = tf.shape(label, out_type=tf.int32)[0]
 
             prediction = self.text_featurizer.prepand_blank(label)
