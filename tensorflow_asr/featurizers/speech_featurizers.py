@@ -238,12 +238,7 @@ class SpeechFeaturizer:
         log_spec -= 10.0 * math_util.log10(tf.maximum(self.speech_config.output_floor, 1.0))
         return log_spec
 
-    def extract(self, signal: np.ndarray) -> np.ndarray:
-        signal = np.asfortranarray(signal)
-        features = self.tf_extract(tf.convert_to_tensor(signal, dtype=tf.float32))
-        return features.numpy()
-
-    def tf_extract(self, signal: tf.Tensor) -> tf.Tensor:
+    def extract(self, signal: tf.Tensor) -> tf.Tensor:
         """
         Extract speech features from signals (for using in tflite)
         Args:
