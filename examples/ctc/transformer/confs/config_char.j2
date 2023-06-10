@@ -17,7 +17,7 @@
 {% set datadir = "/Volumes/Data/MLDL/Datasets/ASR/LibriSpeech" %}
 
 model_config:
-  class_name: tensorflow_asr.models.ctc>transformer
+  class_name: tensorflow_asr.models.ctc>Transformer
   config:
     name: transformer
     encoder_subsampling:
@@ -62,7 +62,6 @@ decoder_config:
 learning_config:
   train_dataset_config:
     enabled: True
-    use_tf: True
     augmentation_config:
       feature_augment:
         time_masking:
@@ -86,7 +85,6 @@ learning_config:
 
   eval_dataset_config:
     enabled: False
-    use_tf: True
     data_paths:
       - {{datadir}}/dev-clean/transcripts.tsv
     tfrecords_dir: null
@@ -98,7 +96,6 @@ learning_config:
     metadata: {{repodir}}/vocabularies/librispeech/characters/train.metadata.json
 
   test_dataset_config:
-    use_tf: True
     data_paths:
       - {{datadir}}/test-clean/transcripts.tsv
     tfrecords_dir: null

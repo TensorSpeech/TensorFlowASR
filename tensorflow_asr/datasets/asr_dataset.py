@@ -22,12 +22,7 @@ import tqdm
 
 from tensorflow_asr.augmentations.augmentation import Augmentation
 from tensorflow_asr.datasets.base_dataset import AUTOTUNE, BUFFER_SIZE, TFRECORD_SHARDS, BaseDataset
-from tensorflow_asr.featurizers.speech_featurizers import (
-    SpeechFeaturizer,
-    load_and_convert_to_wav,
-    read_raw_audio,
-    tf_read_raw_audio,
-)
+from tensorflow_asr.featurizers.speech_featurizers import SpeechFeaturizer, load_and_convert_to_wav, tf_read_raw_audio
 from tensorflow_asr.featurizers.text_featurizers import TextFeaturizer
 from tensorflow_asr.utils import data_util, feature_util, file_util, math_util
 
@@ -48,7 +43,6 @@ class ASRDataset(BaseDataset):
         shuffle: bool = False,
         indefinite: bool = False,
         drop_remainder: bool = True,
-        use_tf: bool = False,
         enabled: bool = True,
         metadata: str = None,
         buffer_size: int = BUFFER_SIZE,
@@ -62,7 +56,6 @@ class ASRDataset(BaseDataset):
             stage=stage,
             buffer_size=buffer_size,
             drop_remainder=drop_remainder,
-            use_tf=use_tf,
             enabled=enabled,
             metadata=metadata,
             indefinite=indefinite,
@@ -164,37 +157,7 @@ class ASRDataset(BaseDataset):
             audio = load_and_convert_to_wav(path).numpy()
             yield bytes(path, "utf-8"), audio, bytes(transcript, "utf-8")
 
-    def preprocess(
-        self,
-        path: tf.Tensor,
-        audio: tf.Tensor,
-        transcript: tf.Tensor,
-    ):
-        with tf.device("/CPU:0"):
-
-            def fn(_path: bytes, _audio: bytes, _transcript: bytes):
-                signal = read_raw_audio(_audio, sample_rate=self.speech_featurizer.speech_config.sample_rate)
-                signal = self.augmentations.signal_augment(signal)
-                features = self.speech_featurizer.extract(signal.numpy())
-                features = self.augmentations.feature_augment(features)
-                features = tf.convert_to_tensor(features, tf.float32)
-                input_length = tf.shape(features, out_type=tf.int32)[0]
-
-                label = self.text_featurizer.extract(_transcript)
-                label_length = tf.shape(label, out_type=tf.int32)[0]
-
-                prediction = self.text_featurizer.prepand_blank(label)
-                prediction_length = tf.shape(prediction, out_type=tf.int32)[0]
-
-                return _path, features, input_length, label, label_length, prediction, prediction_length
-
-            return tf.numpy_function(
-                fn,
-                inp=[path, audio, transcript],
-                Tout=[tf.string, tf.float32, tf.int32, tf.int32, tf.int32, tf.int32, tf.int32],
-            )
-
-    def tf_preprocess(
+    def _process_item(
         self,
         path: tf.Tensor,
         audio: tf.Tensor,
@@ -225,7 +188,7 @@ class ASRDataset(BaseDataset):
         Returns:
             path, features, input_lengths, labels, label_lengths, pred_inp
         """
-        data = self.tf_preprocess(path, audio, transcript) if self.use_tf else self.preprocess(path, audio, transcript)
+        data = self._process_item(path=path, audio=audio, transcript=transcript)
         _, features, input_length, label, label_length, prediction, prediction_length = data
         return (
             data_util.create_inputs(inputs=features, inputs_length=input_length, predictions=prediction, predictions_length=prediction_length),
@@ -305,7 +268,6 @@ class ASRTFRecordDataset(ASRDataset):
         tfrecords_shards: int = TFRECORD_SHARDS,
         cache: bool = False,
         shuffle: bool = False,
-        use_tf: bool = False,
         enabled: bool = True,
         metadata: str = None,
         indefinite: bool = False,
@@ -324,7 +286,6 @@ class ASRTFRecordDataset(ASRDataset):
             shuffle=shuffle,
             buffer_size=buffer_size,
             drop_remainder=drop_remainder,
-            use_tf=use_tf,
             enabled=enabled,
             metadata=metadata,
             indefinite=indefinite,

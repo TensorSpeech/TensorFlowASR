@@ -243,7 +243,6 @@ decoder_config:
 learning_config:
   train_dataset_config:
     enabled: True
-    use_tf: True
     augmentation_config:
       feature_augment:
         gauss_noise:
@@ -270,7 +269,6 @@ learning_config:
 
   eval_dataset_config:
     enabled: False
-    use_tf: True
     data_paths:
       - {{datadir}}/dev-clean/transcripts.tsv
     tfrecords_dir: null
@@ -283,7 +281,6 @@ learning_config:
 
   test_dataset_config:
     enabled: False
-    use_tf: True
     data_paths:
       - {{datadir}}/test-clean/transcripts.tsv
     tfrecords_dir: null

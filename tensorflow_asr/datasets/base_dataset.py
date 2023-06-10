@@ -32,7 +32,6 @@ class BaseDataset:
         buffer_size: int = BUFFER_SIZE,
         indefinite: bool = False,
         drop_remainder: bool = True,
-        use_tf: bool = False,
         enabled: bool = True,
         metadata: str = None,
         stage: str = "train",
@@ -48,7 +47,6 @@ class BaseDataset:
             raise ValueError("buffer_size must be positive when shuffle is on")
         self.buffer_size = buffer_size  # shuffle buffer size
         self.stage = stage  # for defining tfrecords files
-        self.use_tf = use_tf
         self.enabled = enabled
         self.drop_remainder = drop_remainder  # whether to drop remainder for multi gpu training
         self.indefinite = indefinite  # Whether to make dataset repeat indefinitely -> avoid the potential last partial batch

@@ -50,7 +50,7 @@ def read_raw_audio(
             wave = librosa.resample(wave, orig_sr=sr, target_sr=sample_rate)
     elif isinstance(audio, np.ndarray):
         if audio.ndim > 1:
-            ValueError("input audio must be single channel")
+            raise ValueError("input audio must be single channel")
         return audio
     else:
         raise ValueError("input audio must be either a path or bytes")

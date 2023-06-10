@@ -71,7 +71,6 @@ decoder_config:
 learning_config:
   train_dataset_config:
     enabled: True
-    use_tf: True
     augmentation_config:
       feature_augment:
         time_masking:
@@ -96,7 +95,6 @@ learning_config:
 
   eval_dataset_config:
     enabled: False
-    use_tf: True
     data_paths: null
     tfrecords_dir: null
     shuffle: False
@@ -108,7 +106,6 @@ learning_config:
 
   test_dataset_config:
     enabled: False
-    use_tf: True
     data_paths: null
     tfrecords_dir: null
     shuffle: False

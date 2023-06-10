@@ -93,6 +93,7 @@ class DecoderConfig:
         self.num_iterations: int = config.pop("num_iterations", 4)
         self.reserved_tokens: list = config.pop("reserved_tokens", None)
         self.normalization_form: str = config.pop("normalization_form", "NFKC")
+        self.keep_whitespace: bool = config.pop("keep_whitespace", False)
 
         self.corpus_files = file_util.preprocess_paths(config.pop("corpus_files", []))
 
@@ -113,7 +114,6 @@ class DatasetConfig:
         self.cache: bool = config.pop("cache", False)
         self.drop_remainder: bool = config.pop("drop_remainder", True)
         self.buffer_size: int = config.pop("buffer_size", 1000)
-        self.use_tf: bool = config.pop("use_tf", False)
         self.augmentations = Augmentation(config.pop("augmentation_config", {}))
         self.metadata: str = config.pop("metadata", None)
         for k, v in config.items():

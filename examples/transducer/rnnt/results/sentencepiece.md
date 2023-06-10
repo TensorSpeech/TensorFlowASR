@@ -81,7 +81,6 @@ decoder_config:
 learning_config:
   train_dataset_config:
     enabled: False
-    use_tf: True
     data_paths: null
     tfrecords_dir: {{datadir}}
     shuffle: True
@@ -93,7 +92,6 @@ learning_config:
 
   eval_dataset_config:
     enabled: False
-    use_tf: True
     data_paths: null
     tfrecords_dir: null
     shuffle: False
@@ -105,7 +103,6 @@ learning_config:
 
   test_dataset_config:
     enabled: True
-    use_tf: True
     data_paths:
       - {{datadir}}/test-clean/transcripts.tsv
     tfrecords_dir: null

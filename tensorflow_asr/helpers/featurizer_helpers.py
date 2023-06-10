@@ -27,9 +27,6 @@ def prepare_featurizers(
     if config.decoder_config.type == "sentencepiece":
         logger.info("Loading SentencePiece model ...")
         text_featurizer = text_featurizers.SentencePieceFeaturizer(config.decoder_config)
-    elif config.decoder_config.type == "subwords":
-        logger.info("Loading subwords ...")
-        text_featurizer = text_featurizers.SubwordFeaturizer(config.decoder_config)
     elif config.decoder_config.type == "wordpiece":
         logger.info("Loading wordpiece ...")
         text_featurizer = text_featurizers.WordPieceFeaturizer(config.decoder_config)

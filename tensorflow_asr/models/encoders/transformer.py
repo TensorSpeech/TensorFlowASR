@@ -124,27 +124,19 @@ class TransformerBlock(Layer):
     def call(
         self,
         inputs,
-        relative_position_encoding=None,
-        content_attention_bias=None,
-        positional_attention_bias=None,
         training=False,
         attention_mask=None,
         use_causal_mask=False,
         use_auto_mask=True,
     ):
-        original_outputs = inputs
+        original_outputs, relative_position_encoding, content_attention_bias, positional_attention_bias = inputs
         outputs = self.norm1(original_outputs, training=training) if self._norm_position == "pre" else original_outputs
-        mha_inputs = (
-            dict(
-                inputs=[outputs, outputs, outputs, relative_position_encoding],
-                content_attention_bias=content_attention_bias,
-                positional_attention_bias=positional_attention_bias,
-            )
-            if self._mha_type == "relmha"
-            else dict(inputs=[outputs, outputs, outputs])
-        )
         outputs = self.mha(
-            **mha_inputs,
+            (
+                [outputs, outputs, outputs, relative_position_encoding, content_attention_bias, positional_attention_bias]
+                if self._mha_type == "relmha"
+                else [outputs, outputs, outputs]
+            ),
             training=training,
             attention_mask=attention_mask,
             use_causal_mask=use_causal_mask,
@@ -267,10 +259,7 @@ class TransformerEncoder(Layer):
         outputs = self.do(outputs, training=training)
         for block in self.blocks:
             outputs = block(
-                outputs,
-                relative_position_encoding=relative_position_encoding,
-                content_attention_bias=self.content_attention_bias,
-                positional_attention_bias=self.positional_attention_bias,
+                [outputs, relative_position_encoding, self.content_attention_bias, self.positional_attention_bias],
                 training=training,
                 use_causal_mask=self._use_attention_causal_mask,
                 use_auto_mask=self._use_attention_auto_mask,
