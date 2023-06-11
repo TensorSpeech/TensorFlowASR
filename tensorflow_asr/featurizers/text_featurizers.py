@@ -15,7 +15,6 @@
 import codecs
 import os
 import unicodedata
-from multiprocessing import cpu_count
 
 import sentencepiece as sp
 import tensorflow as tf
@@ -237,6 +236,7 @@ class SentencePieceFeaturizer(TextFeaturizer):
             pad_id=decoder_config.pad_index,
             unk_surface="__UNKNOWN__",  # change default unk surface U+2047("⁇") by "__UNKNOWN__"
             allow_whitespace_only_pieces=decoder_config.keep_whitespace,
+            split_by_whitespace=(not decoder_config.keep_whitespace),
             max_sentencepiece_length=decoder_config.max_sentencepiece_length,
             max_sentence_length=decoder_config.max_sentence_length,  # bytes
         )
