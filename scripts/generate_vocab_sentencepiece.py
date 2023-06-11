@@ -15,7 +15,7 @@
 from tensorflow_asr import tf
 from tensorflow_asr.configs.config import Config
 from tensorflow_asr.featurizers.text_featurizers import SentencePieceFeaturizer
-from tensorflow_asr.utils import cli_util, env_util
+from tensorflow_asr.utils import cli_util
 
 logger = tf.get_logger()
 
