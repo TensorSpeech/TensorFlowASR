@@ -22,7 +22,6 @@ import jinja2
 import tensorflow as tf
 import yaml
 
-ROOT_DIRECTORY = os.path.realpath(os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))  # root dir of the repo
 ENABLE_PATH_PREPROCESS = True
 
 
@@ -47,9 +46,7 @@ def load_yaml(
     )
     with tf.io.gfile.GFile(path, "r") as file:
         return yaml.load(
-            jinja2.Environment(loader=jinja2.FileSystemLoader([ROOT_DIRECTORY, "."]), autoescape=True)
-            .from_string(file.read())
-            .render(repodir=ROOT_DIRECTORY),
+            jinja2.Environment(loader=jinja2.FileSystemLoader(["."]), autoescape=True).from_string(file.read()).render(repodir="."),
             Loader=loader,
         )
 
