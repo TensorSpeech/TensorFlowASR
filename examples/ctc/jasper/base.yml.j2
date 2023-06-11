@@ -15,11 +15,11 @@
 {% set modeldir = "/mnt/Miscellanea/Models/local/jasper" %}
 {% set datadir = "/mnt/Data/MLDL/Datasets/ASR/LibriSpeech" %}
 
-{# {% import "examples/configs/wp.yml.j2" as decoder_config %} #}
-{% import "examples/configs/wp_whitespace.yml.j2" as decoder_config %}
-{# {% import "examples/configs/sp.yml.j2" as decoder_config %} #}
-{# {% import "examples/configs/sp_whitespace.yml.j2" as decoder_config %} #}
-{# {% import "examples/configs/char.yml.j2" as decoder_config %} #}
+{# {% import "examples/configs/wp.yml.j2" as decoder_config with context %} #}
+{% import "examples/configs/wp_whitespace.yml.j2" as decoder_config with context %}
+{# {% import "examples/configs/sp.yml.j2" as decoder_config with context %} #}
+{# {% import "examples/configs/sp_whitespace.yml.j2" as decoder_config with context %} #}
+{# {% import "examples/configs/char.yml.j2" as decoder_config with context %} #}
 
 speech_config:
   sample_rate: 16000
