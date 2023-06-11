@@ -66,7 +66,7 @@ decoder_config:
   norm_score: True
   lm_config: null
   vocabulary: {{repodir}}/vocabularies/librispeech/characters/english.characters
-  corpus_files: null
+  train_files: null
 
 learning_config:
   train_dataset_config:

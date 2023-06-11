@@ -73,7 +73,7 @@ class TextFeaturizer:
 
     @classmethod
     def corpus_generator(cls, decoder_config: DecoderConfig):
-        for file_path in decoder_config.corpus_files:
+        for file_path in decoder_config.train_files:
             logger.info(f"Reading {file_path} ...")
             with tf.io.gfile.GFile(file_path, "r") as f:
                 temp_lines = f.read().splitlines()
@@ -226,6 +226,8 @@ class SentencePieceFeaturizer(TextFeaturizer):
 
     @classmethod
     def build_from_corpus(cls, decoder_config: DecoderConfig):
+        if os.path.exists(decoder_config.vocabulary):
+            return
         sp.SentencePieceTrainer.Train(
             sentence_iterator=cls.corpus_generator(decoder_config),
             model_prefix=os.path.splitext(decoder_config.vocabulary)[0],
@@ -304,6 +306,9 @@ class WordPieceFeaturizer(TextFeaturizer):
 
     @classmethod
     def build_from_corpus(cls, decoder_config: DecoderConfig):
+        if os.path.exists(decoder_config.vocabulary):
+            return
+
         def generator():
             for data in cls.corpus_generator(decoder_config):
                 yield data

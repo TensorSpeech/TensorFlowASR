@@ -34,7 +34,7 @@ def test_featurizer():
         "blank_at_zero": True,
         "beam_width": 5,
         "norm_score": True,
-        "corpus_files": [
+        "train_files": [
             "/data/datasets/LibriSpeech/train-clean-100/transcripts.tsv"
             "/data/datasets/LibriSpeech/train-clean-360/transcripts.tsv"
             "/data/datasets/LibriSpeech/train-other-500/transcripts.tsv"
@@ -88,7 +88,7 @@ def test_iextract():
         "blank_at_zero": True,
         "beam_width": 5,
         "norm_score": True,
-        "corpus_files": [
+        "train_files": [
             "/data/datasets/LibriSpeech/train-clean-100/transcripts.tsv"
             "/data/datasets/LibriSpeech/train-clean-360/transcripts.tsv"
             "/data/datasets/LibriSpeech/train-other-500/transcripts.tsv"

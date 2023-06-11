@@ -97,7 +97,8 @@ class DecoderConfig:
         self.max_sentence_length: int = config.pop("max_sentence_length", 1048576)  # bytes
         self.max_sentencepiece_length: int = config.pop("max_sentencepiece_length", 16)  # bytes
 
-        self.corpus_files = file_util.preprocess_paths(config.pop("corpus_files", []))
+        self.train_files = file_util.preprocess_paths(config.pop("train_files", []))
+        self.eval_files = file_util.preprocess_paths(config.pop("eval_files", []))
 
         for k, v in config.items():
             setattr(self, k, v)

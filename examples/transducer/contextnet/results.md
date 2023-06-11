@@ -236,7 +236,7 @@ decoder_config:
   normalization_form: NFKC
   num_iterations: 4
 
-  corpus_files: null
+  train_files: null
 
 learning_config:
   train_dataset_config:

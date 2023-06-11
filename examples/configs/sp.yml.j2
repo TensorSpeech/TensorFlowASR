@@ -23,8 +23,11 @@ decoder_config:
   normalization_form: NFKC
   max_sentencepiece_length: 16
   max_sentence_length: 1048576
-  corpus_files:
+  train_files:
     - {{datadir}}/train-clean-100/transcripts.tsv
     - {{datadir}}/train-clean-360/transcripts.tsv
     - {{datadir}}/train-other-500/transcripts.tsv
+  eval_files:
+    - {{datadir}}/dev-clean/transcripts.tsv
+    - {{datadir}}/dev-other/transcripts.tsv
 
