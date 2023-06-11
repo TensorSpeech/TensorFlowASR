@@ -1,4 +1,4 @@
-# Copyright 2020 Huy Le Nguyen (@nglehuy)
+{# # Copyright 2020 Huy Le Nguyen (@nglehuy)
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -10,11 +10,21 @@
 # distributed under the License is distributed on an "AS IS" BASIS,
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
-# limitations under the License.
+# limitations under the License. #}
 
 {% set repodir = "." %}
-{% set modeldir = "/Volumes/Data/Miscellanea/Models/local/transformer-ctc" %}
-{% set datadir = "/Volumes/Data/MLDL/Datasets/ASR/LibriSpeech" %}
+{% set modeldir = "E:/Miscellanea/Models/local/transformer-ctc" %}
+{% set datadir = "E:/MLDL/Datasets/ASR/LibriSpeech" %}
+
+speech_config:
+  sample_rate: 16000
+  frame_ms: 25
+  stride_ms: 10
+  num_feature_bins: 80
+  feature_type: log_mel_spectrogram
+
+{# "examples/configs/wp_whitespace.yml.j2" or "examples/configs/sp.yml.j2" or "examples/configs/sp_whitespace.yml.j2" #}
+{% include "examples/configs/wp.yml.j2" %} 
 
 model_config:
   class_name: tensorflow_asr.models.ctc>Transformer
@@ -43,21 +53,7 @@ model_config:
     encoder_use_attention_auto_mask: True
     encoder_pwffn_activation: relu
     encoder_memory_length: 512
-
-speech_config:
-  sample_rate: 16000
-  frame_ms: 25
-  stride_ms: 10
-  num_feature_bins: 80
-  feature_type: log_mel_spectrogram
-
-decoder_config:
-  type: characters
-  blank_index: 0
-  beam_width: 0
-  norm_score: True
-  lm_config: null
-  vocabulary: {{repodir}}/vocabularies/english.characters
+    vocab_size: {{vocabsize}}
 
 learning_config:
   train_dataset_config:
@@ -81,7 +77,7 @@ learning_config:
     buffer_size: 100
     drop_remainder: True
     stage: train
-    metadata: {{repodir}}/vocabularies/librispeech/characters/train.metadata.json
+    metadata: {{repodir}}/vocabularies/librispeech/wordpiece/train_{{vocabsize}}.metadata.json
 
   eval_dataset_config:
     enabled: False
@@ -93,7 +89,7 @@ learning_config:
     buffer_size: 100
     drop_remainder: True
     stage: eval
-    metadata: {{repodir}}/vocabularies/librispeech/characters/train.metadata.json
+    metadata: {{repodir}}/vocabularies/librispeech/wordpiece/train_{{vocabsize}}.metadata.json
 
   test_dataset_config:
     data_paths:

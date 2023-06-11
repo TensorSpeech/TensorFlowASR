@@ -16,23 +16,6 @@
 {% set modeldir = "/mnt/Miscellanea/Models/local/deepspeech2" %}
 {% set datadir = "/mnt/Data/MLDL/Datasets/ASR/LibriSpeech" %}
 
-model_config:
-  name: deepspeech2
-  conv_type: conv2d
-  conv_kernels: [[11, 41], [11, 21], [11, 11]]
-  conv_strides: [[2, 2], [1, 2], [1, 2]]
-  conv_filters: [32, 32, 96]
-  conv_dropout: 0.1
-  rnn_nlayers: 5
-  rnn_type: lstm
-  rnn_units: 512
-  rnn_bidirectional: True
-  rnn_unroll: False
-  rnn_rowconv: 0
-  rnn_dropout: 0.1
-  fc_nlayers: 0
-  fc_units: 1024
-
 speech_config:
   sample_rate: 16000
   frame_ms: 25
@@ -40,31 +23,28 @@ speech_config:
   num_feature_bins: 80
   feature_type: log_mel_spectrogram
 
-decoder_config:
-  type: wordpiece
+{# "examples/configs/wp_whitespace.yml.j2" or "examples/configs/sp.yml.j2" or "examples/configs/sp_whitespace.yml.j2" #}
+{% include "examples/configs/wp.yml.j2" %} 
 
-  blank_index: 0
-  unknown_token: "<unk>"
-  unknown_index: 1
-
-  beam_width: 0
-  norm_score: True
-  lm_config: null
-
-  vocabulary: {{repodir}}/vocabularies/librispeech/wordpiece/train_1000_50.tokens
-  vocab_size: 1000
-  max_token_length: 50
-  max_unique_chars: 1000
-  reserved_tokens:
-    - "<pad>"
-    - "<unk>"
-  normalization_form: NFKC
-  num_iterations: 4
-
-  corpus_files:
-    - {{datadir}}/train-clean-100/transcripts.tsv
-    - {{datadir}}/train-clean-360/transcripts.tsv
-    - {{datadir}}/train-other-500/transcripts.tsv
+model_config:
+  class_name: tensorflow_asr.models.ctc>DeepSpeech2
+  config:
+    name: deepspeech2
+    conv_type: conv2d
+    conv_kernels: [[11, 41], [11, 21], [11, 11]]
+    conv_strides: [[2, 2], [1, 2], [1, 2]]
+    conv_filters: [32, 32, 96]
+    conv_dropout: 0.1
+    rnn_nlayers: 5
+    rnn_type: lstm
+    rnn_units: 512
+    rnn_bidirectional: True
+    rnn_unroll: False
+    rnn_rowconv: 0
+    rnn_dropout: 0.1
+    fc_nlayers: 0
+    fc_units: 1024
+    vocab_size: {{vocabsize}}
 
 learning_config:
   train_dataset_config:
@@ -88,10 +68,10 @@ learning_config:
     buffer_size: 100
     drop_remainder: True
     stage: train
-    metadata: {{repodir}}/vocabularies/librispeech/wordpiece/train_1000.metadata.json
+    metadata: {{repodir}}/vocabularies/librispeech/wordpiece/train_{{vocabsize}}.metadata.json
 
   eval_dataset_config:
-    enabled: False
+    enabled: True
     data_paths:
       - {{datadir}}/dev-clean/transcripts.tsv
     tfrecords_dir: null
@@ -100,7 +80,7 @@ learning_config:
     buffer_size: 100
     drop_remainder: True
     stage: eval
-    metadata: {{repodir}}/vocabularies/librispeech/wordpiece/train_1000.metadata.json
+    metadata: {{repodir}}/vocabularies/librispeech/wordpiece/train_{{vocabsize}}.metadata.json
 
   test_dataset_config:
     enabled: False
@@ -114,13 +94,18 @@ learning_config:
     stage: test
 
   optimizer_config:
-    beta_1: 0.9
-    beta_2: 0.98
-    epsilon: 1e-9
-
-  learning_rate_config:
-    warmup_steps: 10000
-    max_lr_numerator: 0.05
+    class_name: adam
+    config:
+      learning_rate:
+        class_name: tensorflow_asr.optimizers.schedules>TransformerSchedule
+        config:
+          dmodel: 512
+          warmup_steps: 10000
+          max_lr: null
+          min_lr: 1e-6
+      beta_1: 0.9
+      beta_2: 0.98
+      epsilon: 1e-9
 
   running_config:
     batch_size: 2

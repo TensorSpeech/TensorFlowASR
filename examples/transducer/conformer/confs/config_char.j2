@@ -16,17 +16,6 @@
 {% set modeldir = "/Users/nlhuy/Paraphernalia/models/local/conformer" %}
 {% set datadir = "/Users/nlhuy/Paraphernalia/data/LibriSpeech" %}
 
-decoder_config:
-  type: characters
-
-  blank_index: 0
-
-  beam_width: 0
-  norm_score: True
-  lm_config: null
-
-  vocabulary: {{repodir}}/vocabularies/english.characters
-
 speech_config:
   sample_rate: 16000
   frame_ms: 25
@@ -34,6 +23,8 @@ speech_config:
   num_feature_bins: 80
   feature_type: log_mel_spectrogram
   normalize_feature: True
+
+{% include "" %}
 
 model_config:
   class_name: tensorflow_asr.models.transducer>Conformer
