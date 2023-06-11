@@ -6,13 +6,13 @@ decoder_config:
   type: sentencepiece
   blank_index: 0
   pad_token: "<pad>"
-  pad_index: 0
+  pad_index: -1 # disable
   unknown_token: "<unk>"
-  unknown_index: 1
+  unknown_index: 0
   bos_token: "<s>"
-  bos_index: 2
+  bos_index: -1 # disable
   eos_token: "</s>"
-  eos_index: 3
+  eos_index: -1 # disable
   beam_width: 0
   norm_score: True
   lm_config: null

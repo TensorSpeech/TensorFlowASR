@@ -235,8 +235,10 @@ class SentencePieceFeaturizer(TextFeaturizer):
             eos_id=decoder_config.eos_index,
             pad_id=decoder_config.pad_index,
             unk_surface="__UNKNOWN__",  # change default unk surface U+2047("⁇") by "__UNKNOWN__"
-            allow_whitespace_only_pieces=decoder_config.keep_whitespace,
-            split_by_whitespace=(not decoder_config.keep_whitespace),
+            allow_whitespace_only_pieces=False,
+            split_by_whitespace=False,
+            treat_whitespace_as_suffix=False,
+            user_defined_symbols=(" " if decoder_config.keep_whitespace else ""),
             max_sentencepiece_length=decoder_config.max_sentencepiece_length,
             max_sentence_length=decoder_config.max_sentence_length,  # bytes
         )
@@ -326,17 +328,17 @@ class WordPieceFeaturizer(TextFeaturizer):
             dataset.batch(1000).prefetch(2),
             vocab_size=decoder_config.vocab_size,
             reserved_tokens=decoder_config.reserved_tokens,
-            bert_tokenizer_params=dict(
-                lower_case=False,  # keep original from dataset
-                keep_whitespace=decoder_config.keep_whitespace,
-                normalization_form=decoder_config.normalization_form,
-                preserve_unused_token=False,
-            ),
-            learn_params=dict(
-                max_token_length=decoder_config.max_token_length,
-                max_unique_chars=decoder_config.max_unique_chars,
-                num_iterations=decoder_config.num_iterations,
-            ),
+            bert_tokenizer_params={
+                "lower_case": False,  # keep original from dataset
+                "keep_whitespace": decoder_config.keep_whitespace,
+                "normalization_form": decoder_config.normalization_form,
+                "preserve_unused_token": False,
+            },
+            learn_params={
+                "max_token_length": decoder_config.max_token_length,
+                "max_unique_chars": decoder_config.max_unique_chars,
+                "num_iterations": decoder_config.num_iterations,
+            },
         )
         write_vocab_file(decoder_config.vocabulary, vocab)
 
