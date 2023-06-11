@@ -38,27 +38,29 @@ def main(
     elif config.decoder_config.type == "wordpiece":
         text_featurizers.WordPieceFeaturizer.build_from_corpus(config.decoder_config)
 
-    logger.info("Preparing train metadata ...")
-    speech_featurizer, text_featurizer = featurizer_helpers.prepare_featurizers(config=config)
-    train_dataset = ASRDataset(
-        data_paths=config.decoder_config.train_files,
-        speech_featurizer=speech_featurizer,
-        text_featurizer=text_featurizer,
-        stage="train",
-        shuffle=False,
-    )
-    train_dataset.update_metadata(metadata)
+    if config.decoder_config.train_files:
+        logger.info("Preparing train metadata ...")
+        speech_featurizer, text_featurizer = featurizer_helpers.prepare_featurizers(config=config)
+        train_dataset = ASRDataset(
+            data_paths=config.decoder_config.train_files,
+            speech_featurizer=speech_featurizer,
+            text_featurizer=text_featurizer,
+            stage="train",
+            shuffle=False,
+        )
+        train_dataset.update_metadata(metadata)
 
-    logger.info("Preparing eval metadata ...")
-    speech_featurizer, text_featurizer = featurizer_helpers.prepare_featurizers(config=config)
-    eval_dataset = ASRDataset(
-        data_paths=config.decoder_config.eval_files,
-        speech_featurizer=speech_featurizer,
-        text_featurizer=text_featurizer,
-        stage="eval",
-        shuffle=False,
-    )
-    eval_dataset.update_metadata(metadata)
+    if config.decoder_config.eval_files:
+        logger.info("Preparing eval metadata ...")
+        speech_featurizer, text_featurizer = featurizer_helpers.prepare_featurizers(config=config)
+        eval_dataset = ASRDataset(
+            data_paths=config.decoder_config.eval_files,
+            speech_featurizer=speech_featurizer,
+            text_featurizer=text_featurizer,
+            stage="eval",
+            shuffle=False,
+        )
+        eval_dataset.update_metadata(metadata)
 
 
 if __name__ == "__main__":
