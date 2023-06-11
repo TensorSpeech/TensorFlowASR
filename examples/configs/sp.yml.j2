@@ -1,4 +1,6 @@
 {% set vocabsize = 1000 %}
+{% set vocabprefix = repodir ~ "/vocabularies/librispeech/sentencepiece/train_bpe" ~ vocabsize %}
+{% set metadata = vocabprefix ~ ".metadata.json" %}
 
 decoder_config:
   type: sentencepiece
@@ -15,8 +17,8 @@ decoder_config:
   norm_score: True
   lm_config: null
   model_type: bpe
-  vocabulary: {{repodir}}/vocabularies/librispeech/sentencepiece/train_bpe_{{vocabsize}}.model
-  keep_whitespace: True
+  vocabulary: {{vocabprefix}}.model
+  keep_whitespace: False
   vocab_size: {{vocabsize}}
   reserved_tokens: null
   normalization_form: NFKC

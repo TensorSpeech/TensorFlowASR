@@ -1,7 +1,11 @@
+{% set vocabsize = 29 %}
+{% set vocabprefix = repodir ~ "/vocabularies/librispeech/characters/english" %}
+{% set metadata = vocabprefix ~ ".metadata.json" %}
+
 decoder_config:
   type: characters
   blank_index: 0
   beam_width: 0
   norm_score: True
   lm_config: null
-  vocabulary: {{repodir}}/vocabularies/english.vocab
+  vocabulary: {{vocabprefix}}.vocab

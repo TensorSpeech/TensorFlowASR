@@ -1,4 +1,6 @@
 {% set vocabsize = 1000 %}
+{% set vocabprefix = repodir ~ "/vocabularies/librispeech/wordpiece/train_" ~ vocabsize ~ "_whitespace" %}
+{% set metadata = vocabprefix ~ ".metadata.json" %}
 
 decoder_config:
   type: wordpiece
@@ -8,7 +10,7 @@ decoder_config:
   beam_width: 0
   norm_score: True
   lm_config: null
-  vocabulary: {{repodir}}/vocabularies/librispeech/wordpiece/train_{{vocabsize}}_whitespace.vocab
+  vocabulary: {{vocabprefix}}.vocab
   keep_whitespace: True
   vocab_size: {{vocabsize}}
   max_token_length: 50

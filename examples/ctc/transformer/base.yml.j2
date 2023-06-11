@@ -15,6 +15,12 @@
 {% set modeldir = "E:/Miscellanea/Models/local/transformer-ctc" %}
 {% set datadir = "E:/MLDL/Datasets/ASR/LibriSpeech" %}
 
+{# {% import "examples/configs/wp.yml.j2" as decoder_config %} #}
+{% import "examples/configs/wp_whitespace.yml.j2" as decoder_config %}
+{# {% import "examples/configs/sp.yml.j2" as decoder_config %} #}
+{# {% import "examples/configs/sp_whitespace.yml.j2" as decoder_config %} #}
+{# {% import "examples/configs/char.yml.j2" as decoder_config %} #}
+
 speech_config:
   sample_rate: 16000
   frame_ms: 25
@@ -22,11 +28,7 @@ speech_config:
   num_feature_bins: 80
   feature_type: log_mel_spectrogram
 
-{# {% include "examples/configs/wp.yml.j2" %} #}
-{% include "examples/configs/wp_whitespace.yml.j2" %}
-{# {% include "examples/configs/sp.yml.j2" %}
-{% include "examples/configs/sp_whitespace.yml.j2" %}
-{% include "examples/configs/char.yml.j2" %} #}
+{{decoder_config}}
 
 model_config:
   class_name: tensorflow_asr.models.ctc>Transformer
@@ -55,7 +57,7 @@ model_config:
     encoder_use_attention_auto_mask: True
     encoder_pwffn_activation: relu
     encoder_memory_length: 512
-    vocab_size: {{vocabsize}}
+    vocab_size: {{decoder_config.vocabsize}}
 
 learning_config:
   train_dataset_config:
@@ -79,7 +81,7 @@ learning_config:
     buffer_size: 100
     drop_remainder: True
     stage: train
-    metadata: {{repodir}}/vocabularies/librispeech/wordpiece/train_{{vocabsize}}.metadata.json
+    metadata: {{decoder_config.metadata}}
 
   eval_dataset_config:
     enabled: False
@@ -91,7 +93,7 @@ learning_config:
     buffer_size: 100
     drop_remainder: True
     stage: eval
-    metadata: {{repodir}}/vocabularies/librispeech/wordpiece/train_{{vocabsize}}.metadata.json
+    metadata: {{decoder_config.metadata}}
 
   test_dataset_config:
     data_paths:
