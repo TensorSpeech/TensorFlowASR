@@ -12,11 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from tensorflow_asr import tf
 from tensorflow_asr.configs.config import Config
 from tensorflow_asr.featurizers.text_featurizers import WordPieceFeaturizer
 from tensorflow_asr.utils import cli_util, env_util
 
-logger = env_util.setup_environment()
+logger = tf.get_logger()
 
 
 def main(

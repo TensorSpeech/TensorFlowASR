@@ -12,15 +12,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from tensorflow_asr.utils import env_util
-
-logger = env_util.setup_environment()
-
+from tensorflow_asr import tf
 from tensorflow_asr.configs.config import Config
 from tensorflow_asr.datasets.asr_dataset import ASRTFRecordDataset
 from tensorflow_asr.helpers import featurizer_helpers
 from tensorflow_asr.utils import cli_util, file_util
 
+logger = tf.get_logger()
 
 def main(
     *transcripts,
