@@ -5,24 +5,18 @@ import tensorflow as tf
 
 from tensorflow_asr.configs.config import DecoderConfig
 from tensorflow_asr.featurizers.text_featurizers import SentencePieceFeaturizer
+from tensorflow_asr.utils import file_util
 
-decoder_config = DecoderConfig(
-    {
-        "model_type": "unigram",
-        "vocabulary": f"{os.path.dirname(__file__)}/../vocabularies/librispeech/sentencepiece/train_bpe_1000.model",
-        "blank_index": 0,
-        "pad_token": "<pad>",
-        "pad_index": 0,
-        "unknown_token": "<unk>",
-        "unknown_index": 1,
-        "bos_token": "<s>",
-        "bos_index": 2,
-        "eos_token": "</s>",
-        "eos_index": 3,
-    }
-)
+file_util.ENABLE_PATH_PREPROCESS = False
 
-text = "i'm good but it would have broken down after ten miles of that hard trail dawn came while they wound over the crest of the range and with the sun in their faces they took the downgrade it was well into the morning before nash reached logan"
+config_path = os.path.join(file_util.ROOT_DIRECTORY, "examples", "configs", "sp_whitespace.yml.j2")
+print(config_path)
+config = file_util.load_yaml(config_path)
+
+decoder_config = DecoderConfig(config["decoder_config"])
+
+# text = "i'm good but it would have broken down after ten miles of that hard trail dawn came while they wound over the crest of the range and with the sun in their faces they took the downgrade it was well into the morning before nash reached logan"
+text = "a b"
 
 
 def test():
@@ -30,9 +24,7 @@ def test():
     print(featurizer.num_classes)
     print(text)
     indices = featurizer.extract(text)
-    print(indices.numpy())
-    indices = featurizer.tf_extract(text)
-    print(indices.numpy())
+    print(indices)
     indices = list(indices.numpy())
     indices += [0, 0]
     batch_indices = tf.stack([indices, indices], axis=0)

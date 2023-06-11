@@ -237,6 +237,7 @@ class SentencePieceFeaturizer(TextFeaturizer):
             eos_id=decoder_config.eos_index,
             pad_id=decoder_config.pad_index,
             unk_surface="__UNKNOWN__",  # change default unk surface U+2047("⁇") by "__UNKNOWN__"
+            allow_whitespace_only_pieces=decoder_config.keep_whitespace,
         )
 
         return cls(decoder_config)

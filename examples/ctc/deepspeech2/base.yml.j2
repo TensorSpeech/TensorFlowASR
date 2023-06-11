@@ -1,4 +1,4 @@
-# Copyright 2020 Huy Le Nguyen (@nglehuy)
+{# # Copyright 2020 Huy Le Nguyen (@nglehuy)
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -10,11 +10,10 @@
 # distributed under the License is distributed on an "AS IS" BASIS,
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
-# limitations under the License.
+# limitations under the License. #}
 
-{% set repodir = "." %}
-{% set modeldir = "/mnt/Miscellanea/Models/local/deepspeech2" %}
-{% set datadir = "/mnt/Data/MLDL/Datasets/ASR/LibriSpeech" %}
+{% set modeldir = "E:/Miscellanea/Models/local/transformer-ctc" %}
+{% set datadir = "E:/MLDL/Datasets/ASR/LibriSpeech" %}
 
 speech_config:
   sample_rate: 16000
@@ -23,8 +22,11 @@ speech_config:
   num_feature_bins: 80
   feature_type: log_mel_spectrogram
 
-{# "examples/configs/wp_whitespace.yml.j2" or "examples/configs/sp.yml.j2" or "examples/configs/sp_whitespace.yml.j2" #}
-{% include "examples/configs/wp.yml.j2" %} 
+{# {% include "examples/configs/wp.yml.j2" %} #}
+{% include "examples/configs/wp_whitespace.yml.j2" %}
+{# {% include "examples/configs/sp.yml.j2" %}
+{% include "examples/configs/sp_whitespace.yml.j2" %}
+{% include "examples/configs/char.yml.j2" %} #}
 
 model_config:
   class_name: tensorflow_asr.models.ctc>DeepSpeech2

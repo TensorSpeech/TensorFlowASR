@@ -23,6 +23,7 @@ import tensorflow as tf
 import yaml
 
 ROOT_DIRECTORY = os.path.realpath(os.path.join(os.path.dirname(__file__), "..", ".."))  # root dir of the repo
+ENABLE_PATH_PREPROCESS = True
 
 
 def load_yaml(
@@ -45,7 +46,10 @@ def load_yaml(
         list("-+0123456789."),
     )
     with tf.io.gfile.GFile(path, "r") as file:
-        return yaml.load(jinja2.Environment(loader=jinja2.FileSystemLoader(ROOT_DIRECTORY)).from_string(file.read()).render(), Loader=loader)
+        return yaml.load(
+            jinja2.Environment(loader=jinja2.FileSystemLoader(ROOT_DIRECTORY)).from_string(file.read()).render(repodir=ROOT_DIRECTORY),
+            Loader=loader,
+        )
 
 
 def is_hdf5_filepath(
@@ -81,7 +85,7 @@ def preprocess_paths(
     Returns:
         Union[List, str]: A processed path or list of paths, return None if it's not path
     """
-    if not enabled:
+    if not (enabled and ENABLE_PATH_PREPROCESS):
         return paths
     if isinstance(paths, (list, tuple)):
         paths = [path if is_cloud_path(path) else os.path.abspath(os.path.expanduser(path)) for path in paths]
