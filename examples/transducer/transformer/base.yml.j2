@@ -1,4 +1,4 @@
-# Copyright 2020 Huy Le Nguyen (@nglehuy)
+{# # Copyright 2020 Huy Le Nguyen (@nglehuy)
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -10,11 +10,15 @@
 # distributed under the License is distributed on an "AS IS" BASIS,
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
-# limitations under the License.
+# limitations under the License. #}
 
-{% set repodir = "." %}
-{% set modeldir = "/Users/nlhuy/Paraphernalia/models/local/conformer" %}
-{% set datadir = "/Users/nlhuy/Paraphernalia/data/LibriSpeech" %}
+{% set modeldir = "E:/Miscellanea/Models/local/transducer/transformer" %}
+{% set datadir = "E:/MLDL/Datasets/ASR/LibriSpeech" %}
+
+{# {% import "examples/configs/wp.yml.j2" as decoder_config with context %} #}
+{% import "examples/configs/wp_whitespace.yml.j2" as decoder_config with context %}
+{# {% import "examples/configs/sp.yml.j2" as decoder_config with context %} #}
+{# {% import "examples/configs/char.yml.j2" as decoder_config with context %} #}
 
 speech_config:
   sample_rate: 16000
@@ -22,53 +26,53 @@ speech_config:
   stride_ms: 10
   num_feature_bins: 80
   feature_type: log_mel_spectrogram
-  normalize_feature: True
 
-{% include "" %}
+{{decoder_config}}
 
 model_config:
-  class_name: tensorflow_asr.models.transducer>Conformer
+  class_name: tensorflow_asr.models.transducer>Transformer
   config:
+    name: transformer
     encoder_subsampling:
       type: conv2d
-      filters: 144
       nlayers: 2
+      filters: 512
       kernel_size: 3
       strides: 2
-      padding: same
+      padding: causal
       norm: none
       activation: relu
-    encoder_ffm_residual_factor: 0.5
-    encoder_mhsam_residual_factor: 1.0
-    encoder_convm_residual_factor: 1.0
-    encoder_dmodel: 144
-    encoder_num_blocks: 2
-    encoder_head_size: 36 # == dmodel // num_heads
+    encoder_dropout: 0.1
+    encoder_residual_factor: 1.0
+    encoder_norm_position: post
+    encoder_dmodel: 512
+    encoder_dff: 1024
+    encoder_num_blocks: 6
+    encoder_head_size: 128
     encoder_num_heads: 4
     encoder_mha_type: relmha
     encoder_interleave_relpe: True
     encoder_use_attention_causal_mask: False
     encoder_use_attention_auto_mask: True
-    encoder_kernel_size: 32
-    encoder_dropout: 0.1
-    encoder_padding: causal
+    encoder_pwffn_activation: relu
+    encoder_memory_length: 512
     prediction_label_encode_mode: embedding
-    prediction_embed_dim: 320
+    prediction_embed_dim: 512
     prediction_num_rnns: 1
-    prediction_rnn_units: 320
+    prediction_rnn_units: 512
     prediction_rnn_type: lstm
     prediction_rnn_implementation: 2
-    prediction_rnn_unroll: False # False to use with CUDA or dynamic length, True to use with TPU and static length
+    prediction_rnn_unroll: False
     prediction_layer_norm: False
-    prediction_projection_units: 144
-    joint_dim: 320
-    prejoint_encoder_linear: False
-    prejoint_prediction_linear: False
-    postjoint_linear: True
+    prediction_projection_units: 0
+    joint_dim: 512
+    prejoint_encoder_linear: True
+    prejoint_prediction_linear: True
+    postjoint_linear: False
     joint_activation: tanh
     joint_mode: add
     blank: 0
-    vocab_size: 29
+    vocab_size: {{decoder_config.vocabsize}}
 
 learning_config:
   train_dataset_config:
@@ -77,23 +81,22 @@ learning_config:
       feature_augment:
         time_masking:
           prob: 1.0
-          num_masks: 10
+          num_masks: 5
           mask_factor: 100
           p_upperbound: 0.05
-          mask_value: zero
         freq_masking:
           prob: 1.0
           num_masks: 1
           mask_factor: 27
-          mask_value: zero
     data_paths:
       - {{datadir}}/dev-clean/transcripts.tsv
-    tfrecords_dir: {{datadir}}/tfrecords
+    tfrecords_dir: null
     shuffle: True
     cache: True
     buffer_size: 100
     drop_remainder: True
     stage: train
+    metadata: {{decoder_config.metadata}}
 
   eval_dataset_config:
     enabled: False
@@ -105,36 +108,31 @@ learning_config:
     buffer_size: 100
     drop_remainder: True
     stage: eval
+    metadata: {{decoder_config.metadata}}
 
   test_dataset_config:
-    enabled: False
     data_paths:
       - {{datadir}}/test-clean/transcripts.tsv
     tfrecords_dir: null
     shuffle: False
     cache: True
     buffer_size: 100
-    drop_remainder: True
+    drop_remainder: False
     stage: test
 
   optimizer_config:
     class_name: adam
     config:
       learning_rate:
-        class_name: tensorflow_asr.optimizers.schedule>TransformerSchedule
+        class_name: tensorflow_asr.optimizers.schedules>TransformerSchedule
         config:
-          dmodel: 144
-          initial_lr: 1.0
+          dmodel: 512
           warmup_steps: 10000
-          max_lr: 0.00035
+          max_lr: null
           min_lr: 1e-6
       beta_1: 0.9
       beta_2: 0.98
       epsilon: 1e-9
-
-  apply_gwn_config:
-    predict_net_step: 20000
-    predict_net_stddev: 0.075
 
   running_config:
     batch_size: 2
@@ -144,8 +142,6 @@ learning_config:
       save_best_only: False
       save_weights_only: True
       save_freq: epoch
-      options:
-        experimental_enable_async_checkpoint: True
     backup_and_restore:
       backup_dir: {{modeldir}}/states
       save_freq: epoch

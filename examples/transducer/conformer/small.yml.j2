@@ -12,34 +12,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-{% set repodir = "." %}
-{% set modeldir = "/Users/nlhuy/Paraphernalia/models/local/rnn-transducer" %}
-{% set datadir = "/Users/nlhuy/Paraphernalia/data/LibriSpeech" %}
+{% set modeldir = "E:/Miscellanea/Models/local/transducer/conformer" %}
+{% set datadir = "E:/MLDL/Datasets/ASR/LibriSpeech" %}
 
-model_config:
-  name: rnn_transducer
-  encoder_reductions:
-    0: 2
-    1: 2
-  encoder_dmodel: 640
-  encoder_rnn_type: lstm
-  encoder_rnn_units: 1024
-  encoder_nlayers: 2
-  encoder_layer_norm: False
-  prediction_label_encode_mode: embedding
-  prediction_embed_dim: 640
-  prediction_num_rnns: 2
-  prediction_rnn_units: 1024
-  prediction_rnn_type: lstm
-  prediction_rnn_unroll: False
-  prediction_layer_norm: False
-  prediction_projection_units: 640
-  joint_dim: 640
-  prejoint_encoder_linear: False
-  prejoint_prediction_linear: False
-  postjoint_linear: False
-  joint_activation: tanh
-  joint_mode: add
+{# {% import "examples/configs/wp.yml.j2" as decoder_config with context %} #}
+{% import "examples/configs/wp_whitespace.yml.j2" as decoder_config with context %}
+{# {% import "examples/configs/sp.yml.j2" as decoder_config with context %} #}
+{# {% import "examples/configs/char.yml.j2" as decoder_config with context %} #}
 
 speech_config:
   sample_rate: 16000
@@ -47,31 +26,51 @@ speech_config:
   stride_ms: 10
   num_feature_bins: 80
   feature_type: log_mel_spectrogram
+  normalize_feature: True
 
-decoder_config:
-  type: characters
-
-  blank_index: 0
-  unknown_token: "<pad>"
-  unknown_index: 0
-
-  beam_width: 0
-  norm_score: True
-  lm_config: null
-
-  vocabulary: {{repodir}}/vocabularies/english.characters
-  vocab_size: 1000
-  max_token_length: 4
-  max_unique_chars: 1000
-  reserved_tokens:
-    - "<pad>"
-  normalization_form: NFKC
-  num_iterations: 4
-
-  corpus_files:
-    - {{datadir}}/train-clean-100/transcripts.tsv
-    - {{datadir}}/train-clean-360/transcripts.tsv
-    - {{datadir}}/train-other-500/transcripts.tsv
+model_config:
+  class_name: tensorflow_asr.models.transducer>Conformer
+  config:
+    encoder_subsampling:
+      type: conv2d
+      filters: 144
+      nlayers: 2
+      kernel_size: 3
+      strides: 2
+      padding: same
+      norm: none
+      activation: relu
+    encoder_ffm_residual_factor: 0.5
+    encoder_mhsam_residual_factor: 1.0
+    encoder_convm_residual_factor: 1.0
+    encoder_dmodel: 144
+    encoder_num_blocks: 2
+    encoder_head_size: 36 # == dmodel // num_heads
+    encoder_num_heads: 4
+    encoder_mha_type: relmha
+    encoder_interleave_relpe: True
+    encoder_use_attention_causal_mask: False
+    encoder_use_attention_auto_mask: True
+    encoder_kernel_size: 32
+    encoder_dropout: 0.1
+    encoder_padding: causal
+    prediction_label_encode_mode: embedding
+    prediction_embed_dim: 320
+    prediction_num_rnns: 1
+    prediction_rnn_units: 320
+    prediction_rnn_type: lstm
+    prediction_rnn_implementation: 2
+    prediction_rnn_unroll: False
+    prediction_layer_norm: False
+    prediction_projection_units: 144
+    joint_dim: 320
+    prejoint_encoder_linear: False
+    prejoint_prediction_linear: False
+    postjoint_linear: True
+    joint_activation: tanh
+    joint_mode: add
+    blank: 0
+    vocab_size: {{decoder_config.vocabsize}}
 
 learning_config:
   train_dataset_config:
@@ -80,7 +79,7 @@ learning_config:
       feature_augment:
         time_masking:
           prob: 1.0
-          num_masks: 10
+          num_masks: 5
           mask_factor: 100
           p_upperbound: 0.05
         freq_masking:
@@ -89,13 +88,13 @@ learning_config:
           mask_factor: 27
     data_paths:
       - {{datadir}}/dev-clean/transcripts.tsv
-    tfrecords_dir: {{datadir}}/tfrecords
+    tfrecords_dir: null
     shuffle: True
     cache: True
     buffer_size: 100
     drop_remainder: True
     stage: train
-    metadata: {{repodir}}/vocabularies/librispeech/wordpiece/train_1000_4.metadata.json
+    metadata: {{decoder_config.metadata}}
 
   eval_dataset_config:
     enabled: False
@@ -107,22 +106,28 @@ learning_config:
     buffer_size: 100
     drop_remainder: True
     stage: eval
-    metadata: {{repodir}}/vocabularies/librispeech/wordpiece/train_1000_4.metadata.json
+    metadata: {{decoder_config.metadata}}
 
   test_dataset_config:
-    enabled: False
     data_paths:
       - {{datadir}}/test-clean/transcripts.tsv
     tfrecords_dir: null
     shuffle: False
     cache: True
     buffer_size: 100
-    drop_remainder: True
+    drop_remainder: False
     stage: test
 
   optimizer_config:
     class_name: adam
     config:
+      learning_rate:
+        class_name: tensorflow_asr.optimizers.schedules>TransformerSchedule
+        config:
+          dmodel: 144
+          warmup_steps: 10000
+          max_lr: 0.00035
+          min_lr: 1e-6
       beta_1: 0.9
       beta_2: 0.98
       epsilon: 1e-9
@@ -146,4 +151,3 @@ learning_config:
       write_images: True
       update_freq: epoch
       profile_batch: 2
-
