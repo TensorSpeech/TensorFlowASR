@@ -18,11 +18,10 @@ decoder_config:
   vocabulary: {{repodir}}/vocabularies/librispeech/sentencepiece/train_bpe_{{vocabsize}}_whitespace.model
   keep_whitespace: True
   vocab_size: {{vocabsize}}
-  max_token_length: 50
-  max_unique_chars: 1000
   reserved_tokens: null
   normalization_form: NFKC
-  num_iterations: 4
+  max_sentencepiece_length: 16
+  max_sentence_length: 1048576
   corpus_files:
     - {{datadir}}/train-clean-100/transcripts.tsv
     - {{datadir}}/train-clean-360/transcripts.tsv

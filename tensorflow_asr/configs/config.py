@@ -94,6 +94,8 @@ class DecoderConfig:
         self.reserved_tokens: list = config.pop("reserved_tokens", None)
         self.normalization_form: str = config.pop("normalization_form", "NFKC")
         self.keep_whitespace: bool = config.pop("keep_whitespace", False)
+        self.max_sentence_length: int = config.pop("max_sentence_length", 1048576)  # bytes
+        self.max_sentencepiece_length: int = config.pop("max_sentencepiece_length", 16)  # bytes
 
         self.corpus_files = file_util.preprocess_paths(config.pop("corpus_files", []))
 

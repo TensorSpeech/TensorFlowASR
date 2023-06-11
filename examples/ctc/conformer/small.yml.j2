@@ -84,7 +84,7 @@ learning_config:
     buffer_size: 1000
     drop_remainder: False
     stage: train
-    metadata: {{repodir}}/vocabularies/librispeech/wordpiece/train_{{vocabsize}}.metadata.json
+    metadata: {{repodir}}/vocabularies/librispeech/wordpiece/train_{{vocabsize}}_whitespace.metadata.json
 
   eval_dataset_config:
     enabled: True
@@ -97,7 +97,7 @@ learning_config:
     buffer_size: 1000
     drop_remainder: False
     stage: eval
-    metadata: {{repodir}}/vocabularies/librispeech/wordpiece/train_{{vocabsize}}.metadata.json
+    metadata: {{repodir}}/vocabularies/librispeech/wordpiece/train_{{vocabsize}}_whitespace.metadata.json
 
   test_dataset_config:
     enabled: False

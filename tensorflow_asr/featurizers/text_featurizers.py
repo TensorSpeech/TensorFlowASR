@@ -231,13 +231,14 @@ class SentencePieceFeaturizer(TextFeaturizer):
             model_prefix=output_path_prefix,
             model_type=decoder_config.model_type,
             vocab_size=decoder_config.vocab_size,
-            num_threads=cpu_count(),
             unk_id=decoder_config.unknown_index,
             bos_id=decoder_config.bos_index,
             eos_id=decoder_config.eos_index,
             pad_id=decoder_config.pad_index,
             unk_surface="__UNKNOWN__",  # change default unk surface U+2047("⁇") by "__UNKNOWN__"
             allow_whitespace_only_pieces=decoder_config.keep_whitespace,
+            max_sentencepiece_length=decoder_config.max_sentencepiece_length,
+            max_sentence_length=decoder_config.max_sentence_length,  # bytes
         )
 
         return cls(decoder_config)
