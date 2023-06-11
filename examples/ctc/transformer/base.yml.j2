@@ -23,8 +23,11 @@ speech_config:
   num_feature_bins: 80
   feature_type: log_mel_spectrogram
 
-{# "examples/configs/wp_whitespace.yml.j2" or "examples/configs/sp.yml.j2" or "examples/configs/sp_whitespace.yml.j2" #}
-{% include "examples/configs/wp.yml.j2" %} 
+{# {% include "examples/configs/wp.yml.j2" %} #}
+{% include "examples/configs/wp_whitespace.yml.j2" %}
+{# {% include "examples/configs/sp.yml.j2" %}
+{% include "examples/configs/sp_whitespace.yml.j2" %}
+{% include "examples/configs/char.yml.j2" %} #}
 
 model_config:
   class_name: tensorflow_asr.models.ctc>Transformer
