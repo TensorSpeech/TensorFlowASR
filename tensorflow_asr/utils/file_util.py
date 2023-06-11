@@ -22,7 +22,7 @@ import jinja2
 import tensorflow as tf
 import yaml
 
-ROOT_DIRECTORY = os.path.realpath(os.path.join(os.path.dirname(__file__), "..", ".."))  # root dir of the repo
+ROOT_DIRECTORY = os.path.realpath(os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))  # root dir of the repo
 ENABLE_PATH_PREPROCESS = True
 
 
