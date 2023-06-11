@@ -227,7 +227,8 @@ class SentencePieceFeaturizer(TextFeaturizer):
     @classmethod
     def build_from_corpus(cls, decoder_config: DecoderConfig):
         if os.path.exists(decoder_config.vocabulary):
-            return
+            return cls(decoder_config)
+
         sp.SentencePieceTrainer.Train(
             sentence_iterator=cls.corpus_generator(decoder_config),
             model_prefix=os.path.splitext(decoder_config.vocabulary)[0],
@@ -245,6 +246,7 @@ class SentencePieceFeaturizer(TextFeaturizer):
             max_sentencepiece_length=decoder_config.max_sentencepiece_length,
             max_sentence_length=decoder_config.max_sentence_length,  # bytes
         )
+
         return cls(decoder_config)
 
     def extract(self, text: tf.Tensor) -> tf.Tensor:
@@ -307,7 +309,7 @@ class WordPieceFeaturizer(TextFeaturizer):
     @classmethod
     def build_from_corpus(cls, decoder_config: DecoderConfig):
         if os.path.exists(decoder_config.vocabulary):
-            return
+            return cls(decoder_config)
 
         def generator():
             for data in cls.corpus_generator(decoder_config):
