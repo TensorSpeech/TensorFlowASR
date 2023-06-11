@@ -9,14 +9,14 @@ from tensorflow_asr.utils import file_util
 
 file_util.ENABLE_PATH_PREPROCESS = False
 
-config_path = os.path.join(file_util.ROOT_DIRECTORY, "examples", "configs", "sp_whitespace.yml.j2")
+config_path = os.path.join(file_util.ROOT_DIRECTORY, "examples", "configs", "sp.yml.j2")
 print(config_path)
 config = file_util.load_yaml(config_path)
 
 decoder_config = DecoderConfig(config["decoder_config"])
 
-# text = "i'm good but it would have broken down after ten miles of that hard trail dawn came while they wound over the crest of the range and with the sun in their faces they took the downgrade it was well into the morning before nash reached logan"
-text = "a b"
+text = "i'm good but it would have broken down after ten miles of that hard trail dawn came while they wound over the crest of the range and with the sun in their faces they took the downgrade it was well into the morning before nash reached logan"
+# text = "a b"
 
 
 def test():

@@ -5,20 +5,19 @@
 decoder_config:
   type: sentencepiece
   blank_index: 0
-  pad_token: "<pad>"
-  pad_index: 0
   unknown_token: "<unk>"
-  unknown_index: 1
+  unknown_index: 0
+  pad_token: "<pad>"
+  pad_index: -1
   bos_token: "<s>"
-  bos_index: 2
+  bos_index: -1
   eos_token: "</s>"
-  eos_index: 3
+  eos_index: -1
   beam_width: 0
   norm_score: True
   lm_config: null
   model_type: bpe
   vocabulary: {{vocabprefix}}.model
-  keep_whitespace: False
   vocab_size: {{vocabsize}}
   reserved_tokens: null
   normalization_form: NFKC

@@ -6,7 +6,7 @@ decoder_config:
   type: wordpiece
   blank_index: 0
   unknown_token: "<unk>"
-  unknown_index: 1
+  unknown_index: 0
   beam_width: 0
   norm_score: True
   lm_config: null
@@ -16,7 +16,6 @@ decoder_config:
   max_token_length: 50
   max_unique_chars: 1000
   reserved_tokens:
-    - "<pad>"
     - "<unk>"
   normalization_form: NFKC
   num_iterations: 4

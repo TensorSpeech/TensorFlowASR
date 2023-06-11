@@ -216,7 +216,7 @@ class SentencePieceFeaturizer(TextFeaturizer):
     def __init__(self, decoder_config: DecoderConfig):
         super().__init__(decoder_config)
         self.blank = self.decoder_config.blank_index
-        self.tokenizer = tft.FastSentencepieceTokenizer(self.__load_model())
+        self.tokenizer = tft.FastSentencepieceTokenizer(self.__load_model(), reverse=False, add_bos=False, add_eos=False)
         self.num_classes = int(self.tokenizer.vocab_size())
 
     def __load_model(self):
@@ -239,7 +239,7 @@ class SentencePieceFeaturizer(TextFeaturizer):
             allow_whitespace_only_pieces=False,
             split_by_whitespace=False,
             treat_whitespace_as_suffix=False,
-            user_defined_symbols=(" " if decoder_config.keep_whitespace else ""),
+            user_defined_symbols="",
             max_sentencepiece_length=decoder_config.max_sentencepiece_length,
             max_sentence_length=decoder_config.max_sentence_length,  # bytes
         )
@@ -247,12 +247,7 @@ class SentencePieceFeaturizer(TextFeaturizer):
 
     def extract(self, text: tf.Tensor) -> tf.Tensor:
         text = self.normalize_text(text, self.decoder_config.normalization_form)
-        if self.decoder_config.keep_whitespace:
-            text = tf.strings.regex_replace(text, " ", "| |")
-            text = tf.strings.split(text, sep="|")
-        else:
-            text = tf.strings.split(text)
-        indices = self.tokenizer.tokenize(text).merge_dims(0, 1)
+        indices = self.tokenizer.tokenize(text)
         indices = tf.cast(indices, tf.int32)
         return indices
 

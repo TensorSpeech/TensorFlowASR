@@ -73,13 +73,13 @@ class DecoderConfig:
 
         self.blank_index: int = config.pop("blank_index", 0)
         self.pad_token: str = config.pop("pad_token", "<pad>")
-        self.pad_index: int = config.pop("pad_index", 0)
+        self.pad_index: int = config.pop("pad_index", -1)
         self.unknown_token: str = config.pop("unknown_token", "<unk>")
-        self.unknown_index: int = config.pop("unknown_index", 1)
+        self.unknown_index: int = config.pop("unknown_index", 0)
         self.bos_token: str = config.pop("bos_token", "<s>")
-        self.bos_index: int = config.pop("bos_index", 2)
+        self.bos_index: int = config.pop("bos_index", -1)
         self.eos_token: str = config.pop("eos_token", "</s>")
-        self.eos_index: int = config.pop("eos_index", 3)
+        self.eos_index: int = config.pop("eos_index", -1)
 
         self.beam_width: int = config.pop("beam_width", 0)
         self.norm_score: bool = config.pop("norm_score", True)
