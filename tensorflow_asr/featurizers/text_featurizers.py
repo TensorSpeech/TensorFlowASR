@@ -71,6 +71,17 @@ class TextFeaturizer:
         self.num_classes = None
         self.max_length = 0
 
+    @classmethod
+    def corpus_generator(cls, decoder_config: DecoderConfig):
+        for file_path in decoder_config.corpus_files:
+            logger.info(f"Reading {file_path} ...")
+            with tf.io.gfile.GFile(file_path, "r") as f:
+                temp_lines = f.read().splitlines()
+                for line in temp_lines[1:]:  # Skip the header of tsv file
+                    data = line.split("\t", 2)[-1]  # get only transcript
+                    data = cls.normalize_text(data, decoder_config.normalization_form).numpy()
+                    yield data
+
     @property
     def shape(self) -> list:
         return [self.max_length if self.max_length > 0 else None]
@@ -88,8 +99,9 @@ class TextFeaturizer:
     def reset_length(self):
         self.max_length = 0
 
-    def normalize_text(self, text: tf.Tensor):
-        text = tft.normalize_utf8(text, self.decoder_config.normalization_form)
+    @classmethod
+    def normalize_text(cls, text: tf.Tensor, normalization_form: str = "NFKC"):
+        text = tft.normalize_utf8(text, normalization_form)
         text = tf.strings.regex_replace(text, r"\p{Cc}|\p{Cf}", " ")
         text = tf.strings.regex_replace(text, r" +", " ")
         text = tf.strings.lower(text, encoding="utf-8")
@@ -165,7 +177,7 @@ class CharFeaturizer(TextFeaturizer):
         self.upoints = tf.strings.unicode_decode(self.tokens, "UTF-8").to_tensor(shape=[None, 1])
 
     def extract(self, text):
-        text = self.normalize_text(text)
+        text = self.normalize_text(text, self.decoder_config.normalization_form)
         text = tf.strings.unicode_split(text, "UTF-8")
         return self.tokenizer.lookup(text)
 
@@ -214,27 +226,16 @@ class SentencePieceFeaturizer(TextFeaturizer):
 
     @classmethod
     def build_from_corpus(cls, decoder_config: DecoderConfig):
-        output_path_prefix = os.path.splitext(decoder_config.vocabulary)[0]
-
-        def corpus_iterator():
-            for file in decoder_config.corpus_files:
-                with open(file, "r", encoding="utf-8") as f:
-                    lines = f.read().splitlines()
-                    lines = lines[1:]
-                for line in lines:
-                    line = line.split("\t")
-                    yield line[-1]
-
         sp.SentencePieceTrainer.Train(
-            sentence_iterator=corpus_iterator(),
-            model_prefix=output_path_prefix,
+            sentence_iterator=cls.corpus_generator(decoder_config),
+            model_prefix=os.path.splitext(decoder_config.vocabulary)[0],
             model_type=decoder_config.model_type,
             vocab_size=decoder_config.vocab_size,
             unk_id=decoder_config.unknown_index,
             bos_id=decoder_config.bos_index,
             eos_id=decoder_config.eos_index,
             pad_id=decoder_config.pad_index,
-            unk_surface="__UNKNOWN__",  # change default unk surface U+2047("⁇") by "__UNKNOWN__"
+            unk_surface="",  # change default unk surface U+2047("⁇") by ""
             allow_whitespace_only_pieces=False,
             split_by_whitespace=False,
             treat_whitespace_as_suffix=False,
@@ -242,11 +243,10 @@ class SentencePieceFeaturizer(TextFeaturizer):
             max_sentencepiece_length=decoder_config.max_sentencepiece_length,
             max_sentence_length=decoder_config.max_sentence_length,  # bytes
         )
-
         return cls(decoder_config)
 
     def extract(self, text: tf.Tensor) -> tf.Tensor:
-        text = self.normalize_text(text)
+        text = self.normalize_text(text, self.decoder_config.normalization_form)
         if self.decoder_config.keep_whitespace:
             text = tf.strings.regex_replace(text, " ", "| |")
             text = tf.strings.split(text, sep="|")
@@ -309,23 +309,18 @@ class WordPieceFeaturizer(TextFeaturizer):
 
     @classmethod
     def build_from_corpus(cls, decoder_config: DecoderConfig):
-        def corpus_generator():
-            for file_path in decoder_config.corpus_files:
-                logger.info(f"Reading {file_path} ...")
-                with tf.io.gfile.GFile(file_path, "r") as f:
-                    temp_lines = f.read().splitlines()
-                    for line in temp_lines[1:]:  # Skip the header of tsv file
-                        data = line.split("\t", 2)[-1]  # get only transcript
-                        yield data
+        def generator():
+            for data in cls.corpus_generator(decoder_config):
+                yield data
 
         def write_vocab_file(filepath, vocab):
             with tf.io.gfile.GFile(filepath, "w") as f:
                 for token in vocab:
                     print(token, file=f)
 
-        dataset = tf.data.Dataset.from_generator(corpus_generator, output_signature=tf.TensorSpec(shape=(), dtype=tf.string))
+        dataset = tf.data.Dataset.from_generator(generator, output_signature=tf.TensorSpec(shape=(), dtype=tf.string)).batch(1000).prefetch(2)
         vocab = bert_vocab.bert_vocab_from_dataset(
-            dataset.batch(1000).prefetch(2),
+            dataset,
             vocab_size=decoder_config.vocab_size,
             reserved_tokens=decoder_config.reserved_tokens,
             bert_tokenizer_params={
@@ -345,7 +340,7 @@ class WordPieceFeaturizer(TextFeaturizer):
         return cls(decoder_config)
 
     def extract(self, text: tf.Tensor) -> tf.Tensor:
-        text = self.normalize_text(text)
+        text = self.normalize_text(text, self.decoder_config.normalization_form)
         if self.decoder_config.keep_whitespace:
             text = tf.strings.regex_replace(text, " ", "| |")
             text = tf.strings.split(text, sep="|")
