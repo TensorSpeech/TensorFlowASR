@@ -1,5 +1,12 @@
+speech_config:
+  sample_rate: 16000
+  frame_ms: 25
+  stride_ms: 10
+  num_feature_bins: 80
+  feature_type: log_mel_spectrogram
+
 {% set vocabsize = 1000 %}
-{% set vocabprefix = repodir ~ "/configs/librispeech/sentencepiece/train_bpe_" ~ vocabsize %}
+{% set vocabprefix = repodir ~ "/examples/configs/librispeech/sentencepiece/train_bpe_" ~ vocabsize %}
 {% set metadata = vocabprefix ~ ".metadata.json" %}
 
 decoder_config:

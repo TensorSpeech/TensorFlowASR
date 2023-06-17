@@ -1,5 +1,12 @@
+speech_config:
+  sample_rate: 16000
+  frame_ms: 25
+  stride_ms: 10
+  num_feature_bins: 80
+  feature_type: log_mel_spectrogram
+
 {% set vocabsize = 1000 %}
-{% set vocabprefix = repodir ~ "/examples/configs/decoder_config/librispeech/wordpiece/train_" ~ vocabsize %}
+{% set vocabprefix = repodir ~ "/examples/configs/librispeech/wordpiece/train_" ~ vocabsize ~ "_whitespace" %}
 {% set metadata = vocabprefix ~ ".metadata.json" %}
 
 decoder_config:
@@ -11,7 +18,7 @@ decoder_config:
   norm_score: True
   lm_config: null
   vocabulary: {{vocabprefix}}.vocab
-  keep_whitespace: False
+  keep_whitespace: True
   vocab_size: {{vocabsize}}
   max_token_length: 50
   max_unique_chars: 1000
