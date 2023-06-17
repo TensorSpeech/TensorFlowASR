@@ -21,7 +21,6 @@ import librosa
 import numpy as np
 import soundfile as sf
 import tensorflow as tf
-import tensorflow_io as tfio
 
 from tensorflow_asr.configs.config import SpeechConfig
 from tensorflow_asr.featurizers.methods import gammatone
@@ -30,8 +29,9 @@ from tensorflow_asr.utils import math_util
 
 def load_and_convert_to_wav(
     path: str,
+    sample_rate: int = None,
 ) -> tf.Tensor:
-    wave, rate = librosa.load(os.path.expanduser(path), sr=None, mono=True)
+    wave, rate = librosa.load(os.path.realpath(os.path.expanduser(path)), sr=sample_rate, mono=True)
     return tf.audio.encode_wav(tf.expand_dims(wave, axis=-1), sample_rate=rate)
 
 
@@ -57,15 +57,9 @@ def read_raw_audio(
     return wave
 
 
-def tf_read_raw_audio(
-    audio: tf.Tensor,
-    sample_rate=16000,
-) -> tf.Tensor:
-    wave, rate = tf.audio.decode_wav(audio, desired_channels=1, desired_samples=-1)
-    # if not env_util.has_devices("TPU"):
-    resampled = tfio.audio.resample(wave, rate_in=tf.cast(rate, dtype=tf.int64), rate_out=sample_rate)
-    return tf.reshape(resampled, shape=[-1])  # reshape for using tf.signal
-    # return tf.reshape(wave, shape=[-1])  # reshape for using tf.signal
+def tf_read_raw_audio(audio: tf.Tensor):
+    wave, _ = tf.audio.decode_wav(audio, desired_channels=1, desired_samples=-1)
+    return tf.reshape(wave, shape=[-1])  # reshape for using tf.signal
 
 
 def slice_signal(
@@ -171,7 +165,7 @@ def tf_depreemphasis(
             x = tf.concat([x, [current]], 0)
         return x
 
-    return tf.map_fn(map_fn, signal)
+    return tf.vectorized_map(map_fn, signal, warn=False)
 
 
 class SpeechFeaturizer:

@@ -38,6 +38,7 @@ model_config:
 learning_config:
   train_dataset_config:
     enabled: True
+    sample_rate: 16000
     augmentation_config:
       feature_augment:
         time_masking:
@@ -61,6 +62,7 @@ learning_config:
 
   eval_dataset_config:
     enabled: True
+    sample_rate: 16000
     data_paths:
       - {{datadir}}/dev-clean/transcripts.tsv
     tfrecords_dir: null
@@ -73,6 +75,7 @@ learning_config:
 
   test_dataset_config:
     enabled: False
+    sample_rate: 16000
     data_paths:
       - {{datadir}}/test-clean/transcripts.tsv
     tfrecords_dir: null

@@ -46,6 +46,7 @@ class ASRDataset(BaseDataset):
         enabled: bool = True,
         metadata: str = None,
         buffer_size: int = BUFFER_SIZE,
+        sample_rate: int = 16000,
         **kwargs,
     ):
         super().__init__(
@@ -59,6 +60,7 @@ class ASRDataset(BaseDataset):
             enabled=enabled,
             metadata=metadata,
             indefinite=indefinite,
+            sample_rate=sample_rate,
         )
         self.entries = []
         self.speech_featurizer = speech_featurizer
@@ -154,7 +156,7 @@ class ASRDataset(BaseDataset):
 
     def generator(self):
         for path, _, transcript in self.entries:
-            audio = load_and_convert_to_wav(path).numpy()
+            audio = load_and_convert_to_wav(path, sample_rate=self.sample_rate).numpy()
             yield bytes(path, "utf-8"), audio, bytes(transcript, "utf-8")
 
     def _process_item(
@@ -163,20 +165,19 @@ class ASRDataset(BaseDataset):
         audio: tf.Tensor,
         transcript: tf.Tensor,
     ):
-        with tf.device("/CPU:0"):
-            signal = tf_read_raw_audio(audio, self.speech_featurizer.speech_config.sample_rate)
-            signal = self.augmentations.signal_augment(signal)
-            features = self.speech_featurizer.extract(signal)
-            features = self.augmentations.feature_augment(features)
-            input_length = tf.shape(features, out_type=tf.int32)[0]
+        signal = tf_read_raw_audio(audio)
+        signal = self.augmentations.signal_augment(signal)
+        features = self.speech_featurizer.extract(signal)
+        features = self.augmentations.feature_augment(features)
+        input_length = tf.shape(features, out_type=tf.int32)[0]
 
-            label = self.text_featurizer.extract(transcript)
-            label_length = tf.shape(label, out_type=tf.int32)[0]
+        label = self.text_featurizer.extract(transcript)
+        label_length = tf.shape(label, out_type=tf.int32)[0]
 
-            prediction = self.text_featurizer.prepand_blank(label)
-            prediction_length = tf.shape(prediction, out_type=tf.int32)[0]
+        prediction = self.text_featurizer.prepand_blank(label)
+        prediction_length = tf.shape(prediction, out_type=tf.int32)[0]
 
-            return path, features, input_length, label, label_length, prediction, prediction_length
+        return path, features, input_length, label, label_length, prediction, prediction_length
 
     def parse(
         self,
@@ -274,6 +275,7 @@ class ASRTFRecordDataset(ASRDataset):
         drop_remainder: bool = True,
         buffer_size: int = BUFFER_SIZE,
         compression_type: str = "GZIP",
+        sample_rate: int = 16000,
         **kwargs,
     ):
         super().__init__(
@@ -289,6 +291,7 @@ class ASRTFRecordDataset(ASRDataset):
             enabled=enabled,
             metadata=metadata,
             indefinite=indefinite,
+            sample_rate=sample_rate,
         )
         if not self.stage:
             raise ValueError("stage must be defined, either 'train', 'eval' or 'test'")
@@ -306,7 +309,7 @@ class ASRTFRecordDataset(ASRDataset):
         logger.info(f"Processing {shard_path} ...")
         with tf.io.TFRecordWriter(shard_path, options=tf.io.TFRecordOptions(compression_type=self.compression_type)) as writer:
             for path, _, transcript in entries:
-                audio = load_and_convert_to_wav(path).numpy()
+                audio = load_and_convert_to_wav(path, sample_rate=self.sample_rate).numpy()
                 feature = {
                     "path": feature_util.bytestring_feature([path.encode("utf-8")]),
                     "audio": feature_util.bytestring_feature([audio]),
@@ -377,9 +380,10 @@ class ASRTFRecordDataset(ASRDataset):
 class ASRSliceDataset(ASRDataset):
     """Dataset for ASR using Slice"""
 
-    @staticmethod
-    def load(record):
-        audio = tf.numpy_function(lambda path: load_and_convert_to_wav(path.decode("utf-8")).numpy(), inp=[record[0]], Tout=tf.string)
+    def load(self, record):
+        audio = tf.numpy_function(
+            lambda path: load_and_convert_to_wav(path.decode("utf-8"), sample_rate=self.sample_rate).numpy(), inp=[record[0]], Tout=tf.string
+        )
         return record[0], audio, record[2]
 
     def create(

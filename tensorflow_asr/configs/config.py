@@ -119,6 +119,7 @@ class DatasetConfig:
         self.buffer_size: int = config.pop("buffer_size", 1000)
         self.augmentations = Augmentation(config.pop("augmentation_config", {}))
         self.metadata: str = config.pop("metadata", None)
+        self.sample_rate: int = config.pop("sample_rate", 16000)
         for k, v in config.items():
             setattr(self, k, v)
 

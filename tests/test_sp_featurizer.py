@@ -9,7 +9,7 @@ from tensorflow_asr.utils import file_util
 
 file_util.ENABLE_PATH_PREPROCESS = False
 
-config_path = os.path.join(file_util.ROOT_DIRECTORY, "examples", "configs", "sp.yml.j2")
+config_path = os.path.join(os.path.dirname(__file__), "..", "examples", "configs", "sp.yml.j2")
 print(config_path)
 config = file_util.load_yaml(config_path)
 

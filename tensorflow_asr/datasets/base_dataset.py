@@ -34,6 +34,7 @@ class BaseDataset:
         drop_remainder: bool = True,
         enabled: bool = True,
         metadata: str = None,
+        sample_rate: int = 16000,
         stage: str = "train",
         **kwargs
     ):
@@ -52,6 +53,7 @@ class BaseDataset:
         self.indefinite = indefinite  # Whether to make dataset repeat indefinitely -> avoid the potential last partial batch
         self.total_steps = None  # for better training visualization
         self.metadata = metadata
+        self.sample_rate = sample_rate
 
     def parse(self, *args, **kwargs):
         raise NotImplementedError()

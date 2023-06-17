@@ -1,18 +1,10 @@
 {% set modeldir = "/mnt/Miscellanea/Models/local/jasper" %}
 {% set datadir = "/mnt/Data/MLDL/Datasets/ASR/LibriSpeech" %}
 
-{# {% import "examples/configs/librispeech/wp.yml.j2" as decoder_config with context %} #}
+{% import "examples/configs/log_mel_spectrogram.yml.j2" as speech_config with context %}
+{{speech_config}}
+
 {% import "examples/configs/librispeech/wp_whitespace.yml.j2" as decoder_config with context %}
-{# {% import "examples/configs/librispeech/sp.yml.j2" as decoder_config with context %} #}
-{# {% import "examples/configs/librispeech/char.yml.j2" as decoder_config with context %} #}
-
-speech_config:
-  sample_rate: 16000
-  frame_ms: 25
-  stride_ms: 10
-  num_feature_bins: 80
-  feature_type: log_mel_spectrogram
-
 {{decoder_config}}
 
 model_config:
