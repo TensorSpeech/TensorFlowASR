@@ -8,9 +8,6 @@ import tensorflow as tf
 from tensorflow_asr.augmentations.methods import specaugment
 from tensorflow_asr.configs.config import SpeechConfig
 from tensorflow_asr.featurizers import speech_featurizers
-from tensorflow_asr.utils import env_util
-
-env_util.setup_environment()
 
 speech_conf = SpeechConfig(
     {

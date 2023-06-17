@@ -25,7 +25,7 @@ import tensorflow_io as tfio
 
 from tensorflow_asr.configs.config import SpeechConfig
 from tensorflow_asr.featurizers.methods import gammatone
-from tensorflow_asr.utils import env_util, math_util
+from tensorflow_asr.utils import math_util
 
 
 def load_and_convert_to_wav(
@@ -62,10 +62,10 @@ def tf_read_raw_audio(
     sample_rate=16000,
 ) -> tf.Tensor:
     wave, rate = tf.audio.decode_wav(audio, desired_channels=1, desired_samples=-1)
-    if not env_util.has_devices("TPU"):
-        resampled = tfio.audio.resample(wave, rate_in=tf.cast(rate, dtype=tf.int64), rate_out=sample_rate)
-        return tf.reshape(resampled, shape=[-1])  # reshape for using tf.signal
-    return tf.reshape(wave, shape=[-1])  # reshape for using tf.signal
+    # if not env_util.has_devices("TPU"):
+    resampled = tfio.audio.resample(wave, rate_in=tf.cast(rate, dtype=tf.int64), rate_out=sample_rate)
+    return tf.reshape(resampled, shape=[-1])  # reshape for using tf.signal
+    # return tf.reshape(wave, shape=[-1])  # reshape for using tf.signal
 
 
 def slice_signal(
