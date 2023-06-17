@@ -23,7 +23,6 @@ def output_shape(self):
     return self._tfasr_output_shape
 
 
-@tf.__internal__.tracking.no_automatic_dependency_tracking
 @generic_utils.default
 def build(self, input_shape):
     self._tfasr_output_shape = tf_utils.convert_shapes(self.compute_output_shape(input_shape), to_tuples=True)
