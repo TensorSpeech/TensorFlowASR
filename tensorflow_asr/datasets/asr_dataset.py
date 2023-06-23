@@ -20,7 +20,6 @@ import tensorflow as tf
 import tqdm
 
 from tensorflow_asr.datasets.base_dataset import AUTOTUNE, BUFFER_SIZE, TFRECORD_SHARDS, BaseDataset
-from tensorflow_asr.featurizers.speech_featurizers import load_and_convert_to_wav, tf_read_raw_audio
 from tensorflow_asr.featurizers.text_featurizers import TextFeaturizer
 from tensorflow_asr.utils import data_util, feature_util, file_util, math_util
 
@@ -141,11 +140,11 @@ class ASRDataset(BaseDataset):
 
     def generator(self):
         for path, _, transcript in self.entries:
-            audio = load_and_convert_to_wav(path, sample_rate=self.sample_rate).numpy()
+            audio = data_util.load_and_convert_to_wav(path, sample_rate=self.sample_rate).numpy()
             yield bytes(path, "utf-8"), audio, bytes(transcript, "utf-8")
 
     def _process_item(self, path: tf.Tensor, audio: tf.Tensor, transcript: tf.Tensor):
-        inputs = tf_read_raw_audio(audio)
+        inputs = data_util.read_raw_audio(audio)
         inputs_length = tf.shape(inputs)[0]
 
         labels = self.text_featurizer.extract(transcript)
@@ -278,7 +277,7 @@ class ASRTFRecordDataset(ASRDataset):
         logger.info(f"Processing {shard_path} ...")
         with tf.io.TFRecordWriter(shard_path, options=tf.io.TFRecordOptions(compression_type=self.compression_type)) as writer:
             for path, _, transcript in entries:
-                audio = load_and_convert_to_wav(path, sample_rate=self.sample_rate).numpy()
+                audio = data_util.load_and_convert_to_wav(path, sample_rate=self.sample_rate).numpy()
                 feature = dict(
                     path=feature_util.bytestring_feature([path.encode("utf-8")]),
                     audio=feature_util.bytestring_feature([audio]),
@@ -344,7 +343,9 @@ class ASRSliceDataset(ASRDataset):
 
     def load(self, record):
         audio = tf.numpy_function(
-            lambda path: load_and_convert_to_wav(path.decode("utf-8"), sample_rate=self.sample_rate).numpy(), inp=[record[0]], Tout=tf.string
+            lambda path: data_util.load_and_convert_to_wav(path.decode("utf-8"), sample_rate=self.sample_rate).numpy(),
+            inp=[record[0]],
+            Tout=tf.string,
         )
         return record[0], audio, record[2]
 

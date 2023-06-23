@@ -14,13 +14,31 @@
 
 # tf.data.Dataset does not work well for namedtuple so we are using dict
 
+import os
+
+import librosa
+import tensorflow as tf
+
+
+def load_and_convert_to_wav(
+    path: str,
+    sample_rate: int = None,
+):
+    wave, rate = librosa.load(os.path.realpath(os.path.expanduser(path)), sr=sample_rate, mono=True)
+    return tf.audio.encode_wav(tf.expand_dims(wave, axis=-1), sample_rate=rate)
+
+
+def read_raw_audio(audio: tf.Tensor):
+    wave, _ = tf.audio.decode_wav(audio, desired_channels=1, desired_samples=-1)
+    return tf.reshape(wave, shape=[-1])  # reshape for using tf.signal
+
 
 def create_inputs(
     inputs,
     inputs_length,
     predictions=None,
     predictions_length=None,
-) -> dict:
+):
     data = {
         "inputs": inputs,
         "inputs_length": inputs_length,
@@ -35,7 +53,7 @@ def create_inputs(
 def create_logits(
     logits,
     logits_length,
-) -> dict:
+):
     return {
         "logits": logits,
         "logits_length": logits_length,
