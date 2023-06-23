@@ -14,13 +14,14 @@
 
 from tensorflow_asr import tf  # import to aid logging messages
 from tensorflow_asr.configs.config import Config
-from tensorflow_asr.helpers import dataset_helpers, featurizer_helpers
+from tensorflow_asr.datasets import asr_dataset
+from tensorflow_asr.featurizers import text_featurizers
 from tensorflow_asr.utils import cli_util, env_util, file_util
 
 
 def main(
     config_path: str,
-    tfrecords: bool = False,
+    dataset_type: str,
     bs: int = None,
     spx: int = 1,
     devices: list = None,
@@ -35,16 +36,14 @@ def main(
 
     config = Config(config_path)
 
-    speech_featurizer, text_featurizer = featurizer_helpers.prepare_featurizers(config=config)
+    text_featurizer = text_featurizers.get(config)
 
-    train_dataset, eval_dataset = dataset_helpers.prepare_training_datasets(
-        config=config,
-        speech_featurizer=speech_featurizer,
-        text_featurizer=text_featurizer,
-        tfrecords=tfrecords,
+    train_dataset = asr_dataset.get(
+        text_featurizer=text_featurizer, dataset_config=config.data_config.train_dataset_config, dataset_type=dataset_type
     )
+    eval_dataset = asr_dataset.get(text_featurizer=text_featurizer, dataset_config=config.data_config.eval_dataset_config, dataset_type=dataset_type)
 
-    train_data_loader, eval_data_loader, global_batch_size = dataset_helpers.prepare_training_data_loaders(
+    train_data_loader, eval_data_loader, global_batch_size = asr_dataset.get_loaders(
         config=config,
         train_dataset=train_dataset,
         eval_dataset=eval_dataset,

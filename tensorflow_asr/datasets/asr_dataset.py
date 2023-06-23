@@ -14,16 +14,53 @@
 
 import json
 import os
+from dataclasses import asdict, dataclass
 
 import numpy as np
 import tensorflow as tf
 import tqdm
 
+from tensorflow_asr.configs.config import Config, DatasetConfig
 from tensorflow_asr.datasets.base_dataset import AUTOTUNE, BUFFER_SIZE, TFRECORD_SHARDS, BaseDataset
 from tensorflow_asr.featurizers.text_featurizers import TextFeaturizer
 from tensorflow_asr.utils import data_util, feature_util, file_util, math_util
 
 logger = tf.get_logger()
+
+
+@dataclass
+class ASR_DATASER_TYPES:
+    TFRECORD: str = "tfrecord"
+    SLICE: str = "slice"
+    GENERATOR: str = "generator"
+
+
+def get(
+    text_featurizer: TextFeaturizer,
+    dataset_config: DatasetConfig,
+    dataset_type: str,
+):
+    if dataset_type == ASR_DATASER_TYPES.TFRECORD:
+        return ASRTFRecordDataset(text_featurizer=text_featurizer, **vars(dataset_config))
+    if dataset_type == ASR_DATASER_TYPES.SLICE:
+        return ASRSliceDataset(text_featurizer=text_featurizer, **vars(dataset_config))
+    if dataset_type == ASR_DATASER_TYPES.GENERATOR:
+        return ASRDataset(text_featurizer=text_featurizer, **vars(dataset_config))
+    raise ValueError(f"dataset_type must in {asdict(ASR_DATASER_TYPES()).values()}")
+
+
+def get_loaders(
+    config: Config,
+    train_dataset,
+    eval_dataset,
+    strategy,
+    batch_size: int = None,
+):
+    global_batch_size = batch_size or config.learning_config.running_config.batch_size
+    global_batch_size *= strategy.num_replicas_in_sync
+    train_data_loader = train_dataset.create(global_batch_size)
+    eval_data_loader = eval_dataset.create(global_batch_size)
+    return train_data_loader, eval_data_loader, global_batch_size
 
 
 class ASRDataset(BaseDataset):
@@ -36,7 +73,7 @@ class ASRDataset(BaseDataset):
         data_paths: list,
         cache: bool = False,
         shuffle: bool = False,
-        indefinite: bool = False,
+        indefinite: bool = True,
         drop_remainder: bool = True,
         enabled: bool = True,
         metadata: str = None,
@@ -243,7 +280,7 @@ class ASRTFRecordDataset(ASRDataset):
         shuffle: bool = False,
         enabled: bool = True,
         metadata: str = None,
-        indefinite: bool = False,
+        indefinite: bool = True,
         drop_remainder: bool = True,
         buffer_size: int = BUFFER_SIZE,
         compression_type: str = "GZIP",
