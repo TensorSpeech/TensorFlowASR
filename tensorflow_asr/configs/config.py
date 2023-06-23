@@ -127,8 +127,8 @@ class LearningConfig:
 class Config:
     """User config class for training, testing or infering"""
 
-    def __init__(self, data: Union[str, dict]):
-        config = data if isinstance(data, dict) else file_util.load_yaml(file_util.preprocess_paths(data))
+    def __init__(self, data: Union[str, dict], **kwargs):
+        config = data if isinstance(data, dict) else file_util.load_yaml(file_util.preprocess_paths(data), **kwargs)
         self.decoder_config = DecoderConfig(config.pop("decoder_config", {}))
         self.model_config: dict = config.pop("model_config", {})
         self.data_config = DataConfig(config.pop("data_config", {}))

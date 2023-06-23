@@ -27,7 +27,8 @@ ENABLE_PATH_PREPROCESS = True
 
 def load_yaml(
     path: str,
-) -> dict:
+    **kwargs,
+):
     # Fix yaml numbers https://stackoverflow.com/a/30462009/11037553
     loader = yaml.SafeLoader
     loader.add_implicit_resolver(
@@ -46,7 +47,7 @@ def load_yaml(
     )
     with tf.io.gfile.GFile(path, "r") as file:
         return yaml.load(
-            jinja2.Environment(loader=jinja2.FileSystemLoader(["."])).from_string(file.read()).render(repodir="."),
+            jinja2.Environment(loader=jinja2.FileSystemLoader(["."])).from_string(file.read()).render(repodir=".", **kwargs),
             Loader=loader,
         )
 
