@@ -15,18 +15,25 @@
 import codecs
 import os
 import unicodedata
+from dataclasses import asdict, dataclass
 
 import sentencepiece as sp
 import tensorflow as tf
 import tensorflow_text as tft
 from tensorflow_text.tools.wordpiece_vocab import bert_vocab_from_dataset as bert_vocab
 
-from tensorflow_asr.configs.config import DecoderConfig
+from tensorflow_asr.configs.config import Config, DecoderConfig
 from tensorflow_asr.utils import file_util
 
 logger = tf.get_logger()
 
-TEXT_FEATURIZER_TYPES = ["characters", "wordpiece", "sentencepiece"]
+
+@dataclass
+class TEXT_FEATURIZER_TYPES:
+    CHARACTERS: str = "characters"
+    WORDPIECE: str = "wordpiece"
+    SENTENCEPIECE: str = "sentencepiece"
+
 
 ENGLISH_CHARACTERS = [
     "<blank>",
@@ -59,6 +66,28 @@ ENGLISH_CHARACTERS = [
     "z",
     "'",
 ]
+
+
+def get(config: Config):
+    if config.decoder_config.type == TEXT_FEATURIZER_TYPES.SENTENCEPIECE:
+        logger.info("Loading SentencePiece model ...")
+        text_featurizer = SentencePieceFeaturizer(config.decoder_config)
+    elif config.decoder_config.type == TEXT_FEATURIZER_TYPES.WORDPIECE:
+        logger.info("Loading wordpiece ...")
+        text_featurizer = WordPieceFeaturizer(config.decoder_config)
+    elif config.decoder_config.type == TEXT_FEATURIZER_TYPES.CHARACTERS:
+        logger.info("Use characters ...")
+        text_featurizer = CharFeaturizer(config.decoder_config)
+    else:
+        raise ValueError(f"type must be in {asdict(TEXT_FEATURIZER_TYPES()).values()}, received {config.decoder_config.type}")
+    return text_featurizer
+
+
+def build(config: Config):
+    if config.decoder_config.type == TEXT_FEATURIZER_TYPES.SENTENCEPIECE:
+        SentencePieceFeaturizer.build_from_corpus(config.decoder_config)
+    elif config.decoder_config.type == TEXT_FEATURIZER_TYPES.WORDPIECE:
+        WordPieceFeaturizer.build_from_corpus(config.decoder_config)
 
 
 class TextFeaturizer:

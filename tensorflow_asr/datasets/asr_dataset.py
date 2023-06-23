@@ -14,15 +14,13 @@
 
 import json
 import os
-from typing import Union
 
 import numpy as np
 import tensorflow as tf
 import tqdm
 
-from tensorflow_asr.augmentations.augmentation import Augmentation
 from tensorflow_asr.datasets.base_dataset import AUTOTUNE, BUFFER_SIZE, TFRECORD_SHARDS, BaseDataset
-from tensorflow_asr.featurizers.speech_featurizers import SpeechFeaturizer, load_and_convert_to_wav, tf_read_raw_audio
+from tensorflow_asr.featurizers.speech_featurizers import load_and_convert_to_wav, tf_read_raw_audio
 from tensorflow_asr.featurizers.text_featurizers import TextFeaturizer
 from tensorflow_asr.utils import data_util, feature_util, file_util, math_util
 
@@ -35,10 +33,8 @@ class ASRDataset(BaseDataset):
     def __init__(
         self,
         stage: str,
-        # speech_featurizer: SpeechFeaturizer,
         text_featurizer: TextFeaturizer,
         data_paths: list,
-        # augmentations: Augmentation = Augmentation(None),
         cache: bool = False,
         shuffle: bool = False,
         indefinite: bool = False,
@@ -51,7 +47,6 @@ class ASRDataset(BaseDataset):
     ):
         super().__init__(
             data_paths=data_paths,
-            # augmentations=augmentations,
             cache=cache,
             shuffle=shuffle,
             stage=stage,
@@ -63,80 +58,69 @@ class ASRDataset(BaseDataset):
             sample_rate=sample_rate,
         )
         self.entries = []
-        # self.speech_featurizer = speech_featurizer
         self.text_featurizer = text_featurizer
-        if self.metadata:
-            self.load_metadata(metadata=metadata)
+        self.max_input_length = None
+        self.max_label_length = None
+        self.load_metadata()
 
     # -------------------------------- metadata -------------------------------------
 
     def compute_metadata(self):
+        self.max_input_length = 0 if self.max_input_length is None else self.max_input_length
+        self.max_label_length = 0 if self.max_label_length is None else self.max_label_length
         self.read_entries()
         for _, duration, transcript in tqdm.tqdm(self.entries, desc=f"Computing metadata for entries in {self.stage} dataset"):
-            # input_length = self.speech_featurizer.get_length_from_duration(duration)
             input_length = math_util.get_nsamples(duration, self.sample_rate)
             label = self.text_featurizer.extract(transcript).numpy()
             label_length = len(label)
-            self.speech_featurizer.update_length(input_length)
-            self.text_featurizer.update_length(label_length)
+            self.max_input_length = max(self.max_input_length, input_length)
+            self.max_label_length = max(self.max_label_length, label_length)
 
-    def save_metadata(
-        self,
-        metadata: str = None,
-    ):
-        if metadata is None:
+    def save_metadata(self):
+        if self.metadata is None:
             return
-        metadata = file_util.preprocess_paths(metadata)
-        if tf.io.gfile.exists(metadata):
-            with tf.io.gfile.GFile(metadata, "r") as f:
+        self.metadata = file_util.preprocess_paths(self.metadata)
+        if tf.io.gfile.exists(self.metadata):
+            with tf.io.gfile.GFile(self.metadata, "r") as f:
                 try:
                     content = json.loads(f.read())
                 except json.JSONDecodeError as e:
-                    raise ValueError(f"File {metadata} is currently not in json format. Please update the file") from e
+                    raise ValueError(f"File {self.metadata} is currently not in json format. Please update the file") from e
         else:
             content = {}
-        content[self.stage] = {
-            "max_input_length": self.speech_featurizer.max_length,
-            "max_label_length": self.text_featurizer.max_length,
-            "num_entries": self.total_steps,
-        }
-        with tf.io.gfile.GFile(metadata, "w") as f:
+        content[self.stage] = dict(
+            max_input_length=self.max_input_length,
+            max_label_length=self.max_label_length,
+            num_entries=self.total_steps,
+        )
+        with tf.io.gfile.GFile(self.metadata, "w") as f:
             f.write(json.dumps(content, indent=2))
-        logger.info(f"Metadata written to {metadata}")
+        logger.info(f"Metadata written to {self.metadata}")
 
-    def load_metadata(
-        self,
-        metadata: Union[str, dict] = None,
-    ):
-        if metadata is None:
+    def load_metadata(self):
+        if self.metadata is None:
             return
         if not self.enabled:
             return
         content = None
-        if isinstance(metadata, dict):
-            content = metadata
-        else:
-            metadata = file_util.preprocess_paths(metadata)
-            if tf.io.gfile.exists(metadata):
-                logger.info(f"Loading metadata from {metadata} ...")
-                with tf.io.gfile.GFile(metadata, "r") as f:
-                    try:
-                        content = json.loads(f.read()).get(self.stage, {})
-                    except json.JSONDecodeError as e:
-                        raise ValueError(f"File {metadata} must be in json format") from e
+        self.metadata = file_util.preprocess_paths(self.metadata)
+        if tf.io.gfile.exists(self.metadata):
+            logger.info(f"Loading metadata from {self.metadata} ...")
+            with tf.io.gfile.GFile(self.metadata, "r") as f:
+                try:
+                    content = json.loads(f.read()).get(self.stage, {})
+                except json.JSONDecodeError as e:
+                    raise ValueError(f"File {self.metadata} must be in json format") from e
         if not content:
             return
-        self.speech_featurizer.update_length(int(content.get("max_input_length", 0)))
-        self.text_featurizer.update_length(int(content.get("max_label_length", 0)))
+        self.max_input_length = content.get("max_input_length")
+        self.max_label_length = content.get("max_label_length")
         self.total_steps = int(content.get("num_entries", 0))
 
-    def update_metadata(
-        self,
-        metadata: str = None,
-    ):
-        self.load_metadata(metadata)
+    def update_metadata(self):
+        self.load_metadata()
         self.compute_metadata()
-        self.save_metadata(metadata)
+        self.save_metadata()
 
     # -------------------------------- ENTRIES -------------------------------------
 
@@ -160,17 +144,7 @@ class ASRDataset(BaseDataset):
             audio = load_and_convert_to_wav(path, sample_rate=self.sample_rate).numpy()
             yield bytes(path, "utf-8"), audio, bytes(transcript, "utf-8")
 
-    def _process_item(
-        self,
-        path: tf.Tensor,
-        audio: tf.Tensor,
-        transcript: tf.Tensor,
-    ):
-        # signal = tf_read_raw_audio(audio)
-        # signal = self.augmentations.signal_augment(signal)
-        # features = self.speech_featurizer.extract(signal)
-        # features = self.augmentations.feature_augment(features)
-        # input_length = tf.shape(features, out_type=tf.int32)[0]
+    def _process_item(self, path: tf.Tensor, audio: tf.Tensor, transcript: tf.Tensor):
         inputs = tf_read_raw_audio(audio)
         inputs_length = tf.shape(inputs)[0]
 
@@ -182,12 +156,7 @@ class ASRDataset(BaseDataset):
 
         return path, inputs, inputs_length, labels, labels_length, predictions, predictions_length
 
-    def parse(
-        self,
-        path: tf.Tensor,
-        audio: tf.Tensor,
-        transcript: tf.Tensor,
-    ):
+    def parse(self, path: tf.Tensor, audio: tf.Tensor, transcript: tf.Tensor):
         """
         Returns:
             path, features, input_lengths, labels, label_lengths, pred_inp
@@ -208,11 +177,7 @@ class ASRDataset(BaseDataset):
 
     # -------------------------------- CREATION -------------------------------------
 
-    def process(
-        self,
-        dataset: tf.data.Dataset,
-        batch_size: int,
-    ):
+    def process(self, dataset: tf.data.Dataset, batch_size: int):
         if self.cache:
             dataset = dataset.cache()  # cache original (unchanged data)
 
@@ -230,12 +195,15 @@ class ASRDataset(BaseDataset):
             batch_size=batch_size,
             padded_shapes=(
                 data_util.create_inputs(
-                    inputs=tf.TensorShape(self.speech_featurizer.shape),
+                    inputs=tf.TensorShape([self.max_input_length]),
                     inputs_length=tf.TensorShape([]),
-                    predictions=tf.TensorShape(self.text_featurizer.prepand_shape),
+                    predictions=tf.TensorShape([self.max_label_length + 1]),
                     predictions_length=tf.TensorShape([]),
                 ),
-                data_util.create_labels(labels=tf.TensorShape(self.text_featurizer.shape), labels_length=tf.TensorShape([])),
+                data_util.create_labels(
+                    labels=tf.TensorShape([self.max_label_length]),
+                    labels_length=tf.TensorShape([]),
+                ),
             ),
             padding_values=(
                 data_util.create_inputs(inputs=0.0, inputs_length=0, predictions=self.text_featurizer.blank, predictions_length=0),
@@ -248,10 +216,7 @@ class ASRDataset(BaseDataset):
         dataset = dataset.prefetch(AUTOTUNE)
         return dataset
 
-    def create(
-        self,
-        batch_size: int,
-    ):
+    def create(self, batch_size: int):
         if not self.enabled:
             return None
         self.read_entries()
@@ -272,10 +237,8 @@ class ASRTFRecordDataset(ASRDataset):
         self,
         data_paths: list,
         tfrecords_dir: str,
-        speech_featurizer: SpeechFeaturizer,
         text_featurizer: TextFeaturizer,
         stage: str,
-        augmentations: Augmentation = Augmentation(None),
         tfrecords_shards: int = TFRECORD_SHARDS,
         cache: bool = False,
         shuffle: bool = False,
@@ -290,10 +253,8 @@ class ASRTFRecordDataset(ASRDataset):
     ):
         super().__init__(
             stage=stage,
-            speech_featurizer=speech_featurizer,
             text_featurizer=text_featurizer,
             data_paths=data_paths,
-            augmentations=augmentations,
             cache=cache,
             shuffle=shuffle,
             buffer_size=buffer_size,
@@ -302,6 +263,7 @@ class ASRTFRecordDataset(ASRDataset):
             metadata=metadata,
             indefinite=indefinite,
             sample_rate=sample_rate,
+            **kwargs,
         )
         if not self.stage:
             raise ValueError("stage must be defined, either 'train', 'eval' or 'test'")
@@ -311,20 +273,17 @@ class ASRTFRecordDataset(ASRDataset):
         self.tfrecords_shards = tfrecords_shards
         self.compression_type = compression_type
 
-    def write_tfrecord_file(
-        self,
-        splitted_entries: tuple,
-    ):
+    def write_tfrecord_file(self, splitted_entries: tuple):
         shard_path, entries = splitted_entries
         logger.info(f"Processing {shard_path} ...")
         with tf.io.TFRecordWriter(shard_path, options=tf.io.TFRecordOptions(compression_type=self.compression_type)) as writer:
             for path, _, transcript in entries:
                 audio = load_and_convert_to_wav(path, sample_rate=self.sample_rate).numpy()
-                feature = {
-                    "path": feature_util.bytestring_feature([path.encode("utf-8")]),
-                    "audio": feature_util.bytestring_feature([audio]),
-                    "transcript": feature_util.bytestring_feature([transcript.encode("utf-8")]),
-                }
+                feature = dict(
+                    path=feature_util.bytestring_feature([path.encode("utf-8")]),
+                    audio=feature_util.bytestring_feature([audio]),
+                    transcript=feature_util.bytestring_feature([transcript.encode("utf-8")]),
+                )
                 example = tf.train.Example(features=tf.train.Features(feature=feature))
                 writer.write(example.SerializeToString())
         logger.info(f"Created {shard_path}")
@@ -354,23 +313,16 @@ class ASRTFRecordDataset(ASRDataset):
 
         return True
 
-    def parse(
-        self,
-        record: tf.Tensor,
-        **kwargs,
-    ):
-        feature_description = {
-            "path": tf.io.FixedLenFeature([], tf.string),
-            "audio": tf.io.FixedLenFeature([], tf.string),
-            "transcript": tf.io.FixedLenFeature([], tf.string),
-        }
+    def parse(self, record: tf.Tensor, **kwargs):
+        feature_description = dict(
+            path=tf.io.FixedLenFeature([], tf.string),
+            audio=tf.io.FixedLenFeature([], tf.string),
+            transcript=tf.io.FixedLenFeature([], tf.string),
+        )
         example = tf.io.parse_single_example(record, feature_description)
         return super().parse(**example)
 
-    def create(
-        self,
-        batch_size: int,
-    ):
+    def create(self, batch_size: int):
         if not self.enabled:
             return None
         have_data = self.create_tfrecords()
@@ -396,10 +348,7 @@ class ASRSliceDataset(ASRDataset):
         )
         return record[0], audio, record[2]
 
-    def create(
-        self,
-        batch_size: int,
-    ):
+    def create(self, batch_size: int):
         if not self.enabled:
             return None
         self.read_entries()

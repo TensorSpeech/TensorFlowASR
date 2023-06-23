@@ -12,13 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import os
 
 from tensorflow_asr import tf
 from tensorflow_asr.configs.config import Config
 from tensorflow_asr.datasets.asr_dataset import ASRDataset
 from tensorflow_asr.featurizers import text_featurizers
-from tensorflow_asr.helpers import featurizer_helpers
 from tensorflow_asr.utils import cli_util
 
 logger = tf.get_logger()
@@ -30,37 +28,22 @@ def main(
     config = Config(config_path)
     if not config.decoder_config.vocabulary:
         raise ValueError("decoder_config.vocabulary must be defined")
-    metadata = f"{os.path.splitext(config.decoder_config.vocabulary)[0]}.metadata.json"
 
     logger.info("Preparing vocab ...")
-    if config.decoder_config.type == "sentencepiece":
-        text_featurizers.SentencePieceFeaturizer.build_from_corpus(config.decoder_config)
-    elif config.decoder_config.type == "wordpiece":
-        text_featurizers.WordPieceFeaturizer.build_from_corpus(config.decoder_config)
+    text_featurizers.build(config=config)
+    text_featurizer = text_featurizers.get(config=config)
 
-    if config.decoder_config.train_files:
-        logger.info("Preparing train metadata ...")
-        speech_featurizer, text_featurizer = featurizer_helpers.prepare_featurizers(config=config)
-        train_dataset = ASRDataset(
-            data_paths=config.decoder_config.train_files,
-            speech_featurizer=speech_featurizer,
-            text_featurizer=text_featurizer,
-            stage="train",
-            shuffle=False,
-        )
-        train_dataset.update_metadata(metadata)
+    logger.info("Preparing train metadata ...")
+    config.data_config.train_dataset_config.drop_remainder = False
+    config.data_config.train_dataset_config.shuffle = False
+    train_dataset = ASRDataset(text_featurizer=text_featurizer, **vars(config.data_config.train_dataset_config))
+    train_dataset.update_metadata()
 
-    if config.decoder_config.eval_files:
-        logger.info("Preparing eval metadata ...")
-        speech_featurizer, text_featurizer = featurizer_helpers.prepare_featurizers(config=config)
-        eval_dataset = ASRDataset(
-            data_paths=config.decoder_config.eval_files,
-            speech_featurizer=speech_featurizer,
-            text_featurizer=text_featurizer,
-            stage="eval",
-            shuffle=False,
-        )
-        eval_dataset.update_metadata(metadata)
+    logger.info("Preparing eval metadata ...")
+    config.data_config.eval_dataset_config.drop_remainder = False
+    config.data_config.eval_dataset_config.shuffle = False
+    eval_dataset = ASRDataset(text_featurizer=text_featurizer, **vars(config.data_config.train_dataset_config))
+    eval_dataset.update_metadata()
 
 
 if __name__ == "__main__":

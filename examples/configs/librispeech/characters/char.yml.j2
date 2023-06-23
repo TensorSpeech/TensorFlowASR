@@ -1,10 +1,3 @@
-speech_config:
-  sample_rate: 16000
-  frame_ms: 25
-  stride_ms: 10
-  num_feature_bins: 80
-  feature_type: log_mel_spectrogram
-
 {% set vocabsize = 29 %}
 {% set vocabprefix = repodir ~ "/examples/configs/librispeech/characters/english" %}
 {% set metadata = vocabprefix ~ ".metadata.json" %}
@@ -16,3 +9,6 @@ decoder_config:
   norm_score: True
   lm_config: null
   vocabulary: {{vocabprefix}}.vocab
+
+{% import repodir ~ "/examples/configs/librispeech/data.yml.j2" as data_config with context %}
+{{data_config}}

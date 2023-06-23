@@ -1,10 +1,3 @@
-speech_config:
-  sample_rate: 16000
-  frame_ms: 25
-  stride_ms: 10
-  num_feature_bins: 80
-  feature_type: log_mel_spectrogram
-
 {% set vocabsize = 1000 %}
 {% set vocabprefix = repodir ~ "/examples/configs/librispeech/wordpiece/train_" ~ vocabsize ~ "_whitespace" %}
 {% set metadata = vocabprefix ~ ".metadata.json" %}
@@ -34,3 +27,5 @@ decoder_config:
     - {{datadir}}/dev-clean/transcripts.tsv
     - {{datadir}}/dev-other/transcripts.tsv
 
+{% import repodir ~ "/examples/configs/librispeech/data.yml.j2" as data_config with context %}
+{{data_config}}

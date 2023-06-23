@@ -108,7 +108,8 @@ disable=too-few-public-methods,
         too-many-branches,
         ungrouped-imports,
         attribute-defined-outside-init,
-        too-many-public-methods
+        too-many-public-methods,
+        use-dict-literal
 
 # Enable the message, report, category or checker with the given id(s). You can
 # either give multiple identifier separated by comma (,) or put this option
