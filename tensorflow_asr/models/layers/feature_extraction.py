@@ -266,7 +266,7 @@ class FeatureExtraction(Layer):
 
     def compute_mask(self, inputs, mask=None):
         signals, signals_length = inputs
-        mask = tf.sequence_mask(signals_length, maxlen=tf.shape(signals)[1], dtype=tf.bool)
+        mask = tf.sequence_mask(signals_length, maxlen=(tf.shape(signals)[1] + self.padding), dtype=tf.bool)
         nsamples = math_util.count(mask, value=True, axis=1)
         nframes = tf.vectorized_map(self.get_nframes, nsamples, warn=False)
         padded_nframes = self.get_nframes(tf.shape(inputs)[1])
@@ -278,9 +278,7 @@ class FeatureExtraction(Layer):
         if nsamples is None:
             output_shape = [B, None, self.num_feature_bins]
         else:
-            if self.padding > 0:
-                nsamples += self.padding
-            output_shape = [B, self.get_nframes(nsamples), self.num_feature_bins]
+            output_shape = [B, self.get_nframes(nsamples + self.padding), self.num_feature_bins]
         if self.has_channel_dim:
             output_shape += [1]
         return tf.TensorShape(output_shape), tf.TensorShape(signal_length_shape)
