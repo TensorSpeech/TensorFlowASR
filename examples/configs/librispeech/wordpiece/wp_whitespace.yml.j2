@@ -23,9 +23,6 @@ decoder_config:
     - {{datadir}}/train-clean-100/transcripts.tsv
     - {{datadir}}/train-clean-360/transcripts.tsv
     - {{datadir}}/train-other-500/transcripts.tsv
-  eval_files:
-    - {{datadir}}/dev-clean/transcripts.tsv
-    - {{datadir}}/dev-other/transcripts.tsv
 
 {% import repodir ~ "/examples/configs/librispeech/data.yml.j2" as data_config with context %}
 {{data_config}}
