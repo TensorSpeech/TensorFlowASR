@@ -35,10 +35,10 @@ class ASRDataset(BaseDataset):
     def __init__(
         self,
         stage: str,
-        speech_featurizer: SpeechFeaturizer,
+        # speech_featurizer: SpeechFeaturizer,
         text_featurizer: TextFeaturizer,
         data_paths: list,
-        augmentations: Augmentation = Augmentation(None),
+        # augmentations: Augmentation = Augmentation(None),
         cache: bool = False,
         shuffle: bool = False,
         indefinite: bool = False,
@@ -51,7 +51,7 @@ class ASRDataset(BaseDataset):
     ):
         super().__init__(
             data_paths=data_paths,
-            augmentations=augmentations,
+            # augmentations=augmentations,
             cache=cache,
             shuffle=shuffle,
             stage=stage,
@@ -63,7 +63,7 @@ class ASRDataset(BaseDataset):
             sample_rate=sample_rate,
         )
         self.entries = []
-        self.speech_featurizer = speech_featurizer
+        # self.speech_featurizer = speech_featurizer
         self.text_featurizer = text_featurizer
         if self.metadata:
             self.load_metadata(metadata=metadata)
@@ -73,7 +73,8 @@ class ASRDataset(BaseDataset):
     def compute_metadata(self):
         self.read_entries()
         for _, duration, transcript in tqdm.tqdm(self.entries, desc=f"Computing metadata for entries in {self.stage} dataset"):
-            input_length = self.speech_featurizer.get_length_from_duration(duration)
+            # input_length = self.speech_featurizer.get_length_from_duration(duration)
+            input_length = math_util.get_nsamples(duration, self.sample_rate)
             label = self.text_featurizer.extract(transcript).numpy()
             label_length = len(label)
             self.speech_featurizer.update_length(input_length)
@@ -165,19 +166,21 @@ class ASRDataset(BaseDataset):
         audio: tf.Tensor,
         transcript: tf.Tensor,
     ):
-        signal = tf_read_raw_audio(audio)
-        signal = self.augmentations.signal_augment(signal)
-        features = self.speech_featurizer.extract(signal)
-        features = self.augmentations.feature_augment(features)
-        input_length = tf.shape(features, out_type=tf.int32)[0]
+        # signal = tf_read_raw_audio(audio)
+        # signal = self.augmentations.signal_augment(signal)
+        # features = self.speech_featurizer.extract(signal)
+        # features = self.augmentations.feature_augment(features)
+        # input_length = tf.shape(features, out_type=tf.int32)[0]
+        inputs = tf_read_raw_audio(audio)
+        inputs_length = tf.shape(inputs)[0]
 
-        label = self.text_featurizer.extract(transcript)
-        label_length = tf.shape(label, out_type=tf.int32)[0]
+        labels = self.text_featurizer.extract(transcript)
+        labels_length = tf.shape(labels, out_type=tf.int32)[0]
 
-        prediction = self.text_featurizer.prepand_blank(label)
-        prediction_length = tf.shape(prediction, out_type=tf.int32)[0]
+        predictions = self.text_featurizer.prepand_blank(labels)
+        predictions_length = tf.shape(predictions, out_type=tf.int32)[0]
 
-        return path, features, input_length, label, label_length, prediction, prediction_length
+        return path, inputs, inputs_length, labels, labels_length, predictions, predictions_length
 
     def parse(
         self,
@@ -189,11 +192,18 @@ class ASRDataset(BaseDataset):
         Returns:
             path, features, input_lengths, labels, label_lengths, pred_inp
         """
-        data = self._process_item(path=path, audio=audio, transcript=transcript)
-        _, features, input_length, label, label_length, prediction, prediction_length = data
+        (
+            _,
+            inputs,
+            inputs_length,
+            labels,
+            labels_length,
+            predictions,
+            predictions_length,
+        ) = self._process_item(path=path, audio=audio, transcript=transcript)
         return (
-            data_util.create_inputs(inputs=features, inputs_length=input_length, predictions=prediction, predictions_length=prediction_length),
-            data_util.create_labels(labels=label, labels_length=label_length),
+            data_util.create_inputs(inputs=inputs, inputs_length=inputs_length, predictions=predictions, predictions_length=predictions_length),
+            data_util.create_labels(labels=labels, labels_length=labels_length),
         )
 
     # -------------------------------- CREATION -------------------------------------

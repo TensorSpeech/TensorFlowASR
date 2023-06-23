@@ -12,13 +12,22 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import math
+from dataclasses import asdict, dataclass
 
 import tensorflow as tf
 
+from tensorflow_asr.augmentations.augmentation import Augmentation
 from tensorflow_asr.featurizers.methods import gammatone
 from tensorflow_asr.models.base_layer import Layer
 from tensorflow_asr.utils import math_util
+
+
+@dataclass
+class FEATURE_TYPES:
+    SPECTROGRAM: str = "spectrogram"
+    LOG_MEL_SPECTROGRAM: str = "log_mel_spectrogram"
+    MFCC: str = "mffc"
+    LOG_GAMMATONE_SPECTROGRAM: str = "log_gammatone_spectrogram"
 
 
 class FeatureExtraction(Layer):
@@ -32,78 +41,103 @@ class FeatureExtraction(Layer):
         preemphasis=0.0,
         pad_end=True,
         use_librosa_like_stft=False,
-        fft_overdrive=True,
         output_floor=1e-10,
-        lower_edge_hertz=125.0,
+        lower_edge_hertz=0.0,
         upper_edge_hertz=8000.0,
+        nfft=None,
         normalize_signal=False,
         normalize_feature=False,
         normalize_per_frame=False,
-        name="feature_extraction",
-        **kwargs
+        padding=0,
+        has_channel_dim=False,
+        augmentations: Augmentation = None,
+        **kwargs,
     ):
-        super().__init__(name=name, **kwargs)
-        # Sample rate in Hz
+        """
+        Audio Features Extraction Keras Layer
+
+        Parameters
+        ----------
+        sample_rate : int, optional
+            Sample rate of audio signals in Hz, by default 16000
+        frame_ms : int, optional
+            Amount of data grabbed for each frame during analysis in ms, by default 25
+        stride_ms : int, optional
+            Number of ms to jump between frames, by default 10
+        num_feature_bins : int, optional
+            Number of bins in the feature output, by default 80
+        feature_type : str, optional
+            Type of feature extraction, by default "log_mel_spectrogram"
+        preemphasis : float, optional
+            The first-order filter coefficient used for preemphasis, when it is 0.0, preemphasis is turned off, by default 0.0
+        pad_end : bool, optional
+            Whether to pad the end of `signals` with zeros when framing produces a frame that lies partially past its end, by default True
+        use_librosa_like_stft : bool, optional
+            Use librosa like stft, by default False
+        output_floor : _type_, optional
+            Minimum output value, by default 1e-10
+        lower_edge_hertz : float, optional
+            The lowest frequency of the feature analysis, by default 125.0
+        upper_edge_hertz : float, optional
+            The highest frequency of the feature analysis, by default 8000.0
+        nfft : int, optional
+            NFFT, if None, equals frame_length derived from frame_ms, by default None
+        normalize_signal : bool, optional
+            Normalize signals to [-1,1] range, by default False
+        normalize_feature : bool, optional
+            Normalize features using z-score, by default False
+        normalize_per_frame : bool, optional
+            Normalize features in feature dim instead of n_frames dim, by default False
+        padding : int, optional
+            Number of samples to pad with 0 before feature extraction, by default 0
+        has_channel_dim : bool, optional
+            Whether to expand the last dimension of feature output to give [B, n_frames, num_feature_bins, 1], by default False
+        """
+        assert feature_type in asdict(FEATURE_TYPES()).values(), f"feature_type must be in {asdict(FEATURE_TYPES()).values()}"
+
+        super().__init__(name=feature_type, **kwargs)
         self.sample_rate = sample_rate
-        # Amount of data grabbed for each frame during analysis
+
         self.frame_ms = frame_ms
         self.frame_length = int(round(self.sample_rate * self.frame_ms / 1000.0))
-        # Number of ms to jump between frames
+
         self.stride_ms = stride_ms
         self.frame_step = int(round(self.sample_rate * self.stride_ms / 1000.0))
-        # Number of bins in the feature output
+
         self.num_feature_bins = num_feature_bins
-        # Type of feature extraction
+
         self.feature_type = feature_type
-        # The first-order filter coefficient used for preemphasis. When it is 0.0, preemphasis is turned off.
+
         self.preemphasis = preemphasis
-        # Whether to pad the end of `signals` with zeros when framing produces a frame that lies partially past its end.
+
         self.pad_end = pad_end
-        # Use librosa like stft
+
         self.use_librosa_like_stft = use_librosa_like_stft
-        # Whether to use twice the minimum fft resolution.
-        self.fft_overdrive = fft_overdrive
-        # Minimum output of filterbank output prior to taking logarithm.
+
         self.output_floor = output_floor
-        # The lowest frequency of the feature analysis
+
         self.lower_edge_hertz = lower_edge_hertz
-        # The highest frequency of the feature analysis
         self.upper_edge_hertz = upper_edge_hertz
-        # Normalization
+
         self._normalize_signal = normalize_signal
         self._normalize_feature = normalize_feature
         self._normalize_per_frame = normalize_per_frame
-        # NFFT
-        self.nfft = int(max(512, math.pow(2, math.ceil(math.log(self.frame_length, 2)))))
-        if self.fft_overdrive:
-            self.nfft *= 2
+
+        self.padding = padding
+        self.nfft = self.frame_length if nfft is None else nfft
+        self.has_channel_dim = has_channel_dim
+
+        self.augmentations = augmentations
 
     # ---------------------------------- signals --------------------------------- #
 
     def normalize_signal(self, signal):
-        """
-        TF Normailize signal to [-1, 1] range
-        Args:
-            signal: tf.Tensor with shape [B, None]
-
-        Returns:
-            normalized signal with shape [B, None]
-        """
         if not self._normalize_signal:
             return signal
         gain = 1.0 / (tf.reduce_max(tf.abs(signal), axis=-1) + 1e-9)
         return signal * gain
 
     def preemphasis_signal(self, signal):
-        """
-        TF Pre-emphasis
-        Args:
-            signal: tf.Tensor with shape [B, None]
-            coeff: Float that indicates the preemphasis coefficient
-
-        Returns:
-            pre-emphasized signal with shape [B, None]
-        """
         if not self.preemphasis or self.preemphasis <= 0.0:
             return signal
         s0 = tf.expand_dims(signal[:, 0], axis=-1)
@@ -113,15 +147,6 @@ class FeatureExtraction(Layer):
     # --------------------------------- features --------------------------------- #
 
     def normalize_audio_features(self, audio_feature):
-        """
-        TF z-score features normalization
-        Args:
-            audio_feature: tf.Tensor with shape [B, T, F]
-            per_frame:
-
-        Returns:
-            normalized audio features with shape [B, T, F]
-        """
         if not self._normalize_feature:
             return audio_feature
         axis = -1 if self._normalize_per_frame else 1
@@ -147,9 +172,7 @@ class FeatureExtraction(Layer):
         return fft_features
 
     def logarithm(self, S):
-        log_spec = 10.0 * math_util.log10(tf.maximum(self.output_floor, S))
-        log_spec -= 10.0 * math_util.log10(tf.maximum(self.output_floor, 1.0))
-        return log_spec
+        return math_util.log10(tf.maximum(S, self.output_floor))
 
     def log_mel_spectrogram(self, signal):
         S = self.stft(signal)
@@ -186,23 +209,78 @@ class FeatureExtraction(Layer):
         return self.logarithm(gtone_spectrogram)
 
     def call(self, inputs, training=False):
-        signal = self.normalize_signal(inputs)
-        signal = self.preemphasis_signal(signal)
+        """
+        Compute features of audio signals
 
-        if self.feature_type == "spectrogram":
-            features = self.spectrogram(signal)
-        elif self.feature_type == "log_mel_spectrogram":
-            features = self.log_mel_spectrogram(signal)
-        elif self.feature_type == "mfcc":
-            features = self.mfcc(signal)
-        elif self.feature_type == "log_gammatone_spectrogram":
-            features = self.log_gammatone_spectrogram(signal)
-        else:
-            raise ValueError("feature_type must be either 'mfcc', 'log_mel_spectrogram' or 'spectrogram'")
+        Parameters
+        ----------
+        inputs : tf.Tensor, shape [B, None]
+            Audio signals that were resampled to sample_rate
+
+        training : bool, optional
+            Training mode, by default False
+
+        Returns
+        -------
+        tf.Tensor, shape = [B, n_frames, num_feature_bins, 1] if has_channel_dim else [B, n_frames, num_feature_bins]
+            Features extracted from audio signals
+        """
+        signals, signals_length = inputs
+
+        if training:
+            signals = self.augmentations.signal_augment(signals)
+
+        if self.padding > 0:
+            signals = tf.pad(signals, [[0, 0], [0, self.padding]], mode="CONSTANT", constant_values=0)
+
+        signals = self.normalize_signal(signals)
+        signals = self.preemphasis_signal(signals)
+
+        if self.feature_type == FEATURE_TYPES.SPECTROGRAM:
+            features = self.spectrogram(signals)
+        elif self.feature_type == FEATURE_TYPES.MFCC:
+            features = self.mfcc(signals)
+        elif self.feature_type == FEATURE_TYPES.LOG_GAMMATONE_SPECTROGRAM:
+            features = self.log_gammatone_spectrogram(signals)
+        else:  # default as log_mel_spectrogram
+            features = self.log_mel_spectrogram(signals)
 
         features = self.normalize_audio_features(features)
-        features = tf.expand_dims(features, axis=-1)
-        return features
+        if self.has_channel_dim:
+            features = tf.expand_dims(features, axis=-1)
+
+        if training:
+            features = self.augmentations.feature_augment(features)
+
+        features_length = tf.vectorized_map(self.get_nframes, signals_length, warn=False)
+
+        return features, features_length
+
+    def get_nframes(self, nsamples):
+        # https://www.tensorflow.org/api_docs/python/tf/signal/frame
+        if self.use_librosa_like_stft:
+            return 1 + (nsamples - self.nfft) // self.frame_step
+        if self.pad_end:
+            return -(-nsamples // self.frame_step)
+        return 1 + (nsamples - self.frame_length) // self.frame_step
+
+    def compute_mask(self, inputs, mask=None):
+        signals, signals_length = inputs
+        mask = tf.sequence_mask(signals_length, maxlen=tf.shape(signals)[1], dtype=tf.bool)
+        nsamples = math_util.count(mask, value=True, axis=1)
+        nframes = tf.vectorized_map(self.get_nframes, nsamples, warn=False)
+        padded_nframes = self.get_nframes(tf.shape(inputs)[1])
+        return tf.sequence_mask(nframes, padded_nframes, dtype=tf.bool), None
 
     def compute_output_shape(self, input_shape):
-        return input_shape
+        signal_shape, signal_length_shape = input_shape
+        B, nsamples = signal_shape
+        if nsamples is None:
+            output_shape = [B, None, self.num_feature_bins]
+        else:
+            if self.padding > 0:
+                nsamples += self.padding
+            output_shape = [B, self.get_nframes(nsamples), self.num_feature_bins]
+        if self.has_channel_dim:
+            output_shape += [1]
+        return tf.TensorShape(output_shape), tf.TensorShape(signal_length_shape)

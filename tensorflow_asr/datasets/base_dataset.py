@@ -13,8 +13,6 @@
 # limitations under the License.
 import tensorflow as tf
 
-from tensorflow_asr.augmentations.augmentation import Augmentation
-
 BUFFER_SIZE = 100
 TFRECORD_SHARDS = 16
 AUTOTUNE = tf.data.experimental.AUTOTUNE
@@ -26,7 +24,7 @@ class BaseDataset:
     def __init__(
         self,
         data_paths: list,
-        augmentations: Augmentation = Augmentation(None),
+        # augmentations: Augmentation = Augmentation(None),
         cache: bool = False,
         shuffle: bool = False,
         buffer_size: int = BUFFER_SIZE,
@@ -41,7 +39,7 @@ class BaseDataset:
         self.data_paths = data_paths or []
         if not isinstance(self.data_paths, list):
             raise ValueError("data_paths must be a list of string paths")
-        self.augmentations = augmentations  # apply augmentation
+        # self.augmentations = augmentations  # apply augmentation
         self.cache = cache  # whether to cache transformed dataset to memory
         self.shuffle = shuffle  # whether to shuffle tf.data.Dataset
         if buffer_size <= 0 and shuffle:

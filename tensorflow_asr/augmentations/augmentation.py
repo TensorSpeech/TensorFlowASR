@@ -40,13 +40,37 @@ class Augmentation:
             outputs = tf.where(tf.less(p, au.prob), au.augment(outputs), outputs)
         return outputs
 
-    @tf.function
     def signal_augment(self, inputs):
-        return self._augment(inputs, self.signal_augmentations)
+        """
+        Augment audio signals
 
-    @tf.function
+        Parameters
+        ----------
+        inputs : tf.Tensor, shape [B, None]
+            Original audio signals
+
+        Returns
+        -------
+        tf.Tensor, shape [B, None]
+            Augmented audio signals
+        """
+        return tf.vectorized_map(lambda x: self._augment(x, self.signal_augmentations), inputs, warn=False)
+
     def feature_augment(self, inputs):
-        return self._augment(inputs, self.feature_augmentations)
+        """
+        Augment audio features
+
+        Parameters
+        ----------
+        inputs : tf.Tensor, shape [B, T, F]
+            _description_
+
+        Returns
+        -------
+        _type_
+            _description_
+        """
+        return tf.vectorized_map(lambda x: self._augment(x, self.feature_augmentations), inputs, warn=False)
 
     @staticmethod
     def parse(config: dict) -> list:

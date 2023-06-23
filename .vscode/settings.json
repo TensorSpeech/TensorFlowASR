@@ -17,5 +17,6 @@
         "--line-length",
         "130"
     ],
-    "python.formatting.provider": "black"
+    "python.formatting.provider": "black",
+    "autoDocstring.docstringFormat": "numpy"
 }

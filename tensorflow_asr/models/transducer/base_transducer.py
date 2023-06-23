@@ -400,11 +400,11 @@ class Transducer(BaseModel):
                     lambda: None,
                 )
 
-    def call(self, inputs, training=False):
-        enc, enc_length = self.encoder([inputs["inputs"], inputs["inputs_length"]], training=training)
-        pred = self.predict_net([inputs["predictions"], inputs["predictions_length"]], training=training)
+    def call_logits(self, features, features_length, predictions, predictions_length, training=False):
+        enc, logits_length = self.encoder((features, features_length), training=training)
+        pred = self.predict_net((predictions, predictions_length), training=training)
         logits = self.joint_net([enc, pred], training=training)
-        return data_util.create_logits(logits=logits, logits_length=enc_length)
+        return logits, logits_length
 
     # -------------------------------- INFERENCES -------------------------------------
 

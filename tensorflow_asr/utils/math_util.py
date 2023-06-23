@@ -250,3 +250,10 @@ def conv_output_length(input_length, filter_size, padding, stride, dilation=1):
     elif padding == "full":
         output_length = input_length + dilated_filter_size - 1
     return (output_length + stride - 1) // stride
+
+
+def get_nsamples(
+    duration: float,
+    sample_rate: int = 16000,
+):
+    return math.ceil(float(duration) * sample_rate)

@@ -18,8 +18,9 @@ from keras.models import Model
 
 from tensorflow_asr.featurizers.speech_featurizers import SpeechFeaturizer
 from tensorflow_asr.featurizers.text_featurizers import TextFeaturizer
+from tensorflow_asr.models.layers.feature_extraction import FeatureExtraction
 from tensorflow_asr.optimizers.accumulation import GradientAccumulator
-from tensorflow_asr.utils import env_util, file_util
+from tensorflow_asr.utils import data_util, env_util, file_util
 
 logger = tf.get_logger()
 
@@ -35,6 +36,10 @@ class BaseModelLayer(Model):  # pylint: disable=abstract-method
 
 
 class BaseModel(Model):
+    def __init__(self, speech_config: dict, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.feature_extraction = FeatureExtraction(**speech_config)
+
     def summary(
         self,
         line_length=127,
@@ -132,6 +137,16 @@ class BaseModel(Model):
         self.add_custom_metric(metric=tf.keras.metrics.Mean(name="loss"))
         self.distribute_reduction_method = "sum"
         super().compile(optimizer=optimizer, loss=loss, run_eagerly=run_eagerly, **kwargs)
+
+    def call_logits(self, features, features_length, *args, training=False):
+        raise NotImplementedError()
+
+    def call(self, inputs, training=False):
+        signals, signals_length = inputs["inputs"], inputs["inputs_length"]
+        predictions, predictions_length = inputs["predictions"], inputs["predictions_length"]
+        features, features_length = self.feature_extraction((signals, signals_length), training=training)
+        logits, logits_length = self.call_logits(features, features_length, predictions, predictions_length, training=training)
+        return data_util.create_logits(logits=logits, logits_length=logits_length)
 
     def add_featurizers(self, speech_featurizer: SpeechFeaturizer, text_featurizer: TextFeaturizer):
         """

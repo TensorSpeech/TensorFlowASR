@@ -90,10 +90,10 @@ class CtcModel(BaseModel):
                     lambda: None,
                 )
 
-    def call(self, inputs, training=False):
-        logits, logits_length = self.encoder([inputs["inputs"], inputs["inputs_length"]], training=training)
-        logits, logits_length = self.decoder([logits, logits_length], training=training)
-        return data_util.create_logits(logits=logits, logits_length=logits_length)
+    def call_logits(self, features, features_length, *args, training=False):
+        logits, logits_length = self.encoder((features, features_length), training=training)
+        logits, logits_length = self.decoder((logits, logits_length), training=training)
+        return logits, logits_length
 
     # -------------------------------- GREEDY -------------------------------------
 
