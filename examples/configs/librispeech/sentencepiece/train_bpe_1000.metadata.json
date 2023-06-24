@@ -3,5 +3,10 @@
     "max_input_length": 475760,
     "max_label_length": 232,
     "num_entries": 281241
+  },
+  "eval": {
+    "max_input_length": 562480,
+    "max_label_length": 227,
+    "num_entries": 5567
   }
 }
