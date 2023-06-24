@@ -458,7 +458,7 @@ class Transducer(BaseModel):
                 return tf.math.reduce_all(tf.less(_frame_indices, nframes))
 
             def body(_frame_indices, _previous_tokens, _previous_states, _tokens, _tokens_indices):
-                _current_frames = tf.expand_dims(tf.gather_nd(encoded, _frame_indices, batch_dim=1), axis=1)  # [B, 1, E]
+                _current_frames = tf.expand_dims(tf.gather_nd(encoded, _frame_indices, batch_dims=1), axis=1)  # [B, 1, E]
                 _log_softmax, _states = self.call_next(_current_frames, _previous_tokens, _previous_states, tflite=tflite)
                 _current_tokens = tf.argmax(_log_softmax, axis=-1, output_type=tf.int32)  # [B, 1]
                 # update results
