@@ -281,6 +281,7 @@ class ASRDataset(BaseDataset):
     def read_entries(self):
         if hasattr(self, "entries") and len(self.entries) > 0:
             return
+        self.data_paths = file_util.preprocess_paths(self.data_paths, enabled=self.enabled)
         for file_path in self.data_paths:
             logger.info(f"Reading {file_path} ...")
             with tf.io.gfile.GFile(file_path, "r") as f:
@@ -449,6 +450,7 @@ class ASRTFRecordDataset(ASRDataset):
     def create_tfrecords(self):
         if not self.tfrecords_dir:
             return False
+        self.tfrecords_dir = file_util.preprocess_paths(self.tfrecords_dir, isdir=True, enabled=self.enabled)
 
         if tf.io.gfile.glob(os.path.join(self.tfrecords_dir, f"{self.stage}*.tfrecord")):
             logger.info(f"TFRecords're already existed: {self.stage}")
