@@ -2,7 +2,7 @@
 import os
 
 from tensorflow_asr import tf
-from tensorflow_asr.configs.config import SpeechConfig
+from tensorflow_asr.config import SpeechConfig
 from tensorflow_asr.featurizers import speech_featurizers
 from tensorflow_asr.utils import file_util
 

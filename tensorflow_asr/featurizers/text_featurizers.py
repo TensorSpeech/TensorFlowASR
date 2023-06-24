@@ -22,7 +22,7 @@ import tensorflow as tf
 import tensorflow_text as tft
 from tensorflow_text.tools.wordpiece_vocab import bert_vocab_from_dataset as bert_vocab
 
-from tensorflow_asr.configs.config import Config, DecoderConfig
+from tensorflow_asr.config import Config, DecoderConfig
 from tensorflow_asr.utils import file_util
 
 logger = tf.get_logger()

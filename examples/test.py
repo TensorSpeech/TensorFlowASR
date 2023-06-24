@@ -14,8 +14,8 @@
 
 
 from tensorflow_asr import tf  # import to aid logging messages
-from tensorflow_asr.configs.config import Config
-from tensorflow_asr.datasets import asr_dataset
+from tensorflow_asr import dataset
+from tensorflow_asr.config import Config
 from tensorflow_asr.featurizers import text_featurizers
 from tensorflow_asr.helpers import exec_helpers
 from tensorflow_asr.utils import cli_util, env_util, file_util
@@ -42,7 +42,7 @@ def main(
 
     text_featurizer = text_featurizers.get(config)
 
-    test_dataset = asr_dataset.get(text_featurizer=text_featurizer, dataset_config=config.data_config.test_dataset_config, dataset_type=dataset_type)
+    test_dataset = dataset.get(text_featurizer=text_featurizer, dataset_config=config.data_config.test_dataset_config, dataset_type=dataset_type)
     test_data_loader = test_dataset.create(batch_size)
 
     model = tf.keras.models.model_from_config(config.model_config)

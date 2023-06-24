@@ -14,8 +14,8 @@
 
 
 from tensorflow_asr import tf
-from tensorflow_asr.configs.config import Config
-from tensorflow_asr.datasets.asr_dataset import ASRDataset
+from tensorflow_asr.config import Config
+from tensorflow_asr.dataset import ASRDataset
 from tensorflow_asr.featurizers import text_featurizers
 from tensorflow_asr.utils import cli_util
 

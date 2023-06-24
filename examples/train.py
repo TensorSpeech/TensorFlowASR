@@ -15,8 +15,8 @@
 import os
 
 from tensorflow_asr import tf  # import to aid logging messages
-from tensorflow_asr.configs.config import Config
-from tensorflow_asr.datasets import asr_dataset
+from tensorflow_asr import dataset
+from tensorflow_asr.config import Config
 from tensorflow_asr.featurizers import text_featurizers
 from tensorflow_asr.utils import cli_util, env_util, file_util
 
@@ -43,21 +43,21 @@ def main(
 
     text_featurizer = text_featurizers.get(config)
 
-    train_dataset = asr_dataset.get(
+    train_dataset = dataset.get(
         text_featurizer=text_featurizer,
         dataset_config=config.data_config.train_dataset_config,
         dataset_type=dataset_type,
     )
-    eval_dataset = asr_dataset.get(
+    eval_dataset = dataset.get(
         text_featurizer=text_featurizer,
         dataset_config=config.data_config.eval_dataset_config,
         dataset_type=dataset_type,
     )
 
-    shapes = asr_dataset.get_global_shape(config, strategy, train_dataset, eval_dataset, batch_size=bs)
+    shapes = dataset.get_global_shape(config, strategy, train_dataset, eval_dataset, batch_size=bs)
 
-    train_data_loader = train_dataset.create(shapes["batch_size"])
-    eval_data_loader = eval_dataset.create(shapes["batch_size"])
+    train_data_loader = train_dataset.create(shapes["batch_size"], padded_shapes=shapes["padded_shapes"])
+    eval_data_loader = eval_dataset.create(shapes["batch_size"], padded_shapes=shapes["padded_shapes"])
 
     with strategy.scope():
         model = tf.keras.models.model_from_config(config.model_config)

@@ -12,6 +12,52 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+# Dataset Structures :kissing:
+
+# To make a custom dataset, inherit the `BaseDataset` class and override following methods:
+
+# 1. `create` to create `tf.data.Dataset` instance.
+# 2. `parse` for transforming `tf.data.Dataset` during creation by applyting `tf.data.Dataset.map` function.
+
+# _Note_: To create transcripts for **librispeech**, see [create_librispeech_trans.py](../../scripts/create_librispeech_trans.py)
+
+# ## ASR Datasets
+
+# An ASR dataset is some `.tsv` files in format: `PATH\tDURATION\tTRANSCRIPT`. You must create those files by your own with your own data and methods.
+
+# **Note**: Each `.tsv` file must include a header `PATH\tDURATION\tTRANSCRIPT` because it will remove these headers when loading dataset, otherwise you will lose 1 data file :sob:
+
+# **For transcript**, if you want to include characters such as dots, commas, double quote, etc.. you must create your own `.txt` vocabulary file. Default is [English](../featurizers/english.txt)
+
+# **Inputs**
+
+# ```python
+# class ASRTFRecordDataset(ASRDataset):
+#     """ Dataset for ASR using TFRecords """
+
+# class ASRSliceDataset(ASRDataset):
+#     """ Dataset for ASR using Slice """
+# ```
+
+# **Outputs when iterating dataset**
+
+# ```python
+# (
+#     {
+#         "inputs": ...,
+#         "inputs_length": ...,
+#         "predictions": ...,
+#         "predictions_length": ...,
+#     },
+#     {
+#         "labels": ...,
+#         "labels_length": ...
+#     }
+# )
+# ```
+
+# Where `predictions` and `predictions_length` are the label prepanded by blank and its length for training *Transducer*
+
 import json
 import os
 from dataclasses import asdict, dataclass
@@ -20,8 +66,7 @@ import numpy as np
 import tensorflow as tf
 import tqdm
 
-from tensorflow_asr.configs.config import Config, DatasetConfig
-from tensorflow_asr.datasets.base_dataset import AUTOTUNE, BUFFER_SIZE, TFRECORD_SHARDS, BaseDataset
+from tensorflow_asr.config import Config, DatasetConfig
 from tensorflow_asr.featurizers.text_featurizers import TextFeaturizer
 from tensorflow_asr.utils import data_util, feature_util, file_util, math_util
 
@@ -64,18 +109,74 @@ def get_global_shape(
     max_input_length = None if max_input_length == 0 else max_input_length
     max_label_length = None if max_label_length == 0 else max_label_length
 
-    for dset in datasets:  # update global shape to all datasets
-        dset.max_input_length = max_input_length
-        dset.max_label_length = max_label_length
-
     input_shape = [max_input_length]
     prediction_shape = [max_label_length + 1] if max_label_length else [None]
+    label_shape = [max_label_length]
+    padded_shapes = (
+        data_util.create_inputs(
+            inputs=tf.TensorShape(input_shape),
+            inputs_length=tf.TensorShape([]),
+            predictions=tf.TensorShape(prediction_shape),
+            predictions_length=tf.TensorShape([]),
+        ),
+        data_util.create_labels(
+            labels=tf.TensorShape(label_shape),
+            labels_length=tf.TensorShape([]),
+        ),
+    )
 
     return dict(
         batch_size=global_batch_size,
         input_shape=input_shape,
         prediction_shape=prediction_shape,
+        label_shape=label_shape,
+        padded_shapes=padded_shapes,
     )
+
+
+BUFFER_SIZE = 100
+TFRECORD_SHARDS = 16
+AUTOTUNE = tf.data.experimental.AUTOTUNE
+
+
+class BaseDataset:
+    """Based dataset for all models"""
+
+    def __init__(
+        self,
+        data_paths: list,
+        cache: bool = False,
+        shuffle: bool = False,
+        buffer_size: int = BUFFER_SIZE,
+        indefinite: bool = False,
+        drop_remainder: bool = True,
+        enabled: bool = True,
+        metadata: str = None,
+        sample_rate: int = 16000,
+        stage: str = "train",
+        **kwargs,
+    ):
+        self.data_paths = data_paths or []
+        if not isinstance(self.data_paths, list):
+            raise ValueError("data_paths must be a list of string paths")
+        self.cache = cache  # whether to cache transformed dataset to memory
+        self.shuffle = shuffle  # whether to shuffle tf.data.Dataset
+        if buffer_size <= 0 and shuffle:
+            raise ValueError("buffer_size must be positive when shuffle is on")
+        self.buffer_size = buffer_size  # shuffle buffer size
+        self.stage = stage  # for defining tfrecords files
+        self.enabled = enabled
+        self.drop_remainder = drop_remainder  # whether to drop remainder for multi gpu training
+        self.indefinite = indefinite  # Whether to make dataset repeat indefinitely -> avoid the potential last partial batch
+        self.total_steps = None  # for better training visualization
+        self.metadata = metadata
+        self.sample_rate = sample_rate
+
+    def parse(self, *args, **kwargs):
+        raise NotImplementedError()
+
+    def create(self, batch_size):
+        raise NotImplementedError()
 
 
 class ASRDataset(BaseDataset):
@@ -231,7 +332,7 @@ class ASRDataset(BaseDataset):
 
     # -------------------------------- CREATION -------------------------------------
 
-    def process(self, dataset: tf.data.Dataset, batch_size: int):
+    def process(self, dataset: tf.data.Dataset, batch_size: int, padded_shapes=None):
         if self.cache:
             dataset = dataset.cache()  # cache original (unchanged data)
 
@@ -244,10 +345,8 @@ class ASRDataset(BaseDataset):
         if self.indefinite and self.total_steps:
             dataset = dataset.repeat()
 
-        # PADDED BATCH the dataset
-        dataset = dataset.padded_batch(
-            batch_size=batch_size,
-            padded_shapes=(
+        if padded_shapes is None:
+            padded_shapes = (
                 data_util.create_inputs(
                     inputs=tf.TensorShape([self.max_input_length]),
                     inputs_length=tf.TensorShape([]),
@@ -258,7 +357,12 @@ class ASRDataset(BaseDataset):
                     labels=tf.TensorShape([self.max_label_length]),
                     labels_length=tf.TensorShape([]),
                 ),
-            ),
+            )
+
+        # PADDED BATCH the dataset
+        dataset = dataset.padded_batch(
+            batch_size=batch_size,
+            padded_shapes=padded_shapes,
             padding_values=(
                 data_util.create_inputs(inputs=0.0, inputs_length=0, predictions=self.text_featurizer.blank, predictions_length=0),
                 data_util.create_labels(labels=self.text_featurizer.blank, labels_length=0),
@@ -270,7 +374,7 @@ class ASRDataset(BaseDataset):
         dataset = dataset.prefetch(AUTOTUNE)
         return dataset
 
-    def create(self, batch_size: int):
+    def create(self, batch_size: int, padded_shapes=None):
         if not self.enabled:
             return None
         self.read_entries()
@@ -281,7 +385,7 @@ class ASRDataset(BaseDataset):
             output_types=(tf.string, tf.string, tf.string),
             output_shapes=(tf.TensorShape([]), tf.TensorShape([]), tf.TensorShape([])),
         )
-        return self.process(dataset, batch_size)
+        return self.process(dataset, batch_size, padded_shapes=padded_shapes)
 
 
 class ASRTFRecordDataset(ASRDataset):
@@ -376,7 +480,7 @@ class ASRTFRecordDataset(ASRDataset):
         example = tf.io.parse_single_example(record, feature_description)
         return super().parse(**example)
 
-    def create(self, batch_size: int):
+    def create(self, batch_size: int, padded_shapes=None):
         if not self.enabled:
             return None
         have_data = self.create_tfrecords()
@@ -390,7 +494,7 @@ class ASRTFRecordDataset(ASRDataset):
         files_ds = files_ds.with_options(ignore_order)
         dataset = tf.data.TFRecordDataset(files_ds, compression_type=self.compression_type, num_parallel_reads=AUTOTUNE)
 
-        return self.process(dataset, batch_size)
+        return self.process(dataset, batch_size, padded_shapes=padded_shapes)
 
 
 class ASRSliceDataset(ASRDataset):
@@ -404,7 +508,7 @@ class ASRSliceDataset(ASRDataset):
         )
         return record[0], audio, record[2]
 
-    def create(self, batch_size: int):
+    def create(self, batch_size: int, padded_shapes=None):
         if not self.enabled:
             return None
         self.read_entries()
@@ -418,4 +522,4 @@ class ASRSliceDataset(ASRDataset):
         dataset = dataset.with_options(options)
         dataset = dataset.map(self.load, num_parallel_calls=AUTOTUNE, deterministic=False)
 
-        return self.process(dataset, batch_size)
+        return self.process(dataset, batch_size, padded_shapes=padded_shapes)

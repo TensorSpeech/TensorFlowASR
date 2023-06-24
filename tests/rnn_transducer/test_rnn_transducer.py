@@ -21,7 +21,7 @@ logger = tf.get_logger()
 
 DEFAULT_YAML = os.path.join(os.path.abspath(os.path.dirname(__file__)), "config_wp.j2")
 
-from tensorflow_asr.configs.config import Config
+from tensorflow_asr.config import Config
 from tensorflow_asr.featurizers.speech_featurizers import SpeechFeaturizer
 from tensorflow_asr.featurizers.text_featurizers import CharFeaturizer
 from tensorflow_asr.models.transducer.rnn_transducer import RnnTransducer

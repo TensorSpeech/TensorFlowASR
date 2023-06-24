@@ -13,7 +13,7 @@
 # limitations under the License.
 
 from tensorflow_asr import tf  # import to aid logging messages
-from tensorflow_asr.configs.config import Config
+from tensorflow_asr.config import Config
 from tensorflow_asr.helpers import exec_helpers, featurizer_helpers
 from tensorflow_asr.utils import cli_util, env_util, file_util
 

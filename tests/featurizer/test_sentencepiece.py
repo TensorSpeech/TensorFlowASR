@@ -3,7 +3,7 @@ import re
 
 import sentencepiece as spm
 
-from tensorflow_asr.datasets.asr_dataset import ASRSliceDataset, ASRSliceTestDataset
+from tensorflow_asr.dataset import ASRSliceDataset, ASRSliceTestDataset
 from tensorflow_asr.featurizers.speech_featurizers import SpeechFeaturizer
 from tensorflow_asr.featurizers.text_featurizers import SentencePieceFeaturizer, SubwordFeaturizer, TextFeaturizer
 

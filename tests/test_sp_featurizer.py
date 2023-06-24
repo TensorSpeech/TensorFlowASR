@@ -3,7 +3,7 @@ import os
 
 import tensorflow as tf
 
-from tensorflow_asr.configs.config import DecoderConfig
+from tensorflow_asr.config import DecoderConfig
 from tensorflow_asr.featurizers.text_featurizers import SentencePieceFeaturizer
 from tensorflow_asr.utils import file_util
 

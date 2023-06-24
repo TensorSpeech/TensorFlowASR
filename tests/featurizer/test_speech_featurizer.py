@@ -6,7 +6,7 @@ import numpy as np
 import tensorflow as tf
 
 from tensorflow_asr.augmentations.methods import specaugment
-from tensorflow_asr.configs.config import SpeechConfig
+from tensorflow_asr.config import SpeechConfig
 from tensorflow_asr.featurizers import speech_featurizers
 
 speech_conf = SpeechConfig(

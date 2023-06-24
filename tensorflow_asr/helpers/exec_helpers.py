@@ -15,7 +15,7 @@
 import tensorflow as tf
 from tqdm import tqdm
 
-from tensorflow_asr.datasets.asr_dataset import ASRSliceDataset
+from tensorflow_asr.dataset import ASRSliceDataset
 from tensorflow_asr.models.base_model import BaseModel
 from tensorflow_asr.utils import app_util, file_util
 
