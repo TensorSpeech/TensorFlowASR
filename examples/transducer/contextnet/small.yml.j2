@@ -11,6 +11,17 @@ model_config:
       stride_ms: 10
       num_feature_bins: 80
       feature_type: log_mel_spectrogram
+      augmentations:
+        feature_augment:
+          time_masking:
+            prob: 1.0
+            num_masks: 5
+            mask_factor: 100
+            p_upperbound: 0.05
+          freq_masking:
+            prob: 1.0
+            num_masks: 1
+            mask_factor: 27
     encoder_alpha: 0.5
     encoder_blocks:
       # C0
