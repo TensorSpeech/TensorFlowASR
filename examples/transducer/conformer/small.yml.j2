@@ -1,24 +1,14 @@
-{% set modeldir = "E:/Miscellanea/Models/local/transducer/conformer" %}
-{% set datadir = "E:/MLDL/Datasets/ASR/LibriSpeech" %}
-
-{# {% import "examples/configs/librispeech/wp.yml.j2" as decoder_config with context %} #}
-{% import "examples/configs/librispeech/wp_whitespace.yml.j2" as decoder_config with context %}
-{# {% import "examples/configs/librispeech/sp.yml.j2" as decoder_config with context %} #}
-{# {% import "examples/configs/librispeech/char.yml.j2" as decoder_config with context %} #}
-
-speech_config:
-  sample_rate: 16000
-  frame_ms: 25
-  stride_ms: 10
-  num_feature_bins: 80
-  feature_type: log_mel_spectrogram
-  normalize_feature: True
-
+{% import repodir ~ "/examples/configs/librispeech/wordpiece/wp_whitespace.yml.j2" as decoder_config with context %}
 {{decoder_config}}
 
 model_config:
   class_name: tensorflow_asr.models.transducer>Conformer
   config:
+    speech_config:
+      sample_rate: 16000
+      frame_ms: 25
+      stride_ms: 10
+      feature_type: log_mel_spectrogram
     encoder_subsampling:
       type: conv2d
       filters: 144
@@ -61,51 +51,6 @@ model_config:
     vocab_size: {{decoder_config.vocabsize}}
 
 learning_config:
-  train_dataset_config:
-    enabled: True
-    augmentation_config:
-      feature_augment:
-        time_masking:
-          prob: 1.0
-          num_masks: 5
-          mask_factor: 100
-          p_upperbound: 0.05
-        freq_masking:
-          prob: 1.0
-          num_masks: 1
-          mask_factor: 27
-    data_paths:
-      - {{datadir}}/dev-clean/transcripts.tsv
-    tfrecords_dir: null
-    shuffle: True
-    cache: True
-    buffer_size: 100
-    drop_remainder: True
-    stage: train
-    metadata: {{decoder_config.metadata}}
-
-  eval_dataset_config:
-    enabled: False
-    data_paths:
-      - {{datadir}}/dev-clean/transcripts.tsv
-    tfrecords_dir: null
-    shuffle: False
-    cache: True
-    buffer_size: 100
-    drop_remainder: True
-    stage: eval
-    metadata: {{decoder_config.metadata}}
-
-  test_dataset_config:
-    data_paths:
-      - {{datadir}}/test-clean/transcripts.tsv
-    tfrecords_dir: null
-    shuffle: False
-    cache: True
-    buffer_size: 100
-    drop_remainder: False
-    stage: test
-
   optimizer_config:
     class_name: adam
     config:

@@ -12,6 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import os
+
 from tensorflow_asr import tf  # import to aid logging messages
 from tensorflow_asr.configs.config import Config
 from tensorflow_asr.datasets import asr_dataset
@@ -22,19 +24,21 @@ from tensorflow_asr.utils import cli_util, env_util, file_util
 def main(
     config_path: str,
     dataset_type: str,
+    datadir: str,
     bs: int = None,
     spx: int = 1,
     devices: list = None,
     mxp: str = "none",
     jit_compile: bool = False,
     ga_steps: int = None,
+    repodir: str = os.path.realpath(os.path.join(os.path.dirname(__file__), "..")),
 ):
     tf.keras.backend.clear_session()
     env_util.setup_seed()
     strategy = env_util.setup_strategy(devices)
     env_util.setup_mxp(mxp=mxp)
 
-    config = Config(config_path)
+    config = Config(config_path, repodir=repodir, datadir=datadir)
 
     text_featurizer = text_featurizers.get(config)
 

@@ -25,6 +25,7 @@ class Conformer(Transducer):
         self,
         blank: int,
         vocab_size: int,
+        speech_config: dict,
         encoder_subsampling: dict,
         encoder_dmodel: int = 144,
         encoder_num_blocks: int = 16,
@@ -69,6 +70,7 @@ class Conformer(Transducer):
         **kwargs,
     ):
         super().__init__(
+            speech_config=speech_config,
             encoder=ConformerEncoder(
                 subsampling=encoder_subsampling,
                 dmodel=encoder_dmodel,

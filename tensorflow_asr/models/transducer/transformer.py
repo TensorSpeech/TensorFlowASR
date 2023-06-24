@@ -24,6 +24,7 @@ class Transformer(Transducer):
         self,
         blank: int,
         vocab_size: int,
+        speech_config: dict,
         encoder_subsampling: dict,
         encoder_dmodel: int = 512,
         encoder_dff: int = 1024,
@@ -63,6 +64,7 @@ class Transformer(Transducer):
         **kwargs,
     ):
         super().__init__(
+            speech_config=speech_config,
             encoder=TransformerEncoder(
                 subsampling=encoder_subsampling,
                 num_blocks=encoder_num_blocks,

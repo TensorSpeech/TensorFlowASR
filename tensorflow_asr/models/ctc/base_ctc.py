@@ -24,11 +24,12 @@ class CtcModel(BaseModel):
     def __init__(
         self,
         blank: int,
+        speech_config: dict,
         encoder: tf.keras.layers.Layer,
         decoder: tf.keras.layers.Layer,
         **kwargs,
     ):
-        super().__init__(**kwargs)
+        super().__init__(speech_config=speech_config, **kwargs)
         self.blank = blank
         self.encoder = encoder
         self.decoder = decoder

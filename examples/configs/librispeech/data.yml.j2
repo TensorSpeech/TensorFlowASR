@@ -2,10 +2,12 @@ data_config:
   train_dataset_config:
     enabled: True
     sample_rate: 16000
-    data_paths:
+    {# data_paths:
       - {{datadir}}/train-clean-100/transcripts.tsv
       - {{datadir}}/train-clean-360/transcripts.tsv
-      - {{datadir}}/train-other-500/transcripts.tsv
+      - {{datadir}}/train-other-500/transcripts.tsv #}
+    data_paths:
+      - {{datadir}}/dev-clean/transcripts.tsv
     tfrecords_dir: {{datadir}}
     shuffle: True
     cache: True
@@ -15,7 +17,7 @@ data_config:
     metadata: {{metadata}}
 
   eval_dataset_config:
-    enabled: True
+    enabled: False
     sample_rate: 16000
     data_paths:
       - {{datadir}}/dev-clean/transcripts.tsv

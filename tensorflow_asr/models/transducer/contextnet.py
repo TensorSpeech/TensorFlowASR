@@ -26,6 +26,7 @@ class ContextNet(Transducer):
         self,
         blank: int,
         vocab_size: int,
+        speech_config: dict,
         encoder_blocks: List[dict],
         encoder_alpha: float = 0.5,
         encoder_trainable: bool = True,
@@ -52,6 +53,7 @@ class ContextNet(Transducer):
         **kwargs,
     ):
         super().__init__(
+            speech_config=speech_config,
             encoder=ContextNetEncoder(
                 blocks=encoder_blocks,
                 alpha=encoder_alpha,

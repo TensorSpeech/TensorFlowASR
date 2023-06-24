@@ -53,6 +53,7 @@ class Transformer(CtcModel):
         self,
         blank: int,
         vocab_size: int,
+        speech_config: dict,
         encoder_subsampling: dict,
         encoder_dmodel: int = 512,
         encoder_dff: int = 1024,
@@ -77,6 +78,7 @@ class Transformer(CtcModel):
     ):
         super().__init__(
             blank=blank,
+            speech_config=speech_config,
             encoder=TransformerEncoder(
                 subsampling=encoder_subsampling,
                 num_blocks=encoder_num_blocks,

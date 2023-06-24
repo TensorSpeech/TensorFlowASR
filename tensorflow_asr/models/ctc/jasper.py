@@ -347,6 +347,7 @@ class Jasper(CtcModel):
         self,
         blank: int,
         vocab_size: int,
+        speech_config: dict,
         dense: bool = False,
         padding: str = "causal",
         first_additional_block_channels: int = 256,
@@ -375,6 +376,7 @@ class Jasper(CtcModel):
     ):
         super().__init__(
             blank=blank,
+            speech_config=speech_config,
             encoder=JasperEncoder(
                 dense=dense,
                 padding=padding,

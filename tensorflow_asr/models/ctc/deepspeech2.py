@@ -326,6 +326,7 @@ class DeepSpeech2(CtcModel):
         self,
         blank: int,
         vocab_size: int,
+        speech_config: dict,
         conv_type: str = "conv2d",
         conv_kernels: list = [[11, 41], [11, 21], [11, 21]],
         conv_strides: list = [[2, 2], [1, 2], [1, 2]],
@@ -348,6 +349,7 @@ class DeepSpeech2(CtcModel):
     ):
         super().__init__(
             blank=blank,
+            speech_config=speech_config,
             encoder=DeepSpeech2Encoder(
                 conv_type=conv_type,
                 conv_kernels=conv_kernels,

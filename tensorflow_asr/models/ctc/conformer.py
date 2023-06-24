@@ -55,6 +55,7 @@ class Conformer(CtcModel):
         self,
         blank: int,
         vocab_size: int,
+        speech_config: dict,
         encoder_subsampling: dict,
         encoder_dmodel: int = 144,
         encoder_num_blocks: int = 16,
@@ -84,6 +85,7 @@ class Conformer(CtcModel):
     ):
         super().__init__(
             blank=blank,
+            speech_config=speech_config,
             encoder=ConformerEncoder(
                 subsampling=encoder_subsampling,
                 dmodel=encoder_dmodel,

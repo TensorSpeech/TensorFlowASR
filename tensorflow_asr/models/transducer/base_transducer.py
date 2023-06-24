@@ -264,9 +264,10 @@ class Transducer(BaseModel):
 
     def __init__(
         self,
-        encoder: tf.keras.layers.Layer,
         blank: int,
         vocab_size: int,
+        speech_config: dict,
+        encoder: tf.keras.layers.Layer,
         prediction_label_encoder_mode: str = "embedding",
         prediction_embed_dim: int = 512,
         prediction_num_rnns: int = 1,
@@ -289,7 +290,7 @@ class Transducer(BaseModel):
         name="transducer",
         **kwargs,
     ):
-        super().__init__(name=name, **kwargs)
+        super().__init__(speech_config=speech_config, name=name, **kwargs)
         self.blank = blank
         self.encoder = encoder
         self.predict_net = TransducerPrediction(
