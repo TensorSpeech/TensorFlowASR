@@ -68,6 +68,7 @@ def main(
     with strategy.scope():
         model = tf.keras.models.model_from_config(config.model_config)
         model.make(**shapes)
+        model.text_featurizer = text_featurizer
         if config.learning_config.pretrained:
             model.load_weights(
                 config.learning_config.pretrained,

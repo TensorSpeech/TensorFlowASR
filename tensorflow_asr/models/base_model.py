@@ -16,6 +16,7 @@
 import tensorflow as tf
 from keras.models import Model
 
+from tensorflow_asr.featurizers.text_featurizers import TextFeaturizer
 from tensorflow_asr.metrics.error_rates import ErrorRate
 from tensorflow_asr.models.layers.feature_extraction import FeatureExtraction
 from tensorflow_asr.optimizers.accumulation import GradientAccumulator
@@ -38,6 +39,15 @@ class BaseModel(Model):
     def __init__(self, speech_config: dict, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.feature_extraction = FeatureExtraction(**speech_config)
+        self._text_featurizer = None
+
+    @property
+    def text_featurizer(self):
+        return self._text_featurizer
+
+    @text_featurizer.setter
+    def text_featurizer(self, text_featurizer: TextFeaturizer):
+        self._text_featurizer = text_featurizer
 
     def summary(
         self,
