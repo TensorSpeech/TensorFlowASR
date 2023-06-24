@@ -345,6 +345,7 @@ class JasperDecoder(Layer):
 class Jasper(CtcModel):
     def __init__(
         self,
+        blank: int,
         vocab_size: int,
         dense: bool = False,
         padding: str = "causal",
@@ -373,6 +374,7 @@ class Jasper(CtcModel):
         **kwargs,
     ):
         super().__init__(
+            blank=blank,
             encoder=JasperEncoder(
                 dense=dense,
                 padding=padding,

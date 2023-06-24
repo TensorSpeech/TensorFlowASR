@@ -39,21 +39,24 @@ def main(
     text_featurizer = text_featurizers.get(config)
 
     train_dataset = asr_dataset.get(
-        text_featurizer=text_featurizer, dataset_config=config.data_config.train_dataset_config, dataset_type=dataset_type
+        text_featurizer=text_featurizer,
+        dataset_config=config.data_config.train_dataset_config,
+        dataset_type=dataset_type,
     )
-    eval_dataset = asr_dataset.get(text_featurizer=text_featurizer, dataset_config=config.data_config.eval_dataset_config, dataset_type=dataset_type)
+    eval_dataset = asr_dataset.get(
+        text_featurizer=text_featurizer,
+        dataset_config=config.data_config.eval_dataset_config,
+        dataset_type=dataset_type,
+    )
 
-    train_data_loader, eval_data_loader, global_batch_size = asr_dataset.get_loaders(
-        config=config,
-        train_dataset=train_dataset,
-        eval_dataset=eval_dataset,
-        strategy=strategy,
-        batch_size=bs,
-    )
+    shapes = asr_dataset.get_global_shape(config, strategy, train_dataset, eval_dataset, batch_size=bs)
+
+    train_data_loader = train_dataset.create(shapes["batch_size"])
+    eval_data_loader = eval_dataset.create(shapes["batch_size"])
 
     with strategy.scope():
         model = tf.keras.models.model_from_config(config.model_config)
-        model.make(speech_featurizer.shape, prediction_shape=text_featurizer.prepand_shape, batch_size=global_batch_size)
+        model.make(**shapes)
         if config.learning_config.pretrained:
             model.load_weights(
                 config.learning_config.pretrained,

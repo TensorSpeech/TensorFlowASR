@@ -49,7 +49,6 @@ class FeatureExtraction(Layer):
         normalize_feature=False,
         normalize_per_frame=False,
         padding=0,
-        has_channel_dim=False,
         augmentations: Augmentation = None,
         **kwargs,
     ):
@@ -125,7 +124,6 @@ class FeatureExtraction(Layer):
 
         self.padding = padding
         self.nfft = self.frame_length if nfft is None else nfft
-        self.has_channel_dim = has_channel_dim
 
         self.augmentations = augmentations
 
@@ -239,15 +237,14 @@ class FeatureExtraction(Layer):
         if self.feature_type == FEATURE_TYPES.SPECTROGRAM:
             features = self.spectrogram(signals)
         elif self.feature_type == FEATURE_TYPES.MFCC:
-            features = self.mfcc(signals)
+            features = self.mfcc(signals)  # TODO: add option to compute delta features for mfccs
         elif self.feature_type == FEATURE_TYPES.LOG_GAMMATONE_SPECTROGRAM:
             features = self.log_gammatone_spectrogram(signals)
         else:  # default as log_mel_spectrogram
             features = self.log_mel_spectrogram(signals)
 
         features = self.normalize_audio_features(features)
-        if self.has_channel_dim:
-            features = tf.expand_dims(features, axis=-1)
+        features = tf.expand_dims(features, axis=-1)
 
         if training:
             features = self.augmentations.feature_augment(features)
@@ -276,9 +273,7 @@ class FeatureExtraction(Layer):
         signal_shape, signal_length_shape = input_shape
         B, nsamples = signal_shape
         if nsamples is None:
-            output_shape = [B, None, self.num_feature_bins]
+            output_shape = [B, None, self.num_feature_bins, 1]
         else:
-            output_shape = [B, self.get_nframes(nsamples + self.padding), self.num_feature_bins]
-        if self.has_channel_dim:
-            output_shape += [1]
+            output_shape = [B, self.get_nframes(nsamples + self.padding), self.num_feature_bins, 1]
         return tf.TensorShape(output_shape), tf.TensorShape(signal_length_shape)

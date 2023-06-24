@@ -324,6 +324,7 @@ class DeepSpeech2Decoder(Layer):
 class DeepSpeech2(CtcModel):
     def __init__(
         self,
+        blank: int,
         vocab_size: int,
         conv_type: str = "conv2d",
         conv_kernels: list = [[11, 41], [11, 21], [11, 21]],
@@ -346,6 +347,7 @@ class DeepSpeech2(CtcModel):
         **kwargs,
     ):
         super().__init__(
+            blank=blank,
             encoder=DeepSpeech2Encoder(
                 conv_type=conv_type,
                 conv_kernels=conv_kernels,

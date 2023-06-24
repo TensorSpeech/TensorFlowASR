@@ -24,7 +24,7 @@ class ErrorRate(tf.keras.metrics.Metric):
         name="error_rate",
         **kwargs,
     ):
-        super(ErrorRate, self).__init__(name=name, **kwargs)
+        super().__init__(name=name, **kwargs)
         self.numerator = self.add_weight(name="numerator", initializer="zeros")
         self.denominator = self.add_weight(name="denominator", initializer="zeros")
         self.func = func
@@ -34,9 +34,11 @@ class ErrorRate(tf.keras.metrics.Metric):
         decode: tf.Tensor,
         target: tf.Tensor,
     ):
-        n, d = self.func(decode, target)
-        self.numerator.assign_add(n)
-        self.denominator.assign_add(d)
+        with tf.device("/device:CPU:0"):
+            n, d = self.func(decode, target)
+            self.numerator.assign_add(n)
+            self.denominator.assign_add(d)
 
     def result(self):
-        return tf.math.divide_no_nan(self.numerator, self.denominator)
+        with tf.device("/device:CPU:0"):
+            return tf.math.divide_no_nan(self.numerator, self.denominator)

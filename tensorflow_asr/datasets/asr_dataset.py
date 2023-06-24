@@ -49,18 +49,29 @@ def get(
     raise ValueError(f"dataset_type must in {asdict(ASR_DATASER_TYPES()).values()}")
 
 
-def get_loaders(
+def get_global_shape(
     config: Config,
-    train_dataset,
-    eval_dataset,
     strategy,
+    *datasets,
     batch_size: int = None,
 ):
-    global_batch_size = batch_size or config.learning_config.running_config.batch_size
-    global_batch_size *= strategy.num_replicas_in_sync
-    train_data_loader = train_dataset.create(global_batch_size)
-    eval_data_loader = eval_dataset.create(global_batch_size)
-    return train_data_loader, eval_data_loader, global_batch_size
+    global_batch_size = (batch_size or config.learning_config.running_config.batch_size) * strategy.num_replicas_in_sync
+
+    max_input_length, max_label_length = 0, 0
+    for dset in datasets:
+        max_input_length = max(max_input_length, dset.max_input_length or 0)
+        max_label_length = max(max_label_length, dset.max_label_length or 0)
+    max_input_length = None if max_input_length == 0 else max_input_length
+    max_label_length = None if max_label_length == 0 else max_label_length
+
+    input_shape = [max_input_length]
+    prediction_shape = [max_label_length + 1] if max_label_length else [None]
+
+    return dict(
+        batch_size=global_batch_size,
+        input_shape=input_shape,
+        prediction_shape=prediction_shape,
+    )
 
 
 class ASRDataset(BaseDataset):
@@ -107,7 +118,7 @@ class ASRDataset(BaseDataset):
         self.read_entries()
         for _, duration, transcript in tqdm.tqdm(self.entries, desc=f"Computing metadata for entries in {self.stage} dataset"):
             input_length = math_util.get_nsamples(duration, self.sample_rate)
-            label = self.text_featurizer.extract(transcript).numpy()
+            label = self.text_featurizer.tokenize(transcript).numpy()
             label_length = len(label)
             self.max_input_length = max(self.max_input_length, input_length)
             self.max_label_length = max(self.max_label_length, label_length)
@@ -181,16 +192,17 @@ class ASRDataset(BaseDataset):
             yield bytes(path, "utf-8"), audio, bytes(transcript, "utf-8")
 
     def _process_item(self, path: tf.Tensor, audio: tf.Tensor, transcript: tf.Tensor):
-        inputs = data_util.read_raw_audio(audio)
-        inputs_length = tf.shape(inputs)[0]
+        with tf.device("/device:CPU:0"):
+            inputs = data_util.read_raw_audio(audio)
+            inputs_length = tf.shape(inputs)[0]
 
-        labels = self.text_featurizer.extract(transcript)
-        labels_length = tf.shape(labels, out_type=tf.int32)[0]
+            labels = self.text_featurizer.tokenize(transcript)
+            labels_length = tf.shape(labels, out_type=tf.int32)[0]
 
-        predictions = self.text_featurizer.prepand_blank(labels)
-        predictions_length = tf.shape(predictions, out_type=tf.int32)[0]
+            predictions = self.text_featurizer.prepand_blank(labels)
+            predictions_length = tf.shape(predictions, out_type=tf.int32)[0]
 
-        return path, inputs, inputs_length, labels, labels_length, predictions, predictions_length
+            return path, inputs, inputs_length, labels, labels_length, predictions, predictions_length
 
     def parse(self, path: tf.Tensor, audio: tf.Tensor, transcript: tf.Tensor):
         """

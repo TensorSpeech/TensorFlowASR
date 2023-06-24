@@ -51,6 +51,7 @@ class TransformerDecoder(Layer):
 class Transformer(CtcModel):
     def __init__(
         self,
+        blank: int,
         vocab_size: int,
         encoder_subsampling: dict,
         encoder_dmodel: int = 512,
@@ -75,6 +76,7 @@ class Transformer(CtcModel):
         **kwargs,
     ):
         super().__init__(
+            blank=blank,
             encoder=TransformerEncoder(
                 subsampling=encoder_subsampling,
                 num_blocks=encoder_num_blocks,

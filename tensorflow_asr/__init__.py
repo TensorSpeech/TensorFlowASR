@@ -40,5 +40,5 @@ Layer.output_shape = output_shape
 Layer.build = build
 Layer.compute_output_shape = compute_output_shape
 
-# from tensorflow_asr.models import *
-# from tensorflow_asr.optimizers import *
+from tensorflow_asr.models import *
+from tensorflow_asr.optimizers import *

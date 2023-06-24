@@ -16,11 +16,10 @@
 import tensorflow as tf
 from keras.models import Model
 
-from tensorflow_asr.featurizers.speech_featurizers import SpeechFeaturizer
-from tensorflow_asr.featurizers.text_featurizers import TextFeaturizer
+from tensorflow_asr.metrics.error_rates import ErrorRate
 from tensorflow_asr.models.layers.feature_extraction import FeatureExtraction
 from tensorflow_asr.optimizers.accumulation import GradientAccumulator
-from tensorflow_asr.utils import data_util, env_util, file_util
+from tensorflow_asr.utils import data_util, env_util, file_util, metric_util
 
 logger = tf.get_logger()
 
@@ -105,9 +104,32 @@ class BaseModel(Model):
             self._tfasr_metrics = {}
         self._tfasr_metrics[metric.name] = metric
 
-    def make(self, *args, **kwargs):
-        """Custom function for building model (uses self.build so cannot overwrite that function)"""
-        raise NotImplementedError()
+    def make(self, input_shape=[None], prediction_shape=[None], batch_size=None, **kwargs):
+        """
+        Custom function for building model (uses self.build so cannot overwrite that function)
+
+        Parameters
+        ----------
+        input_shape : list, optional
+            The shape of signal, by default [None]
+        prediction_shape : list, optional
+            The shape of prediction, by default [None]
+        batch_size : int, optional
+            Batch size, by default None
+        """
+        inputs = tf.keras.Input(shape=input_shape, batch_size=batch_size, dtype=tf.float32)
+        inputs_length = tf.keras.Input(shape=[], batch_size=batch_size, dtype=tf.int32)
+        predictions = tf.keras.Input(shape=prediction_shape, batch_size=batch_size, dtype=tf.int32)
+        predictions_length = tf.keras.Input(shape=[], batch_size=batch_size, dtype=tf.int32)
+        self(
+            data_util.create_inputs(
+                inputs=inputs,
+                inputs_length=inputs_length,
+                predictions=predictions,
+                predictions_length=predictions_length,
+            ),
+            training=False,
+        )
 
     def compile(
         self,
@@ -135,6 +157,8 @@ class BaseModel(Model):
             self.use_ga = False
         self.apply_gwn_config = apply_gwn_config
         self.add_custom_metric(metric=tf.keras.metrics.Mean(name="loss"))
+        self.add_custom_metric(metric=ErrorRate(metric_util.tf_wer, name="wer"))
+        self.add_custom_metric(metric=ErrorRate(metric_util.tf_cer, name="cer"))
         self.distribute_reduction_method = "sum"
         super().compile(optimizer=optimizer, loss=loss, run_eagerly=run_eagerly, **kwargs)
 
@@ -147,17 +171,6 @@ class BaseModel(Model):
         features, features_length = self.feature_extraction((signals, signals_length), training=training)
         logits, logits_length = self.call_logits(features, features_length, predictions, predictions_length, training=training)
         return data_util.create_logits(logits=logits, logits_length=logits_length)
-
-    def add_featurizers(self, speech_featurizer: SpeechFeaturizer, text_featurizer: TextFeaturizer):
-        """
-        Function to add featurizer to model to convert to end2end tflite
-        Args:
-            speech_featurizer: SpeechFeaturizer instance
-            text_featurizer: TextFeaturizer instance
-            scorer: external language model scorer
-        """
-        self.speech_featurizer = speech_featurizer
-        self.text_featurizer = text_featurizer
 
     # -------------------------------- STEP FUNCTIONS -------------------------------------
     def apply_gwn(self) -> list:
@@ -206,8 +219,7 @@ class BaseModel(Model):
             self.optimizer.apply_gradients(zip(gradients, self.trainable_variables))
 
         self._tfasr_metrics["loss"].update_state(per_sample_loss)
-        result = {m.name: m.result() / tf.distribute.get_strategy().num_replicas_in_sync for m in self.metrics}
-        return result
+        return dict(loss=self._tfasr_metrics["loss"].result() / tf.distribute.get_strategy().num_replicas_in_sync)
 
     def test_step(self, batch):
         """
@@ -221,8 +233,6 @@ class BaseModel(Model):
         inputs, y_true = batch
         y_pred = self(inputs, training=False)
         per_sample_loss = self.loss(y_true=y_true, y_pred=y_pred)
-        # global_batch_size = self._get_global_batch_size(y_pred)
-        # loss = tf.nn.compute_average_loss(per_sample_loss, global_batch_size=global_batch_size)
         self._tfasr_metrics["loss"].update_state(per_sample_loss)
         return {m.name: m.result() / tf.distribute.get_strategy().num_replicas_in_sync for m in self.metrics}
 
@@ -235,13 +245,12 @@ class BaseModel(Model):
             [tf.Tensor]: stacked tensor of shape [B, 3] with each row is the text [truth, greedy, beam_search]
         """
         inputs, y_true = batch
-        labels = self.text_featurizer.iextract(y_true["labels"])
-        greedy_decoding = self.recognize(inputs)
-        if self.text_featurizer.decoder_config.beam_width == 0:
-            beam_search_decoding = tf.tile(tf.expand_dims(tf.convert_to_tensor("", tf.string), 0), [tf.shape(labels)[0]])
-        else:
-            beam_search_decoding = self.recognize_beam(inputs)
-        return tf.stack([labels, greedy_decoding, beam_search_decoding], axis=-1)
+        labels = self.text_featurizer.detokenize(y_true["labels"])
+        greedy_tokens = self.recognize(**inputs)
+        greedy_transcripts = self.text_featurizer.detokenize(greedy_tokens)
+        beam_search_tokens = self.recognize_beam(**inputs, beam_width=self.text_featurizer.beam_width)
+        beam_search_transcripts = self.text_featurizer.detokenize(beam_search_tokens)
+        return tf.stack([labels, greedy_transcripts, beam_search_transcripts], axis=-1)
 
     # -------------------------------- INFERENCE FUNCTIONS -------------------------------------
 

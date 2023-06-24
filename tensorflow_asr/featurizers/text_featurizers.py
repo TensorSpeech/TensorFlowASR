@@ -159,13 +159,13 @@ class TextFeaturizer:
         """Prepand blank index for transducer models"""
         return tf.concat([[self.blank], text], 0)
 
-    def extract(self, text: str) -> tf.Tensor:
+    def tokenize(self, text: str) -> tf.Tensor:
         raise NotImplementedError()
 
-    def iextract(self, indices: tf.Tensor) -> tf.Tensor:
+    def detokenize(self, indices: tf.Tensor) -> tf.Tensor:
         raise NotImplementedError()
 
-    def indices2upoints(self, indices: tf.Tensor) -> tf.Tensor:
+    def detokenize_unicode_points(self, indices: tf.Tensor) -> tf.Tensor:
         raise NotImplementedError()
 
 
@@ -205,12 +205,12 @@ class CharFeaturizer(TextFeaturizer):
         )
         self.upoints = tf.strings.unicode_decode(self.tokens, "UTF-8").to_tensor(shape=[None, 1])
 
-    def extract(self, text):
+    def tokenize(self, text):
         text = self.normalize_text(text, self.decoder_config.normalization_form)
         text = tf.strings.unicode_split(text, "UTF-8")
         return self.tokenizer.lookup(text)
 
-    def iextract(self, indices: tf.Tensor) -> tf.Tensor:
+    def detokenize(self, indices: tf.Tensor) -> tf.Tensor:
         """
         Convert list of indices to string
         Args:
@@ -226,7 +226,7 @@ class CharFeaturizer(TextFeaturizer):
         return tokens
 
     @tf.function(input_signature=[tf.TensorSpec([None], dtype=tf.int32)])
-    def indices2upoints(self, indices: tf.Tensor) -> tf.Tensor:
+    def detokenize_unicode_points(self, indices: tf.Tensor) -> tf.Tensor:
         """
         Transform Predicted Indices to Unicode Code Points (for using tflite)
         Args:
@@ -278,13 +278,13 @@ class SentencePieceFeaturizer(TextFeaturizer):
 
         return cls(decoder_config)
 
-    def extract(self, text: tf.Tensor) -> tf.Tensor:
+    def tokenize(self, text: tf.Tensor) -> tf.Tensor:
         text = self.normalize_text(text, self.decoder_config.normalization_form)
         indices = self.tokenizer.tokenize(text)
         indices = tf.cast(indices, tf.int32)
         return indices
 
-    def iextract(self, indices: tf.Tensor) -> tf.Tensor:
+    def detokenize(self, indices: tf.Tensor) -> tf.Tensor:
         """
         Convert list of indices to string
         Args:
@@ -302,7 +302,7 @@ class SentencePieceFeaturizer(TextFeaturizer):
         return transcripts
 
     @tf.function(input_signature=[tf.TensorSpec([None], dtype=tf.int32)])
-    def indices2upoints(self, indices: tf.Tensor) -> tf.Tensor:
+    def detokenize_unicode_points(self, indices: tf.Tensor) -> tf.Tensor:
         """
         Transform Predicted Indices to Unicode Code Points (for using tflite)
         Args:
@@ -312,7 +312,7 @@ class SentencePieceFeaturizer(TextFeaturizer):
             unicode code points transcript with dtype tf.int32 and shape [None]
         """
         with tf.name_scope("indices2upoints"):
-            transcripts = self.iextract(tf.reshape(indices, [1, -1]))
+            transcripts = self.detokenize(tf.reshape(indices, [1, -1]))
             upoints = tf.strings.unicode_decode(transcripts, "UTF-8").to_tensor()
             return tf.reshape(upoints, [-1])
 
@@ -370,7 +370,7 @@ class WordPieceFeaturizer(TextFeaturizer):
 
         return cls(decoder_config)
 
-    def extract(self, text: tf.Tensor) -> tf.Tensor:
+    def tokenize(self, text: tf.Tensor) -> tf.Tensor:
         text = self.normalize_text(text, self.decoder_config.normalization_form)
         if self.decoder_config.keep_whitespace:
             text = tf.strings.regex_replace(text, " ", "| |")
@@ -380,7 +380,7 @@ class WordPieceFeaturizer(TextFeaturizer):
         indices = self.tokenizer.tokenize(text).merge_dims(0, 1)
         return indices
 
-    def iextract(self, indices: tf.Tensor) -> tf.Tensor:
+    def detokenize(self, indices: tf.Tensor) -> tf.Tensor:
         """
         Convert list of indices to string
         Args:
@@ -396,7 +396,7 @@ class WordPieceFeaturizer(TextFeaturizer):
         return transcripts
 
     @tf.function(input_signature=[tf.TensorSpec([None], dtype=tf.int32)])
-    def indices2upoints(self, indices: tf.Tensor) -> tf.Tensor:
+    def detokenize_unicode_points(self, indices: tf.Tensor) -> tf.Tensor:
         """
         Transform Predicted Indices to Unicode Code Points (for using tflite)
         Args:
@@ -406,6 +406,6 @@ class WordPieceFeaturizer(TextFeaturizer):
             unicode code points transcript with dtype tf.int32 and shape [None]
         """
         with tf.name_scope("indices2upoints"):
-            transcripts = self.iextract(tf.reshape(indices, [1, -1]))
+            transcripts = self.detokenize(tf.reshape(indices, [1, -1]))
             upoints = tf.strings.unicode_decode(transcripts, "UTF-8").to_tensor()
             return tf.reshape(upoints, [-1])
