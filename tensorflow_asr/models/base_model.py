@@ -244,8 +244,8 @@ class BaseModel(Model):
         y_pred = self(inputs, training=False)
         per_sample_loss = self.loss(y_true=y_true, y_pred=y_pred)
         self._tfasr_metrics["loss"].update_state(per_sample_loss)
+        tokens = self.recognize(**inputs)
         with tf.device("/device:CPU:0"):
-            tokens = self.recognize(**inputs)
             labels = self.text_featurizer.detokenize(y_true["labels"])
             transcripts = self.text_featurizer.detokenize(tokens)
             self._tfasr_metrics["wer"].update_state(transcripts, labels)

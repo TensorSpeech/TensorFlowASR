@@ -55,6 +55,7 @@ class FreqMasking(AugmentationMethod):
         if self.mask_value not in asdict(MASK_VALUES()).values():
             raise ValueError(f"mask_value must in {asdict(MASK_VALUES()).values()}")
 
+    @tf.function
     def augment(self, spectrogram: tf.Tensor):
         """
         Masking the frequency channels (shape[1])
@@ -69,17 +70,18 @@ class FreqMasking(AugmentationMethod):
         tf.Tensor, shape [T, num_feature_bins] or [T, num_feature_bins, 1]
             Masked frequency dim of audio features
         """
-        _, F, *rest = shape_util.shape_list(spectrogram, out_type=tf.int32)
-        indices_shape = (1, -1) + (1,) * len(rest)
-        mval = get_mask_value(spectrogram, mask_value=self.mask_value)
-        for _ in range(self.num_masks):
-            f = tf.random.uniform([], minval=0, maxval=self.mask_factor, dtype=tf.dtypes.int32)
-            f = tf.minimum(f, F)
-            f0 = tf.random.uniform([], minval=0, maxval=F - f, dtype=tf.dtypes.int32)
-            indices = tf.reshape(tf.range(F), indices_shape)
-            condition = tf.math.logical_and(tf.math.greater_equal(indices, f0), tf.math.less(indices, f0 + f))
-            spectrogram = tf.where(condition, mval, spectrogram)
-        return spectrogram
+        with tf.name_scope("freq_masking_specaugment"):
+            _, F, *rest = shape_util.shape_list(spectrogram, out_type=tf.int32)
+            indices_shape = (1, -1) + (1,) * len(rest)
+            mval = get_mask_value(spectrogram, mask_value=self.mask_value)
+            for _ in range(self.num_masks):
+                f = tf.random.uniform([], minval=0, maxval=self.mask_factor, dtype=tf.dtypes.int32)
+                f = tf.minimum(f, F)
+                f0 = tf.random.uniform([], minval=0, maxval=F - f, dtype=tf.dtypes.int32)
+                indices = tf.reshape(tf.range(F), indices_shape)
+                condition = tf.math.logical_and(tf.math.greater_equal(indices, f0), tf.math.less(indices, f0 + f))
+                spectrogram = tf.where(condition, mval, spectrogram)
+            return spectrogram
 
 
 class TimeMasking(AugmentationMethod):
@@ -99,6 +101,7 @@ class TimeMasking(AugmentationMethod):
         if self.mask_value not in asdict(MASK_VALUES()).values():
             raise ValueError(f"mask_value must in {asdict(MASK_VALUES()).values()}")
 
+    @tf.function
     def augment(self, spectrogram: tf.Tensor):
         """
         Masking the time channel (shape[0])
@@ -113,14 +116,15 @@ class TimeMasking(AugmentationMethod):
         tf.Tensor, shape [T, num_feature_bins] or [T, num_feature_bins, 1]
             Masked time dim of audio features
         """
-        T, *rest = shape_util.shape_list(spectrogram, out_type=tf.int32)
-        indices_shape = (-1,) + (1,) * len(rest)
-        mval = get_mask_value(spectrogram, mask_value=self.mask_value)
-        for _ in range(self.num_masks):
-            t = tf.random.uniform([], minval=0, maxval=self.mask_factor, dtype=tf.int32)
-            t = tf.minimum(t, tf.cast(tf.cast(T, dtype=tf.float32) * self.p_upperbound, dtype=tf.int32))
-            t0 = tf.random.uniform([], minval=0, maxval=(T - t), dtype=tf.int32)
-            indices = tf.reshape(tf.range(T), indices_shape)
-            condition = tf.math.logical_and(tf.math.greater_equal(indices, t0), tf.math.less(indices, t0 + t))
-            spectrogram = tf.where(condition, mval, spectrogram)
-        return spectrogram
+        with tf.name_scope("time_masking_specaugment"):
+            T, *rest = shape_util.shape_list(spectrogram, out_type=tf.int32)
+            indices_shape = (-1,) + (1,) * len(rest)
+            mval = get_mask_value(spectrogram, mask_value=self.mask_value)
+            for _ in range(self.num_masks):
+                t = tf.random.uniform([], minval=0, maxval=self.mask_factor, dtype=tf.int32)
+                t = tf.minimum(t, tf.cast(tf.cast(T, dtype=tf.float32) * self.p_upperbound, dtype=tf.int32))
+                t0 = tf.random.uniform([], minval=0, maxval=(T - t), dtype=tf.int32)
+                indices = tf.reshape(tf.range(T), indices_shape)
+                condition = tf.math.logical_and(tf.math.greater_equal(indices, t0), tf.math.less(indices, t0 + t))
+                spectrogram = tf.where(condition, mval, spectrogram)
+            return spectrogram

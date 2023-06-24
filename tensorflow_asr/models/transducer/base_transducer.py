@@ -449,7 +449,7 @@ class Transducer(BaseModel):
 
             batch_size, nframes, _ = shape_util.shape_list(encoded)
             frame_indices = tf.zeros([batch_size, 1], dtype=tf.int32)
-            previous_tokens = tf.zeros([batch_size, 1], dtype=tf.int32)
+            previous_tokens = tf.ones([batch_size, 1], dtype=tf.int32) * self.blank
             previous_states = self.predict_net.get_initial_state(batch_size)
             tokens = tf.ones([batch_size, nframes * 2 + 1], dtype=tf.int32) * self.blank
             tokens_indices = tf.zeros([batch_size, 1], dtype=tf.int32)
@@ -464,8 +464,8 @@ class Transducer(BaseModel):
                 # update results
                 _tokens = tf.tensor_scatter_nd_update(
                     tensor=_tokens,
-                    indices=tf.concat([tf.range(batch_size, dtype=tf.int32)[..., None], _tokens_indices], 1),
-                    updates=tf.squeeze(_current_tokens, axis=1),
+                    indices=tf.concat([tf.expand_dims(tf.range(batch_size, dtype=tf.int32), axis=-1), _tokens_indices], -1),
+                    updates=tf.reshape(_current_tokens, [batch_size]),
                 )
                 _tokens_indices += 1
                 # update states
