@@ -234,6 +234,12 @@ class BaseModel(Model):
         y_pred = self(inputs, training=False)
         per_sample_loss = self.loss(y_true=y_true, y_pred=y_pred)
         self._tfasr_metrics["loss"].update_state(per_sample_loss)
+        with tf.device("/device:CPU:0"):
+            tokens = self.recognize(**inputs)
+            labels = self.text_featurizer.detokenize(y_true["labels"])
+            transcripts = self.text_featurizer.detokenize(tokens)
+            self._tfasr_metrics["wer"].update_state(transcripts, labels)
+            self._tfasr_metrics["cer"].update_state(transcripts, labels)
         return {m.name: m.result() / tf.distribute.get_strategy().num_replicas_in_sync for m in self.metrics}
 
     def predict_step(self, batch):

@@ -49,7 +49,7 @@ class FeatureExtraction(Layer):
         normalize_feature=False,
         normalize_per_frame=False,
         padding=0,
-        augmentations: Augmentation = Augmentation(),
+        augmentation_config=None,
         **kwargs,
     ):
         """
@@ -89,8 +89,8 @@ class FeatureExtraction(Layer):
             Normalize features in feature dim instead of n_frames dim, by default False
         padding : int, optional
             Number of samples to pad with 0 before feature extraction, by default 0
-        has_channel_dim : bool, optional
-            Whether to expand the last dimension of feature output to give [B, n_frames, num_feature_bins, 1], by default False
+        augmentation_config : dict, optional
+            Dictionary of augmentation config for training
         """
         assert feature_type in asdict(FEATURE_TYPES()).values(), f"feature_type must be in {asdict(FEATURE_TYPES()).values()}"
 
@@ -125,7 +125,7 @@ class FeatureExtraction(Layer):
         self.padding = padding
         self.nfft = self.frame_length if nfft is None else nfft
 
-        self.augmentations = augmentations
+        self.augmentations = Augmentation(augmentation_config)
 
     # ---------------------------------- signals --------------------------------- #
 

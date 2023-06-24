@@ -99,7 +99,8 @@ def main(
         epochs=config.learning_config.running_config.num_epochs,
         validation_data=eval_data_loader,
         callbacks=callbacks,
-        steps_per_epoch=train_dataset.total_steps,
+        # steps_per_epoch=train_dataset.total_steps,
+        steps_per_epoch=1,
         validation_steps=eval_dataset.total_steps if eval_data_loader else None,
     )
 
