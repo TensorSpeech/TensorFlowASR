@@ -64,6 +64,10 @@ def get_global_shape(
     max_input_length = None if max_input_length == 0 else max_input_length
     max_label_length = None if max_label_length == 0 else max_label_length
 
+    for dset in datasets:  # update global shape to all datasets
+        dset.max_input_length = max_input_length
+        dset.max_label_length = max_label_length
+
     input_shape = [max_input_length]
     prediction_shape = [max_label_length + 1] if max_label_length else [None]
 

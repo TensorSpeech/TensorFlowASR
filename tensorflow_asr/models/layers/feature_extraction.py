@@ -159,7 +159,7 @@ class FeatureExtraction(Layer):
             left_pad = (self.nfft - self.frame_length) // 2
             right_pad = self.nfft - self.frame_length - left_pad
             window = tf.pad(window, [[left_pad, right_pad]])
-            framed_signals = tf.signal.frame(signal, frame_length=self.nfft, frame_step=self.frame_step)
+            framed_signals = tf.signal.frame(signal, frame_length=self.nfft, frame_step=self.frame_step, pad_end=self.pad_end)
             framed_signals *= window
             fft_features = tf.abs(tf.signal.rfft(framed_signals, [self.nfft]))
         else:
@@ -256,6 +256,8 @@ class FeatureExtraction(Layer):
     def get_nframes(self, nsamples):
         # https://www.tensorflow.org/api_docs/python/tf/signal/frame
         if self.use_librosa_like_stft:
+            if self.pad_end:
+                return -(-nsamples // self.frame_step)
             return 1 + (nsamples - self.nfft) // self.frame_step
         if self.pad_end:
             return -(-nsamples // self.frame_step)
