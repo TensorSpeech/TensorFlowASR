@@ -468,7 +468,7 @@ class Transducer(BaseModel):
                     updates=tf.reshape(_current_tokens, [batch_size]),
                 )
                 # update states
-                _equal_blank = tf.equal(_current_tokens, self.blank)
+                _equal_blank = tf.reshape(tf.equal(_current_tokens, self.blank), [batch_size])
                 _frame_indices = tf.where(_equal_blank, tf.add(_frame_indices, 1), _frame_indices)  # blank then next frames, else current frames
                 _previous_tokens = tf.where(_equal_blank, _previous_tokens, _current_tokens)  # blank then keep prev tokens, else next tokens
                 _previous_states = tf.where(_equal_blank, _previous_states, _states)  # blank then keep prev states, else next states
