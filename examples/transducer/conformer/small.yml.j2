@@ -1,4 +1,4 @@
-{% import "examples/configs/librispeech/wordpiece/wp_whitespace.yml.j2" as decoder_config with context %}
+{% import "examples/configs/librispeech/sentencepiece/sp.yml.j2" as decoder_config with context %}
 {{decoder_config}}
 
 model_config:
@@ -9,6 +9,7 @@ model_config:
       sample_rate: 16000
       frame_ms: 25
       stride_ms: 10
+      num_feature_bins: 80
       feature_type: log_mel_spectrogram
     encoder_subsampling:
       type: conv2d
@@ -16,7 +17,7 @@ model_config:
       nlayers: 2
       kernel_size: 3
       strides: 2
-      padding: same
+      padding: causal
       norm: none
       activation: relu
     encoder_ffm_residual_factor: 0.5
@@ -33,6 +34,7 @@ model_config:
     encoder_kernel_size: 32
     encoder_dropout: 0.1
     encoder_padding: causal
+    encoder_memory_length: 144
     prediction_label_encode_mode: embedding
     prediction_embed_dim: 320
     prediction_num_rnns: 1
@@ -60,8 +62,8 @@ learning_config:
         config:
           dmodel: 144
           warmup_steps: 10000
-          max_lr: 0.00035
-          min_lr: 1e-6
+          max_lr: 0.0041666667 # 0.05 / sqrt(144)
+          min_lr: null
       beta_1: 0.9
       beta_2: 0.98
       epsilon: 1e-9
@@ -71,7 +73,7 @@ learning_config:
     predict_net_stddev: 0.075
 
   running_config:
-    batch_size: 2
+    batch_size: 4
     num_epochs: 100
     checkpoint:
       filepath: {{modeldir}}/checkpoints/{epoch:02d}.h5
