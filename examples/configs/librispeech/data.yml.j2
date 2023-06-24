@@ -10,7 +10,7 @@ data_config:
     shuffle: True
     cache: False
     buffer_size: 1000
-    drop_remainder: False
+    drop_remainder: True
     stage: train
     metadata: {{metadata}}
 
@@ -24,7 +24,7 @@ data_config:
     shuffle: False
     cache: True
     buffer_size: 1000
-    drop_remainder: False
+    drop_remainder: True
     stage: eval
     metadata: {{metadata}}
 
