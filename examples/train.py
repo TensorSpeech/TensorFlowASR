@@ -20,6 +20,8 @@ from tensorflow_asr.config import Config
 from tensorflow_asr.featurizers import text_featurizers
 from tensorflow_asr.utils import cli_util, env_util, file_util
 
+logger = tf.get_logger()
+
 
 def main(
     config_path: str,
@@ -57,7 +59,11 @@ def main(
     shapes = dataset.get_global_shape(config, strategy, train_dataset, eval_dataset, batch_size=bs)
 
     train_data_loader = train_dataset.create(shapes["batch_size"], padded_shapes=shapes["padded_shapes"])
+    logger.info(f"train_data_loader.element_spec = {train_data_loader.element_spec}")
+
     eval_data_loader = eval_dataset.create(shapes["batch_size"], padded_shapes=shapes["padded_shapes"])
+    if eval_data_loader:
+        logger.info(f"eval_data_loader.element_spec = {eval_data_loader.element_spec}")
 
     with strategy.scope():
         model = tf.keras.models.model_from_config(config.model_config)
