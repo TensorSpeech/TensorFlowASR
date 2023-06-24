@@ -115,6 +115,8 @@ class ASRDataset(BaseDataset):
     def compute_metadata(self):
         self.max_input_length = 0 if self.max_input_length is None else self.max_input_length
         self.max_label_length = 0 if self.max_label_length is None else self.max_label_length
+        if self.max_input_length > 0 and self.max_label_length > 0:
+            return  # already computed
         self.read_entries()
         for _, duration, transcript in tqdm.tqdm(self.entries, desc=f"Computing metadata for entries in {self.stage} dataset"):
             input_length = math_util.get_nsamples(duration, self.sample_rate)
