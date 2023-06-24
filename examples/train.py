@@ -23,6 +23,7 @@ from tensorflow_asr.utils import cli_util, env_util, file_util
 
 def main(
     config_path: str,
+    modeldir: str,
     dataset_type: str,
     datadir: str,
     bs: int = None,
@@ -38,7 +39,7 @@ def main(
     strategy = env_util.setup_strategy(devices)
     env_util.setup_mxp(mxp=mxp)
 
-    config = Config(config_path, repodir=repodir, datadir=datadir)
+    config = Config(config_path, repodir=repodir, datadir=datadir, modeldir=modeldir)
 
     text_featurizer = text_featurizers.get(config)
 

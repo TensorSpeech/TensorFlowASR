@@ -1,24 +1,16 @@
-{% set modeldir = "E:/Miscellanea/Models/local/transducer/contextnet" %}
-{% set datadir = "E:/MLDL/Datasets/ASR/LibriSpeech" %}
-
-{# {% import "examples/configs/librispeech/wp.yml.j2" as decoder_config with context %} #}
-{% import "examples/configs/librispeech/wp_whitespace.yml.j2" as decoder_config with context %}
-{# {% import "examples/configs/librispeech/sp.yml.j2" as decoder_config with context %} #}
-{# {% import "examples/configs/librispeech/char.yml.j2" as decoder_config with context %} #}
-
-speech_config:
-  sample_rate: 16000
-  frame_ms: 25
-  stride_ms: 10
-  num_feature_bins: 80
-  feature_type: log_mel_spectrogram
-
+{% import "examples/configs/librispeech/sentencepiece/sp.yml.j2" as decoder_config with context %}
 {{decoder_config}}
 
 model_config:
   class_name: tensorflow_asr.models.transducer>ContextNet
   config:
     name: contextnet
+    speech_config:
+      sample_rate: 16000
+      frame_ms: 25
+      stride_ms: 10
+      num_feature_bins: 80
+      feature_type: log_mel_spectrogram
     encoder_alpha: 0.5
     encoder_blocks:
       # C0
@@ -198,8 +190,8 @@ model_config:
     prediction_rnn_units: 512
     prediction_rnn_type: lstm
     prediction_rnn_implementation: 2
-    prediction_rnn_unroll: False # False to use with GPU Cuda
-    prediction_layer_norm: False
+    prediction_rnn_unroll: False
+    prediction_layer_norm: True
     prediction_projection_units: 0
     joint_dim: 512
     prejoint_encoder_linear: True
@@ -211,51 +203,6 @@ model_config:
     vocab_size: {{decoder_config.vocabsize}}
 
 learning_config:
-  train_dataset_config:
-    enabled: True
-    augmentation_config:
-      feature_augment:
-        time_masking:
-          prob: 1.0
-          num_masks: 5
-          mask_factor: 100
-          p_upperbound: 0.05
-        freq_masking:
-          prob: 1.0
-          num_masks: 1
-          mask_factor: 27
-    data_paths:
-      - {{datadir}}/dev-clean/transcripts.tsv
-    tfrecords_dir: null
-    shuffle: True
-    cache: True
-    buffer_size: 100
-    drop_remainder: True
-    stage: train
-    metadata: {{decoder_config.metadata}}
-
-  eval_dataset_config:
-    enabled: False
-    data_paths:
-      - {{datadir}}/dev-clean/transcripts.tsv
-    tfrecords_dir: null
-    shuffle: False
-    cache: True
-    buffer_size: 100
-    drop_remainder: True
-    stage: eval
-    metadata: {{decoder_config.metadata}}
-
-  test_dataset_config:
-    data_paths:
-      - {{datadir}}/test-clean/transcripts.tsv
-    tfrecords_dir: null
-    shuffle: False
-    cache: True
-    buffer_size: 100
-    drop_remainder: False
-    stage: test
-
   optimizer_config:
     class_name: adam
     config:
@@ -264,8 +211,8 @@ learning_config:
         config:
           dmodel: 320
           warmup_steps: 10000
-          max_lr: null
-          min_lr: 1e-6
+          max_lr: 0.0025
+          min_lr: null
       beta_1: 0.9
       beta_2: 0.98
       epsilon: 1e-9
@@ -275,8 +222,8 @@ learning_config:
     predict_net_stddev: 0.075
 
   running_config:
-    batch_size: 2
-    num_epochs: 100
+    batch_size: 4
+    num_epochs: 300
     checkpoint:
       filepath: {{modeldir}}/checkpoints/{epoch:02d}.h5
       save_best_only: False

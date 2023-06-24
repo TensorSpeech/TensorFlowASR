@@ -49,7 +49,7 @@ class FeatureExtraction(Layer):
         normalize_feature=False,
         normalize_per_frame=False,
         padding=0,
-        augmentations: Augmentation = None,
+        augmentations: Augmentation = Augmentation(),
         **kwargs,
     ):
         """
@@ -264,9 +264,9 @@ class FeatureExtraction(Layer):
     def compute_mask(self, inputs, mask=None):
         signals, signals_length = inputs
         mask = tf.sequence_mask(signals_length, maxlen=(tf.shape(signals)[1] + self.padding), dtype=tf.bool)
-        nsamples = math_util.count(mask, value=True, axis=1)
+        nsamples = tf.reduce_sum(tf.cast(mask, tf.int32), axis=1)
         nframes = tf.vectorized_map(self.get_nframes, nsamples, warn=False)
-        padded_nframes = self.get_nframes(tf.shape(inputs)[1])
+        padded_nframes = self.get_nframes(tf.shape(signals, tf.int32)[1])
         return tf.sequence_mask(nframes, padded_nframes, dtype=tf.bool), None
 
     def compute_output_shape(self, input_shape):

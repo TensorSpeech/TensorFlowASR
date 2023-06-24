@@ -1,9 +1,10 @@
-{% import repodir ~ "/examples/configs/librispeech/wordpiece/wp_whitespace.yml.j2" as decoder_config with context %}
+{% import "examples/configs/librispeech/wordpiece/wp_whitespace.yml.j2" as decoder_config with context %}
 {{decoder_config}}
 
 model_config:
   class_name: tensorflow_asr.models.transducer>Conformer
   config:
+    name: conformer
     speech_config:
       sample_rate: 16000
       frame_ms: 25
@@ -22,7 +23,7 @@ model_config:
     encoder_mhsam_residual_factor: 1.0
     encoder_convm_residual_factor: 1.0
     encoder_dmodel: 144
-    encoder_num_blocks: 2
+    encoder_num_blocks: 16
     encoder_head_size: 36 # == dmodel // num_heads
     encoder_num_heads: 4
     encoder_mha_type: relmha
@@ -39,12 +40,12 @@ model_config:
     prediction_rnn_type: lstm
     prediction_rnn_implementation: 2
     prediction_rnn_unroll: False
-    prediction_layer_norm: False
+    prediction_layer_norm: True
     prediction_projection_units: 144
     joint_dim: 320
-    prejoint_encoder_linear: False
-    prejoint_prediction_linear: False
-    postjoint_linear: True
+    prejoint_encoder_linear: True
+    prejoint_prediction_linear: True
+    postjoint_linear: False
     joint_activation: tanh
     joint_mode: add
     blank: 0

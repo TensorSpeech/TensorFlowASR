@@ -47,7 +47,7 @@ def load_yaml(
     )
     with tf.io.gfile.GFile(path, "r") as file:
         return yaml.load(
-            jinja2.Environment(loader=jinja2.FileSystemLoader(["."])).from_string(file.read()).render(**kwargs),
+            jinja2.Environment(loader=jinja2.FileSystemLoader([kwargs["repodir"]])).from_string(file.read()).render(**kwargs),
             Loader=loader,
         )
 

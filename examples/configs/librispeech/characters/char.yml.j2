@@ -10,5 +10,5 @@ decoder_config:
   lm_config: null
   vocabulary: {{vocabprefix}}.vocab
 
-{% import repodir ~ "/examples/configs/librispeech/data.yml.j2" as data_config with context %}
+{% import "examples/configs/librispeech/data.yml.j2" as data_config with context %}
 {{data_config}}
