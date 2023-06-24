@@ -43,7 +43,7 @@ def main(
     logger.info("Preparing eval metadata ...")
     config.data_config.eval_dataset_config.drop_remainder = False
     config.data_config.eval_dataset_config.shuffle = False
-    eval_dataset = ASRDataset(text_featurizer=text_featurizer, **vars(config.data_config.train_dataset_config))
+    eval_dataset = ASRDataset(text_featurizer=text_featurizer, **vars(config.data_config.eval_dataset_config))
     eval_dataset.update_metadata()
 
 
