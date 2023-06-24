@@ -448,11 +448,11 @@ class Transducer(BaseModel):
             encoded, _ = self.encoder((features, features_length), training=False)
 
             batch_size, nframes, _ = shape_util.shape_list(encoded)
-            frame_indices = tf.zeros([batch_size, 1], dtype=tf.int32)
-            previous_tokens = tf.ones([batch_size, 1], dtype=tf.int32) * self.blank
+            frame_indices = tf.zeros([batch_size, 1], dtype=tf.int32, name="frame_indices")
+            previous_tokens = tf.ones([batch_size, 1], dtype=tf.int32, name="previous_tokens") * self.blank
             previous_states = self.predict_net.get_initial_state(batch_size)
-            tokens = tf.ones([batch_size, nframes * 2 + 1], dtype=tf.int32) * self.blank
-            tokens_indices = tf.zeros([batch_size, 1], dtype=tf.int32)
+            tokens = tf.ones([batch_size, nframes * 2 + 1], dtype=tf.int32, name="tokens") * self.blank
+            tokens_indices = tf.zeros([batch_size, 1], dtype=tf.int32, name="tokens_indices")
 
             def condition(_frame_indices, *_):
                 return tf.math.reduce_all(tf.less(_frame_indices, nframes))
@@ -467,14 +467,13 @@ class Transducer(BaseModel):
                     indices=tf.concat([tf.expand_dims(tf.range(batch_size, dtype=tf.int32), axis=-1), _tokens_indices], -1),
                     updates=tf.reshape(_current_tokens, [batch_size]),
                 )
-                _tokens_indices += 1
                 # update states
                 _equal_blank = tf.equal(_current_tokens, self.blank)
-                _frame_indices = tf.where(_equal_blank, _frame_indices + 1, _frame_indices)  # blank then next frames, else current frames
+                _frame_indices = tf.where(_equal_blank, tf.add(_frame_indices, 1), _frame_indices)  # blank then next frames, else current frames
                 _previous_tokens = tf.where(_equal_blank, _previous_tokens, _current_tokens)  # blank then keep prev tokens, else next tokens
                 _previous_states = tf.where(_equal_blank, _previous_states, _states)  # blank then keep prev states, else next states
                 # return
-                return _frame_indices, _previous_tokens, _previous_states, _tokens, _tokens_indices
+                return _frame_indices, _previous_tokens, _previous_states, _tokens, tf.add(_tokens_indices, 1)
 
             (
                 frame_indices,
