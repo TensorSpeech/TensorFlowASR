@@ -14,6 +14,7 @@
 # limitations under the License.
 
 import tensorflow as tf
+from keras.engine.training import _minimum_control_deps, reduce_per_replica
 from keras.models import Model
 
 from tensorflow_asr.models.layers.feature_extraction import FeatureExtraction
@@ -88,9 +89,20 @@ class BaseModel(Model):
         with file_util.read_file(filepath) as path:
             super().load_weights(filepath=path, by_name=by_name, skip_mismatch=skip_mismatch, options=options)
 
+    @property
+    def metrics(self):
+        if not hasattr(self, "_tfasr_metrics"):
+            self._tfasr_metrics = {}
+        return list(self._tfasr_metrics.values())
+
     def reset_metrics(self):
         super().reset_metrics()
         self.reset_states()  # reset all stateful states also
+
+    def add_custom_metric(self, metric: tf.keras.metrics.Metric):
+        if not hasattr(self, "_tfasr_metrics"):
+            self._tfasr_metrics = {}
+        self._tfasr_metrics[metric.name] = metric
 
     def make(self, input_shape=[None], prediction_shape=[None], batch_size=None, **kwargs):
         """
@@ -144,7 +156,8 @@ class BaseModel(Model):
         else:
             self.use_ga = False
         self.apply_gwn_config = apply_gwn_config
-        self.distribute_reduction_method = "concat"
+        self.distribute_reduction_method = "sum"
+        self.add_custom_metric(tf.keras.metrics.Mean(name="loss"))
         super().compile(optimizer=optimizer, loss=loss, run_eagerly=run_eagerly, **kwargs)
 
     def call_logits(self, features, features_length, *args, training=False):
@@ -168,15 +181,13 @@ class BaseModel(Model):
         global_batch_size = tf.shape(y_pred["logits"])[0] * self.distribute_strategy.num_replicas_in_sync
         return global_batch_size
 
+    def _validate_and_get_metrics_result(self, logs):
+        logs = super()._validate_and_get_metrics_result(logs)
+        if "predictions" in logs:
+            del logs["predictions"]
+        return logs
+
     def train_step(self, batch):
-        """
-        Args:
-            batch ([tf.Tensor]): a batch of training data
-
-        Returns:
-            Dict[tf.Tensor]: a dict of validation metrics with keys are the name of metric
-
-        """
         inputs, y_true = batch
 
         with tf.GradientTape() as tape:
@@ -203,43 +214,95 @@ class BaseModel(Model):
         else:
             self.optimizer.apply_gradients(zip(gradients, self.trainable_variables))
 
+        self._tfasr_metrics["loss"].update_state(per_sample_loss)
         return {
-            "loss": per_sample_loss,
+            "loss": self._tfasr_metrics["loss"].result() / self.distribute_strategy.num_replicas_in_sync,
         }
 
     def test_step(self, batch):
-        """
-        Args:
-            batch ([tf.Tensor]: a batch of validation data
-
-        Returns:
-            Dict[tf.Tensor]: a dict of validation metrics with keys are the name of metric prefixed with "val_"
-
-        """
         inputs, y_true = batch
         y_pred = self(inputs, training=False)
         per_sample_loss = self.loss(y_true=y_true, y_pred=y_pred)
-        _gtokens = self.recognize(**inputs)
-        return {
-            "loss": per_sample_loss,
-            "_gtokens": _gtokens,
-            "_labels": y_true["labels"],
-        }
+        self._tfasr_metrics["loss"].update_state(per_sample_loss)
+        return {m.name: m.result() / self.distribute_strategy.num_replicas_in_sync for m in self.metrics}
+
+    def make_test_function(self, force=False):
+        self.make_predict_function(force=force)
+        if self.test_function is not None and not force:
+            return self.test_function
+
+        def step_function(model, iterator):
+            """Runs a single evaluation step."""
+
+            def run_step(data):
+                outputs = model.test_step(data)
+                # Ensure counter is updated only if `test_step` succeeds.
+                with tf.control_dependencies(_minimum_control_deps(outputs)):
+                    model._test_counter.assign_add(1)
+                return outputs
+
+            if self.jit_compile:
+                run_step = tf.function(run_step, jit_compile=True, reduce_retracing=True)
+
+            data = next(iterator)
+            outputs = model.distribute_strategy.run(run_step, args=(data,))
+            outputs = reduce_per_replica(
+                outputs,
+                self.distribute_strategy,
+                reduction=self.distribute_reduction_method,
+            )
+            outputs["predictions"] = self.predict_function(iter((data,)))
+            return outputs
+
+        # Special case if steps_per_execution is one.
+        if self._steps_per_execution is None or self._steps_per_execution.numpy().item() == 1:
+
+            def test_function(iterator):
+                """Runs a test execution with a single step."""
+                return step_function(self, iterator)
+
+            if not self.run_eagerly:
+                test_function = tf.function(test_function, reduce_retracing=True)
+
+            if self._cluster_coordinator:
+                self.test_function = lambda it: self._cluster_coordinator.schedule(test_function, args=(it,))
+            else:
+                self.test_function = test_function
+
+        # If we're using a coordinator, use the value of
+        # self._steps_per_execution at the time the function is
+        # called/scheduled, and not when it is actually executed.
+        elif self._cluster_coordinator:
+
+            def test_function(iterator, steps_per_execution):
+                """Runs a test execution with multiple steps."""
+                for _ in tf.range(steps_per_execution):
+                    outputs = step_function(self, iterator)
+                return outputs
+
+            if not self.run_eagerly:
+                test_function = tf.function(test_function, reduce_retracing=True)
+
+            self.test_function = lambda it: self._cluster_coordinator.schedule(test_function, args=(it, self._steps_per_execution.value()))
+        else:
+
+            def test_function(iterator):
+                """Runs a test execution with multiple steps."""
+                for _ in tf.range(self._steps_per_execution):
+                    outputs = step_function(self, iterator)
+                return outputs
+
+            if not self.run_eagerly:
+                test_function = tf.function(test_function, reduce_retracing=True)
+            self.test_function = test_function
+
+        return self.test_function
 
     def predict_step(self, batch):
-        """
-        Args:
-            batch ([tf.Tensor]): a batch of testing data
-
-        Returns:
-            [tf.Tensor]: stacked tensor of shape [B, 3] with each row is the text [truth, greedy, beam_search]
-        """
         inputs, y_true = batch
-        _gtokens = self.recognize(**inputs)
-        _btokens = self.recognize_beam(**inputs)
+        _tokens = self.recognize(**inputs)
         return {
-            "_gtokens": _gtokens,
-            "_btokens": _btokens,
+            "_tokens": _tokens,
             "_labels": y_true["labels"],
         }
 

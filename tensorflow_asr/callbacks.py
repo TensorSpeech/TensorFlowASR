@@ -12,89 +12,57 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import numpy as np
 import tensorflow as tf
 
 from tensorflow_asr.featurizers.text_featurizers import TextFeaturizer
-from tensorflow_asr.utils import file_util, metric_util
+from tensorflow_asr.metrics.error_rates import ErrorRate
+
+
+def compute_wer(decode, target, dtype=tf.float32):
+    decode = tf.strings.split(decode)
+    target = tf.strings.split(target)
+    distances = tf.cast(tf.edit_distance(decode.to_sparse(), target.to_sparse(), normalize=False), dtype)  # [B]
+    lengths = tf.cast(target.row_lengths(axis=1), dtype)  # [B]
+    return distances, lengths
+
+
+def compute_cer(decode, target, dtype=tf.float32):
+    decode = tf.strings.bytes_split(decode)  # [B, N]
+    target = tf.strings.bytes_split(target)  # [B, M]
+    distances = tf.cast(tf.edit_distance(decode.to_sparse(), target.to_sparse(), normalize=False), dtype)  # [B]
+    lengths = tf.cast(target.row_lengths(axis=1), dtype)  # [B]
+    return distances, lengths
 
 
 class MetricLogger(tf.keras.callbacks.Callback):
-    def __init__(self, text_featurizer: TextFeaturizer, predict_output: str = None):
+    def __init__(self, text_featurizer: TextFeaturizer):
         super().__init__()
         self.text_featurizer = text_featurizer
-        self.predict_output = predict_output
-        self.__reset_metrics__()
 
-    def __reset_metrics__(self):
-        # loss
-        self.loss = (0, 0)
-        # greedy
-        self.gwer = (0, 0)
-        self.gcer = (0, 0)
-        # beam search
-        self.bwer = (0, 0)
-        self.bcer = (0, 0)
+    def set_model(self, model):
+        super().set_model(model)
+        self.model.add_custom_metric(ErrorRate(name="wer"))
+        self.model.add_custom_metric(ErrorRate(name="cer"))
+        self._make_update_state()
 
-    def __agg_loss__(self, losses, logs):
-        self.loss = tf.nest.map_structure(np.add, self.loss, (np.sum(losses), len(losses)))
-        logs["loss"] = np.divide(self.loss[0], self.loss[1])
-        return logs
+    def _make_update_state(self):
+        def update_state(wer, cer):
+            def update(wer, cer):
+                self.model._tfasr_metrics["wer"].update_state(wer)
+                self.model._tfasr_metrics["cer"].update_state(cer)
 
-    def __agg_greedy__(self, transcripts, targets, logs):
-        self.gwer = tf.nest.map_structure(np.add, self.gwer, metric_util.execute_wer(transcripts, targets))
-        self.gcer = tf.nest.map_structure(np.add, self.gcer, metric_util.execute_cer(transcripts, targets))
-        logs["greedy_wer"] = np.divide(self.gwer[0], self.gwer[1])
-        logs["greedy_cer"] = np.divide(self.gcer[0], self.gcer[1])
-        return logs
+            return self.model.distribute_strategy.run(update, args=(wer, cer))
 
-    def __agg_beamsearch__(self, transcripts, targets, logs):
-        self.bwer = tf.nest.map_structure(np.add, self.bwer, metric_util.execute_wer(transcripts, targets))
-        self.bcer = tf.nest.map_structure(np.add, self.bcer, metric_util.execute_cer(transcripts, targets))
-        logs["beamsearch_wer"] = np.divide(self.bwer[0], self.bwer[1])
-        logs["beamsearch_cer"] = np.divide(self.bcer[0], self.bcer[1])
-        return logs
-
-    def on_train_begin(self, logs=None):
-        self.__reset_metrics__()
-
-    def on_train_batch_end(self, batch, logs=None):
-        if logs is None:
-            return
-        logs = self.__agg_loss__(logs.pop("loss"), logs=logs)
-
-    def on_test_begin(self, logs=None):
-        self.__reset_metrics__()
+        self.update_state = tf.function(update_state)
 
     def on_test_batch_end(self, batch, logs=None):
         if logs is None:
             return
-        losses = logs.pop("loss")
-        logs = self.__agg_loss__(losses, logs=logs)
-        transcripts = self.text_featurizer.detokenize(logs.pop("_gtokens")).numpy()
-        targets = self.text_featurizer.detokenize(logs.pop("_labels")).numpy()
-        logs = self.__agg_greedy__(transcripts, targets, logs)
+        predictions = logs.pop("predictions")
+        transcripts = self.text_featurizer.detokenize(predictions.pop("_tokens"))
+        targets = self.text_featurizer.detokenize(predictions.pop("_labels"))
 
-    def on_epoch_end(self, epoch, logs=None):
-        print(logs)
+        wer = compute_wer(transcripts, targets)
+        cer = compute_cer(transcripts, targets)
 
-    def on_predict_begin(self, logs=None):
-        self.__reset_metrics__()
-        self.predict_output = file_util.preprocess_paths(self.predict_output)
-        self.predict_result_file = tf.io.gfile.GFile(self.predict_output, "w")
-        self.predict_result_file.write("GROUNDTRUTH\tGREEDY\tBEAMSEARCH\n")  # header
-
-    def on_predict_batch_end(self, batch, logs=None):
-        if logs is None:
-            return
-        gtranscripts = self.text_featurizer.detokenize(logs.pop("_gtokens")).numpy()
-        btranscripts = self.text_featurizer.detokenize(logs.pop("_btokens")).numpy()
-        targets = self.text_featurizer.detokenize(logs.pop("_labels")).numpy()
-        logs = self.__agg_greedy__(gtranscripts, targets, logs)
-        logs = self.__agg_beamsearch__(btranscripts, targets, logs)
-        for i, groundtruth in enumerate(targets):
-            greedy, beamsearch = gtranscripts[i], btranscripts[i]
-            self.predict_result_file.write(f"{groundtruth}\t{greedy}\t{beamsearch}\n")
-
-    def on_predict_end(self, logs=None):
-        self.predict_result_file.close()
+        self.update_state(wer, cer)
