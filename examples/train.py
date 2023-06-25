@@ -98,8 +98,8 @@ def main(
         callbacks.append(tf.keras.callbacks.EarlyStopping(**config.learning_config.running_config.early_stopping))
     # You can add more callbacks here, and init from the `config.learning_config.running_config.your_custom_callback_options`
 
-    train_dataset.total_steps = 1
-    eval_dataset.total_steps = 5
+    # train_dataset.total_steps = 1
+    # eval_dataset.total_steps = 5
 
     model.fit(
         train_data_loader,
