@@ -414,7 +414,7 @@ class Transducer(BaseModel):
 
         Returns
         -------
-        Tuple[tf.Tensor, tf.Tensor], shapes ([B, 1, V], [B, num_rnns, nstates, state_size])
+        Tuple[tf.Tensor, tf.Tensor], shapes ([B, 1, 1, V], [B, num_rnns, nstates, state_size])
             Output of joint network of the current frame, new states of prediction network
         """
         with tf.name_scope(f"{self.name}_call_next"):
@@ -448,32 +448,42 @@ class Transducer(BaseModel):
             encoded, _ = self.encoder((features, features_length), training=False)
 
             batch_size, nframes, _ = shape_util.shape_list(encoded)
+            max_tokens = nframes * 2 + 1
             frame_indices = tf.zeros([batch_size, 1], dtype=tf.int32, name="frame_indices")
             previous_tokens = tf.ones([batch_size, 1], dtype=tf.int32, name="previous_tokens") * self.blank
             previous_states = self.predict_net.get_initial_state(batch_size)
-            tokens = tf.ones([batch_size, nframes * 2 + 1], dtype=tf.int32, name="tokens") * self.blank
+            tokens = tf.ones([batch_size, max_tokens], dtype=tf.int32, name="tokens") * self.blank
             tokens_indices = tf.zeros([batch_size, 1], dtype=tf.int32, name="tokens_indices")
 
-            def condition(_frame_indices, *_):
-                return tf.math.reduce_all(tf.less(_frame_indices, nframes))
+            def cond(_frame_indices, _previous_tokens, _previous_states, _tokens, _tokens_indices):
+                return tf.logical_not(
+                    tf.logical_or(
+                        tf.math.reduce_all(tf.greater_equal(_frame_indices, nframes - 1)),
+                        tf.math.reduce_all(tf.greater_equal(_tokens_indices, max_tokens - 1)),
+                    )
+                )
 
             def body(_frame_indices, _previous_tokens, _previous_states, _tokens, _tokens_indices):
                 _current_frames = tf.expand_dims(tf.gather_nd(encoded, _frame_indices, batch_dims=1), axis=1)  # [B, 1, E]
                 _log_softmax, _states = self.call_next(_current_frames, _previous_tokens, _previous_states, tflite=tflite)
-                _current_tokens = tf.argmax(_log_softmax, axis=-1, output_type=tf.int32)  # [B, 1]
+                _current_tokens = tf.reshape(tf.argmax(_log_softmax, axis=-1, output_type=tf.int32), [batch_size, 1])  # [B, 1, 1] -> [B, 1]
+                # fmt: off
+                _equal_blank = tf.equal(_current_tokens, self.blank)
                 # update results
+                _update_tokens = tf.reshape(tf.where(_equal_blank, _previous_tokens, _current_tokens), [batch_size])  # blank then keep prev tokens, else next tokens # pylint: disable=line-too-long
+                _tokens_indices = tf.where(_equal_blank, _tokens_indices, tf.minimum(tf.add(_tokens_indices, 1), max_tokens - 1)) # pylint: disable=line-too-long
                 _tokens = tf.tensor_scatter_nd_update(
                     tensor=_tokens,
                     indices=tf.concat([tf.expand_dims(tf.range(batch_size, dtype=tf.int32), axis=-1), _tokens_indices], -1),
-                    updates=tf.reshape(_current_tokens, [batch_size]),
+                    updates=_update_tokens,
                 )
                 # update states
-                _equal_blank = tf.reshape(tf.equal(_current_tokens, self.blank), [batch_size])
-                _frame_indices = tf.where(_equal_blank, tf.add(_frame_indices, 1), _frame_indices)  # blank then next frames, else current frames
+                _frame_indices = tf.where(_equal_blank, tf.minimum(tf.add(_frame_indices, 1), nframes - 1), _frame_indices)  # blank then next frames, else current frames # pylint: disable=line-too-long
                 _previous_tokens = tf.where(_equal_blank, _previous_tokens, _current_tokens)  # blank then keep prev tokens, else next tokens
-                _previous_states = tf.where(_equal_blank, _previous_states, _states)  # blank then keep prev states, else next states
+                _previous_states = tf.where(tf.reshape(_equal_blank, [batch_size, 1, 1, 1]), _previous_states, _states) # blank then keep prev states, else next states # pylint: disable=line-too-long
+                # fmt: on
                 # return
-                return _frame_indices, _previous_tokens, _previous_states, _tokens, tf.add(_tokens_indices, 1)
+                return _frame_indices, _previous_tokens, _previous_states, _tokens, _tokens_indices
 
             (
                 frame_indices,
@@ -481,7 +491,7 @@ class Transducer(BaseModel):
                 previous_states,
                 tokens,
                 tokens_indices,
-            ) = tf.while_loop(condition, body, loop_vars=(frame_indices, previous_tokens, previous_states, tokens, tokens_indices))
+            ) = tf.while_loop(cond, body, loop_vars=(frame_indices, previous_tokens, previous_states, tokens, tokens_indices))
 
             return tokens
 

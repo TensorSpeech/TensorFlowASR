@@ -41,4 +41,4 @@ class ErrorRate(tf.keras.metrics.Metric):
 
     def result(self):
         with tf.device("/device:CPU:0"):
-            return tf.math.divide_no_nan(self.numerator, self.denominator)
+            return tf.math.divide(self.numerator, self.denominator)
