@@ -170,8 +170,9 @@ class BaseModel(Model):
         self.add_custom_metric(metric=tf.keras.metrics.Mean(name="loss"))
         self._log_error_rates = log_error_rates
         if self._log_error_rates:
-            self.add_custom_metric(metric=ErrorRate(metric_util.tf_wer, name="wer"))
-            self.add_custom_metric(metric=ErrorRate(metric_util.tf_cer, name="cer"))
+            with tf.device("/CPU:0"):
+                self.add_custom_metric(metric=ErrorRate(metric_util.tf_wer, name="wer"))
+                self.add_custom_metric(metric=ErrorRate(metric_util.tf_cer, name="cer"))
         self.distribute_reduction_method = "sum"
         super().compile(optimizer=optimizer, loss=loss, run_eagerly=run_eagerly, **kwargs)
 
@@ -249,10 +250,11 @@ class BaseModel(Model):
         self._tfasr_metrics["loss"].update_state(per_sample_loss)
         if self._log_error_rates:
             tokens = self.recognize(**inputs)
-            labels = self.text_featurizer.detokenize(y_true["labels"])
-            transcripts = self.text_featurizer.detokenize(tokens)
-            self._tfasr_metrics["wer"].update_state(transcripts, labels)
-            self._tfasr_metrics["cer"].update_state(transcripts, labels)
+            with tf.device("/CPU:0"):
+                labels = self.text_featurizer.detokenize(y_true["labels"])
+                transcripts = self.text_featurizer.detokenize(tokens)
+                self._tfasr_metrics["wer"].update_state(transcripts, labels)
+                self._tfasr_metrics["cer"].update_state(transcripts, labels)
         return {m.name: m.result() / tf.distribute.get_strategy().num_replicas_in_sync for m in self.metrics}
 
     def predict_step(self, batch):

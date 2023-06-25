@@ -450,17 +450,26 @@ class Transducer(BaseModel):
             encoded, _ = self.encoder((features, features_length), training=False)
 
             batch_size, nframes, _ = shape_util.shape_list(encoded)
-            max_tokens = nframes * 2 + 1
+            # The current indices of the output of encoder, shape [B, 1]
             frame_indices = tf.zeros([batch_size, 1], dtype=tf.int32, name="frame_indices")
+            # Previous predicted tokens, initially are blanks, shape [B, 1]
             previous_tokens = tf.ones([batch_size, 1], dtype=tf.int32, name="previous_tokens") * self.blank
+            # Previous states of the prediction network, initially are zeros, shape [B, num_rnns, nstates, rnn_units]
             previous_states = self.predict_net.get_initial_state(batch_size)
+            # Assumption that number of tokens can not exceed (2 * the size of output of encoder + 1), this is mostly for static runs like TPU or TFLite # pylint: disable=line-too-long
+            max_tokens = nframes * 2 + 1
+            # All of the tokens that are getting recognized, initially are blanks, shape [B, nframes * 2 + 1]
             tokens = tf.ones([batch_size, max_tokens], dtype=tf.int32, name="tokens") * self.blank
+            # The current indices of the token that are currently being recognized, shape [B, 1]
             tokens_indices = tf.zeros([batch_size, 1], dtype=tf.int32, name="tokens_indices")
 
             def cond(_frame_indices, _previous_tokens, _previous_states, _tokens, _tokens_indices):
-                return tf.logical_not(
+                return tf.logical_not(  # Reversed so that the loop check and continue
+                    # One of the following condition met will terminate the loop
                     tf.logical_or(
+                        # Stop when ALL of the indices of the output of the encoder reach the end
                         tf.math.reduce_all(tf.greater_equal(_frame_indices, nframes - 1)),
+                        # Stop when ALL of the indices of recognized tokens reach the end
                         tf.math.reduce_all(tf.greater_equal(_tokens_indices, max_tokens - 1)),
                     )
                 )
