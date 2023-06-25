@@ -69,7 +69,6 @@ def main(
     with strategy.scope():
         model = tf.keras.models.model_from_config(config.model_config)
         model.make(**shapes)
-        model.text_featurizer = text_featurizer
         if config.learning_config.pretrained:
             model.load_weights(
                 config.learning_config.pretrained,
@@ -97,9 +96,6 @@ def main(
     if config.learning_config.running_config.early_stopping:
         callbacks.append(tf.keras.callbacks.EarlyStopping(**config.learning_config.running_config.early_stopping))
     # You can add more callbacks here, and init from the `config.learning_config.running_config.your_custom_callback_options`
-
-    # train_dataset.total_steps = 1
-    # eval_dataset.total_steps = 5
 
     model.fit(
         train_data_loader,
