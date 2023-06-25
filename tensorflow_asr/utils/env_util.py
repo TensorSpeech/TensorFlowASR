@@ -26,13 +26,16 @@ def setup_devices(
     devices: List[int] = None,
     cpu: bool = False,
 ):
-    """Setting visible devices
-
-    Args:
-        devices (list): list of visible devices' indices
-        cpu (bool): use cpu or not
     """
-    tf.config.set_soft_device_placement(True)
+    Setting visible devices
+
+    Parameters
+    ----------
+    devices : List[int], optional
+        List of visible devices' indices, by default None
+    cpu : bool, optional
+        Use cpu or not, by default False
+    """
     if cpu:
         cpus = tf.config.list_physical_devices("CPU")
         tf.config.set_visible_devices(cpus, "CPU")
@@ -64,14 +67,20 @@ def setup_strategy(
     devices: List[int],
     tpu_address: str = None,
 ):
-    """Setting mirrored strategy for training
+    """
+    Setting mirrored strategy for training
 
-    Args:
-        devices (list): list of visible devices' indices
-        tpu_address (str): an optional custom tpu address
+    Parameters
+    ----------
+    devices : List[int]
+        List of visible devices' indices
+    tpu_address : str, optional
+        An optional custom tpu address, by default None
 
-    Returns:
-        tf.distribute.Strategy: TPUStrategy for training on tpus or MirroredStrategy for training on gpus
+    Returns
+    -------
+    f.distribute.Strategy
+        TPUStrategy for training on tpus or MirroredStrategy for training on gpus
     """
     try:
         return setup_tpu(tpu_address)
@@ -95,8 +104,15 @@ def setup_mxp(
     """
     Setup mixed precision
 
-    Args:
-        mxp (str, optional): either "strict" or "auto". Defaults to "strict".
+    Parameters
+    ----------
+    mxp : str, optional
+        Either "strict", "auto" or "none", by default "strict"
+
+    Raises
+    ------
+    ValueError
+        Wrong value for mxp
     """
     options = ["strict", "auto", "none"]
     if mxp not in options:
@@ -121,8 +137,10 @@ def setup_seed(
     I sat at my desk, stared into the garden and thought 42 will do!"
     - Douglas Adams's popular 1979 science-fiction novel The Hitchhiker's Guide to the Galaxy
 
-    Args:
-        seed (int, optional): integer. Defaults to 42.
+    Parameters
+    ----------
+    seed : int, optional
+        Random seed, by default 42
     """
     random.seed(seed)
     np.random.seed(seed)

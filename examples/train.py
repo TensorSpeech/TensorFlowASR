@@ -42,7 +42,7 @@ def main(
     strategy = env_util.setup_strategy(devices)
     env_util.setup_mxp(mxp=mxp)
 
-    config = Config(config_path, repodir=repodir, datadir=datadir, modeldir=modeldir)
+    config = Config(config_path, training=True, repodir=repodir, datadir=datadir, modeldir=modeldir)
 
     text_featurizer = text_featurizers.get(config)
 

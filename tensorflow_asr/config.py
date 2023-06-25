@@ -127,11 +127,12 @@ class LearningConfig:
 class Config:
     """User config class for training, testing or infering"""
 
-    def __init__(self, data: Union[str, dict], **kwargs):
+    def __init__(self, data: Union[str, dict], training=True, **kwargs):
         config = data if isinstance(data, dict) else file_util.load_yaml(file_util.preprocess_paths(data), **kwargs)
         self.decoder_config = DecoderConfig(config.pop("decoder_config", {}))
         self.model_config: dict = config.pop("model_config", {})
         self.data_config = DataConfig(config.pop("data_config", {}))
-        self.learning_config = LearningConfig(config.pop("learning_config", {}))
+        _learning_config_dict = config.pop("learning_config", {})
+        self.learning_config = LearningConfig(_learning_config_dict) if training else None
         for k, v in config.items():
             setattr(self, k, v)

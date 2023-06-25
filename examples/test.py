@@ -13,23 +13,26 @@
 # limitations under the License.
 
 
+import os
+
 from tensorflow_asr import tf  # import to aid logging messages
 from tensorflow_asr import dataset
 from tensorflow_asr.config import Config
 from tensorflow_asr.featurizers import text_featurizers
-from tensorflow_asr.helpers import exec_helpers
-from tensorflow_asr.utils import cli_util, env_util, file_util
+from tensorflow_asr.utils import app_util, cli_util, env_util, file_util
 
 
 def main(
     config_path: str,
     dataset_type: str,
+    datadir: str,
     h5: str = None,
     mxp: str = "none",
-    bs: int = None,
+    bs: int = 1,
     device: int = 0,
     cpu: bool = False,
     output: str = "test.tsv",
+    repodir: str = os.path.realpath(os.path.join(os.path.dirname(__file__), "..")),
 ):
     assert h5 and output
     tf.keras.backend.clear_session()
@@ -37,8 +40,8 @@ def main(
     env_util.setup_devices([device], cpu=cpu)
     env_util.setup_mxp(mxp=mxp)
 
-    config = Config(config_path)
-    batch_size = bs or config.learning_config.running_config.batch_size
+    config = Config(config_path, training=False, repodir=repodir, datadir=datadir)
+    batch_size = bs
 
     text_featurizer = text_featurizers.get(config)
 
@@ -49,9 +52,9 @@ def main(
     model.make(batch_size=batch_size)
     model.load_weights(h5, by_name=file_util.is_hdf5_filepath(h5))
     model.summary()
-    model.add_featurizers(text_featurizer)
+    model.text_featurizer = text_featurizer
 
-    exec_helpers.run_testing(model=model, test_dataset=test_dataset, test_data_loader=test_data_loader, output=output)
+    app_util.run_testing(model=model, test_dataset=test_dataset, test_data_loader=test_data_loader, output=output)
 
 
 if __name__ == "__main__":
