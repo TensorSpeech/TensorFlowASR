@@ -333,19 +333,11 @@ class Transducer(BaseModel):
         mxp="none",
         ga_steps=None,
         apply_gwn_config=None,
-        log_error_rates=True,
         **kwargs,
     ):
         loss = RnntLoss(blank=blank)
         super().compile(
-            loss=loss,
-            optimizer=optimizer,
-            run_eagerly=run_eagerly,
-            mxp=mxp,
-            ga_steps=ga_steps,
-            apply_gwn_config=apply_gwn_config,
-            log_error_rates=log_error_rates,
-            **kwargs,
+            loss=loss, optimizer=optimizer, run_eagerly=run_eagerly, mxp=mxp, ga_steps=ga_steps, apply_gwn_config=apply_gwn_config, **kwargs
         )
 
     def apply_gwn(self):

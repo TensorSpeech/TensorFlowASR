@@ -17,9 +17,10 @@ import os
 
 from tensorflow_asr import tf  # import to aid logging messages
 from tensorflow_asr import dataset
+from tensorflow_asr.callbacks import MetricLogger
 from tensorflow_asr.config import Config
 from tensorflow_asr.featurizers import text_featurizers
-from tensorflow_asr.utils import app_util, cli_util, env_util, file_util
+from tensorflow_asr.utils import cli_util, env_util, file_util
 
 
 def main(
@@ -52,9 +53,11 @@ def main(
     model.make(batch_size=batch_size)
     model.load_weights(h5, by_name=file_util.is_hdf5_filepath(h5))
     model.summary()
-    model.text_featurizer = text_featurizer
-
-    app_util.run_testing(model=model, test_dataset=test_dataset, test_data_loader=test_data_loader, output=output)
+    model.predict(
+        test_data_loader,
+        verbose=1,
+        callbacks=[MetricLogger(text_featurizer=text_featurizer, predict_output=output)],
+    )
 
 
 if __name__ == "__main__":

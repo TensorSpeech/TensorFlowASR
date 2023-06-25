@@ -16,11 +16,9 @@
 import tensorflow as tf
 from keras.models import Model
 
-from tensorflow_asr.featurizers.text_featurizers import TextFeaturizer
-from tensorflow_asr.metrics.error_rates import ErrorRate
 from tensorflow_asr.models.layers.feature_extraction import FeatureExtraction
 from tensorflow_asr.optimizers.accumulation import GradientAccumulator
-from tensorflow_asr.utils import data_util, env_util, file_util, metric_util
+from tensorflow_asr.utils import data_util, env_util, file_util
 
 logger = tf.get_logger()
 
@@ -39,15 +37,6 @@ class BaseModel(Model):
     def __init__(self, speech_config: dict, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.feature_extraction = FeatureExtraction(**speech_config)
-        self._text_featurizer = None
-
-    @property
-    def text_featurizer(self):
-        return self._text_featurizer
-
-    @text_featurizer.setter
-    def text_featurizer(self, text_featurizer: TextFeaturizer):
-        self._text_featurizer = text_featurizer
 
     def summary(
         self,
@@ -99,20 +88,9 @@ class BaseModel(Model):
         with file_util.read_file(filepath) as path:
             super().load_weights(filepath=path, by_name=by_name, skip_mismatch=skip_mismatch, options=options)
 
-    @property
-    def metrics(self):
-        if not hasattr(self, "_tfasr_metrics"):
-            self._tfasr_metrics = {}
-        return list(self._tfasr_metrics.values())
-
     def reset_metrics(self):
         super().reset_metrics()
         self.reset_states()  # reset all stateful states also
-
-    def add_custom_metric(self, metric: tf.keras.metrics.Metric):
-        if not hasattr(self, "_tfasr_metrics"):
-            self._tfasr_metrics = {}
-        self._tfasr_metrics[metric.name] = metric
 
     def make(self, input_shape=[None], prediction_shape=[None], batch_size=None, **kwargs):
         """
@@ -149,7 +127,6 @@ class BaseModel(Model):
         mxp="none",
         ga_steps=None,
         apply_gwn_config=None,
-        log_error_rates=True,
         **kwargs,
     ):
         optimizer = tf.keras.optimizers.get(optimizer)
@@ -167,13 +144,7 @@ class BaseModel(Model):
         else:
             self.use_ga = False
         self.apply_gwn_config = apply_gwn_config
-        self.add_custom_metric(metric=tf.keras.metrics.Mean(name="loss"))
-        self._log_error_rates = log_error_rates
-        if self._log_error_rates:
-            with tf.device("/CPU:0"):
-                self.add_custom_metric(metric=ErrorRate(metric_util.tf_wer, name="wer"))
-                self.add_custom_metric(metric=ErrorRate(metric_util.tf_cer, name="cer"))
-        self.distribute_reduction_method = "sum"
+        self.distribute_reduction_method = "concat"
         super().compile(optimizer=optimizer, loss=loss, run_eagerly=run_eagerly, **kwargs)
 
     def call_logits(self, features, features_length, *args, training=False):
@@ -232,8 +203,9 @@ class BaseModel(Model):
         else:
             self.optimizer.apply_gradients(zip(gradients, self.trainable_variables))
 
-        self._tfasr_metrics["loss"].update_state(per_sample_loss)
-        return dict(loss=self._tfasr_metrics["loss"].result() / tf.distribute.get_strategy().num_replicas_in_sync)
+        return {
+            "loss": per_sample_loss,
+        }
 
     def test_step(self, batch):
         """
@@ -247,15 +219,12 @@ class BaseModel(Model):
         inputs, y_true = batch
         y_pred = self(inputs, training=False)
         per_sample_loss = self.loss(y_true=y_true, y_pred=y_pred)
-        self._tfasr_metrics["loss"].update_state(per_sample_loss)
-        if self._log_error_rates:
-            tokens = self.recognize(**inputs)
-            with tf.device("/CPU:0"):
-                labels = self.text_featurizer.detokenize(y_true["labels"])
-                transcripts = self.text_featurizer.detokenize(tokens)
-                self._tfasr_metrics["wer"].update_state(transcripts, labels)
-                self._tfasr_metrics["cer"].update_state(transcripts, labels)
-        return {m.name: m.result() / tf.distribute.get_strategy().num_replicas_in_sync for m in self.metrics}
+        _gtokens = self.recognize(**inputs)
+        return {
+            "loss": per_sample_loss,
+            "_gtokens": _gtokens,
+            "_labels": y_true["labels"],
+        }
 
     def predict_step(self, batch):
         """
@@ -266,12 +235,13 @@ class BaseModel(Model):
             [tf.Tensor]: stacked tensor of shape [B, 3] with each row is the text [truth, greedy, beam_search]
         """
         inputs, y_true = batch
-        labels = self.text_featurizer.detokenize(y_true["labels"])
-        greedy_tokens = self.recognize(**inputs)
-        greedy_transcripts = self.text_featurizer.detokenize(greedy_tokens)
-        beam_search_tokens = self.recognize_beam(**inputs, beam_width=self.text_featurizer.beam_width)
-        beam_search_transcripts = self.text_featurizer.detokenize(beam_search_tokens)
-        return tf.stack([labels, greedy_transcripts, beam_search_transcripts], axis=-1)
+        _gtokens = self.recognize(**inputs)
+        _btokens = self.recognize_beam(**inputs)
+        return {
+            "_gtokens": _gtokens,
+            "_btokens": _btokens,
+            "_labels": y_true["labels"],
+        }
 
     # -------------------------------- INFERENCE FUNCTIONS -------------------------------------
 

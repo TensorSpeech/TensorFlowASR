@@ -16,6 +16,7 @@ import os
 
 from tensorflow_asr import tf  # import to aid logging messages
 from tensorflow_asr import dataset
+from tensorflow_asr.callbacks import MetricLogger
 from tensorflow_asr.config import Config
 from tensorflow_asr.featurizers import text_featurizers
 from tensorflow_asr.utils import cli_util, env_util, file_util
@@ -34,7 +35,6 @@ def main(
     mxp: str = "none",
     jit_compile: bool = False,
     ga_steps: int = None,
-    log_error_rates: bool = True,
     repodir: str = os.path.realpath(os.path.join(os.path.dirname(__file__), "..")),
 ):
     tf.keras.backend.clear_session()
@@ -84,11 +84,11 @@ def main(
             mxp=mxp,
             ga_steps=ga_steps or config.learning_config.running_config.ga_steps,
             apply_gwn_config=config.learning_config.apply_gwn_config,
-            log_error_rates=log_error_rates,
         )
         model.summary()
 
     callbacks = [
+        MetricLogger(text_featurizer=text_featurizer),
         tf.keras.callbacks.TerminateOnNaN(),
         tf.keras.callbacks.ModelCheckpoint(**config.learning_config.running_config.checkpoint),
         tf.keras.callbacks.BackupAndRestore(**config.learning_config.running_config.backup_and_restore),

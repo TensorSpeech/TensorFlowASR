@@ -7,7 +7,9 @@ os.environ["TF_FORCE_GPU_ALLOW_GROWTH"] = os.environ.get("TF_FORCE_GPU_ALLOW_GRO
 
 import tensorflow as tf
 
+# might cause performance penalty if ops fallback to cpu, see https://cloud.google.com/tpu/docs/tensorflow-ops
 tf.config.set_soft_device_placement(True)
+
 logger = tf.get_logger()
 logger.setLevel(os.environ.get("LOG_LEVEL", "info").upper())
 logger.propagate = False
