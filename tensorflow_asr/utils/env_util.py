@@ -32,6 +32,7 @@ def setup_devices(
         devices (list): list of visible devices' indices
         cpu (bool): use cpu or not
     """
+    tf.config.set_soft_device_placement(True)
     if cpu:
         cpus = tf.config.list_physical_devices("CPU")
         tf.config.set_visible_devices(cpus, "CPU")

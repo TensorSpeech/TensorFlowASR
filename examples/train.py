@@ -34,6 +34,7 @@ def main(
     mxp: str = "none",
     jit_compile: bool = False,
     ga_steps: int = None,
+    log_error_rates: bool = True,
     repodir: str = os.path.realpath(os.path.join(os.path.dirname(__file__), "..")),
 ):
     tf.keras.backend.clear_session()
@@ -83,6 +84,7 @@ def main(
             mxp=mxp,
             ga_steps=ga_steps or config.learning_config.running_config.ga_steps,
             apply_gwn_config=config.learning_config.apply_gwn_config,
+            log_error_rates=log_error_rates,
         )
         model.summary()
 

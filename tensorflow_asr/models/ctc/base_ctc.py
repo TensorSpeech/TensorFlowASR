@@ -42,10 +42,13 @@ class CtcModel(BaseModel):
         run_eagerly=None,
         mxp="none",
         ga_steps=None,
+        log_error_rates=True,
         **kwargs,
     ):
         loss = CtcLoss(blank=blank)
-        super().compile(loss=loss, optimizer=optimizer, run_eagerly=run_eagerly, mxp=mxp, ga_steps=ga_steps, **kwargs)
+        super().compile(
+            loss=loss, optimizer=optimizer, run_eagerly=run_eagerly, mxp=mxp, ga_steps=ga_steps, log_error_rates=log_error_rates, **kwargs
+        )
 
     def apply_gwn(self):
         if self.apply_gwn_config:

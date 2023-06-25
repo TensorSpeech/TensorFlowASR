@@ -149,6 +149,7 @@ class BaseModel(Model):
         mxp="none",
         ga_steps=None,
         apply_gwn_config=None,
+        log_error_rates=True,
         **kwargs,
     ):
         optimizer = tf.keras.optimizers.get(optimizer)
@@ -167,8 +168,10 @@ class BaseModel(Model):
             self.use_ga = False
         self.apply_gwn_config = apply_gwn_config
         self.add_custom_metric(metric=tf.keras.metrics.Mean(name="loss"))
-        self.add_custom_metric(metric=ErrorRate(metric_util.tf_wer, name="wer"))
-        self.add_custom_metric(metric=ErrorRate(metric_util.tf_cer, name="cer"))
+        self._log_error_rates = log_error_rates
+        if log_error_rates:
+            self.add_custom_metric(metric=ErrorRate(metric_util.tf_wer, name="wer"))
+            self.add_custom_metric(metric=ErrorRate(metric_util.tf_cer, name="cer"))
         self.distribute_reduction_method = "sum"
         super().compile(optimizer=optimizer, loss=loss, run_eagerly=run_eagerly, **kwargs)
 
@@ -244,8 +247,8 @@ class BaseModel(Model):
         y_pred = self(inputs, training=False)
         per_sample_loss = self.loss(y_true=y_true, y_pred=y_pred)
         self._tfasr_metrics["loss"].update_state(per_sample_loss)
-        tokens = self.recognize(**inputs)
-        with tf.device("/device:CPU:0"):
+        if self._log_error_rates:
+            tokens = self.recognize(**inputs)
             labels = self.text_featurizer.detokenize(y_true["labels"])
             transcripts = self.text_featurizer.detokenize(tokens)
             self._tfasr_metrics["wer"].update_state(transcripts, labels)
