@@ -169,7 +169,7 @@ class BaseModel(Model):
         self.apply_gwn_config = apply_gwn_config
         self.add_custom_metric(metric=tf.keras.metrics.Mean(name="loss"))
         self._log_error_rates = log_error_rates
-        if log_error_rates:
+        if self._log_error_rates:
             self.add_custom_metric(metric=ErrorRate(metric_util.tf_wer, name="wer"))
             self.add_custom_metric(metric=ErrorRate(metric_util.tf_cer, name="cer"))
         self.distribute_reduction_method = "sum"
