@@ -16,7 +16,6 @@ import os
 
 from tensorflow_asr import tf  # import to aid logging messages
 from tensorflow_asr import dataset
-from tensorflow_asr.callbacks import MetricLogger
 from tensorflow_asr.config import Config
 from tensorflow_asr.featurizers import text_featurizers
 from tensorflow_asr.utils import cli_util, env_util, file_util
@@ -87,7 +86,6 @@ def main(
         model.summary()
 
     callbacks = [
-        MetricLogger(text_featurizer=text_featurizer),
         tf.keras.callbacks.TerminateOnNaN(),
         tf.keras.callbacks.ModelCheckpoint(**config.learning_config.running_config.checkpoint),
         tf.keras.callbacks.BackupAndRestore(**config.learning_config.running_config.backup_and_restore),
