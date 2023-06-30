@@ -102,7 +102,7 @@ class TextFeaturizer:
 
     @classmethod
     def corpus_generator(cls, decoder_config: DecoderConfig):
-        for file_path in decoder_config.train_files:
+        for file_path in file_util.preprocess_paths(decoder_config.train_files):
             logger.info(f"Reading {file_path} ...")
             with tf.io.gfile.GFile(file_path, "r") as f:
                 temp_lines = f.read().splitlines()

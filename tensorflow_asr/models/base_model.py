@@ -137,7 +137,8 @@ class BaseModel(Model):
         run_eagerly=None,
         mxp="none",
         ga_steps=None,
-        apply_gwn_config=None,
+        gwn_config=None,
+        gradn_config=None,
         **kwargs,
     ):
         optimizer = tf.keras.optimizers.get(optimizer)
@@ -154,7 +155,8 @@ class BaseModel(Model):
             logger.info(f"Using gradient accumulation with accumulate steps = {ga_steps}")
         else:
             self.use_ga = False
-        self.apply_gwn_config = apply_gwn_config
+        self.gwn_config = gwn_config
+        self.gradn = tf.keras.regularizers.get(gradn_config) if gradn_config else None
         self.distribute_reduction_method = "sum"
         self.add_custom_metric(tf.keras.metrics.Mean(name="loss"))
         super().compile(optimizer=optimizer, loss=loss, run_eagerly=run_eagerly, **kwargs)
@@ -208,10 +210,15 @@ class BaseModel(Model):
 
         if self.use_ga:  # perform gradient accumulation
             self.ga.accumulate(gradients=gradients)
-            self.optimizer.apply_gradients(zip(self.ga.gradients, self.trainable_variables))
+            gradients = self.ga.gradients
+
+        if self.gradn is not None:
+            gradients = self.gradn(step=self.optimizer.iterations, gradients=gradients)
+
+        self.optimizer.apply_gradients(zip(gradients, self.trainable_variables))
+
+        if self.use_ga:
             tf.cond(self.ga.is_apply_step, self.ga.reset, lambda: None)
-        else:
-            self.optimizer.apply_gradients(zip(gradients, self.trainable_variables))
 
         self._tfasr_metrics["loss"].update_state(per_sample_loss)
         return {

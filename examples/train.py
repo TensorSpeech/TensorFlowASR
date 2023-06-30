@@ -77,11 +77,11 @@ def main(
         model.compile(
             optimizer=tf.keras.optimizers.get(config.learning_config.optimizer_config),
             steps_per_execution=spx,
-            blank=text_featurizer.blank,
             jit_compile=jit_compile,
             mxp=mxp,
             ga_steps=ga_steps or config.learning_config.running_config.ga_steps,
-            apply_gwn_config=config.learning_config.apply_gwn_config,
+            gwn_config=config.learning_config.gwn_config,
+            gradn_config=config.learning_config.gradn_config,
         )
         model.summary()
 

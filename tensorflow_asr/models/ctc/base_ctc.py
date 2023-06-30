@@ -35,47 +35,39 @@ class CtcModel(BaseModel):
         self.decoder = decoder
         self.time_reduction_factor = 1
 
-    def compile(
-        self,
-        optimizer,
-        blank=0,
-        run_eagerly=None,
-        mxp="none",
-        ga_steps=None,
-        **kwargs,
-    ):
-        loss = CtcLoss(blank=blank)
-        super().compile(loss=loss, optimizer=optimizer, run_eagerly=run_eagerly, mxp=mxp, ga_steps=ga_steps, **kwargs)
+    def compile(self, optimizer, **kwargs):
+        loss = CtcLoss(blank=self.blank, name="ctc_loss")
+        return super().compile(loss, optimizer, **kwargs)
 
     def apply_gwn(self):
-        if self.apply_gwn_config:
+        if self.gwn_config:
             original_weights = {}
-            if self.apply_gwn_config.get("encoder_step") is not None and self.apply_gwn_config.get("encoder_stddev") is not None:
+            if self.gwn_config.get("encoder_step") is not None and self.gwn_config.get("encoder_stddev") is not None:
                 original_weights["encoder"] = tf.cond(
-                    tf.greater_equal((self.optimizer.iterations), self.apply_gwn_config["encoder_step"]),
-                    lambda: layer_util.add_gwn(self.encoder.trainable_weights, stddev=self.apply_gwn_config["encoder_stddev"]),
+                    tf.greater_equal((self.optimizer.iterations), self.gwn_config["encoder_step"]),
+                    lambda: layer_util.add_gwn(self.encoder.trainable_weights, stddev=self.gwn_config["encoder_stddev"]),
                     lambda: self.encoder.trainable_weights,
                 )
-            if self.apply_gwn_config.get("decoder_step") is not None and self.apply_gwn_config.get("decoder_stddev") is not None:
+            if self.gwn_config.get("decoder_step") is not None and self.gwn_config.get("decoder_stddev") is not None:
                 original_weights["decoder"] = tf.cond(
-                    tf.greater_equal((self.optimizer.iterations), self.apply_gwn_config["decoder_step"]),
-                    lambda: layer_util.add_gwn(self.decoder.trainable_weights, stddev=self.apply_gwn_config["decoder_stddev"]),
+                    tf.greater_equal((self.optimizer.iterations), self.gwn_config["decoder_step"]),
+                    lambda: layer_util.add_gwn(self.decoder.trainable_weights, stddev=self.gwn_config["decoder_stddev"]),
                     lambda: self.decoder.trainable_weights,
                 )
             return original_weights
         return {}
 
     def remove_gwn(self, original_weights):
-        if self.apply_gwn_config:
+        if self.gwn_config:
             if original_weights.get("encoder") is not None:
                 tf.cond(
-                    tf.greater_equal((self.optimizer.iterations), self.apply_gwn_config["encoder_step"]),
+                    tf.greater_equal((self.optimizer.iterations), self.gwn_config["encoder_step"]),
                     lambda: layer_util.sub_gwn(original_weights["encoder"], self.encoder.trainable_weights),
                     lambda: None,
                 )
             if original_weights.get("decoder") is not None:
                 tf.cond(
-                    tf.greater_equal((self.optimizer.iterations), self.apply_gwn_config["decoder_step"]),
+                    tf.greater_equal((self.optimizer.iterations), self.gwn_config["decoder_step"]),
                     lambda: layer_util.sub_gwn(original_weights["decoder"], self.decoder.trainable_weights),
                     lambda: None,
                 )

@@ -51,8 +51,8 @@ class DecoderConfig:
         self.max_sentence_length: int = config.pop("max_sentence_length", 1048576)  # bytes
         self.max_sentencepiece_length: int = config.pop("max_sentencepiece_length", 16)  # bytes
 
-        self.train_files = file_util.preprocess_paths(config.pop("train_files", []))
-        self.eval_files = file_util.preprocess_paths(config.pop("eval_files", []))
+        self.train_files = config.pop("train_files", [])
+        self.eval_files = config.pop("eval_files", [])
 
         for k, v in config.items():
             setattr(self, k, v)
@@ -119,7 +119,8 @@ class LearningConfig:
         self.pretrained = file_util.preprocess_paths(config.pop("pretrained", None))
         self.optimizer_config: dict = config.pop("optimizer_config", {})
         self.running_config = RunningConfig(config.pop("running_config", {}))
-        self.apply_gwn_config = config.pop("apply_gwn_config", None)
+        self.gwn_config = config.pop("gwn_config", None)
+        self.gradn_config = config.pop("gradn_config", None)
         for k, v in config.items():
             setattr(self, k, v)
 

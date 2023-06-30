@@ -228,9 +228,13 @@ learning_config:
       beta_2: 0.98
       epsilon: 1e-9
 
-  apply_gwn_config:
-    predict_net_step: 20000
-    predict_net_stddev: 0.075
+  gwn_config: null
+
+  gradn_config:
+    class_name: tensorflow_asr.optimizers.regularizers>TimeDependentGaussianGradientNoise
+    config:
+      n: 1.0
+      y: 0.55
 
   running_config:
     batch_size: 4

@@ -325,62 +325,51 @@ class Transducer(BaseModel):
         )
         self.time_reduction_factor = 1
 
-    def compile(
-        self,
-        optimizer,
-        blank=0,
-        run_eagerly=None,
-        mxp="none",
-        ga_steps=None,
-        apply_gwn_config=None,
-        **kwargs,
-    ):
-        loss = RnntLoss(blank=blank)
-        super().compile(
-            loss=loss, optimizer=optimizer, run_eagerly=run_eagerly, mxp=mxp, ga_steps=ga_steps, apply_gwn_config=apply_gwn_config, **kwargs
-        )
+    def compile(self, optimizer, **kwargs):
+        loss = RnntLoss(blank=self.blank, name="rnnt_loss")
+        return super().compile(loss, optimizer, **kwargs)
 
     def apply_gwn(self):
-        if self.apply_gwn_config:
+        if self.gwn_config:
             original_weights = {}
-            if self.apply_gwn_config.get("encoder_step") is not None and self.apply_gwn_config.get("encoder_stddev") is not None:
+            if self.gwn_config.get("encoder_step") is not None and self.gwn_config.get("encoder_stddev") is not None:
                 original_weights["encoder"] = tf.cond(
-                    tf.greater_equal((self.optimizer.iterations), self.apply_gwn_config["encoder_step"]),
-                    lambda: layer_util.add_gwn(self.encoder.trainable_weights, stddev=self.apply_gwn_config["encoder_stddev"]),
+                    tf.greater_equal((self.optimizer.iterations), self.gwn_config["encoder_step"]),
+                    lambda: layer_util.add_gwn(self.encoder.trainable_weights, stddev=self.gwn_config["encoder_stddev"]),
                     lambda: self.encoder.trainable_weights,
                 )
-            if self.apply_gwn_config.get("predict_net_step") is not None and self.apply_gwn_config.get("predict_net_stddev") is not None:
+            if self.gwn_config.get("predict_net_step") is not None and self.gwn_config.get("predict_net_stddev") is not None:
                 original_weights["predict_net"] = tf.cond(
-                    tf.greater_equal((self.optimizer.iterations), self.apply_gwn_config["predict_net_step"]),
-                    lambda: layer_util.add_gwn(self.predict_net.trainable_weights, stddev=self.apply_gwn_config["predict_net_stddev"]),
+                    tf.greater_equal((self.optimizer.iterations), self.gwn_config["predict_net_step"]),
+                    lambda: layer_util.add_gwn(self.predict_net.trainable_weights, stddev=self.gwn_config["predict_net_stddev"]),
                     lambda: self.predict_net.trainable_weights,
                 )
-            if self.apply_gwn_config.get("joint_net_step") is not None and self.apply_gwn_config.get("joint_net_stddev") is not None:
+            if self.gwn_config.get("joint_net_step") is not None and self.gwn_config.get("joint_net_stddev") is not None:
                 original_weights["joint_net"] = tf.cond(
-                    tf.greater_equal((self.optimizer.iterations), self.apply_gwn_config["joint_net_step"]),
-                    lambda: layer_util.add_gwn(self.joint_net.trainable_weights, stddev=self.apply_gwn_config["joint_net_stddev"]),
+                    tf.greater_equal((self.optimizer.iterations), self.gwn_config["joint_net_step"]),
+                    lambda: layer_util.add_gwn(self.joint_net.trainable_weights, stddev=self.gwn_config["joint_net_stddev"]),
                     lambda: self.joint_net.trainable_weights,
                 )
             return original_weights
         return {}
 
     def remove_gwn(self, original_weights):
-        if self.apply_gwn_config:
+        if self.gwn_config:
             if original_weights.get("encoder") is not None:
                 tf.cond(
-                    tf.greater_equal((self.optimizer.iterations), self.apply_gwn_config["encoder_step"]),
+                    tf.greater_equal((self.optimizer.iterations), self.gwn_config["encoder_step"]),
                     lambda: layer_util.sub_gwn(original_weights["encoder"], self.encoder.trainable_weights),
                     lambda: None,
                 )
             if original_weights.get("predict_net") is not None:
                 tf.cond(
-                    tf.greater_equal((self.optimizer.iterations), self.apply_gwn_config["predict_net_step"]),
+                    tf.greater_equal((self.optimizer.iterations), self.gwn_config["predict_net_step"]),
                     lambda: layer_util.sub_gwn(original_weights["predict_net"], self.predict_net.trainable_weights),
                     lambda: None,
                 )
             if original_weights.get("joint_net") is not None:
                 tf.cond(
-                    tf.greater_equal((self.optimizer.iterations), self.apply_gwn_config["joint_net_step"]),
+                    tf.greater_equal((self.optimizer.iterations), self.gwn_config["joint_net_step"]),
                     lambda: layer_util.sub_gwn(original_weights["joint_net"], self.joint_net.trainable_weights),
                     lambda: None,
                 )
