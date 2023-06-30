@@ -11,15 +11,18 @@ class TimeDependentGaussianGradientNoise(tf.keras.regularizers.Regularizer):
 
     def __init__(
         self,
-        n: float = 1.0,  # {0.01, 0.3, 1.0}
-        y: float = 0.55,
+        mean: float = 0.0,
+        eta: float = 1.0,  # {0.01, 0.3, 1.0}
+        gamma: float = 0.55,
     ):
-        self.n = n
-        self.y = y
+        self.mean = mean
+        self.eta = eta
+        self.gamma = gamma
+        super().__init__()
 
     def noise(self, step: tf.Tensor, gradient: tf.Tensor):
-        sigma_squared = self.n / ((1 + tf.cast(step, dtype=gradient.dtype)) ** self.y)
-        return tf.random.normal(mean=0.0, stddev=tf.math.sqrt(sigma_squared), shape=gradient.shape, dtype=gradient.dtype)
+        sigma_squared = self.eta / ((1 + tf.cast(step, dtype=gradient.dtype)) ** self.gamma)
+        return tf.random.normal(mean=self.mean, stddev=tf.math.sqrt(sigma_squared), shape=gradient.shape, dtype=gradient.dtype)
 
     def __call__(self, step: tf.Tensor, gradients: List[tf.Tensor]):
         """
@@ -41,6 +44,7 @@ class TimeDependentGaussianGradientNoise(tf.keras.regularizers.Regularizer):
 
     def get_config(self):
         return {
-            "n": self.n,
-            "y": self.y,
+            "mean": self.mean,
+            "eta": self.eta,
+            "gamma": self.gamma,
         }
