@@ -17,8 +17,8 @@ This is the example for preparing transcript files for librispeech data corpus
 
 ```bash
 python scripts/create_librispeech_trans.py \
---directory=/path/to/dataset/train-clean-100 \
---output=/path/to/dataset/train-clean-100/transcripts.tsv
+    --directory=/path/to/dataset/train-clean-100 \
+    --output=/path/to/dataset/train-clean-100/transcripts.tsv
 ```
 
 Do the same thing with `train-clean-360`, `train-other-500`, `dev-clean`, `dev-other`, `test-clean`, `test-other`
@@ -27,87 +27,44 @@ For other datasets, you must prepare your own python script like the `scripts/cr
 
 ## 3. Prepare config file
 
-The config file is under format `config.j2` which is jinja2 format
+The config file is under format `config.yml.j2` which is jinja2 format with yaml content
 
-Please take a look in some examples for config files in `examples/*/config*.j2`
+Please take a look in some examples for config files in `examples/*/*.yml.j2`
 
 ## 4. [Optional][Required if using TPUs] Create tfrecords
 
 ```bash
 python scripts/create_tfrecords.py \
---mode=train \
---config-path=/path/to/config.j2 \
---tfrecords-dir=/path/to/dataset/tfrecords \
---tfrecords-shards=16 \ # available options are from 1 -> inf
---shuffle \
-/path/to/dataset/train-clean-100/transcripts.tsv \
-/path/to/dataset/train-clean-360/transcripts.tsv \
-/path/to/dataset/train-other-500/transcripts.tsv
+    --config-path=/path/to/config.yml.j2 \
+    --mode=\["train","eval","test"\] \
+    --datadir=/path/to/datadir
 ```
 
-Reduce the `--tfrecords-shards` if the size of the dataset is small
+You can reduce the flag `--modes` to `--modes=\["train","eval"\]` to only create train and eval datasets
 
-Do the same thing with `--mode=eval` and `--mode=test` if needed, corresponds to `dev` and `test` datasets
-
-## 5. Generate vocabulary
+## 5. Generate vocabulary and metadata
 
 This step requires defining path to vocabulary file and other options for generating vocabulary in config file.
 
-Characters:
-
 ```bash
-Prepare like the files in vocabularies/*.characters
-```
-
-Wordpiece:
-
-```bash
-python scripts/generate_vocab_wordpiece.py --config-path=/path/to/config.j2
-```
-
-Sentencepiece:
-
-```bash
-python scripts/generate_vocab_sentencepiece.py --config-path=/path/to/config.j2
+python scripts/prepare_vocab_and_metadata.py \
+    --config-path=/path/to/config.yml.j2 \
+    --datadir=/path/to/datadir
 ```
 
 The inputs, outputs and other options of vocabulary are defined in the config file
 
-## 5. [Optional][Required if using TPUs] Generate metadata.json
 
-The metadata json file contains all the metadata of dataset derived with the current config of `speech_config` and `decoder_config` in the config file
-
-These metadata is for **static-shape** training, which is required for TPUs
-
-Static shape means that it will pad each record to the longest record size of the whole data, therefore if you use with `train` mode and `eval` mode, you have to generate metadata for both stages (aka modes) so that when loading the dataset, it will get the longest record size from both train and eval modes
+## 6. Run training
 
 ```bash
-python scripts/generate_metadata.py \
---stage=train \
---config-path=/path/to/config.j2 \
---metadata=/path/to/metadata.json \
-/path/to/dataset/train-clean-100/transcripts.tsv \
-/path/to/dataset/train-clean-360/transcripts.tsv \
-/path/to/dataset/train-other-500/transcripts.tsv
-# same thing with eval mode
-python scripts/generate_metadata.py \
---stage=eval \
---config-path=/path/to/config.j2 \
---metadata=/path/to/metadata.json \
-/path/to/dataset/dev-clean/transcripts.tsv \
-/path/to/dataset/dev-other/transcripts.tsv
+python examples/train.py \
+    --mxp=auto \
+    --jit-compile \
+    --config-path=/path/to/config.yml.j2 \
+    --dataset-type=tfrecord \
+    --modeldir=/path/to/modeldir \
+    --datadir=/path/to/datadir
+## See others params
+python examples/train.py --help
 ```
-
-## 6. Update config file
-
-Update config file with:
--  The paths to transcript files (and tfrecords if used)
--  The path to metadata json file (if use static shape training)
-
-## 7. Run training
-
-```bash
-python examples/conformer/train.py --mxp=auto --jit-compile --config-path=/path/to/config.j2 --tfrecords
-```
-
-See other options for each example

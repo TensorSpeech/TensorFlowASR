@@ -24,9 +24,9 @@ logger = tf.get_logger()
 
 def main(
     config_path: str,
-    data_dir: str,
+    datadir: str,
 ):
-    config = Config(config_path, datadir=data_dir)
+    config = Config(config_path, datadir=datadir)
     if not config.decoder_config.vocabulary:
         raise ValueError("decoder_config.vocabulary must be defined")
 

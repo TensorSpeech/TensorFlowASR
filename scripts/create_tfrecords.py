@@ -12,41 +12,30 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from tensorflow_asr import tf
-from tensorflow_asr.config import Config
-from tensorflow_asr.dataset import ASRTFRecordDataset
-from tensorflow_asr.helpers import featurizer_helpers
-from tensorflow_asr.utils import cli_util, file_util
+import os
+from typing import List
 
-logger = tf.get_logger()
+from tensorflow_asr import dataset
+from tensorflow_asr.config import Config
+from tensorflow_asr.featurizers import text_featurizers
+from tensorflow_asr.utils import cli_util
 
 
 def main(
-    *transcripts,
-    mode: str = None,
-    config_path: str = None,
-    tfrecords_dir: str = None,
-    tfrecords_shards: int = 16,
-    shuffle: bool = True,
+    config_path: str,
+    datadir: str,
+    modes: List[str],
+    repodir: str = os.path.realpath(os.path.join(os.path.dirname(__file__), "..")),
 ):
-    data_paths = file_util.preprocess_paths(transcripts)
-    tfrecords_dir = file_util.preprocess_paths(tfrecords_dir, isdir=True)
-    logger.info(f"Create tfrecords to directory: {tfrecords_dir}")
-
-    config = Config(config_path)
-
-    speech_featurizer, text_featurizer = featurizer_helpers.prepare_featurizers(config=config)
-
-    tfrecord_dataset = ASRTFRecordDataset(
-        data_paths=data_paths,
-        tfrecords_dir=tfrecords_dir,
-        speech_featurizer=speech_featurizer,
-        text_featurizer=text_featurizer,
-        stage=mode,
-        shuffle=shuffle,
-        tfrecords_shards=tfrecords_shards,
-    )
-    tfrecord_dataset.create_tfrecords()
+    config = Config(config_path, repodir=repodir, datadir=datadir)
+    text_featurizer = text_featurizers.get(config=config)
+    for mode in modes:
+        dat = dataset.get(
+            text_featurizer=text_featurizer,
+            dataset_config=getattr(config.data_config, f"{mode}_dataset_config"),
+            dataset_type="tfrecord",
+        )
+        dat.create_tfrecords()
 
 
 if __name__ == "__main__":

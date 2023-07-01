@@ -84,10 +84,15 @@ def get(config: Config):
 
 
 def build(config: Config):
+    if config.decoder_config.type == TEXT_FEATURIZER_TYPES.CHARACTERS:
+        CharFeaturizer.build_from_corpus(config.decoder_config)
+        return
     if config.decoder_config.type == TEXT_FEATURIZER_TYPES.SENTENCEPIECE:
         SentencePieceFeaturizer.build_from_corpus(config.decoder_config)
-    elif config.decoder_config.type == TEXT_FEATURIZER_TYPES.WORDPIECE:
+        return
+    if config.decoder_config.type == TEXT_FEATURIZER_TYPES.WORDPIECE:
         WordPieceFeaturizer.build_from_corpus(config.decoder_config)
+        return
 
 
 class TextFeaturizer:
@@ -204,6 +209,24 @@ class CharFeaturizer(TextFeaturizer):
             default_value=self.tokens[self.blank],
         )
         self.upoints = tf.strings.unicode_decode(self.tokens, "UTF-8").to_tensor(shape=[None, 1])
+
+    @classmethod
+    def build_from_corpus(cls, decoder_config: DecoderConfig):
+        if os.path.exists(decoder_config.vocabulary):
+            return cls(decoder_config)
+
+        def write_vocab_file(filepath, vocab):
+            with tf.io.gfile.GFile(filepath, "w") as f:
+                for token in vocab:
+                    print(token, file=f)
+
+        vocab = set()
+        for text in cls.corpus_generator(decoder_config):
+            vocab.update(text)
+
+        write_vocab_file(decoder_config.vocabulary, vocab)
+
+        return cls(decoder_config)
 
     def tokenize(self, text):
         text = self.normalize_text(text, self.decoder_config.normalization_form)

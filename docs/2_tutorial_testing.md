@@ -17,8 +17,8 @@ This is the example for preparing transcript files for librispeech data corpus
 
 ```bash
 python scripts/create_librispeech_trans.py \
---directory=/path/to/dataset/test-clean \
---output=/path/to/dataset/test-clean/transcripts.tsv
+    --directory=/path/to/dataset/test-clean \
+    --output=/path/to/dataset/test-clean/transcripts.tsv
 ```
 
 Do the same thing with `test-clean`, `test-other`
@@ -27,45 +27,32 @@ For other datasets, you must prepare your own python script like the `scripts/cr
 
 ## 3. Prepare config file
 
-The config file is under format `config.j2` which is jinja2 format
+The config file is under format `config.yml.j2` which is jinja2 format with yaml content
 
-Please take a look in some examples for config files in `examples/*/config*.j2`
+Please take a look in some examples for config files in `examples/*/*.yml.j2`
 
 The config file is the same as the config used for training
 
-## 4. [Optional][Required if not exists] Generate vocabulary
+## 4. [Optional][Required if not exists] Generate vocabulary and metadata
 
 Use the same vocabulary file used in training
 
-Characters:
-
 ```bash
-Prepare like the files in vocabularies/*.characters
-```
-
-Wordpiece:
-
-```bash
-python scripts/generate_vocab_wordpiece.py --config-path=/path/to/config.j2
-```
-
-Sentencepiece:
-
-```bash
-python scripts/generate_vocab_sentencepiece.py --config-path=/path/to/config.j2
+python scripts/prepare_vocab_and_metadata.py \
+    --config-path=/path/to/config.yml.j2 \
+    --datadir=/path/to/datadir
 ```
 
 The inputs, outputs and other options of vocabulary are defined in the config file
 
-## 5. Update config file
-
-Update config file with:
--  The paths to transcript files for test stage
-
-## 6. Run testing
+## 5. Run testing
 
 ```bash
-python examples/conformer/test.py --config-path=/path/to/config.j2 --saved=/path/to/saved_weights.h5 --bs=1 --output=/path/to/test.tsv
+python examples/conformer/test.py \
+    --config-path=/path/to/config.j2 \
+    --saved=/path/to/saved_weights.h5 \
+    --bs=1 \
+    --output=/path/to/test.tsv
 ```
 
 See other options for each example
