@@ -10,6 +10,7 @@ fire==0.4.0
 jedi==0.18.2
 jiwer==3.0.2
 chardet==5.1.0
+charset-normalizer==2.1.1
 
 # extra=dev
 pytest==7.3.1

@@ -19,6 +19,7 @@ Causal padding supported Conv1D, Conv2D, DepthwiseConv1D, DepthwiseConv2D
 
 import tensorflow as tf
 from keras.layers.convolutional.base_conv import Conv
+from keras.utils import conv_utils
 
 
 def _validate_init(self):  # removed check padding causal
@@ -101,6 +102,27 @@ class DepthwiseConv1D(keras.layers.convolutional.DepthwiseConv1D):
             inputs = tf.pad(inputs, self._compute_causal_padding(inputs))
         return super().call(inputs)
 
+    def compute_output_shape(self, input_shape):
+        if self.data_format == "channels_first":
+            input_dim = input_shape[2]
+            out_filters = input_shape[1] * self.depth_multiplier
+        elif self.data_format == "channels_last":
+            input_dim = input_shape[1]
+            out_filters = input_shape[2] * self.depth_multiplier
+
+        input_dim = conv_utils.conv_output_length(
+            input_dim,
+            self.kernel_size[0],
+            "causal" if self._is_causal else self.padding,
+            self.strides[0],
+            self.dilation_rate[0],
+        )
+        if self.data_format == "channels_first":
+            return (input_shape[0], out_filters, input_dim)
+        elif self.data_format == "channels_last":
+            return (input_shape[0], input_dim, out_filters)
+        raise ValueError("Invalid data_format")
+
 
 class DepthwiseConv2D(keras.layers.convolutional.DepthwiseConv2D):
     def __init__(
@@ -147,3 +169,33 @@ class DepthwiseConv2D(keras.layers.convolutional.DepthwiseConv2D):
         if self._is_causal:
             inputs = tf.pad(inputs, self._compute_causal_padding(inputs))
         return super().call(inputs)
+
+    def compute_output_shape(self, input_shape):
+        if self.data_format == "channels_first":
+            rows = input_shape[2]
+            cols = input_shape[3]
+            out_filters = input_shape[1] * self.depth_multiplier
+        elif self.data_format == "channels_last":
+            rows = input_shape[1]
+            cols = input_shape[2]
+            out_filters = input_shape[3] * self.depth_multiplier
+
+        rows = conv_utils.conv_output_length(
+            rows,
+            self.kernel_size[0],
+            "causal" if self._is_causal else self.padding,
+            self.strides[0],
+            self.dilation_rate[0],
+        )
+        cols = conv_utils.conv_output_length(
+            cols,
+            self.kernel_size[1],
+            "causal" if self._is_causal else self.padding,
+            self.strides[1],
+            self.dilation_rate[1],
+        )
+        if self.data_format == "channels_first":
+            return (input_shape[0], out_filters, rows, cols)
+        elif self.data_format == "channels_last":
+            return (input_shape[0], rows, cols, out_filters)
+        raise ValueError("Invalid data_format")
