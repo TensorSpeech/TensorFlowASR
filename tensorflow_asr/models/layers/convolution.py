@@ -119,7 +119,7 @@ class DepthwiseConv1D(keras.layers.convolutional.DepthwiseConv1D):
         )
         if self.data_format == "channels_first":
             return (input_shape[0], out_filters, input_dim)
-        elif self.data_format == "channels_last":
+        if self.data_format == "channels_last":
             return (input_shape[0], input_dim, out_filters)
         raise ValueError("Invalid data_format")
 
@@ -196,6 +196,6 @@ class DepthwiseConv2D(keras.layers.convolutional.DepthwiseConv2D):
         )
         if self.data_format == "channels_first":
             return (input_shape[0], out_filters, rows, cols)
-        elif self.data_format == "channels_last":
+        if self.data_format == "channels_last":
             return (input_shape[0], rows, cols, out_filters)
         raise ValueError("Invalid data_format")
