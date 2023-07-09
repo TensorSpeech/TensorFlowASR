@@ -2,8 +2,8 @@
 import os
 
 from tensorflow_asr import tf
-from tensorflow_asr.config import SpeechConfig
-from tensorflow_asr.featurizers import speech_featurizers
+from tensorflow_asr.configs import SpeechConfig
+from tensorflow_asr.features import speech_featurizers
 from tensorflow_asr.utils import file_util
 
 file_util.ENABLE_PATH_PREPROCESS = False

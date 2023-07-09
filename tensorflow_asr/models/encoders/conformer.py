@@ -19,7 +19,7 @@ from tensorflow_asr.models.activations.glu import GLU
 from tensorflow_asr.models.base_layer import Layer
 
 # from tensorflow_asr.models.base_model import BaseModelLayer as Layer
-from tensorflow_asr.models.layers.convolution import Conv1D
+from tensorflow_asr.models.layers.convolution import Conv1D, DepthwiseConv1D
 from tensorflow_asr.models.layers.multihead_attention import MultiHeadAttention, MultiHeadRelativeAttention
 from tensorflow_asr.models.layers.positional_encoding import PositionalEncoding, RelativePositionalEncoding
 from tensorflow_asr.models.layers.residual import Residual
@@ -222,6 +222,7 @@ class ConvModule(Layer):
         scale_factor=2,
         residual_factor=1.0,
         norm_position="pre",
+        use_group_conv=False,
         kernel_regularizer=L2,
         bias_regularizer=L2,
         name="conv_module",
@@ -244,16 +245,26 @@ class ConvModule(Layer):
             bias_regularizer=bias_regularizer,
         )
         self.glu = GLU(axis=-1, name="glu")
-        self.dw_conv = Conv1D(
-            filters=input_dim,
-            kernel_size=kernel_size,
-            strides=1,
-            groups=input_dim,
-            padding=padding,
-            name="dw_conv",
-            kernel_regularizer=kernel_regularizer,
-            bias_regularizer=bias_regularizer,
-        )
+        if use_group_conv:
+            self.dw_conv = Conv1D(
+                filters=input_dim,
+                kernel_size=kernel_size,
+                strides=1,
+                padding=padding,
+                groups=input_dim,
+                name="dw_conv",
+                kernel_regularizer=kernel_regularizer,
+                bias_regularizer=bias_regularizer,
+            )
+        else:
+            self.dw_conv = DepthwiseConv1D(
+                kernel_size=kernel_size,
+                strides=1,
+                padding=padding,
+                name="dw_conv",
+                kernel_regularizer=kernel_regularizer,
+                bias_regularizer=bias_regularizer,
+            )
         self.bn = tf.keras.layers.BatchNormalization(
             name="bn", gamma_regularizer=kernel_regularizer, beta_regularizer=bias_regularizer, synchronized=True
         )
@@ -313,6 +324,7 @@ class ConformerBlock(Layer):
         padding="causal",
         convm_scale_factor=2,
         convm_residual_factor=1.0,
+        convm_use_group_conv=False,
         module_norm_position="pre",
         block_norm_position="post",
         memory_length=None,
@@ -360,6 +372,7 @@ class ConformerBlock(Layer):
             scale_factor=convm_scale_factor,
             residual_factor=convm_residual_factor,
             norm_position=module_norm_position,
+            use_group_conv=convm_use_group_conv,
             kernel_regularizer=kernel_regularizer,
             bias_regularizer=bias_regularizer,
         )
@@ -426,6 +439,7 @@ class ConformerEncoder(Layer):
         mhsam_residual_factor=1.0,
         convm_scale_factor=2,
         convm_residual_factor=1.0,
+        convm_use_group_conv=False,
         dropout=0.1,
         module_norm_position="pre",
         block_norm_position="post",
@@ -493,6 +507,7 @@ class ConformerEncoder(Layer):
                 padding=padding,
                 convm_scale_factor=convm_scale_factor,
                 convm_residual_factor=convm_residual_factor,
+                convm_use_group_conv=convm_use_group_conv,
                 module_norm_position=module_norm_position,
                 block_norm_position=block_norm_position,
                 memory_length=memory_length,

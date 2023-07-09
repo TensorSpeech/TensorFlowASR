@@ -3,8 +3,8 @@ import os
 
 import tensorflow as tf
 
-from tensorflow_asr.config import DecoderConfig
-from tensorflow_asr.featurizers.text_featurizers import CharFeaturizer
+from tensorflow_asr.configs import DecoderConfig
+from tensorflow_asr.tokenizers import CharTokenizer
 
 decoder_config = DecoderConfig(
     {
@@ -16,7 +16,7 @@ text = "i'm good but it would have broken down after ten miles of that hard trai
 
 
 def test():
-    featurizer = CharFeaturizer(decoder_config=decoder_config)
+    featurizer = CharTokenizer(decoder_config=decoder_config)
     print(featurizer.tokens)
     print(featurizer.num_classes)
     print(text)

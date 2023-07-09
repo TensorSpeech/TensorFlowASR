@@ -3,8 +3,8 @@ import os
 
 import tensorflow as tf
 
-from tensorflow_asr.config import DecoderConfig
-from tensorflow_asr.featurizers.text_featurizers import SentencePieceFeaturizer
+from tensorflow_asr.configs import DecoderConfig
+from tensorflow_asr.tokenizers import SentencePieceTokenizer
 from tensorflow_asr.utils import file_util
 
 file_util.ENABLE_PATH_PREPROCESS = False
@@ -20,7 +20,7 @@ text = "i'm good but it would have broken down after ten miles of that hard trai
 
 
 def test():
-    featurizer = SentencePieceFeaturizer(decoder_config=decoder_config)
+    featurizer = SentencePieceTokenizer(decoder_config=decoder_config)
     print(featurizer.num_classes)
     print(text)
     indices = featurizer.tokenize(text)

@@ -13,10 +13,9 @@
 # limitations under the License.
 
 
-from tensorflow_asr import tf
-from tensorflow_asr.config import Config
-from tensorflow_asr.dataset import ASRDataset
-from tensorflow_asr.featurizers import text_featurizers
+from tensorflow_asr import tf, tokenizers
+from tensorflow_asr.configs import Config
+from tensorflow_asr.datasets import ASRDataset
 from tensorflow_asr.utils import cli_util
 
 logger = tf.get_logger()
@@ -31,19 +30,19 @@ def main(
         raise ValueError("decoder_config.vocabulary must be defined")
 
     logger.info("Preparing vocab ...")
-    text_featurizers.build(config=config)
-    text_featurizer = text_featurizers.get(config=config)
+    tokenizers.build(config=config)
+    tokenizer = tokenizers.get(config=config)
 
     logger.info("Preparing train metadata ...")
     config.data_config.train_dataset_config.drop_remainder = False
     config.data_config.train_dataset_config.shuffle = False
-    train_dataset = ASRDataset(text_featurizer=text_featurizer, **vars(config.data_config.train_dataset_config))
+    train_dataset = ASRDataset(tokenizer=tokenizer, **vars(config.data_config.train_dataset_config))
     train_dataset.update_metadata()
 
     logger.info("Preparing eval metadata ...")
     config.data_config.eval_dataset_config.drop_remainder = False
     config.data_config.eval_dataset_config.shuffle = False
-    eval_dataset = ASRDataset(text_featurizer=text_featurizer, **vars(config.data_config.eval_dataset_config))
+    eval_dataset = ASRDataset(tokenizer=tokenizer, **vars(config.data_config.eval_dataset_config))
     eval_dataset.update_metadata()
 
 

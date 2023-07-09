@@ -120,11 +120,11 @@ def erb_point(
     # All of the following expressions are derived in Apple TR #35, "An
     # Efficient Implementation of the Patterson-Holdsworth Cochlear Filter
     # Bank." See pages 33-34.
-    erb_point = -ear_q * min_bw + tf.exp(fraction * (-tf.math.log(high_freq + ear_q * min_bw) + tf.math.log(low_freq + ear_q * min_bw))) * (
-        high_freq + ear_q * min_bw
+    erbp = (-ear_q * min_bw) + (
+        tf.exp(fraction * ((-1 * tf.math.log(high_freq + ear_q * min_bw)) + tf.math.log(low_freq + ear_q * min_bw))) * (high_freq + ear_q * min_bw)
     )
 
-    return tf.cast(erb_point, tf.complex64)
+    return tf.cast(erbp, tf.complex64)
 
 
 def erb_space(

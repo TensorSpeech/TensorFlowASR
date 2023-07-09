@@ -14,10 +14,8 @@
 
 import os
 
-from tensorflow_asr import tf  # import to aid logging messages
-from tensorflow_asr import dataset
-from tensorflow_asr.config import Config
-from tensorflow_asr.featurizers import text_featurizers
+from tensorflow_asr import datasets, tf, tokenizers  # import to aid logging messages
+from tensorflow_asr.configs import Config
 from tensorflow_asr.utils import cli_util, env_util, file_util
 
 logger = tf.get_logger()
@@ -43,20 +41,20 @@ def main(
 
     config = Config(config_path, training=True, repodir=repodir, datadir=datadir, modeldir=modeldir)
 
-    text_featurizer = text_featurizers.get(config)
+    tokenizer = tokenizers.get(config)
 
-    train_dataset = dataset.get(
-        text_featurizer=text_featurizer,
+    train_dataset = datasets.get(
+        tokenizer=tokenizer,
         dataset_config=config.data_config.train_dataset_config,
         dataset_type=dataset_type,
     )
-    eval_dataset = dataset.get(
-        text_featurizer=text_featurizer,
+    eval_dataset = datasets.get(
+        tokenizer=tokenizer,
         dataset_config=config.data_config.eval_dataset_config,
         dataset_type=dataset_type,
     )
 
-    shapes = dataset.get_global_shape(config, strategy, train_dataset, eval_dataset, batch_size=bs)
+    shapes = datasets.get_global_shape(config, strategy, train_dataset, eval_dataset, batch_size=bs)
 
     train_data_loader = train_dataset.create(shapes["batch_size"], padded_shapes=shapes["padded_shapes"])
     logger.info(f"train_data_loader.element_spec = {train_data_loader.element_spec}")

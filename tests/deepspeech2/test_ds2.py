@@ -21,16 +21,16 @@ logger = tf.get_logger()
 
 DEFAULT_YAML = os.path.join(os.path.abspath(os.path.dirname(__file__)), "config_wp.j2")
 
-from tensorflow_asr.config import Config
-from tensorflow_asr.featurizers.speech_featurizers import SpeechFeaturizer
-from tensorflow_asr.featurizers.text_featurizers import CharFeaturizer
+from tensorflow_asr.configs import Config
+from tensorflow_asr.features.speech_featurizers import SpeechFeaturizer
 from tensorflow_asr.models.ctc.deepspeech2 import DeepSpeech2
+from tensorflow_asr.tokenizers import CharTokenizer
 
 
 def test_ds2():
     config = Config(DEFAULT_YAML)
 
-    text_featurizer = CharFeaturizer(config.decoder_config)
+    text_featurizer = CharTokenizer(config.decoder_config)
 
     speech_featurizer = SpeechFeaturizer(config.speech_config)
 

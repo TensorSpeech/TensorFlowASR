@@ -3,9 +3,9 @@ import re
 
 import sentencepiece as spm
 
-from tensorflow_asr.dataset import ASRSliceDataset, ASRSliceTestDataset
-from tensorflow_asr.featurizers.speech_featurizers import SpeechFeaturizer
-from tensorflow_asr.featurizers.text_featurizers import SentencePieceFeaturizer, SubwordFeaturizer, TextFeaturizer
+from tensorflow_asr.datasets import ASRSliceDataset, ASRSliceTestDataset
+from tensorflow_asr.features.speech_featurizers import SpeechFeaturizer
+from tensorflow_asr.tokenizers import SentencePieceTokenizer, SubwordFeaturizer, Tokenizer
 
 
 def test_encoder():
@@ -53,7 +53,7 @@ def test_featurizer():
         "normalize_per_frame": False,
     }
 
-    text_featurizer_sentencepiece = SentencePieceFeaturizer.load_from_file(config, None)
+    text_featurizer_sentencepiece = SentencePieceTokenizer.load_from_file(config, None)
     subwords_path = os.path.join(
         os.path.abspath(os.path.dirname(__file__)), os.pardir, os.pardir, "vocabularies", "librispeech_train_4_1030.subwords"
     )
@@ -61,7 +61,7 @@ def test_featurizer():
     speech_featurizer = SpeechFeaturizer(config_speech)
     data_path = os.path.join(os.path.abspath(os.path.dirname(__file__)), "transcripts_librispeech_train_clean_100.tsv")
 
-    def get_data(featurizer: TextFeaturizer):
+    def get_data(featurizer: Tokenizer):
         train_dataset = ASRSliceDataset(
             data_paths=[data_path],
             speech_featurizer=speech_featurizer,
@@ -107,7 +107,7 @@ def test_iextract():
         "normalize_per_frame": False,
     }
 
-    text_featurizer_sentencepiece = SentencePieceFeaturizer.load_from_file(config, None)
+    text_featurizer_sentencepiece = SentencePieceTokenizer.load_from_file(config, None)
     speech_featurizer = SpeechFeaturizer(config_speech)
     data_path = os.path.join(os.path.abspath(os.path.dirname(__file__)), "transcripts_librispeech_train_clean_100.tsv")
 

@@ -43,21 +43,21 @@ args = parser.parse_args()
 
 env_util.setup_devices([args.device], cpu=args.cpu)
 
-from tensorflow_asr.config import Config
-from tensorflow_asr.featurizers.speech_featurizers import SpeechFeaturizer, read_raw_audio
-from tensorflow_asr.featurizers.text_featurizers import CharFeaturizer, SentencePieceFeaturizer, SubwordFeaturizer
+from tensorflow_asr.configs import Config
+from tensorflow_asr.features.speech_featurizers import SpeechFeaturizer, read_raw_audio
 from tensorflow_asr.models.transducer.rnn_transducer import RnnTransducer
+from tensorflow_asr.tokenizers import CharTokenizer, SentencePieceTokenizer, SubwordFeaturizer
 
 config = Config(args.config)
 speech_featurizer = SpeechFeaturizer(config.speech_config)
 if args.sentence_piece:
     logger.info("Loading SentencePiece model ...")
-    text_featurizer = SentencePieceFeaturizer(config.decoder_config)
+    text_featurizer = SentencePieceTokenizer(config.decoder_config)
 elif args.subwords:
     logger.info("Loading subwords ...")
     text_featurizer = SubwordFeaturizer(config.decoder_config)
 else:
-    text_featurizer = CharFeaturizer(config.decoder_config)
+    text_featurizer = CharTokenizer(config.decoder_config)
 text_featurizer.decoder_config.beam_width = args.beam_width
 
 # build model

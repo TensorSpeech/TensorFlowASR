@@ -22,14 +22,14 @@ import tensorflow as tf
 import tensorflow_text as tft
 from tensorflow_text.tools.wordpiece_vocab import bert_vocab_from_dataset as bert_vocab
 
-from tensorflow_asr.config import Config, DecoderConfig
+from tensorflow_asr.configs import Config, DecoderConfig
 from tensorflow_asr.utils import file_util
 
 logger = tf.get_logger()
 
 
 @dataclass
-class TEXT_FEATURIZER_TYPES:
+class TOKENIZER_TYPES:
     CHARACTERS: str = "characters"
     WORDPIECE: str = "wordpiece"
     SENTENCEPIECE: str = "sentencepiece"
@@ -69,33 +69,33 @@ ENGLISH_CHARACTERS = [
 
 
 def get(config: Config):
-    if config.decoder_config.type == TEXT_FEATURIZER_TYPES.SENTENCEPIECE:
+    if config.decoder_config.type == TOKENIZER_TYPES.SENTENCEPIECE:
         logger.info("Loading SentencePiece model ...")
-        text_featurizer = SentencePieceFeaturizer(config.decoder_config)
-    elif config.decoder_config.type == TEXT_FEATURIZER_TYPES.WORDPIECE:
+        tokenizer = SentencePieceTokenizer(config.decoder_config)
+    elif config.decoder_config.type == TOKENIZER_TYPES.WORDPIECE:
         logger.info("Loading wordpiece ...")
-        text_featurizer = WordPieceFeaturizer(config.decoder_config)
-    elif config.decoder_config.type == TEXT_FEATURIZER_TYPES.CHARACTERS:
+        tokenizer = WordPieceTokenizer(config.decoder_config)
+    elif config.decoder_config.type == TOKENIZER_TYPES.CHARACTERS:
         logger.info("Use characters ...")
-        text_featurizer = CharFeaturizer(config.decoder_config)
+        tokenizer = CharTokenizer(config.decoder_config)
     else:
-        raise ValueError(f"type must be in {asdict(TEXT_FEATURIZER_TYPES()).values()}, received {config.decoder_config.type}")
-    return text_featurizer
+        raise ValueError(f"type must be in {asdict(TOKENIZER_TYPES()).values()}, received {config.decoder_config.type}")
+    return tokenizer
 
 
 def build(config: Config):
-    if config.decoder_config.type == TEXT_FEATURIZER_TYPES.CHARACTERS:
-        CharFeaturizer.build_from_corpus(config.decoder_config)
+    if config.decoder_config.type == TOKENIZER_TYPES.CHARACTERS:
+        CharTokenizer.build_from_corpus(config.decoder_config)
         return
-    if config.decoder_config.type == TEXT_FEATURIZER_TYPES.SENTENCEPIECE:
-        SentencePieceFeaturizer.build_from_corpus(config.decoder_config)
+    if config.decoder_config.type == TOKENIZER_TYPES.SENTENCEPIECE:
+        SentencePieceTokenizer.build_from_corpus(config.decoder_config)
         return
-    if config.decoder_config.type == TEXT_FEATURIZER_TYPES.WORDPIECE:
-        WordPieceFeaturizer.build_from_corpus(config.decoder_config)
+    if config.decoder_config.type == TOKENIZER_TYPES.WORDPIECE:
+        WordPieceTokenizer.build_from_corpus(config.decoder_config)
         return
 
 
-class TextFeaturizer:
+class Tokenizer:
     def __init__(self, decoder_config: DecoderConfig):
         self.scorer = None
         self.decoder_config = decoder_config
@@ -174,7 +174,7 @@ class TextFeaturizer:
         raise NotImplementedError()
 
 
-class CharFeaturizer(TextFeaturizer):
+class CharTokenizer(Tokenizer):
     """
     Extract text feature based on char-level granularity.
     By looking up the vocabulary table, each line of transcript will be
@@ -264,7 +264,7 @@ class CharFeaturizer(TextFeaturizer):
             return tf.gather_nd(upoints, tf.where(tf.not_equal(upoints, 0)))
 
 
-class SentencePieceFeaturizer(TextFeaturizer):
+class SentencePieceTokenizer(Tokenizer):
     def __init__(self, decoder_config: DecoderConfig):
         super().__init__(decoder_config)
         self.blank = self.decoder_config.blank_index
@@ -340,7 +340,7 @@ class SentencePieceFeaturizer(TextFeaturizer):
             return tf.reshape(upoints, [-1])
 
 
-class WordPieceFeaturizer(TextFeaturizer):
+class WordPieceTokenizer(Tokenizer):
     def __init__(self, decoder_config: DecoderConfig):
         super().__init__(decoder_config)
         self.blank = self.decoder_config.blank_index  # treat [PAD] as blank

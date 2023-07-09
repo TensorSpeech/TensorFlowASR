@@ -112,6 +112,17 @@ pip3 install -e ".[dev]"
 pip3 install -e ".[tf2.x]" # or ".[tf2.x-gpu]"
 ```
 
+For macos m1 and above
+
+```bash
+conda create -y -n tfasr
+conda activate tfasr
+conda config --env --set subdir osx-64 # tensorflow-text package available only on x86/64 env
+conda install python=3.10.12 tensorflow=2.x # install tensorflow with conda for extra dependencies
+pip install -e ".[dev]"
+pip install -e ".[tf2.x]"
+```
+
 ### Running in a container
 
 ```bash

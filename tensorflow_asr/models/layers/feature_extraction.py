@@ -17,7 +17,7 @@ from dataclasses import asdict, dataclass
 import tensorflow as tf
 
 from tensorflow_asr.augmentations.augmentation import Augmentation
-from tensorflow_asr.featurizers.methods import gammatone
+from tensorflow_asr.features import gammatone
 from tensorflow_asr.models.base_layer import Layer
 from tensorflow_asr.utils import math_util
 

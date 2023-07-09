@@ -18,7 +18,7 @@ import os
 import fire
 import tensorflow as tf
 
-from tensorflow_asr.config import Config
+from tensorflow_asr.configs import Config
 from tensorflow_asr.helpers import featurizer_helpers
 from tensorflow_asr.models.transducer.conformer import Conformer
 from tensorflow_asr.utils import env_util

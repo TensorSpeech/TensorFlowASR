@@ -15,9 +15,8 @@
 import os
 from typing import List
 
-from tensorflow_asr import dataset
-from tensorflow_asr.config import Config
-from tensorflow_asr.featurizers import text_featurizers
+from tensorflow_asr import datasets, tokenizers
+from tensorflow_asr.configs import Config
 from tensorflow_asr.utils import cli_util
 
 
@@ -28,10 +27,10 @@ def main(
     repodir: str = os.path.realpath(os.path.join(os.path.dirname(__file__), "..")),
 ):
     config = Config(config_path, repodir=repodir, datadir=datadir)
-    text_featurizer = text_featurizers.get(config=config)
+    tokenizer = tokenizers.get(config=config)
     for mode in modes:
-        dat = dataset.get(
-            text_featurizer=text_featurizer,
+        dat = datasets.get(
+            tokenizer=tokenizer,
             dataset_config=getattr(config.data_config, f"{mode}_dataset_config"),
             dataset_type="tfrecord",
         )

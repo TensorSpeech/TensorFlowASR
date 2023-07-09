@@ -15,8 +15,8 @@
 import os
 
 from tensorflow_asr import tf  # import to aid logging messages
-from tensorflow_asr.config import Config
-from tensorflow_asr.featurizers import text_featurizers
+from tensorflow_asr import tokenizers
+from tensorflow_asr.configs import Config
 from tensorflow_asr.utils import app_util, cli_util, env_util, file_util
 
 
@@ -32,13 +32,13 @@ def main(
     tf.compat.v1.enable_control_flow_v2()
 
     config = Config(config_path, training=False, repodir=repodir)
-    text_featurizer = text_featurizers.get(config)
+    tokenizer = tokenizers.get(config)
 
     model = tf.keras.models.model_from_config(config.model_config)
     model.make()
     model.load_weights(h5, by_name=file_util.is_hdf5_filepath(h5))
     model.summary()
-    model.text_featurizer = text_featurizer
+    model.tokenizer = tokenizer
 
     app_util.convert_tflite(model=model, output=output)
 

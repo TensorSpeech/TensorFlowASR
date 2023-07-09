@@ -3,8 +3,8 @@ import os
 
 import tensorflow as tf
 
-from tensorflow_asr.config import DecoderConfig
-from tensorflow_asr.featurizers.text_featurizers import WordPieceFeaturizer
+from tensorflow_asr.configs import DecoderConfig
+from tensorflow_asr.tokenizers import WordPieceTokenizer
 from tensorflow_asr.utils import file_util
 
 file_util.ENABLE_PATH_PREPROCESS = False
@@ -20,7 +20,7 @@ text = "a b"
 
 
 def test_wordpiece_featurizer():
-    featurizer = WordPieceFeaturizer(decoder_config=decoder_config)
+    featurizer = WordPieceTokenizer(decoder_config=decoder_config)
     print(featurizer.num_classes)
     print(text)
     indices = featurizer.tokenize(text)

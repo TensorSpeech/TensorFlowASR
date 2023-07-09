@@ -14,6 +14,7 @@ data_config:
     drop_remainder: True
     stage: train
     metadata: {{metadata}}
+    indefinite: True
 
   eval_dataset_config:
     enabled: True
@@ -28,15 +29,18 @@ data_config:
     drop_remainder: True
     stage: eval
     metadata: {{metadata}}
+    indefinite: True
 
   test_dataset_config:
-    enabled: False
+    enabled: True
     sample_rate: 16000
     data_paths:
       - {{datadir}}/test-clean/transcripts.tsv
+      {# - {{datadir}}/test-other/transcripts.tsv #}
     tfrecords_dir: {{datadir}}/tfrecords
     shuffle: False
-    cache: True
+    cache: False
     buffer_size: 100
     drop_remainder: False
     stage: test
+    indefinite: False

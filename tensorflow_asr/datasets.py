@@ -66,8 +66,8 @@ import numpy as np
 import tensorflow as tf
 import tqdm
 
-from tensorflow_asr.config import Config, DatasetConfig
-from tensorflow_asr.featurizers.text_featurizers import TextFeaturizer
+from tensorflow_asr.configs import Config, DatasetConfig
+from tensorflow_asr.tokenizers import Tokenizer
 from tensorflow_asr.utils import data_util, feature_util, file_util, math_util
 
 logger = tf.get_logger()
@@ -81,16 +81,16 @@ class ASR_DATASER_TYPES:
 
 
 def get(
-    text_featurizer: TextFeaturizer,
+    tokenizer: Tokenizer,
     dataset_config: DatasetConfig,
     dataset_type: str,
 ):
     if dataset_type == ASR_DATASER_TYPES.TFRECORD:
-        return ASRTFRecordDataset(text_featurizer=text_featurizer, **vars(dataset_config))
+        return ASRTFRecordDataset(tokenizer=tokenizer, **vars(dataset_config))
     if dataset_type == ASR_DATASER_TYPES.SLICE:
-        return ASRSliceDataset(text_featurizer=text_featurizer, **vars(dataset_config))
+        return ASRSliceDataset(tokenizer=tokenizer, **vars(dataset_config))
     if dataset_type == ASR_DATASER_TYPES.GENERATOR:
-        return ASRDataset(text_featurizer=text_featurizer, **vars(dataset_config))
+        return ASRDataset(tokenizer=tokenizer, **vars(dataset_config))
     raise ValueError(f"dataset_type must in {asdict(ASR_DATASER_TYPES()).values()}")
 
 
@@ -185,7 +185,7 @@ class ASRDataset(BaseDataset):
     def __init__(
         self,
         stage: str,
-        text_featurizer: TextFeaturizer,
+        tokenizer: Tokenizer,
         data_paths: list,
         cache: bool = False,
         shuffle: bool = False,
@@ -210,7 +210,7 @@ class ASRDataset(BaseDataset):
             sample_rate=sample_rate,
         )
         self.entries = []
-        self.text_featurizer = text_featurizer
+        self.tokenizer = tokenizer
         self.max_input_length = None
         self.max_label_length = None
         self.load_metadata()
@@ -225,7 +225,7 @@ class ASRDataset(BaseDataset):
         self.read_entries()
         for _, duration, transcript in tqdm.tqdm(self.entries, desc=f"Computing metadata for entries in {self.stage} dataset"):
             input_length = math_util.get_nsamples(duration, self.sample_rate)
-            label = self.text_featurizer.tokenize(transcript).numpy()
+            label = self.tokenizer.tokenize(transcript).numpy()
             label_length = len(label)
             self.max_input_length = max(self.max_input_length, input_length)
             self.max_label_length = max(self.max_label_length, label_length)
@@ -303,10 +303,10 @@ class ASRDataset(BaseDataset):
         inputs = data_util.read_raw_audio(audio)
         inputs_length = tf.shape(inputs)[0]
 
-        labels = self.text_featurizer.tokenize(transcript)
+        labels = self.tokenizer.tokenize(transcript)
         labels_length = tf.shape(labels, out_type=tf.int32)[0]
 
-        predictions = self.text_featurizer.prepand_blank(labels)
+        predictions = self.tokenizer.prepand_blank(labels)
         predictions_length = tf.shape(predictions, out_type=tf.int32)[0]
 
         return path, inputs, inputs_length, labels, labels_length, predictions, predictions_length
@@ -350,7 +350,7 @@ class ASRDataset(BaseDataset):
                 data_util.create_inputs(
                     inputs=tf.TensorShape([self.max_input_length]),
                     inputs_length=tf.TensorShape([]),
-                    predictions=tf.TensorShape([self.max_label_length + 1]),
+                    predictions=tf.TensorShape([self.max_label_length + 1 if self.max_label_length else None]),
                     predictions_length=tf.TensorShape([]),
                 ),
                 data_util.create_labels(
@@ -364,8 +364,8 @@ class ASRDataset(BaseDataset):
             batch_size=batch_size,
             padded_shapes=padded_shapes,
             padding_values=(
-                data_util.create_inputs(inputs=0.0, inputs_length=0, predictions=self.text_featurizer.blank, predictions_length=0),
-                data_util.create_labels(labels=self.text_featurizer.blank, labels_length=0),
+                data_util.create_inputs(inputs=0.0, inputs_length=0, predictions=self.tokenizer.blank, predictions_length=0),
+                data_util.create_labels(labels=self.tokenizer.blank, labels_length=0),
             ),
             drop_remainder=self.drop_remainder,
         )
@@ -395,7 +395,7 @@ class ASRTFRecordDataset(ASRDataset):
         self,
         data_paths: list,
         tfrecords_dir: str,
-        text_featurizer: TextFeaturizer,
+        tokenizer: Tokenizer,
         stage: str,
         tfrecords_shards: int = TFRECORD_SHARDS,
         cache: bool = False,
@@ -411,7 +411,7 @@ class ASRTFRecordDataset(ASRDataset):
     ):
         super().__init__(
             stage=stage,
-            text_featurizer=text_featurizer,
+            tokenizer=tokenizer,
             data_paths=data_paths,
             cache=cache,
             shuffle=shuffle,
