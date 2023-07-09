@@ -86,7 +86,10 @@ class PredictLogger(tf.keras.callbacks.Callback):
         if logs is None:
             return
 
-        predictions = logs.pop("predictions")
+        predictions = logs.pop("outputs", None)
+        if predictions is None:
+            return
+
         transcripts = self.tokenizer.detokenize(predictions.pop("_tokens"))
         beam_transcripts = self.tokenizer.detokenize(predictions.pop("_beam_tokens"))
         targets = self.tokenizer.detokenize(predictions.pop("_labels"))
