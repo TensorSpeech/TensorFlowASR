@@ -213,7 +213,10 @@ class BaseModel(Model):
             gradients = self.ga.gradients
 
         if self.gradn is not None:
-            gradients = self.gradn(step=self.optimizer.iterations, gradients=gradients)
+            if self.use_ga:
+                gradients = tf.cond(self.ga.is_apply_step, lambda: self.gradn(step=self.optimizer.iterations, gradients=gradients), lambda: gradients)
+            else:
+                gradients = self.gradn(step=self.optimizer.iterations, gradients=gradients)
 
         self.optimizer.apply_gradients(zip(gradients, self.trainable_variables))
 
