@@ -80,7 +80,7 @@ class PredictLogger(tf.keras.callbacks.Callback):
     def on_predict_begin(self, logs=None):
         self.index = 0
         self.output_file = tf.io.gfile.GFile(self.output_file_path, mode="w")
-        self.output_file.write("\t".join(("GROUND_TRUTH", "GREEDY", "BEAM_SEARCH")) + "\n")  # header
+        self.output_file.write("\t".join(("PATH", "GROUND_TRUTH", "GREEDY", "BEAM_SEARCH")) + "\n")  # header
 
     def on_predict_batch_end(self, batch, logs=None):
         if logs is None:
