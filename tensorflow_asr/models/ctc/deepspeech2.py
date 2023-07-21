@@ -305,13 +305,11 @@ class DeepSpeech2Decoder(Layer):
     def __init__(self, vocab_size: int, **kwargs):
         super().__init__(**kwargs)
         self.vocab = tf.keras.layers.Dense(vocab_size, name="logits")
-        self.bn = tf.keras.layers.BatchNormalization(name="bn")
         self._vocab_size = vocab_size
 
     def call(self, inputs, training=False):
         logits, logits_length = inputs
         logits = self.vocab(logits, training=training)
-        logits = self.bn(logits, training=training)
         return logits, logits_length
 
     def compute_output_shape(self, input_shape):
@@ -329,7 +327,7 @@ class DeepSpeech2(CtcModel):
         speech_config: dict,
         conv_type: str = "conv2d",
         conv_kernels: list = [[11, 41], [11, 21], [11, 21]],
-        conv_strides: list = [[2, 2], [1, 2], [1, 2]],
+        conv_strides: list = [[3, 2], [1, 2], [1, 2]],
         conv_filters: list = [32, 32, 96],
         conv_padding: str = "same",
         conv_dropout: float = 0.1,

@@ -186,7 +186,7 @@ class FeatureExtraction(Layer):
 
     def spectrogram(self, signal):
         spectrogram = self.logarithm(self.stft(signal))
-        return spectrogram[:, : self.num_feature_bins]
+        return spectrogram[:, :, : self.num_feature_bins]
 
     def mfcc(self, signal):
         log_mel_spectrogram = self.log_mel_spectrogram(signal)
