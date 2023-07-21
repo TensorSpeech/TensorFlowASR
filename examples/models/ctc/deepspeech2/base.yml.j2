@@ -1,24 +1,27 @@
-{% set modeldir = "E:/Miscellanea/Models/local/transformer-ctc" %}
-{% set datadir = "E:/MLDL/Datasets/ASR/LibriSpeech" %}
-
-{% import "examples/configs/librispeech/wp.yml.j2" as decoder_config with context %}
-{# {% import "examples/configs/librispeech/wp_whitespace.yml.j2" as decoder_config with context %} #}
-{# {% import "examples/configs/librispeech/sp.yml.j2" as decoder_config with context %} #}
-{# {% import "examples/configs/librispeech/char.yml.j2" as decoder_config with context %} #}
-
-speech_config:
-  sample_rate: 16000
-  frame_ms: 25
-  stride_ms: 10
-  num_feature_bins: 80
-  feature_type: log_mel_spectrogram
-
+{% import "examples/configs/librispeech/sentencepiece/sp.yml.j2" as decoder_config with context %}
 {{decoder_config}}
 
 model_config:
   class_name: tensorflow_asr.models.ctc>DeepSpeech2
   config:
     name: deepspeech2
+    speech_config:
+      sample_rate: 16000
+      frame_ms: 25
+      stride_ms: 10
+      num_feature_bins: 128
+      feature_type: spectrogram
+      augmentation_config:
+        feature_augment:
+          time_masking:
+            prob: 1.0
+            num_masks: 5
+            mask_factor: 100
+            p_upperbound: 0.05
+          freq_masking:
+            prob: 1.0
+            num_masks: 1
+            mask_factor: 27
     conv_type: conv2d
     conv_kernels: [[11, 41], [11, 21], [11, 11]]
     conv_strides: [[2, 2], [1, 2], [1, 2]]
@@ -26,6 +29,7 @@ model_config:
     conv_dropout: 0.1
     rnn_nlayers: 5
     rnn_type: lstm
+    rnn_bn_type: bn
     rnn_units: 512
     rnn_bidirectional: True
     rnn_unroll: False
@@ -36,71 +40,17 @@ model_config:
     vocab_size: {{decoder_config.vocabsize}}
 
 learning_config:
-  train_dataset_config:
-    enabled: True
-    sample_rate: 16000
-    augmentation_config:
-      feature_augment:
-        time_masking:
-          prob: 0.5
-          num_masks: 10
-          mask_factor: 100
-          p_upperbound: 0.05
-        freq_masking:
-          prob: 0.5
-          num_masks: 1
-          mask_factor: 27
-    data_paths:
-      - {{datadir}}/train-clean-100/transcripts.tsv
-    tfrecords_dir: {{datadir}}/tfrecords/100h
-    shuffle: True
-    cache: True
-    buffer_size: 100
-    drop_remainder: True
-    stage: train
-    metadata: {{decoder_config.metadata}}
-
-  eval_dataset_config:
-    enabled: True
-    sample_rate: 16000
-    data_paths:
-      - {{datadir}}/dev-clean/transcripts.tsv
-    tfrecords_dir: null
-    shuffle: False
-    cache: True
-    buffer_size: 100
-    drop_remainder: True
-    stage: eval
-    metadata: {{decoder_config.metadata}}
-
-  test_dataset_config:
-    enabled: False
-    sample_rate: 16000
-    data_paths:
-      - {{datadir}}/test-clean/transcripts.tsv
-    tfrecords_dir: null
-    shuffle: False
-    cache: True
-    buffer_size: 100
-    drop_remainder: True
-    stage: test
-
   optimizer_config:
-    class_name: adam
+    class_name: Custom>AdamW
     config:
-      learning_rate:
-        class_name: tensorflow_asr.optimizers.schedules>TransformerSchedule
-        config:
-          dmodel: 512
-          warmup_steps: 10000
-          max_lr: null
-          min_lr: 1e-6
+      learning_rate: 0.001
+      weight_decay: 1e-3
       beta_1: 0.9
       beta_2: 0.98
       epsilon: 1e-9
 
   running_config:
-    batch_size: 2
+    batch_size: 4
     num_epochs: 100
     checkpoint:
       filepath: {{modeldir}}/checkpoints/{epoch:02d}.h5
@@ -114,8 +64,8 @@ learning_config:
     tensorboard:
       log_dir: {{modeldir}}/tensorboard
       histogram_freq: 1
-      write_graph: True
-      write_images: True
+      write_graph: False
+      write_images: False
       update_freq: epoch
-      profile_batch: 2
+      profile_batch: 100
 
