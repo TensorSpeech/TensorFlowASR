@@ -562,6 +562,24 @@ class ConformerEncoder(Layer):
 
         return outputs, outputs_length
 
+    def call_next(self, features, features_length, *args, **kwargs):
+        """
+        Recognize function for encoder network
+
+        Parameters
+        ----------
+        features : tf.Tensor, shape [B, T, F, C]
+        features_length : tf.Tensor, shape [B]
+
+        Returns
+        -------
+        Tuple[tf.Tensor, tf.Tensor, tf.Tensor], shape ([B, T, dmodel], [B], None)
+            Outputs, outputs_length, new_states
+        """
+        with tf.name_scope(f"{self.name}_call_next"):
+            outputs, outputs_length = self.call((features, features_length), training=False)
+            return outputs, outputs_length, None
+
     def compute_output_shape(self, input_shape):
         outputs_shape, outputs_length_shape = self.conv_subsampling.compute_output_shape(input_shape)
         outputs_shape = list(outputs_shape)

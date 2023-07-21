@@ -77,36 +77,80 @@ class CtcModel(BaseModel):
         logits, logits_length = self.decoder((logits, logits_length), training=training)
         return logits, logits_length
 
+    def call_next(
+        self,
+        features,
+        features_length,
+        previous_encoder_states=None,
+        previous_decoder_states=None,
+    ):
+        outputs, outputs_length, next_encoder_states = self.encoder.call_next(features, features_length, previous_encoder_states)
+        outputs, outputs_length, next_decoder_states = self.decoder.call_next(outputs, outputs_length, previous_decoder_states)
+        return outputs, outputs_length, next_encoder_states, next_decoder_states
+
     # -------------------------------- GREEDY -------------------------------------
 
-    def recognize(self, inputs: tf.Tensor, inputs_length: tf.Tensor, **kwargs):
+    def recognize(
+        self,
+        inputs: tf.Tensor,
+        inputs_length: tf.Tensor,
+        previous_encoder_states=None,
+        previous_decoder_states=None,
+        **kwargs,
+    ):
         with tf.name_scope(f"{self.name}_recognize"):
             features, features_length = self.feature_extraction((inputs, inputs_length), training=False)
-            logits, logits_length = self.call_logits(features, features_length, training=False)
+            (
+                outputs,
+                outputs_length,
+                next_encoder_states,
+                next_decoder_states,
+            ) = self.call_next(features, features_length, previous_encoder_states, previous_decoder_states)
             tokens, _ = tf.nn.ctc_greedy_decoder(
-                inputs=tf.transpose(logits, perm=[1, 0, 2]),
-                sequence_length=logits_length,
+                inputs=tf.transpose(outputs, perm=[1, 0, 2]),
+                sequence_length=outputs_length,
                 merge_repeated=True,
                 blank_index=self.blank,
             )
             tokens = tf.reshape(tokens[0].values, tokens[0].dense_shape)
             tokens = tf.cast(tokens, dtype=tf.int32)
-            return tokens
+            return {
+                "tokens": tokens,
+                "next_encoder_states": next_encoder_states,
+                "next_decoder_states": next_decoder_states,
+            }
 
     # -------------------------------- BEAM SEARCH -------------------------------------
 
-    def recognize_beam(self, inputs: tf.Tensor, inputs_length: tf.Tensor, beam_width: int = 10, **kwargs):
+    def recognize_beam(
+        self,
+        inputs: tf.Tensor,
+        inputs_length: tf.Tensor,
+        previous_encoder_states=None,
+        previous_decoder_states=None,
+        beam_width: int = 10,
+        **kwargs,
+    ):
         with tf.name_scope(f"{self.name}_recognize_beam"):
             features, features_length = self.feature_extraction((inputs, inputs_length), training=False)
-            logits, logits_length = self.call_logits(features, features_length, training=False)
+            (
+                outputs,
+                outputs_length,
+                next_encoder_states,
+                next_decoder_states,
+            ) = self.call_next(features, features_length, previous_encoder_states, previous_decoder_states)
             tokens, _ = tf.nn.ctc_beam_search_decoder(
-                inputs=tf.transpose(logits, perm=[1, 0, 2]),
-                sequence_length=logits_length,
+                inputs=tf.transpose(outputs, perm=[1, 0, 2]),
+                sequence_length=outputs_length,
                 beam_width=beam_width,
             )
             tokens = tf.reshape(tokens[0].values, tokens[0].dense_shape)
             tokens = tf.cast(tokens, dtype=tf.int32)
-            return tokens
+            return {
+                "tokens": tokens,
+                "next_encoder_states": next_encoder_states,
+                "next_decoder_states": next_decoder_states,
+            }
 
     # -------------------------------- TFLITE -------------------------------------
 

@@ -237,8 +237,8 @@ class BaseModel(Model):
 
     def predict_step(self, batch):
         inputs, y_true = batch
-        _tokens = self.recognize(**inputs)
-        _beam_tokens = self.recognize_beam(**inputs)
+        _tokens = self.recognize(**inputs)["tokens"]
+        _beam_tokens = self.recognize_beam(**inputs)["tokens"]
         return {
             "_tokens": _tokens,
             "_beam_tokens": _beam_tokens,

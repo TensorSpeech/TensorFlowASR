@@ -23,7 +23,7 @@ DEFAULT_YAML = os.path.join(os.path.abspath(os.path.dirname(__file__)), "config_
 
 from tensorflow_asr.configs import Config
 from tensorflow_asr.features.speech_featurizers import SpeechFeaturizer
-from tensorflow_asr.models.transducer.rnn_transducer import RnnTransducer
+from tensorflow_asr.models.transducer.rnnt import RnnTransducer
 from tensorflow_asr.tokenizers import CharTokenizer
 
 

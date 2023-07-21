@@ -45,7 +45,7 @@ env_util.setup_devices([args.device], cpu=args.cpu)
 
 from tensorflow_asr.configs import Config
 from tensorflow_asr.features.speech_featurizers import SpeechFeaturizer, read_raw_audio
-from tensorflow_asr.models.transducer.rnn_transducer import RnnTransducer
+from tensorflow_asr.models.transducer.rnnt import RnnTransducer
 from tensorflow_asr.tokenizers import CharTokenizer, SentencePieceTokenizer, SubwordFeaturizer
 
 config = Config(args.config)

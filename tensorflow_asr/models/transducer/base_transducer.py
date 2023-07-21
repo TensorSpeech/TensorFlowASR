@@ -122,7 +122,7 @@ class TransducerPrediction(Layer):
                 outputs = self.projections[i](outputs, training=training)
         return outputs
 
-    def call_next(self, inputs, states, tflite: bool = False):
+    def call_next(self, inputs, previous_decoder_states, tflite: bool = False):
         """
         Recognize function for prediction network from the previous predicted tokens
 
@@ -139,14 +139,14 @@ class TransducerPrediction(Layer):
             Outputs, new states
         """
         with tf.name_scope(f"{self.name}_call_next"):
-            states = tf.transpose(states, perm=[1, 2, 0, 3])
+            previous_decoder_states = tf.transpose(previous_decoder_states, perm=[1, 2, 0, 3])
             if tflite and self.label_encoder_mode == "embedding":
                 outputs = self.label_encoder.recognize_tflite(inputs)
             else:
                 outputs = self.label_encoder(inputs, training=False)
             new_states = []
             for i, rnn in enumerate(self.rnns):
-                outputs, *_states = rnn(outputs, training=False, initial_state=tf.unstack(states[i], axis=0))
+                outputs, *_states = rnn(outputs, training=False, initial_state=tf.unstack(previous_decoder_states[i], axis=0))
                 new_states.append(tf.stack(_states))
                 if self.lns[i] is not None:
                     outputs = self.lns[i](outputs, training=False)
@@ -380,7 +380,13 @@ class Transducer(BaseModel):
         logits = self.joint_net((enc, pred), training=training)
         return logits, logits_length
 
-    def call_next(self, current_frames: tf.Tensor, previous_tokens: tf.Tensor, previous_states: tf.Tensor, tflite: bool = False):
+    def call_next(
+        self,
+        current_frames: tf.Tensor,
+        previous_tokens: tf.Tensor,
+        previous_decoder_states: tf.Tensor,
+        tflite: bool = False,
+    ):
         """
         Decode current frame given previous predicted token and states
 
@@ -401,14 +407,22 @@ class Transducer(BaseModel):
             Output of joint network of the current frame, new states of prediction network
         """
         with tf.name_scope(f"{self.name}_call_next"):
-            y, new_states = self.predict_net.call_next(previous_tokens, previous_states, tflite=tflite)
+            y, new_states = self.predict_net.call_next(previous_tokens, previous_decoder_states, tflite=tflite)
             ytu = self.joint_net([current_frames, y], training=False)
             ytu = tf.nn.log_softmax(ytu)
             return ytu, new_states
 
     # -------------------------------- GREEDY -------------------------------------
 
-    def recognize(self, inputs: tf.Tensor, inputs_length: tf.Tensor, tflite: bool = False, **kwargs):
+    def recognize(
+        self,
+        inputs: tf.Tensor,
+        inputs_length: tf.Tensor,
+        previous_encoder_states=None,
+        previous_decoder_states=None,
+        tflite: bool = False,
+        **kwargs,
+    ):
         """
         Recognize greedy from input signals
 
@@ -418,33 +432,41 @@ class Transducer(BaseModel):
             Input signals
         inputs_length : tf.Tensor, shape [B]
             Input signals lenghts
+        previous_encoder_states: tf.Tensor, shape [B, nlayers, nstates, rnn_units] or None
+        previous_decoder_states: tf.Tensor, shape [B, num_rnns, nstates, rnn_units] or None
         tflite : bool, optional
             Enable tflite, by default False
 
         Returns
         -------
-        tf.Tensor, shape [B, frames * 2 + 1]
-            Output tokens, will be feed to text_featurizer.detokenize or text_featurizer.detokenize_unicode_points
+        dict of
+            (
+                tokens, will be feed to text_featurizer.detokenize or text_featurizer.detokenize_unicode_points,
+                next_encoder_states, if encoder does not have states, returns None, will be used to predict next chunk of audio,
+                next_tokens, will be used to predict next chunk of audio,
+                next_decoder_states, next states of predict_net, will be used to predict next chunk of audio,
+            )
         """
         with tf.name_scope(f"{self.name}_recognize"):
             features, features_length = self.feature_extraction((inputs, inputs_length), training=False)
-            encoded, _ = self.encoder((features, features_length), training=False)
+            encoded, encoded_length, next_encoder_states = self.encoder.call_next(features, features_length, previous_encoder_states)
 
-            batch_size, nframes, _ = shape_util.shape_list(encoded)
+            nframes = tf.expand_dims(encoded_length, axis=-1)  # [B, 1]
+            batch_size, max_frames, _ = shape_util.shape_list(encoded)
             # The current indices of the output of encoder, shape [B, 1]
             frame_indices = tf.zeros([batch_size, 1], dtype=tf.int32, name="frame_indices")
             # Previous predicted tokens, initially are blanks, shape [B, 1]
             previous_tokens = tf.ones([batch_size, 1], dtype=tf.int32, name="previous_tokens") * self.blank
             # Previous states of the prediction network, initially are zeros, shape [B, num_rnns, nstates, rnn_units]
-            previous_states = self.predict_net.get_initial_state(batch_size)
+            previous_decoder_states = previous_decoder_states or self.predict_net.get_initial_state(batch_size)
             # Assumption that number of tokens can not exceed (2 * the size of output of encoder + 1), this is mostly for static runs like TPU or TFLite # pylint: disable=line-too-long
-            max_tokens = nframes * 2 + 1
+            max_tokens = max_frames * 2 + 1
             # All of the tokens that are getting recognized, initially are blanks, shape [B, nframes * 2 + 1]
             tokens = tf.ones([batch_size, max_tokens], dtype=tf.int32, name="tokens") * self.blank
-            # The current indices of the token that are currently being recognized, shape [B, 1]
-            tokens_indices = tf.zeros([batch_size, 1], dtype=tf.int32, name="tokens_indices")
+            # The current indices of the token that are currently being recognized, shape [B, 1], the tokens indices are started with 1 so that any blank token recognized got updated to index 0 to avoid affecting results
+            tokens_indices = tf.ones([batch_size, 1], dtype=tf.int32, name="tokens_indices")
 
-            def cond(_frame_indices, _previous_tokens, _previous_states, _tokens, _tokens_indices):
+            def cond(_frame_indices, _previous_tokens, _previous_decoder_states, _tokens, _tokens_indices):
                 return tf.logical_not(  # Reversed so that the loop check and continue
                     # One of the following condition met will terminate the loop
                     tf.logical_or(
@@ -455,37 +477,49 @@ class Transducer(BaseModel):
                     )
                 )
 
-            def body(_frame_indices, _previous_tokens, _previous_states, _tokens, _tokens_indices):
-                _current_frames = tf.expand_dims(tf.gather_nd(encoded, _frame_indices, batch_dims=1), axis=1)  # [B, 1, E]
-                _log_softmax, _states = self.call_next(_current_frames, _previous_tokens, _previous_states, tflite=tflite)
+            def body(_frame_indices, _previous_tokens, _previous_decoder_states, _tokens, _tokens_indices):
+                _current_frames = tf.expand_dims(tf.gather_nd(encoded, tf.minimum(_frame_indices, nframes - 1), batch_dims=1), axis=1)  # [B, 1, E]
+                _log_softmax, _states = self.call_next(_current_frames, _previous_tokens, _previous_decoder_states, tflite=tflite)
                 _current_tokens = tf.reshape(tf.argmax(_log_softmax, axis=-1, output_type=tf.int32), [batch_size, 1])  # [B, 1, 1] -> [B, 1]
-                # fmt: off
-                _equal_blank = tf.equal(_current_tokens, self.blank)
+                # conditions, blanks are ignored
+                _equal_blank = tf.equal(_current_tokens, self.blank)  # [B, 1]
+                # if the token index >= max tokens, it's already finished, set to blank to ignore
+                _equal_blank = tf.logical_or(_equal_blank, tf.greater_equal(_tokens_indices, max_tokens))
+                # if the frame index > nframes, it's already done, set to blank to ignore
+                _equal_blank = tf.logical_or(_equal_blank, tf.greater(_frame_indices, nframes))
                 # update results
-                _update_tokens = tf.reshape(tf.where(_equal_blank, _previous_tokens, _current_tokens), [batch_size])  # blank then keep prev tokens, else next tokens # pylint: disable=line-too-long
-                _tokens_indices = tf.where(_equal_blank, _tokens_indices, tf.minimum(tf.add(_tokens_indices, 1), max_tokens - 1)) # pylint: disable=line-too-long
+                _update_tokens = tf.reshape(tf.where(_equal_blank, self.blank, _current_tokens), [batch_size])  # [B]
+                _update_tokens_indices = tf.where(
+                    _equal_blank, 0, tf.minimum(tf.add(_tokens_indices, 1), max_tokens - 1)
+                )  # blanks are getting updated at index 0 to avoid affecting results
                 _tokens = tf.tensor_scatter_nd_update(
                     tensor=_tokens,
-                    indices=tf.concat([tf.expand_dims(tf.range(batch_size, dtype=tf.int32), axis=-1), _tokens_indices], -1),
-                    updates=_update_tokens,
+                    indices=tf.concat([tf.expand_dims(tf.range(batch_size, dtype=tf.int32), axis=-1), _update_tokens_indices], -1),  # [B, 2]
+                    updates=_update_tokens,  # [B]
                 )
+                _tokens_indices = tf.where(_equal_blank, _tokens_indices, tf.minimum(tf.add(_tokens_indices, 1), max_tokens - 1))
                 # update states
-                _frame_indices = tf.where(_equal_blank, tf.minimum(tf.add(_frame_indices, 1), nframes - 1), _frame_indices)  # blank then next frames, else current frames # pylint: disable=line-too-long
+                _frame_indices = tf.where(_equal_blank, tf.add(_frame_indices, 1), _frame_indices)  # blank then next frames, else current frames
                 _previous_tokens = tf.where(_equal_blank, _previous_tokens, _current_tokens)  # blank then keep prev tokens, else next tokens
-                _previous_states = tf.where(tf.reshape(_equal_blank, [batch_size, 1, 1, 1]), _previous_states, _states) # blank then keep prev states, else next states # pylint: disable=line-too-long
-                # fmt: on
-                # return
-                return _frame_indices, _previous_tokens, _previous_states, _tokens, _tokens_indices
+                _previous_decoder_states = tf.where(
+                    tf.reshape(_equal_blank, [batch_size, 1, 1, 1]), _previous_decoder_states, _states
+                )  # blank then keep prev states, else next states # pylint: disable=line-too-long
+                return _frame_indices, _previous_tokens, _previous_decoder_states, _tokens, _tokens_indices
 
             (
                 frame_indices,
-                previous_tokens,
-                previous_states,
+                next_tokens,
+                next_decoder_states,
                 tokens,
                 tokens_indices,
-            ) = tf.while_loop(cond, body, loop_vars=(frame_indices, previous_tokens, previous_states, tokens, tokens_indices))
+            ) = tf.while_loop(cond, body, loop_vars=(frame_indices, previous_tokens, previous_decoder_states, tokens, tokens_indices))
 
-            return tokens
+            return {
+                "tokens": tokens,
+                "next_encoder_states": next_encoder_states,
+                "next_tokens": next_tokens,
+                "next_decoder_states": next_decoder_states,
+            }
 
     # def recognize_tflite_with_timestamp(self, signal, predicted, states):
     #     features = self.speech_featurizer.tf_extract(signal)
@@ -614,8 +648,16 @@ class Transducer(BaseModel):
 
     # -------------------------------- BEAM SEARCH -------------------------------------
 
-    def recognize_beam(self, inputs: tf.Tensor, inputs_length: tf.Tensor, tflite: bool = False, **kwargs):
-        return self.recognize(inputs, inputs_length, tflite=tflite)
+    def recognize_beam(
+        self,
+        inputs: tf.Tensor,
+        inputs_length: tf.Tensor,
+        previous_encoder_states=None,
+        previous_decoder_states=None,
+        tflite: bool = False,
+        **kwargs,
+    ):
+        return self.recognize(inputs, inputs_length, previous_encoder_states, previous_decoder_states, tflite=tflite)
 
     # def _perform_beam_search_batch(
     #     self,
