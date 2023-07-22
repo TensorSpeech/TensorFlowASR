@@ -9,23 +9,23 @@ model_config:
       sample_rate: 16000
       frame_ms: 25
       stride_ms: 10
-      num_feature_bins: 160
+      num_feature_bins: 128
       feature_type: spectrogram
     conv_type: conv2d
     conv_kernels: [[11, 41], [11, 21]]
-    conv_strides: [[2, 2], [1, 2]]
+    conv_strides: [[3, 2], [1, 2]]
     conv_filters: [32, 32]
     conv_dropout: 0.1
     rnn_nlayers: 5
-    rnn_type: gru
+    rnn_type: lstm
     rnn_bn_type: bn
-    rnn_units: 768
+    rnn_units: 512
     rnn_bidirectional: True
     rnn_unroll: False
     rnn_rowconv: 0
     rnn_dropout: 0.1
     fc_nlayers: 1
-    fc_units: 1536
+    fc_units: 1024
     fc_dropout: 0.1
     blank: 0
     vocab_size: {{decoder_config.vocabsize}}

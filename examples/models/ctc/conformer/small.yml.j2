@@ -1,37 +1,42 @@
-{% set modeldir = "E:/Miscellanea/Models/local/conformer" %}
-{% set datadir = "E:/MLDL/Datasets/ASR/LibriSpeech" %}
-
-{# {% import "examples/configs/librispeech/wp.yml.j2" as decoder_config with context %} #}
-{# {% import "examples/configs/librispeech/wp_whitespace.yml.j2" as decoder_config with context %} #}
-{% import repodir ~ "examples/configs/librispeech/sp.yml.j2" as  with context %}
-{# {% import "examples/configs/librispeech/char.yml.j2" as decoder_config with context %} #}
-
-
-speech_config:
-  sample_rate: 16000
-  frame_ms: 25
-  stride_ms: 10
-  num_feature_bins: 80
-  feature_type: log_mel_spectrogram
-
+{% import "examples/configs/librispeech/sentencepiece/sp.yml.j2" as decoder_config with context %}
 {{decoder_config}}
 
 model_config:
   class_name: tensorflow_asr.models.ctc>Conformer
   config:
     name: conformer
+    speech_config:
+      sample_rate: 16000
+      frame_ms: 25
+      stride_ms: 10
+      num_feature_bins: 80
+      feature_type: log_mel_spectrogram
+      augmentation_config:
+        feature_augment:
+          time_masking:
+            prob: 1.0
+            num_masks: 5
+            mask_factor: 100
+            p_upperbound: 0.05
+          freq_masking:
+            prob: 1.0
+            num_masks: 1
+            mask_factor: 27
     encoder_subsampling:
       type: conv2d
-      nlayers: 2
       filters: 144
+      nlayers: 2
       kernel_size: 3
       strides: 2
       padding: causal
       norm: none
       activation: relu
+    encoder_ffm_residual_factor: 0.5
+    encoder_mhsam_residual_factor: 1.0
+    encoder_convm_residual_factor: 1.0
     encoder_dmodel: 144
-    encoder_num_blocks: 1
-    encoder_head_size: 36
+    encoder_num_blocks: 16
+    encoder_head_size: 36 # == dmodel // num_heads
     encoder_num_heads: 4
     encoder_mha_type: relmha
     encoder_interleave_relpe: True
@@ -40,67 +45,13 @@ model_config:
     encoder_kernel_size: 32
     encoder_dropout: 0.1
     encoder_padding: causal
-    encoder_ffm_residual_factor: 0.5
-    encoder_mhsam_residual_factor: 1.0
-    encoder_convm_residual_factor: 1.0
-    encoder_module_norm_position: pre
-    encoder_block_norm_position: post
-    encoder_memory_length: 512
+    encoder_memory_length: null
+    blank: 0
     vocab_size: {{decoder_config.vocabsize}}
+    kernel_regularizer: null
+    bias_regularizer: null
 
 learning_config:
-  train_dataset_config:
-    enabled: True
-    sample_rate: 16000
-    augmentation_config:
-      feature_augment:
-        time_masking:
-          prob: 1.0
-          num_masks: 5
-          mask_factor: 100
-          p_upperbound: 0.05
-        freq_masking:
-          prob: 1.0
-          num_masks: 1
-          mask_factor: 27
-    data_paths:
-      - {{datadir}}/train-clean-100/transcripts.tsv
-      - {{datadir}}/train-clean-360/transcripts.tsv
-      - {{datadir}}/train-other-500/transcripts.tsv
-    tfrecords_dir: null
-    shuffle: True
-    cache: True
-    buffer_size: 1000
-    drop_remainder: False
-    stage: train
-    metadata: {{decoder_config.metadata}}
-
-  eval_dataset_config:
-    enabled: True
-    sample_rate: 16000
-    data_paths:
-      - {{datadir}}/dev-clean/transcripts.tsv
-      - {{datadir}}/dev-other/transcripts.tsv
-    tfrecords_dir: null
-    shuffle: False
-    cache: True
-    buffer_size: 1000
-    drop_remainder: False
-    stage: eval
-    metadata: {{decoder_config.metadata}}
-
-  test_dataset_config:
-    enabled: False
-    sample_rate: 16000
-    data_paths:
-      - {{datadir}}/test-clean/transcripts.tsv
-    tfrecords_dir: null
-    shuffle: False
-    cache: True
-    buffer_size: 100
-    drop_remainder: False
-    stage: test
-
   optimizer_config:
     class_name: Custom>AdamW
     config:
@@ -109,15 +60,24 @@ learning_config:
         config:
           dmodel: 144
           warmup_steps: 10000
-          max_lr: 0.00035
+          max_lr: null
           min_lr: 1e-6
-      weight_decay: 0.0
+      weight_decay: 1e-3
       beta_1: 0.9
       beta_2: 0.98
       epsilon: 1e-9
+  
+  gwn_config: null
+
+  gradn_config:
+    class_name: tensorflow_asr.optimizers.regularizers>TimeDependentGaussianGradientNoise
+    config:
+      mean: 0.0
+      eta: 1.0
+      gamma: 0.55
 
   running_config:
-    batch_size: 2
+    batch_size: 4
     num_epochs: 100
     checkpoint:
       filepath: {{modeldir}}/checkpoints/{epoch:02d}.h5
@@ -131,16 +91,7 @@ learning_config:
     tensorboard:
       log_dir: {{modeldir}}/tensorboard
       histogram_freq: 1
-      write_graph: True
-      write_images: True
+      write_graph: False
+      write_images: False
       update_freq: epoch
       profile_batch: 100
-    early_stopping:
-      monitor: val_loss
-      min_delta: 0
-      patience: 1
-      verbose: 0
-      mode: min
-      baseline: null
-      restore_best_weights: True
-      start_from_epoch: 10
