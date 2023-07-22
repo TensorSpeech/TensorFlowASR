@@ -12,9 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import tensorflow as tf
-from keras.utils import conv_utils
 from tensorflow.python.ops import nn_ops
 
+try:
+    from keras.utils import conv_utils
+except ImportError:
+    from keras.src.utils import conv_utils
 
 class RowConv1D(tf.keras.layers.Conv1D):
     def __init__(
