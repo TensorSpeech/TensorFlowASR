@@ -37,3 +37,8 @@ class Reshape(Layer):
     def compute_output_shape(self, input_shape):
         b, h, w, d = input_shape
         return (b, h, w * d)
+
+
+class Identity(Layer):
+    def call(self, inputs):
+        return inputs

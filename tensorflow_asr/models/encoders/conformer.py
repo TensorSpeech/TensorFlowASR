@@ -16,7 +16,7 @@
 import tensorflow as tf
 
 from tensorflow_asr.models.activations.glu import GLU
-from tensorflow_asr.models.base_layer import Layer
+from tensorflow_asr.models.base_layer import Identity, Layer
 
 # from tensorflow_asr.models.base_model import BaseModelLayer as Layer
 from tensorflow_asr.models.layers.convolution import Conv1D, DepthwiseConv1D
@@ -63,7 +63,7 @@ class FFModule(Layer):
         self.pre_norm = (
             tf.keras.layers.LayerNormalization(name="ln", gamma_regularizer=kernel_regularizer, beta_regularizer=kernel_regularizer)
             if norm_position == "pre"
-            else tf.keras.layers.Identity(name="preiden" if norm_position == "none" else "iden")
+            else Identity(name="preiden" if norm_position == "none" else "iden")
         )
         self.ffn1 = tf.keras.layers.Dense(
             units=scale_factor * input_dim,
@@ -83,7 +83,7 @@ class FFModule(Layer):
         self.post_norm = (
             tf.keras.layers.LayerNormalization(name="ln", gamma_regularizer=kernel_regularizer, beta_regularizer=kernel_regularizer)
             if norm_position == "post"
-            else tf.keras.layers.Identity(name="postiden" if norm_position == "none" else "iden")
+            else Identity(name="postiden" if norm_position == "none" else "iden")
         )
         self.residual = Residual(factor=residual_factor, regularizer=bias_regularizer, name="residual")
 
@@ -133,7 +133,7 @@ class MHSAModule(Layer):
         self.pre_norm = (
             tf.keras.layers.LayerNormalization(name="ln", gamma_regularizer=kernel_regularizer, beta_regularizer=kernel_regularizer)
             if norm_position == "pre"
-            else tf.keras.layers.Identity(name="preiden" if norm_position == "none" else "iden")
+            else Identity(name="preiden" if norm_position == "none" else "iden")
         )
         if mha_type == "relmha":
             self.mha = MultiHeadRelativeAttention(
@@ -159,7 +159,7 @@ class MHSAModule(Layer):
         self.post_norm = (
             tf.keras.layers.LayerNormalization(name="ln", gamma_regularizer=kernel_regularizer, beta_regularizer=kernel_regularizer)
             if norm_position == "post"
-            else tf.keras.layers.Identity(name="postiden" if norm_position == "none" else "iden")
+            else Identity(name="postiden" if norm_position == "none" else "iden")
         )
         self.residual = Residual(factor=residual_factor, regularizer=bias_regularizer, name="residual")
 
@@ -231,7 +231,7 @@ class ConvModule(Layer):
         self.pre_norm = (
             tf.keras.layers.LayerNormalization(name="ln", gamma_regularizer=kernel_regularizer, beta_regularizer=kernel_regularizer)
             if norm_position == "pre"
-            else tf.keras.layers.Identity(name="preiden" if norm_position == "none" else "iden")
+            else Identity(name="preiden" if norm_position == "none" else "iden")
         )
         self.pw_conv_1 = Conv1D(
             filters=scale_factor * input_dim,
@@ -280,7 +280,7 @@ class ConvModule(Layer):
         self.post_norm = (
             tf.keras.layers.LayerNormalization(name="ln", gamma_regularizer=kernel_regularizer, beta_regularizer=kernel_regularizer)
             if norm_position == "post"
-            else tf.keras.layers.Identity(name="postiden" if norm_position == "none" else "iden")
+            else Identity(name="postiden" if norm_position == "none" else "iden")
         )
         self.residual = Residual(factor=residual_factor, regularizer=bias_regularizer, name="residual")
 
@@ -336,7 +336,7 @@ class ConformerBlock(Layer):
         self.pre_norm = (
             tf.keras.layers.LayerNormalization(name="ln", gamma_regularizer=kernel_regularizer, beta_regularizer=kernel_regularizer)
             if block_norm_position == "pre"
-            else tf.keras.layers.Identity(name="preiden" if block_norm_position == "none" else "iden")
+            else Identity(name="preiden" if block_norm_position == "none" else "iden")
         )
         self.ffm1 = FFModule(
             input_dim=input_dim,
@@ -387,7 +387,7 @@ class ConformerBlock(Layer):
         self.post_norm = (
             tf.keras.layers.LayerNormalization(name="ln", gamma_regularizer=kernel_regularizer, beta_regularizer=kernel_regularizer)
             if block_norm_position == "post"
-            else tf.keras.layers.Identity(name="postiden" if block_norm_position == "none" else "iden")
+            else Identity(name="postiden" if block_norm_position == "none" else "iden")
         )
 
     def call(
