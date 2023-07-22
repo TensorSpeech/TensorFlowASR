@@ -13,7 +13,7 @@ model_config:
       feature_type: spectrogram
     conv_type: conv2d
     conv_kernels: [[11, 41], [11, 21]]
-    conv_strides: [[3, 2], [1, 2]]
+    conv_strides: [[3, 2], [2, 2]]
     conv_filters: [32, 32]
     conv_dropout: 0.1
     rnn_nlayers: 5
@@ -41,8 +41,8 @@ learning_config:
       epsilon: 1e-9
 
   running_config:
-    batch_size: 2
-    num_epochs: 100
+    batch_size: 8
+    num_epochs: 300
     checkpoint:
       filepath: {{modeldir}}/checkpoints/{epoch:02d}.h5
       save_best_only: False

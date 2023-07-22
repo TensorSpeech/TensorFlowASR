@@ -18,7 +18,6 @@ black==23.3.0
 pylint==2.17.4
 matplotlib==3.7.1
 pydot==1.4.2
-netron==6.9.2
 graphviz==0.20.1
 
 # extra=tf2.8
