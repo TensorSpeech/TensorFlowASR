@@ -12,12 +12,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import tensorflow as tf
-from tensorflow.python.ops import nn_ops
+from tensorflow.python.ops import nn_ops  # pylint: disable = no-name-in-module
 
 try:
     from keras.utils import conv_utils
 except ImportError:
     from keras.src.utils import conv_utils
+
 
 class RowConv1D(tf.keras.layers.Conv1D):
     def __init__(

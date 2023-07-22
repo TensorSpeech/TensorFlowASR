@@ -6,7 +6,7 @@ os.environ["TF_CPP_MIN_LOG_LEVEL"] = os.environ.get("TF_CPP_MIN_LOG_LEVEL", "2")
 os.environ["TF_FORCE_GPU_ALLOW_GROWTH"] = os.environ.get("TF_FORCE_GPU_ALLOW_GROWTH", "true")
 
 import tensorflow as tf
-from tensorflow.python.util import deprecation
+from tensorflow.python.util import deprecation  # pylint: disable = no-name-in-module
 
 # might cause performance penalty if ops fallback to cpu, see https://cloud.google.com/tpu/docs/tensorflow-ops
 tf.config.set_soft_device_placement(False)
