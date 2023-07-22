@@ -263,9 +263,7 @@ class ConvModule(Layer):
                 kernel_regularizer=kernel_regularizer,
                 bias_regularizer=bias_regularizer,
             )
-        self.bn = tf.keras.layers.BatchNormalization(
-            name="bn", gamma_regularizer=kernel_regularizer, beta_regularizer=bias_regularizer, synchronized=True
-        )
+        self.bn = tf.keras.layers.BatchNormalization(name="bn", gamma_regularizer=kernel_regularizer, beta_regularizer=bias_regularizer)
         self.swish = tf.keras.layers.Activation(tf.nn.swish, name="swish")
         self.pw_conv_2 = Conv1D(
             filters=input_dim,
