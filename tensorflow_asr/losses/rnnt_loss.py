@@ -222,7 +222,7 @@ def backward_dp(
 
         beta_next = reduce_logsumexp(tf.stack([beta_b, beta_t], axis=0), axis=0)
         masked_beta_next = nan_to_zero(beta_next * tf.expand_dims(mask_s, axis=1)) + nan_to_zero(x * tf.expand_dims((1.0 - mask_s), axis=1))
-        return masked_beta_next
+        return tf.ensure_shape(masked_beta_next, x.shape)
 
     # Initial beta for batches.
     initial_beta_mask = tf.one_hot(logit_length - 1, depth=input_max_len + 1)

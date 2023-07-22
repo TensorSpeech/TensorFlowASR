@@ -19,26 +19,28 @@ from tensorflow_asr.models.layers.convolution import Conv1D, Conv2D
 from tensorflow_asr.utils import math_util, shape_util
 
 
-class Subsampling(Layer):
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
-        self.time_reduction_factor = 1
+class TimeReduction(Layer):
+    def __init__(self, factor: int, name: str = "TimeReduction", **kwargs):
+        super().__init__(name=name, **kwargs)
+        self.time_reduction_factor = factor
+
+    def padding(self, time):
+        new_time = tf.math.ceil(time / self.time_reduction_factor) * self.time_reduction_factor
+        return tf.cast(new_time, dtype=tf.int32) - time
 
     def call(self, inputs):
         outputs, outputs_length = inputs
-        outputs = self._create_mask(outputs, outputs_length)
-        outputs, outputs_length = self._update_mask_and_input_length(outputs, outputs_length)
+        shape = shape_util.shape_list(outputs)
+        outputs = tf.pad(outputs, [[0, 0], [0, self.padding(shape[1])], [0, 0]])
+        outputs = tf.reshape(outputs, [shape[0], -1, shape[-1] * self.time_reduction_factor])
         return outputs, outputs_length
 
-    def _create_mask(self, inputs, inputs_length):
-        mask = getattr(inputs, "_keras_mask", None)
-        if mask is None:
-            mask = tf.sequence_mask(inputs_length, maxlen=tf.shape(inputs)[1], dtype=tf.bool)
-            inputs._keras_mask = mask  # pylint: disable=protected-access
-        return inputs
-
-    def _update_mask_and_input_length(self, inputs, inputs_length):
-        raise NotImplementedError()
+    def compute_mask(self, inputs, mask=None):
+        outputs, outputs_length = inputs
+        maxlen = tf.shape(outputs)[1]
+        maxlen, outputs_length = [math_util.get_reduced_length(length, self.time_reduction_factor) for length in (maxlen, outputs_length)]
+        mask = tf.sequence_mask(outputs_length, maxlen=maxlen, dtype=tf.bool)
+        return mask, None
 
     def compute_output_shape(self, input_shape):
         inputs_shape, inputs_length_shape = input_shape
@@ -48,31 +50,7 @@ class Subsampling(Layer):
         return inputs_shape, inputs_length_shape
 
 
-class TimeReduction(Subsampling):
-    def __init__(self, factor: int, name: str = "TimeReduction", **kwargs):
-        super().__init__(name=name, **kwargs)
-        self.time_reduction_factor = factor
-
-    def padding(self, time):
-        new_time = tf.math.ceil(time / self.time_reduction_factor) * self.time_reduction_factor
-        return tf.cast(new_time, dtype=tf.int32) - time
-
-    def _update_mask_and_input_length(self, inputs, inputs_length):
-        outputs_length = math_util.get_reduced_length(inputs_length, self.time_reduction_factor)
-        outputs = math_util.apply_mask(inputs, mask=tf.sequence_mask(outputs_length, maxlen=tf.shape(inputs)[1], dtype=tf.bool))
-        return outputs, outputs_length
-
-    def call(self, inputs):
-        outputs, outputs_length = inputs
-        outputs = self._create_mask(outputs, outputs_length)
-        shape = shape_util.shape_list(outputs)
-        outputs = tf.pad(outputs, [[0, 0], [0, self.padding(shape[1])], [0, 0]])
-        outputs = tf.reshape(outputs, [shape[0], -1, shape[-1] * self.time_reduction_factor])
-        outputs, outputs_length = super().call([outputs, outputs_length])
-        return outputs, outputs_length
-
-
-class VggSubsampling(Subsampling):
+class VggSubsampling(Layer):
     def __init__(
         self,
         filters: tuple or list = (32, 64),
@@ -131,25 +109,8 @@ class VggSubsampling(Subsampling):
         self.maxpool2 = tf.keras.layers.MaxPool2D(pool_size=pool_size, strides=strides, padding=padding, name="maxpool_2")
         self.time_reduction_factor = self.maxpool1.pool_size[0] * self.maxpool2.pool_size[0]
 
-    def _update_mask_and_input_length(self, inputs, inputs_length):
-        outputs_length = math_util.conv_output_length(
-            inputs_length,
-            self.maxpool1.pool_size[0],
-            padding=self.maxpool1.padding,
-            stride=self.maxpool1.strides[0],
-        )
-        outputs_length = math_util.conv_output_length(
-            outputs_length,
-            self.maxpool2.pool_size[0],
-            padding=self.maxpool2.padding,
-            stride=self.maxpool2.strides[0],
-        )
-        outputs = math_util.apply_mask(inputs, mask=tf.sequence_mask(outputs_length, maxlen=tf.shape(inputs)[1], dtype=tf.bool))
-        return outputs, outputs_length
-
     def call(self, inputs, training=False):
-        inputs, inputs_length = inputs
-        outputs = self._create_mask(inputs, inputs_length)
+        outputs, outputs_length = inputs
 
         outputs = self.conv1(outputs, training=training)
         outputs = self.conv2(outputs, training=training)
@@ -160,8 +121,18 @@ class VggSubsampling(Subsampling):
         outputs = self.maxpool2(outputs, training=training)
 
         outputs = math_util.merge_two_last_dims(outputs)
-        outputs, outputs_length = super().call([outputs, inputs_length])
         return outputs, outputs_length
+
+    def compute_mask(self, inputs, mask=None):
+        outputs, outputs_length = inputs
+        maxlen = tf.shape(outputs)[1]
+        for pool in (self.maxpool1, self.maxpool2):
+            maxlen, outputs_length = [
+                math_util.conv_output_length(length, pool.pool_size[0], padding=pool.padding, stride=pool.strides[0])
+                for length in (maxlen, outputs_length)
+            ]
+        mask = tf.sequence_mask(outputs_length, maxlen=maxlen, dtype=tf.bool)
+        return mask, None
 
     def compute_output_shape(self, input_shape):
         inputs_shape, inputs_length_shape = input_shape
@@ -175,7 +146,7 @@ class VggSubsampling(Subsampling):
         return outputs_shape, inputs_length_shape
 
 
-class Conv2dSubsampling(Subsampling):
+class Conv2dSubsampling(Layer):
     def __init__(
         self,
         nlayers: int,
@@ -226,26 +197,31 @@ class Conv2dSubsampling(Subsampling):
             self.convs.append(subblock)
             self.time_reduction_factor *= subblock.layers[0].strides[0]
 
-    def _update_mask_and_input_length(self, inputs, inputs_length):
-        outputs_length = inputs_length
+    def call(self, inputs, training=False):
+        outputs, outputs_length = inputs
         for block in self.convs:
+            outputs = block(outputs, training=training)
             outputs_length = math_util.conv_output_length(
                 outputs_length,
                 filter_size=block.layers[0].kernel_size[0],
                 padding=block.layers[0].padding,
                 stride=block.layers[0].strides[0],
             )
-        outputs = math_util.apply_mask(inputs, mask=tf.sequence_mask(outputs_length, maxlen=tf.shape(inputs)[1], dtype=tf.bool))
+        outputs = math_util.merge_two_last_dims(outputs)
         return outputs, outputs_length
 
-    def call(self, inputs, training=False):
-        inputs, inputs_length = inputs
-        outputs = self._create_mask(inputs, inputs_length)
+    def compute_mask(self, inputs, mask=None):
+        outputs, outputs_length = inputs
+        maxlen = tf.shape(outputs)[1]
         for block in self.convs:
-            outputs = block(outputs, training=training)
-        outputs = math_util.merge_two_last_dims(outputs)
-        outputs, outputs_length = super().call([outputs, inputs_length])
-        return outputs, outputs_length
+            maxlen, outputs_length = [
+                math_util.conv_output_length(
+                    length, filter_size=block.layers[0].kernel_size[0], padding=block.layers[0].padding, stride=block.layers[0].strides[0]
+                )
+                for length in (maxlen, outputs_length)
+            ]
+        mask = tf.sequence_mask(outputs_length, maxlen=maxlen, dtype=tf.bool)
+        return mask, None
 
     def compute_output_shape(self, input_shape):
         outputs_shape, inputs_length_shape = input_shape
@@ -255,7 +231,7 @@ class Conv2dSubsampling(Subsampling):
         return tuple(outputs_shape), inputs_length_shape
 
 
-class Conv1dSubsampling(Subsampling):
+class Conv1dSubsampling(Layer):
     def __init__(
         self,
         nlayers: int,
@@ -306,26 +282,31 @@ class Conv1dSubsampling(Subsampling):
             self.convs.append(subblock)
             self.time_reduction_factor *= subblock.layers[0].strides[0]
 
-    def _update_mask_and_input_length(self, inputs, inputs_length):
-        outputs_length = inputs_length
+    def call(self, inputs, training=False):
+        outputs, outputs_length = inputs
+        outputs = math_util.merge_two_last_dims(outputs)
         for block in self.convs:
+            outputs = block(outputs, training=training)
             outputs_length = math_util.conv_output_length(
                 outputs_length,
                 filter_size=block.layers[0].kernel_size[0],
                 padding=block.layers[0].padding,
                 stride=block.layers[0].strides[0],
             )
-        outputs = math_util.apply_mask(inputs, mask=tf.sequence_mask(outputs_length, maxlen=tf.shape(inputs)[1], dtype=tf.bool))
         return outputs, outputs_length
 
-    def call(self, inputs, training=False):
-        inputs, inputs_length = inputs
-        outputs = self._create_mask(inputs, inputs_length)
-        outputs = math_util.merge_two_last_dims(outputs)
+    def compute_mask(self, inputs, mask=None):
+        outputs, outputs_length = inputs
+        maxlen = tf.shape(outputs)[1]
         for block in self.convs:
-            outputs = block(outputs, training=training)
-        outputs, outputs_length = super().call([outputs, inputs_length])
-        return outputs, outputs_length
+            maxlen, outputs_length = [
+                math_util.conv_output_length(
+                    length, filter_size=block.layers[0].kernel_size[0], padding=block.layers[0].padding, stride=block.layers[0].strides[0]
+                )
+                for length in (maxlen, outputs_length)
+            ]
+        mask = tf.sequence_mask(outputs_length, maxlen=maxlen, dtype=tf.bool)
+        return mask, None
 
     def compute_output_shape(self, input_shape):
         outputs_shape, inputs_length_shape = input_shape

@@ -2,9 +2,9 @@ import time
 
 import tensorflow as tf
 
-from tensorflow_asr.losses.rnnt_loss_naive import compute_rnnt_loss_and_grad_helper
+from tensorflow_asr.losses.rnnt_loss import compute_rnnt_loss_and_grad_helper
 
-B = 4
+B = 1
 T = 743
 U = 200
 V = 1000
@@ -24,7 +24,6 @@ def run():
         labels=labels,
         label_length=label_length,
         logit_length=logit_length,
-        blank=blank,
     )
     t1 = time.time()
     tf.print(loss)

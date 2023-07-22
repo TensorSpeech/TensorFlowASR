@@ -22,7 +22,7 @@ class TimeDependentGaussianGradientNoise(tf.keras.regularizers.Regularizer):
 
     def noise(self, step: tf.Tensor, gradient: tf.Tensor):
         sigma_squared = self.eta / ((1 + tf.cast(step, dtype=gradient.dtype)) ** self.gamma)
-        return tf.random.normal(mean=self.mean, stddev=tf.math.sqrt(sigma_squared), shape=gradient.shape, dtype=gradient.dtype)
+        return tf.random.normal(mean=self.mean, stddev=tf.math.sqrt(sigma_squared), shape=tf.shape(gradient), dtype=gradient.dtype)
 
     def __call__(self, step: tf.Tensor, gradients: List[tf.Tensor]):
         """
