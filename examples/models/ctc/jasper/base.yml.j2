@@ -1,16 +1,16 @@
-{% set modeldir = "/mnt/Miscellanea/Models/local/jasper" %}
-{% set datadir = "/mnt/Data/MLDL/Datasets/ASR/LibriSpeech" %}
-
-{% import "examples/configs/log_mel_spectrogram.yml.j2" as speech_config with context %}
-{{speech_config}}
-
-{% import "examples/configs/librispeech/wp_whitespace.yml.j2" as decoder_config with context %}
+{% import "examples/configs/librispeech/characters/char.yml.j2" as decoder_config with context %}
 {{decoder_config}}
 
 model_config:
   class_name: tensorflow_asr.models.ctc>Jasper
   config:
     name: jasper
+    speech_config:
+      sample_rate: 16000
+      frame_ms: 25
+      stride_ms: 10
+      num_feature_bins: 80
+      feature_type: log_mel_spectrogram
     dense: True
     first_additional_block_channels: 256
     first_additional_block_kernels: 11
@@ -31,65 +31,15 @@ model_config:
     third_additional_block_strides: 1
     third_additional_block_dilation: 1
     third_additional_block_dropout: 0.4
+    blank: 0
     vocab_size: {{decoder_config.vocabsize}}
 
 learning_config:
-  train_dataset_config:
-    enabled: True
-    augmentation_config:
-      feature_augment:
-        time_masking:
-          prob: 0.5
-          num_masks: 10
-          mask_factor: 100
-          p_upperbound: 0.05
-        freq_masking:
-          prob: 0.5
-          num_masks: 1
-          mask_factor: 27
-    data_paths:
-      - {{datadir}}/train-clean-100/transcripts.tsv
-    tfrecords_dir: null
-    shuffle: True
-    cache: True
-    buffer_size: 1000
-    drop_remainder: False
-    stage: train
-    metadata: {{decoder_config.metadata}}
-
-  eval_dataset_config:
-    enabled: False
-    data_paths:
-      - {{datadir}}/dev-clean/transcripts.tsv
-    tfrecords_dir: null
-    shuffle: False
-    cache: True
-    buffer_size: 100
-    drop_remainder: True
-    stage: eval
-    metadata: {{decoder_config.metadata}}
-
-  test_dataset_config:
-    enabled: False
-    data_paths:
-      - {{datadir}}/test-clean/transcripts.tsv
-    tfrecords_dir: null
-    shuffle: False
-    cache: True
-    buffer_size: 100
-    drop_remainder: True
-    stage: test
-
   optimizer_config:
-    class_name: adam
+    class_name: Custom>AdamW
     config:
-      learning_rate:
-        class_name: tensorflow_asr.optimizers.schedules>TransformerSchedule
-        config:
-          dmodel: 512
-          warmup_steps: 10000
-          max_lr: null
-          min_lr: 1e-6
+      learning_rate: 0.001
+      weight_decay: 1e-3
       beta_1: 0.9
       beta_2: 0.98
       epsilon: 1e-9
@@ -109,8 +59,8 @@ learning_config:
     tensorboard:
       log_dir: {{modeldir}}/tensorboard
       histogram_freq: 1
-      write_graph: True
-      write_images: True
+      write_graph: False
+      write_images: False
       update_freq: epoch
-      profile_batch: 2
+      profile_batch: 100
 

@@ -1,4 +1,4 @@
-{% import "examples/configs/librispeech/sentencepiece/sp.yml.j2" as decoder_config with context %}
+{% import "examples/configs/librispeech/characters/char.yml.j2" as decoder_config with context %}
 {{decoder_config}}
 
 model_config:
@@ -9,23 +9,23 @@ model_config:
       sample_rate: 16000
       frame_ms: 25
       stride_ms: 10
-      num_feature_bins: 128
+      num_feature_bins: 160
       feature_type: spectrogram
     conv_type: conv2d
-    conv_kernels: [[11, 41], [11, 21], [11, 21]]
-    conv_strides: [[3, 2], [1, 2], [1, 2]]
-    conv_filters: [32, 32, 96]
+    conv_kernels: [[11, 41], [11, 21]]
+    conv_strides: [[2, 2], [1, 2]]
+    conv_filters: [32, 32]
     conv_dropout: 0.1
     rnn_nlayers: 5
-    rnn_type: lstm
+    rnn_type: gru
     rnn_bn_type: bn
-    rnn_units: 512
+    rnn_units: 768
     rnn_bidirectional: True
     rnn_unroll: False
     rnn_rowconv: 0
     rnn_dropout: 0.1
     fc_nlayers: 1
-    fc_units: 1024
+    fc_units: 1536
     fc_dropout: 0.1
     blank: 0
     vocab_size: {{decoder_config.vocabsize}}
@@ -41,7 +41,7 @@ learning_config:
       epsilon: 1e-9
 
   running_config:
-    batch_size: 4
+    batch_size: 2
     num_epochs: 100
     checkpoint:
       filepath: {{modeldir}}/checkpoints/{epoch:02d}.h5
