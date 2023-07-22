@@ -13,6 +13,8 @@
 # limitations under the License.
 
 
+import os
+
 from tensorflow_asr import tf, tokenizers
 from tensorflow_asr.configs import Config
 from tensorflow_asr.datasets import ASRDataset
@@ -24,8 +26,9 @@ logger = tf.get_logger()
 def main(
     config_path: str,
     datadir: str,
+    repodir: str = os.path.realpath(os.path.join(os.path.dirname(__file__), "..")),
 ):
-    config = Config(config_path, datadir=datadir)
+    config = Config(config_path, repodir=repodir, datadir=datadir)
     if not config.decoder_config.vocabulary:
         raise ValueError("decoder_config.vocabulary must be defined")
 
