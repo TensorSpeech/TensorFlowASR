@@ -18,12 +18,14 @@ import math
 import tensorflow as tf
 from keras.layers import EinsumDense
 from keras.layers import MultiHeadAttention as KerasMultiHeadAttention
-from keras.utils import tf_utils
 
 try:
     from keras.layers.multi_head_attention import _build_attention_equation, _build_proj_equation, _get_output_shape
 except ImportError:
-    from keras.layers.attention.multi_head_attention import _build_attention_equation, _build_proj_equation, _get_output_shape
+    try:
+        from keras.layers.attention.multi_head_attention import _build_attention_equation, _build_proj_equation, _get_output_shape
+    except ImportError:
+        from keras.src.layers.attention.multi_head_attention import _build_attention_equation, _build_proj_equation, _get_output_shape
 
 from tensorflow_asr.models.layers.memory import Memory
 
@@ -232,7 +234,7 @@ class MultiHeadAttention(KerasMultiHeadAttention):
 
     def _build_from_signature(self, query, value, key=None):
         super()._build_from_signature(query, value, key)
-        with tf_utils.maybe_init_scope(self):  # pylint: disable=not-context-manager
+        with tf.init_scope():  # pylint: disable=not-context-manager
             batch_size, _, dmodel = self._query_shape
             if self._memory_length is not None:
                 self._memory = Memory(batch_size=batch_size, memory_length=self._memory_length, dmodel=dmodel, name="memory", dtype=self.dtype)
@@ -348,7 +350,7 @@ class MultiHeadRelativeAttention(MultiHeadAttention):
             self._relative_position_encoding_shape = tf.TensorShape(relative_position_encoding.shape)
         else:
             self._relative_position_encoding_shape = tf.TensorShape(relative_position_encoding)
-        with tf_utils.maybe_init_scope(self):  # pylint: disable=not-context-manager
+        with tf.init_scope():  # pylint: disable=not-context-manager
             einsum_equation, bias_axes, output_rank = _build_proj_equation(
                 self._relative_position_encoding_shape.rank - 1, bound_dims=1, output_dims=2
             )

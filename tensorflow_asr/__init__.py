@@ -16,7 +16,11 @@ logger.propagate = False
 warnings.simplefilter("ignore")
 
 from keras.layers import Layer
-from keras.utils import tf_utils
+
+try:
+    from keras.utils import tf_utils
+except ImportError:
+    from keras.src.utils import tf_utils
 
 
 @property
