@@ -88,7 +88,6 @@ class TransformerBlock(Layer):
                 memory_length=memory_length,
                 kernel_regularizer=kernel_regularizer,
                 bias_regularizer=bias_regularizer,
-                dtype=tf.float32,  # stable training
                 name="mhsa",
             )
             if mha_type == "mha"
@@ -99,7 +98,6 @@ class TransformerBlock(Layer):
                 memory_length=memory_length,
                 kernel_regularizer=kernel_regularizer,
                 bias_regularizer=bias_regularizer,
-                dtype=tf.float32,  # stable training
                 name="mhsa",
             )
         )

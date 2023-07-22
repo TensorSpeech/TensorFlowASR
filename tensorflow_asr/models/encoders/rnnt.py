@@ -168,7 +168,7 @@ class RnnTransducerEncoder(Layer):
         """
         states = []
         for block in self.blocks:
-            states.append(tf.stack(block.rnn.get_initial_state(tf.zeros([batch_size, 1, 1], dtype=tf.float32)), axis=0))
+            states.append(tf.stack(block.rnn.get_initial_state(tf.zeros([batch_size, 1, 1], dtype=self.dtype)), axis=0))
         return tf.stack(states, axis=0)
 
     def call(self, inputs, training=False):

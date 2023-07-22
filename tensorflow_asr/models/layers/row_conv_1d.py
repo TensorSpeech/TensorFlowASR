@@ -53,7 +53,7 @@ class RowConv1D(tf.keras.layers.Conv1D):
         left_kernel = tf.fill(dims=left_kernel_dims, value=0)
         right_kernel_dims = (self.future_context + 1, input_channel, self.filters)
         right_kernel = tf.fill(dims=right_kernel_dims, value=1)
-        mask_kernel = tf.cast(tf.concat([left_kernel, right_kernel], axis=0), dtype=self.dtype)
+        mask_kernel = tf.cast(tf.concat([left_kernel, right_kernel], 0), dtype=self.dtype)
         self.kernel = tf.multiply(self.kernel, mask_kernel)
 
         if self.use_bias:

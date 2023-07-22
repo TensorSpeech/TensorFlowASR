@@ -229,8 +229,21 @@ class MultiHeadAttention(KerasMultiHeadAttention):
             attn_scores_rank,
         ) = _build_attention_equation(rank, attn_axes=self._attention_axes)
         norm_axes = tuple(range(attn_scores_rank - len(self._attention_axes), attn_scores_rank))
-        self._softmax = tf.keras.layers.Softmax(axis=norm_axes, dtype=self.dtype)
+        self._softmax = tf.keras.layers.Softmax(axis=norm_axes, dtype=tf.float32)  # stable training
         self._dropout_layer = tf.keras.layers.Dropout(rate=self._dropout, dtype=self.dtype)
+
+    def _masked_softmax(self, attention_scores, attention_mask=None):
+        # Normalize the attention scores to probabilities.
+        # `attention_scores` = [B, N, T, S]
+        if attention_mask is not None:
+            # The expand dim happens starting from the `num_heads` dimension,
+            # (<batch_dims>, num_heads, <query_attention_dims,
+            # key_attention_dims>)
+            mask_expansion_axis = -len(self._attention_axes) * 2 - 1
+            for _ in range(len(attention_scores.shape) - len(attention_mask.shape)):
+                attention_mask = tf.expand_dims(attention_mask, axis=mask_expansion_axis)
+        attention_scores = self._softmax(attention_scores, attention_mask)
+        return tf.cast(attention_scores, self.dtype)
 
     def _build_from_signature(self, query, value, key=None):
         super()._build_from_signature(query, value, key)

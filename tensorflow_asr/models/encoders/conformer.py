@@ -143,7 +143,6 @@ class MHSAModule(Layer):
                 memory_length=memory_length,
                 kernel_regularizer=kernel_regularizer,
                 bias_regularizer=bias_regularizer,
-                dtype=tf.float32,  # for stable training
                 name="mhsa",
             )
         else:
@@ -154,7 +153,6 @@ class MHSAModule(Layer):
                 memory_length=memory_length,
                 kernel_regularizer=kernel_regularizer,
                 bias_regularizer=bias_regularizer,
-                dtype=tf.float32,  # for stable training
                 name="mhsa",
             )
         self.do = tf.keras.layers.Dropout(dropout, name="dropout")

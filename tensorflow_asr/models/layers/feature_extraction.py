@@ -94,7 +94,7 @@ class FeatureExtraction(Layer):
         """
         assert feature_type in asdict(FEATURE_TYPES()).values(), f"feature_type must be in {asdict(FEATURE_TYPES()).values()}"
 
-        super().__init__(name=feature_type, dtype=tf.float32, **kwargs)
+        super().__init__(name=feature_type, **kwargs)
         self.sample_rate = sample_rate
 
         self.frame_ms = frame_ms
@@ -153,6 +153,7 @@ class FeatureExtraction(Layer):
         return tf.divide(tf.subtract(audio_feature, mean), stddev)
 
     def stft(self, signal):
+        signal = tf.cast(signal, tf.float32)
         if self.use_librosa_like_stft:
             # signal = tf.pad(signal, [[self.nfft // 2, self.nfft // 2]], mode="REFLECT")
             window = tf.signal.hann_window(self.frame_length, periodic=True)
@@ -167,6 +168,7 @@ class FeatureExtraction(Layer):
                 tf.signal.stft(signal, frame_length=self.frame_length, frame_step=self.frame_step, fft_length=self.nfft, pad_end=self.pad_end)
             )
         fft_features = tf.square(fft_features)
+        fft_features = tf.cast(fft_features, self.dtype)
         return fft_features
 
     def logarithm(self, S):
