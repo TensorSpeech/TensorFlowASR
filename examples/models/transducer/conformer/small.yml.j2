@@ -45,7 +45,7 @@ model_config:
     encoder_kernel_size: 32
     encoder_dropout: 0.1
     encoder_padding: causal
-    encoder_memory_length: 144
+    encoder_memory_length: null
     prediction_label_encode_mode: embedding
     prediction_embed_dim: 320
     prediction_num_rnns: 1
@@ -53,8 +53,8 @@ model_config:
     prediction_rnn_type: lstm
     prediction_rnn_implementation: 2
     prediction_rnn_unroll: False
-    prediction_layer_norm: True
-    prediction_projection_units: 144
+    prediction_layer_norm: False
+    prediction_projection_units: 0
     joint_dim: 320
     prejoint_encoder_linear: True
     prejoint_prediction_linear: True
@@ -63,28 +63,36 @@ model_config:
     joint_mode: add
     blank: 0
     vocab_size: {{decoder_config.vocabsize}}
+    kernel_regularizer: null
+    bias_regularizer: null
 
 learning_config:
   optimizer_config:
-    class_name: adam
+    class_name: Custom>AdamW
     config:
       learning_rate:
         class_name: tensorflow_asr.optimizers.schedules>TransformerSchedule
         config:
           dmodel: 144
-          warmup_steps: 10000
-          max_lr: 0.0041666667 # 0.05 / sqrt(144)
-          min_lr: null
+          warmup_steps: 20000
+          max_lr: null
+          min_lr: 1e-6
+      weight_decay: 1e-3
       beta_1: 0.9
       beta_2: 0.98
       epsilon: 1e-9
-  
-  apply_gwn_config:
-    predict_net_step: 20000
-    predict_net_stddev: 0.075
+
+  gwn_config: null
+
+  gradn_config:
+    class_name: tensorflow_asr.optimizers.regularizers>TimeDependentGaussianGradientNoise
+    config:
+      mean: 0.0
+      eta: 1.0
+      gamma: 0.55
 
   running_config:
-    batch_size: 4
+    batch_size: 3
     num_epochs: 100
     checkpoint:
       filepath: {{modeldir}}/checkpoints/{epoch:02d}.h5
@@ -99,6 +107,6 @@ learning_config:
       log_dir: {{modeldir}}/tensorboard
       histogram_freq: 1
       write_graph: True
-      write_images: True
+      write_images: False
       update_freq: epoch
-      profile_batch: 2
+      profile_batch: 100
