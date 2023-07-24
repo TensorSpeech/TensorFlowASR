@@ -149,35 +149,35 @@ class VggSubsampling(Layer):
 class Conv2dSubsampling(Layer):
     def __init__(
         self,
-        nlayers: int,
-        filters: int,
-        strides: list or tuple or int = 2,
-        kernel_size: int or list or tuple = 3,
-        padding: str = "same",
-        norm: str = "none",
-        activation: str = "relu",
+        filters: list,
+        strides: list = [[2, 1], [2, 1]],
+        kernels: list = [[3, 3], [3, 3]],
+        paddings: list = ["causal", "causal"],
+        norms: list = ["none", "none"],
+        activations: list = ["relu", "relu"],
         kernel_regularizer=None,
         bias_regularizer=None,
         name="conv2d_subsampling",
         **kwargs,
     ):
         super().__init__(name=name, **kwargs)
+        assert len(filters) == len(strides) == len(kernels) == len(paddings) == len(norms) == len(activations)
         self.convs = []
         self.time_reduction_factor = 1
-        for i in range(nlayers):
+        for i in range(len(filters)):
             subblock = tf.keras.Sequential(name=f"block_{i}")
             subblock.add(
                 Conv2D(
-                    filters=filters,
-                    kernel_size=kernel_size,
-                    strides=strides,
-                    padding=padding,
+                    filters=filters[i],
+                    kernel_size=kernels[i],
+                    strides=strides[i],
+                    padding=paddings[i],
                     name=f"conv_{i}",
                     kernel_regularizer=kernel_regularizer,
                     bias_regularizer=bias_regularizer,
                 )
             )
-            if norm == "batch":
+            if norms[i] == "batch":
                 subblock.add(
                     tf.keras.layers.BatchNormalization(
                         name=f"bn_{i}",
@@ -185,7 +185,7 @@ class Conv2dSubsampling(Layer):
                         beta_regularizer=bias_regularizer,
                     )
                 )
-            elif norm == "layer":
+            elif norms[i] == "layer":
                 subblock.add(
                     tf.keras.layers.LayerNormalization(
                         name=f"ln_{i}",
@@ -193,7 +193,7 @@ class Conv2dSubsampling(Layer):
                         beta_regularizer=bias_regularizer,
                     )
                 )
-            subblock.add(tf.keras.layers.Activation(activation, name=f"{activation}_{i}"))
+            subblock.add(tf.keras.layers.Activation(activations[i], name=f"{activations[i]}_{i}"))
             self.convs.append(subblock)
             self.time_reduction_factor *= subblock.layers[0].strides[0]
 
@@ -234,35 +234,35 @@ class Conv2dSubsampling(Layer):
 class Conv1dSubsampling(Layer):
     def __init__(
         self,
-        nlayers: int,
-        filters: int,
-        strides: int = 2,
-        kernel_size: int = 3,
-        padding: str = "causal",
-        norm: str = "none",
-        activation: str = "relu",
+        filters: list,
+        strides: list = [2, 2],
+        kernels: list = [3, 3],
+        paddings: list = ["causal", "causal"],
+        norms: list = ["none", "none"],
+        activations: list = ["relu", "relu"],
         kernel_regularizer=None,
         bias_regularizer=None,
         name="conv1d_subsampling",
         **kwargs,
     ):
         super().__init__(name=name, **kwargs)
+        assert len(filters) == len(strides) == len(kernels) == len(paddings) == len(norms) == len(activations)
         self.convs = []
         self.time_reduction_factor = 1
-        for i in range(nlayers):
+        for i in range(len(filters)):
             subblock = tf.keras.Sequential(name=f"block_{i}")
             subblock.add(
                 Conv1D(
-                    filters=filters,
-                    kernel_size=kernel_size,
-                    strides=strides,
-                    padding=padding,
+                    filters=filters[i],
+                    kernel_size=kernels[i],
+                    strides=strides[i],
+                    padding=paddings[i],
                     name=f"conv_{i}",
                     kernel_regularizer=kernel_regularizer,
                     bias_regularizer=bias_regularizer,
                 )
             )
-            if norm == "batch":
+            if norms[i] == "batch":
                 subblock.add(
                     tf.keras.layers.BatchNormalization(
                         name=f"bn_{i}",
@@ -270,7 +270,7 @@ class Conv1dSubsampling(Layer):
                         beta_regularizer=bias_regularizer,
                     )
                 )
-            elif norm == "layer":
+            elif norms[i] == "layer":
                 subblock.add(
                     tf.keras.layers.LayerNormalization(
                         name=f"ln_{i}",
@@ -278,7 +278,7 @@ class Conv1dSubsampling(Layer):
                         beta_regularizer=bias_regularizer,
                     )
                 )
-            subblock.add(tf.keras.layers.Activation(activation, name=f"{activation}_{i}"))
+            subblock.add(tf.keras.layers.Activation(activations[i], name=f"{activations[i]}_{i}"))
             self.convs.append(subblock)
             self.time_reduction_factor *= subblock.layers[0].strides[0]
 

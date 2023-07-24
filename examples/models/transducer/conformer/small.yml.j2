@@ -24,13 +24,12 @@ model_config:
             mask_factor: 27
     encoder_subsampling:
       type: conv2d
-      filters: 144
-      nlayers: 2
-      kernel_size: 3
-      strides: 2
-      padding: causal
-      norm: none
-      activation: relu
+      filters: [144, 144]
+      kernels: [3, 3]
+      strides: [2, 2]
+      paddings: ["causal", "causal"]
+      norms: ["none", "none"]
+      activations: ["relu", "relu"]
     encoder_ffm_residual_factor: 0.5
     encoder_mhsam_residual_factor: 1.0
     encoder_convm_residual_factor: 1.0

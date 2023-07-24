@@ -215,27 +215,25 @@ model_config:
 
 learning_config:
   optimizer_config:
-    class_name: adam
+    class_name: Custom>AdamW
     config:
       learning_rate:
         class_name: tensorflow_asr.optimizers.schedules>TransformerSchedule
         config:
           dmodel: 320
           warmup_steps: 15000
-          max_lr: 0.0025
-          min_lr: null
+          max_lr: null
+          min_lr: 1e-6
+      weight_decay: 1e-3
       beta_1: 0.9
       beta_2: 0.98
       epsilon: 1e-9
 
-  gwn_config: null
+  gwn_config:
+    predict_net_step: 0
+    predict_net_stddev: 0.075
 
-  gradn_config:
-    class_name: tensorflow_asr.optimizers.regularizers>TimeDependentGaussianGradientNoise
-    config:
-      mean: 0.0
-      eta: 1.0
-      gamma: 0.55
+  gradn_config: null
 
   running_config:
     batch_size: 4
