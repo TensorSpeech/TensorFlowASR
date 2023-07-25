@@ -14,23 +14,29 @@
 
 import tensorflow as tf
 
-from tensorflow_asr.models.base_layer import Layer
+from tensorflow_asr.models.base_layer import Identity, Layer
 from tensorflow_asr.models.ctc.base_ctc import CtcModel
 from tensorflow_asr.models.layers.row_conv_1d import RowConv1D
 from tensorflow_asr.models.layers.sequence_wise_bn import SequenceBatchNorm
 from tensorflow_asr.utils import layer_util, math_util
 
 
-class Reshape(tf.keras.layers.Layer):
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
-        self.supports_masking = True
-
+class Reshape(Layer):
     def call(self, inputs):
-        return math_util.merge_two_last_dims(inputs)
+        outputs, outputs_length = inputs
+        outputs = math_util.merge_two_last_dims(outputs)
+        return outputs, outputs_length
+
+    def compute_output_shape(self, input_shape):
+        output_shape, output_length_shape = input_shape
+        b, t, f, c = output_shape
+        return (b, t, f * c), output_length_shape
 
 
-class ConvBlock(tf.keras.layers.Layer):
+# ----------------------------------- CONV ----------------------------------- #
+
+
+class ConvBlock(Layer):
     def __init__(
         self,
         conv_type: str = "conv2d",
@@ -42,22 +48,41 @@ class ConvBlock(tf.keras.layers.Layer):
         **kwargs,
     ):
         super().__init__(**kwargs)
-        self.supports_masking = True
         CnnClass = layer_util.get_conv(conv_type)
         self.conv = CnnClass(filters=filters, kernel_size=kernels, strides=strides, padding=padding, name=conv_type)
         self.bn = tf.keras.layers.BatchNormalization(name="bn")
         self.relu = tf.keras.layers.ReLU(name="relu")
         self.do = tf.keras.layers.Dropout(dropout, name="dropout")
+        self.time_reduction_factor = self.conv.strides[0]
 
     def call(self, inputs, training=False):
-        outputs = self.conv(inputs, training=training)
+        outputs, outputs_length = inputs
+        outputs = self.conv(outputs, training=training)
         outputs = self.bn(outputs, training=training)
         outputs = self.relu(outputs, training=training)
         outputs = self.do(outputs, training=training)
-        return outputs
+        outputs_length = math_util.conv_output_length(
+            outputs_length, filter_size=self.conv.filters, padding=self.conv.padding, stride=self.conv.strides[0]
+        )
+        return outputs, outputs_length
+
+    def compute_mask(self, inputs, mask=None):
+        outputs, outputs_length = inputs
+        maxlen = tf.shape(outputs)[1]
+        maxlen, outputs_length = (
+            math_util.conv_output_length(length, filter_size=self.conv.filters, padding=self.conv.padding, stride=self.conv.strides[0])
+            for length in (maxlen, outputs_length)
+        )
+        mask = tf.sequence_mask(outputs_length, maxlen=maxlen, dtype=tf.bool)
+        return mask, None
+
+    def compute_output_shape(self, input_shape):
+        output_shape, output_length_shape = input_shape
+        output_shape = self.conv.compute_output_shape(output_shape)
+        return output_shape, output_length_shape
 
 
-class ConvModule(tf.keras.layers.Layer):
+class ConvModule(Layer):
     def __init__(
         self,
         conv_type: str = "conv2d",
@@ -69,17 +94,16 @@ class ConvModule(tf.keras.layers.Layer):
         **kwargs,
     ):
         super().__init__(**kwargs)
-        self.supports_masking = True
-
+        assert conv_type in ("conv1d", "conv2d")
         assert len(kernels) == len(strides) == len(filters)
         assert dropout >= 0.0
 
-        self.preprocess = None  # reshape from [B, T, F, C] to [B, T, F * C]
-        if conv_type == "conv1d":
-            self.preprocess = Reshape(name="preprocess")
+        self.pre = Reshape(name="preprocess") if conv_type == "conv1d" else Identity(name="iden")
 
-        self.blocks = [
-            ConvBlock(
+        self.convs = []
+        self.time_reduction_factor = 1
+        for i in range(len(filters)):
+            conv_block = ConvBlock(
                 conv_type=conv_type,
                 kernels=kernels[i],
                 strides=strides[i],
@@ -88,29 +112,42 @@ class ConvModule(tf.keras.layers.Layer):
                 padding=padding,
                 name=f"block_{i}",
             )
-            for i in range(len(filters))
-        ]
+            self.convs.append(conv_block)
+            self.time_reduction_factor *= conv_block.time_reduction_factor
 
-        self.postprocess = None  # reshape from [B, T, F, C] to [B, T, F * C]
-        if conv_type == "conv2d":
-            self.postprocess = Reshape(name="postprocess")
-
-        self.reduction_factor = 1
-        for s in strides:
-            self.reduction_factor *= s[0]
+        self.post = Reshape(name="postprocess") if conv_type == "conv2d" else Identity(name="iden")
 
     def call(self, inputs, training=False):
-        outputs = inputs
-        if self.preprocess is not None:
-            outputs = self.preprocess(outputs)
-        for block in self.blocks:
-            outputs = block(outputs, training=training)
-        if self.postprocess is not None:
-            outputs = self.postprocess(outputs)
+        outputs = self.pre(inputs, training=training)
+        for conv in self.convs:
+            outputs = conv(outputs, training=training)
+        outputs = self.post(outputs, training=training)
         return outputs
 
+    def compute_mask(self, inputs, mask=None):
+        outputs, outputs_length = inputs
+        maxlen = tf.shape(outputs)[1]
+        for conv in self.convs:
+            maxlen, outputs_length = (
+                math_util.conv_output_length(length, filter_size=conv.conv.filters, padding=conv.conv.padding, stride=conv.conv.strides[0])
+                for length in (maxlen, outputs_length)
+            )
+        mask = tf.sequence_mask(outputs_length, maxlen=maxlen, dtype=tf.bool)
+        return mask, None
 
-class RnnBlock(tf.keras.layers.Layer):
+    def compute_output_shape(self, input_shape):
+        output_shape = input_shape
+        output_shape = self.pre.compute_output_shape(output_shape)
+        for conv in self.convs:
+            output_shape = conv.compute_output_shape(output_shape)
+        output_shape = self.post.compute_output_shape(output_shape)
+        return output_shape
+
+
+# ------------------------------------ RNN ----------------------------------- #
+
+
+class RnnBlock(Layer):
     def __init__(
         self,
         rnn_type: str = "lstm",
@@ -123,7 +160,6 @@ class RnnBlock(tf.keras.layers.Layer):
         **kwargs,
     ):
         super().__init__(**kwargs)
-        self.supports_masking = True
         RnnClass = layer_util.get_rnn(rnn_type)
         self.rnn = RnnClass(
             units,
@@ -143,16 +179,19 @@ class RnnBlock(tf.keras.layers.Layer):
         if not bidirectional and rowconv > 0:
             self.rowconv = RowConv1D(filters=units, future_context=rowconv, name="rowconv")
 
-    def call(self, inputs, training=False):
-        outputs = inputs
-        outputs = self.rnn(outputs, training=training, mask=getattr(outputs, "_keras_mask", None))
+    def call(self, inputs, training=False, mask=None):
+        outputs, outputs_length = inputs
+        outputs = self.rnn(outputs, training=training, mask=mask[0] if mask else getattr(outputs, "_keras_mask", None))
         outputs = self.bn(outputs, training=training)
         if self.rowconv is not None:
             outputs = self.rowconv(outputs, training=training)
-        return outputs
+        return outputs, outputs_length
+
+    def compute_output_shape(self, input_shape):
+        return input_shape
 
 
-class RnnModule(tf.keras.layers.Layer):
+class RnnModule(Layer):
     def __init__(
         self,
         nlayers: int = 5,
@@ -166,7 +205,6 @@ class RnnModule(tf.keras.layers.Layer):
         **kwargs,
     ):
         super().__init__(**kwargs)
-        self.supports_masking = True
         self.blocks = [
             RnnBlock(
                 rnn_type=rnn_type,
@@ -181,14 +219,20 @@ class RnnModule(tf.keras.layers.Layer):
             for i in range(nlayers)
         ]
 
-    def call(self, inputs, training=False):
+    def call(self, inputs, training=False, mask=None):
         outputs = inputs
         for block in self.blocks:
-            outputs = block(outputs, training=training)
+            outputs = block(outputs, training=training, mask=mask)
         return outputs
 
+    def compute_output_shape(self, input_shape):
+        return input_shape
 
-class FcBlock(tf.keras.layers.Layer):
+
+# ------------------------------ FULLY CONNECTED ----------------------------- #
+
+
+class FcBlock(Layer):
     def __init__(
         self,
         units: int = 1024,
@@ -196,21 +240,24 @@ class FcBlock(tf.keras.layers.Layer):
         **kwargs,
     ):
         super().__init__(**kwargs)
-        self.supports_masking = True
         self.fc = tf.keras.layers.Dense(units, name="fc")
         self.bn = tf.keras.layers.BatchNormalization(name="bn")
         self.relu = tf.keras.layers.ReLU(name="relu")
         self.do = tf.keras.layers.Dropout(dropout, name="dropout")
 
     def call(self, inputs, training=False):
-        outputs = self.fc(inputs, training=training)
+        outputs, outputs_length = inputs
+        outputs = self.fc(outputs, training=training)
         outputs = self.bn(outputs, training=training)
         outputs = self.relu(outputs, training=training)
         outputs = self.do(outputs, training=training)
-        return outputs
+        return outputs, outputs_length
+
+    def compute_output_shape(self, input_shape):
+        return input_shape
 
 
-class FcModule(tf.keras.layers.Layer):
+class FcModule(Layer):
     def __init__(
         self,
         nlayers: int = 0,
@@ -219,7 +266,6 @@ class FcModule(tf.keras.layers.Layer):
         **kwargs,
     ):
         super().__init__(**kwargs)
-        self.supports_masking = True
         self.blocks = [FcBlock(units=units, dropout=dropout, name=f"block_{i}") for i in range(nlayers)]
 
     def call(self, inputs, training=False):
@@ -227,6 +273,9 @@ class FcModule(tf.keras.layers.Layer):
         for block in self.blocks:
             outputs = block(outputs, training=training)
         return outputs
+
+    def compute_output_shape(self, input_shape):
+        return input_shape
 
 
 class DeepSpeech2Encoder(Layer):
@@ -272,33 +321,30 @@ class DeepSpeech2Encoder(Layer):
             dropout=rnn_dropout,
             name="rnn_module",
         )
-        self._rnn_units = rnn_units
         self.fc_module = FcModule(
             nlayers=fc_nlayers,
             units=fc_units,
             dropout=fc_dropout,
             name="fc_module",
         )
-        self._fc_nlayers = fc_nlayers
-        self._fc_units = fc_units
-        self.time_reduction_factor = self.conv_module.reduction_factor
+        self.time_reduction_factor = self.conv_module.time_reduction_factor
 
     def call(self, inputs, training=False):
-        outputs, inputs_length = inputs
+        outputs = inputs
         outputs = self.conv_module(outputs, training=training)
-        outputs_length = math_util.get_reduced_length(inputs_length, self.time_reduction_factor)
-        outputs = math_util.apply_mask(outputs, mask=tf.sequence_mask(outputs_length, maxlen=tf.shape(outputs)[1], dtype=tf.bool))
         outputs = self.rnn_module(outputs, training=training)
         outputs = self.fc_module(outputs, training=training)
-        return outputs, outputs_length
+        return outputs
+
+    def compute_mask(self, inputs, mask=None):
+        return self.conv_module.compute_mask(inputs, mask=mask)
 
     def compute_output_shape(self, input_shape):
-        inputs_shape, inputs_length_shape = input_shape
-        outputs_time = None if inputs_shape[1] is None else math_util.legacy_get_reduced_length(inputs_shape[1], self.time_reduction_factor)
-        outputs_batch = inputs_shape[0]
-        outputs_size = self._fc_units if self._fc_nlayers > 0 else self._rnn_units
-        outputs_shape = (outputs_batch, outputs_time, outputs_size)
-        return outputs_shape, inputs_length_shape
+        output_shape = input_shape
+        output_shape = self.conv_module.compute_output_shape(output_shape)
+        output_shape = self.rnn_module.compute_output_shape(output_shape)
+        output_shape = self.fc_module.compute_output_shape(output_shape)
+        return output_shape
 
 
 class DeepSpeech2Decoder(Layer):
@@ -313,9 +359,9 @@ class DeepSpeech2Decoder(Layer):
         return logits, logits_length
 
     def compute_output_shape(self, input_shape):
-        logits_shape, logits_length_shape = input_shape
-        outputs_shape = logits_shape[:-1] + (self._vocab_size,)
-        return tuple(outputs_shape), tuple(logits_length_shape)
+        output_shape, output_length_shape = input_shape
+        output_shape = self.vocab.compute_output_shape(output_shape)
+        return output_shape, output_length_shape
 
 
 @tf.keras.utils.register_keras_serializable("tensorflow_asr.models.ctc")
@@ -372,4 +418,4 @@ class DeepSpeech2(CtcModel):
             name=name,
             **kwargs,
         )
-        self.time_reduction_factor = self.encoder.conv_module.reduction_factor
+        self.time_reduction_factor = self.encoder.time_reduction_factor

@@ -113,9 +113,9 @@ class TransducerPrediction(Layer):
     def call(self, inputs, training=False):
         outputs, prediction_length = inputs
         outputs = self.label_encoder(outputs, training=training)
-        outputs = math_util.apply_mask(outputs, mask=tf.sequence_mask(prediction_length, maxlen=tf.shape(outputs)[1], dtype=tf.bool))
+        mask = tf.sequence_mask(prediction_length, maxlen=tf.shape(outputs)[1], dtype=tf.bool)
         for i, rnn in enumerate(self.rnns):
-            outputs, *_ = rnn(outputs, training=training, mask=getattr(outputs, "_keras_mask", None))
+            outputs, *_ = rnn(outputs, training=training, mask=mask)
             if self.lns[i] is not None:
                 outputs = self.lns[i](outputs, training=training)
             if self.projections[i] is not None:
@@ -153,6 +153,10 @@ class TransducerPrediction(Layer):
                 if self.projections[i] is not None:
                     outputs = self.projections[i](outputs, training=False)
             return outputs, tf.transpose(tf.stack(new_states, axis=0), perm=[2, 0, 1, 3])
+
+    def compute_mask(self, inputs, mask=None):
+        outputs, prediction_length = inputs
+        return tf.sequence_mask(prediction_length, maxlen=tf.shape(outputs)[1], dtype=tf.bool)
 
     def compute_output_shape(self, input_shape):
         predictions_shape, _ = input_shape
@@ -251,6 +255,9 @@ class TransducerJoint(Layer):
         outputs = self.activation(outputs, training=training)
         outputs = self.ffn_out(outputs, training=training)
         return outputs
+
+    def compute_mask(self, inputs, mask=None):
+        return self.joint.compute_mask(inputs, mask=mask)
 
     def compute_output_shape(self, input_shape):
         encoder_shape, prediction_shape = input_shape

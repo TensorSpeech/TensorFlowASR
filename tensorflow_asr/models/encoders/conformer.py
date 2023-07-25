@@ -576,6 +576,9 @@ class ConformerEncoder(Layer):
             outputs, outputs_length = self.call((features, features_length), training=False)
             return outputs, outputs_length, None
 
+    def compute_mask(self, inputs, mask=None):
+        return self.conv_subsampling.compute_mask(inputs, mask=mask)
+
     def compute_output_shape(self, input_shape):
         outputs_shape, outputs_length_shape = self.conv_subsampling.compute_output_shape(input_shape)
         outputs_shape = list(outputs_shape)

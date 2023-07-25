@@ -239,11 +239,11 @@ class ContextNetEncoder(Layer):
             self.time_reduction_factor *= block.time_reduction_factor
 
     def call(self, inputs, training=False):
-        outputs, inputs_length = inputs
+        outputs, outputs_length = inputs
         outputs = self.reshape(outputs)
         for block in self.blocks:
-            outputs, inputs_length = block([outputs, inputs_length], training=training)
-        return outputs, inputs_length
+            outputs, outputs_length = block([outputs, outputs_length], training=training)
+        return outputs, outputs_length
 
     def call_next(self, features, features_length, *args, **kwargs):
         """
@@ -262,6 +262,13 @@ class ContextNetEncoder(Layer):
         with tf.name_scope(f"{self.name}_call_next"):
             outputs, outputs_length = self.call((features, features_length), training=False)
             return outputs, outputs_length, None
+
+    def compute_mask(self, inputs, mask=None):
+        outputs, outputs_length = inputs
+        maxlen = tf.shape(outputs)[1]
+        maxlen, outputs_length = (math_util.get_reduced_length(length, self.time_reduction_factor) for length in (maxlen, outputs_length))
+        mask = tf.sequence_mask(outputs_length, maxlen=maxlen, dtype=tf.bool)
+        return mask, None
 
     def compute_output_shape(self, input_shape):
         inputs_shape, inputs_length_shape = input_shape

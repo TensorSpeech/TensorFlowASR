@@ -22,9 +22,9 @@ def get_rnn(
 ):
     assert rnn_type in ["lstm", "gru", "rnn"]
     if rnn_type == "lstm":
-        return recurrent.LSTM
+        return tf.keras.layers.LSTM
     if rnn_type == "gru":
-        return recurrent.GRU
+        return tf.keras.layers.GRU
     return tf.keras.layers.SimpleRNN
 
 
