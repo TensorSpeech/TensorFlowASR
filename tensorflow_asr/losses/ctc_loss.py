@@ -34,7 +34,7 @@ class CtcLoss(tf.keras.losses.Loss):
             labels=y_true["labels"],
             label_length=y_true["labels_length"],
             logits_time_major=False,
-            # unique=tf.nn.ctc_unique_labels(y_true["labels"]),  # enable a faster, memory efficient implementation on TPU.
+            unique=tf.nn.ctc_unique_labels(y_true["labels"]),  # enable a faster, memory efficient implementation on TPU.
             blank_index=self.blank,
             name=self.name,
         )
