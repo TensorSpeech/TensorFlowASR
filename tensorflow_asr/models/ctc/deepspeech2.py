@@ -169,6 +169,7 @@ class RnnBlock(Layer):
             use_bias=True,
             name=rnn_type,
             zero_output_for_mask=True,
+            dtype=self.dtype,
         )
         if bidirectional:
             self.rnn = tf.keras.layers.Bidirectional(self.rnn, name=f"b{rnn_type}")
