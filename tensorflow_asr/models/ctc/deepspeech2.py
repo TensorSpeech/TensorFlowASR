@@ -189,7 +189,7 @@ class RnnBlock(Layer):
         return outputs, outputs_length
 
     def compute_output_shape(self, input_shape):
-        return input_shape
+        return input_shape[:-1] + [self.rnn.units]
 
 
 class RnnModule(Layer):
@@ -227,7 +227,7 @@ class RnnModule(Layer):
         return outputs
 
     def compute_output_shape(self, input_shape):
-        return input_shape
+        return input_shape[:-1] + [self.blocks[-1].rnn.units]
 
 
 # ------------------------------ FULLY CONNECTED ----------------------------- #
@@ -255,7 +255,7 @@ class FcBlock(Layer):
         return outputs, outputs_length
 
     def compute_output_shape(self, input_shape):
-        return input_shape
+        return input_shape[:-1] + [self.fc.units]
 
 
 class FcModule(Layer):
@@ -276,7 +276,7 @@ class FcModule(Layer):
         return outputs
 
     def compute_output_shape(self, input_shape):
-        return input_shape
+        return input_shape[:-1] + [self.blocks[-1].fc.units]
 
 
 class DeepSpeech2Encoder(Layer):
