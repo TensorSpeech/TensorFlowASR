@@ -14,7 +14,7 @@
 
 import tensorflow as tf
 
-from tensorflow_asr.models.layers import convolution, recurrent
+from tensorflow_asr.models.layers import convolution
 
 
 def get_rnn(
