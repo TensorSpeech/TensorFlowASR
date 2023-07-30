@@ -168,7 +168,7 @@ class RnnBlock(Layer):
 
     def call(self, inputs, training=False):
         outputs, outputs_length = inputs
-        outputs = self.rnn(outputs, training=training) # mask auto populate
+        outputs = self.rnn(outputs, training=training)  # mask auto populate
         outputs = self.bn(outputs, training=training)
         if self.rowconv is not None:
             outputs = self.rowconv(outputs, training=training)
@@ -232,7 +232,7 @@ class FcBlock(Layer):
         **kwargs,
     ):
         super().__init__(**kwargs)
-        self.fc = tf.keras.layers.Dense(units, name="fc")
+        self.fc = tf.keras.layers.TimeDistributed(tf.keras.layers.Dense(units, name="fc"), name="tfc")
         self.bn = tf.keras.layers.BatchNormalization(name="bn")
         self.relu = tf.keras.layers.ReLU(name="relu")
         self.do = tf.keras.layers.Dropout(dropout, name="dropout")
@@ -247,7 +247,7 @@ class FcBlock(Layer):
 
     def compute_output_shape(self, input_shape):
         output_shape, output_length_shape = input_shape
-        output_shape = output_shape[:-1] + (self.fc.units,)
+        output_shape = self.fc.compute_output_shape(output_shape)
         return output_shape, output_length_shape
 
 
@@ -347,8 +347,7 @@ class DeepSpeech2Encoder(Layer):
 class DeepSpeech2Decoder(Layer):
     def __init__(self, vocab_size: int, **kwargs):
         super().__init__(**kwargs)
-        self.vocab = tf.keras.layers.Dense(vocab_size, name="logits")
-        self._vocab_size = vocab_size
+        self.vocab = tf.keras.layers.TimeDistributed(tf.keras.layers.Dense(vocab_size, name="logits"), name="tlogits")
 
     def call(self, inputs, training=False):
         logits, logits_length = inputs

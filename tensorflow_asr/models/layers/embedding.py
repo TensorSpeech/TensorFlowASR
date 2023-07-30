@@ -14,6 +14,8 @@
 
 import tensorflow as tf
 
+from tensorflow_asr.models.base_layer import Layer
+
 
 class Embedding(tf.keras.layers.Embedding):
     def __init__(
@@ -36,6 +38,55 @@ class Embedding(tf.keras.layers.Embedding):
         )
         self.supports_masking = True
 
-    def recognize_tflite(self, inputs):
+    def call(self, inputs):
+        outputs, outputs_length = inputs
+        outputs = super().call(outputs)
+        return outputs, outputs_length
+
+    def call_next(self, inputs):
         outputs = tf.cast(tf.expand_dims(inputs, axis=-1), dtype=tf.int32)
         return tf.gather_nd(self.embeddings, outputs)  # https://github.com/tensorflow/tensorflow/issues/42410
+
+    def compute_mask(self, inputs, mask=None):
+        outputs, outputs_length = inputs
+        mask = tf.sequence_mask(outputs_length, maxlen=tf.shape(outputs)[1], dtype=tf.bool)
+        return mask, None
+
+    def compute_output_shape(self, input_shape):
+        output_shape, output_length_shape = input_shape
+        output_shape = super().compute_output_shape(output_shape)
+        return output_shape, output_length_shape
+
+
+class OneHotBlank(Layer):
+    """
+    https://arxiv.org/pdf/1211.3711.pdf
+    The inputs are encoded as one-hot vectors;
+    that is, if Y consists of K labels and yu = k, then y^u is a length K vector whose elements are all zero
+    except the k-th, which is one. ∅ is encoded as a length K vector of zeros
+    """
+
+    def __init__(self, blank, depth, name="one_hot_blank", **kwargs):
+        super().__init__(name=name, **kwargs)
+        self.blank = blank
+        self.depth = depth
+
+    def call(self, inputs):
+        outputs, outputs_length = inputs
+        minus_one_at_blank = tf.where(tf.equal(outputs, self.blank), -1, outputs)
+        outputs = tf.one_hot(minus_one_at_blank, depth=self.depth, dtype=self.dtype)
+        return outputs, outputs_length
+
+    def call_next(self, inputs):
+        outputs, _ = self.call((inputs, None))
+        return outputs
+
+    def compute_mask(self, inputs, mask=None):
+        outputs, outputs_length = inputs
+        mask = tf.sequence_mask(outputs_length, maxlen=tf.shape(outputs)[1], dtype=tf.bool)
+        return mask, None
+
+    def compute_output_shape(self, input_shape):
+        output_shape, output_length_shape = input_shape
+        output_shape = output_shape + (self.depth,)
+        return output_shape, output_length_shape

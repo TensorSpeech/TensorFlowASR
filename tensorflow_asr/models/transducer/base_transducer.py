@@ -21,9 +21,8 @@ import tensorflow as tf
 from tensorflow_asr.losses.rnnt_loss import RnntLoss
 from tensorflow_asr.models.base_layer import Layer
 from tensorflow_asr.models.base_model import BaseModel
-from tensorflow_asr.models.layers.embedding import Embedding
-from tensorflow_asr.models.layers.one_hot_blank import OneHotBlank
-from tensorflow_asr.utils import layer_util, math_util, shape_util
+from tensorflow_asr.models.layers.embedding import Embedding, OneHotBlank
+from tensorflow_asr.utils import layer_util, shape_util
 
 Hypothesis = collections.namedtuple("Hypothesis", ("index", "prediction", "states"))
 
@@ -46,19 +45,19 @@ class TransducerPrediction(Layer):
         rnn_unroll: bool = False,
         layer_norm: bool = True,
         projection_units: int = 0,
+        projection_temporal: bool = False,
         kernel_regularizer=None,
         bias_regularizer=None,
         name="transducer_prediction",
         **kwargs,
     ):
         super().__init__(name=name, **kwargs)
-        if label_encoder_mode not in ["one_hot", "embedding"]:
-            raise ValueError("label_encode_mode must be either 'one_hot' or 'embedding'")
-        self.label_encoder_mode = label_encoder_mode
-        if self.label_encoder_mode == "embedding":
-            self.label_encoder = Embedding(vocab_size, embed_dim, regularizer=kernel_regularizer, name=self.label_encoder_mode)
-        else:
-            self.label_encoder = OneHotBlank(blank=blank, depth=vocab_size, name=self.label_encoder_mode)
+        assert label_encoder_mode in ("one_hot", "embedding"), "label_encode_mode must be either 'one_hot' or 'embedding'"
+        self.label_encoder = (
+            Embedding(vocab_size, embed_dim, regularizer=kernel_regularizer, name=label_encoder_mode)
+            if label_encoder_mode == "embedding"
+            else OneHotBlank(blank=blank, depth=vocab_size, name=label_encoder_mode)
+        )
         # Initialize rnn layers
         RnnClass = layer_util.get_rnn(rnn_type)
         self.rnns = []
@@ -92,6 +91,7 @@ class TransducerPrediction(Layer):
                 if projection_units > 0
                 else None
             )
+            projection = tf.keras.layers.TimeDistributed(projection, name=f"tprojection_{i}") if projection and projection_temporal else None
             self.rnns.append(rnn)
             self.lns.append(ln)
             self.projections.append(projection)
@@ -111,16 +111,15 @@ class TransducerPrediction(Layer):
         return tf.transpose(tf.stack(states, axis=0), perm=[2, 0, 1, 3])
 
     def call(self, inputs, training=False):
-        outputs, prediction_length = inputs
-        outputs = self.label_encoder(outputs, training=training)
-        mask = tf.sequence_mask(prediction_length, maxlen=tf.shape(outputs)[1], dtype=tf.bool)
+        outputs, outputs_length = inputs
+        outputs, outputs_length = self.label_encoder((outputs, outputs_length), training=training)
         for i, rnn in enumerate(self.rnns):
-            outputs, *_ = rnn(outputs, training=training, mask=mask)
+            outputs, *_ = rnn(outputs, training=training)  # mask auto populate
             if self.lns[i] is not None:
                 outputs = self.lns[i](outputs, training=training)
             if self.projections[i] is not None:
                 outputs = self.projections[i](outputs, training=training)
-        return outputs
+        return outputs, outputs_length
 
     def call_next(self, inputs, previous_decoder_states, tflite: bool = False):
         """
@@ -140,10 +139,7 @@ class TransducerPrediction(Layer):
         """
         with tf.name_scope(f"{self.name}_call_next"):
             previous_decoder_states = tf.transpose(previous_decoder_states, perm=[1, 2, 0, 3])
-            if tflite and self.label_encoder_mode == "embedding":
-                outputs = self.label_encoder.recognize_tflite(inputs)
-            else:
-                outputs = self.label_encoder(inputs, training=False)
+            outputs = self.label_encoder.call_next(inputs)
             new_states = []
             for i, rnn in enumerate(self.rnns):
                 outputs, *_states = rnn(outputs, training=False, initial_state=tf.unstack(previous_decoder_states[i], axis=0))
@@ -155,14 +151,18 @@ class TransducerPrediction(Layer):
             return outputs, tf.transpose(tf.stack(new_states, axis=0), perm=[2, 0, 1, 3])
 
     def compute_mask(self, inputs, mask=None):
-        outputs, prediction_length = inputs
-        return tf.sequence_mask(prediction_length, maxlen=tf.shape(outputs)[1], dtype=tf.bool)
+        return self.label_encoder.compute_mask(inputs, mask=mask)
 
     def compute_output_shape(self, input_shape):
-        predictions_shape, _ = input_shape
-        output_size = self.projections[-1].units if self.projections[-1] is not None else self.rnns[-1].units
-        outputs_shape = predictions_shape + (output_size,)
-        return tuple(outputs_shape)
+        output_shape, output_length_shape = input_shape
+        output_shape, output_length_shape = self.label_encoder.compute_output_shape((output_shape, output_length_shape))
+        for i, rnn in enumerate(self.rnns):
+            output_shape = (
+                self.projections[i].compute_output_shape(output_shape)
+                if self.projections[i] is not None
+                else rnn.compute_output_shape(output_shape)[0]
+            )
+        return tuple(output_shape), tuple(output_length_shape)
 
 
 class TransducerJointMerge(Layer):
@@ -174,8 +174,8 @@ class TransducerJointMerge(Layer):
 
     def compute_mask(self, inputs, mask=None):
         enc_out, pred_out = inputs
-        enc_mask = getattr(enc_out, "_keras_mask", None)  # BT
-        pred_mask = getattr(pred_out, "_keras_mask", None)  # BU
+        enc_mask = mask[0] if mask else getattr(enc_out, "_keras_mask", None)  # BT
+        pred_mask = mask[1] if mask else getattr(pred_out, "_keras_mask", None)  # BU
         auto_mask = None
         if enc_mask is not None:
             auto_mask = enc_mask[:, :, tf.newaxis]  # BT1
@@ -184,8 +184,6 @@ class TransducerJointMerge(Layer):
                 auto_mask = auto_mask & pred_mask[:, tf.newaxis, :]  # BT1 & B1U -> BTU
             else:
                 auto_mask = pred_mask[:, tf.newaxis, :]
-        if mask is not None and auto_mask is not None:
-            auto_mask = auto_mask & mask
         mask = auto_mask
         return mask
 
@@ -197,7 +195,6 @@ class TransducerJointMerge(Layer):
             outputs = tf.add(enc_out, pred_out)  # broadcast operator
         else:
             outputs = tf.multiply(enc_out, pred_out)  # broadcast operator
-        outputs = math_util.apply_mask(outputs, mask=self.compute_mask(inputs))
         return outputs  # [B, T, U, V]
 
     def compute_output_shape(self, input_shape):
@@ -249,7 +246,7 @@ class TransducerJoint(Layer):
             enc_out = self.ffn_enc(enc_out, training=training)  # [B, T, E] => [B, T, V]
         if self.prejoint_prediction_linear:
             pred_out = self.ffn_pred(pred_out, training=training)  # [B, U, P] => [B, U, V]
-        outputs = self.joint([enc_out, pred_out])  # => [B, T, U, V]
+        outputs = self.joint((enc_out, pred_out))  # => [B, T, U, V]
         if self.postjoint_linear:
             outputs = self.ffn(outputs, training=training)
         outputs = self.activation(outputs, training=training)
@@ -284,6 +281,7 @@ class Transducer(BaseModel):
         prediction_rnn_unroll: bool = False,
         prediction_layer_norm: bool = True,
         prediction_projection_units: int = 0,
+        prediction_projection_temporal: bool = False,
         prediction_trainable: bool = True,
         joint_dim: int = 1024,
         joint_activation: str = "tanh",
@@ -312,6 +310,7 @@ class Transducer(BaseModel):
             rnn_unroll=prediction_rnn_unroll,
             layer_norm=prediction_layer_norm,
             projection_units=prediction_projection_units,
+            projection_temporal=prediction_projection_temporal,
             kernel_regularizer=kernel_regularizer,
             bias_regularizer=bias_regularizer,
             trainable=prediction_trainable,
@@ -383,7 +382,7 @@ class Transducer(BaseModel):
 
     def call_logits(self, features, features_length, predictions, predictions_length, training=False):
         enc, logits_length = self.encoder((features, features_length), training=training)
-        pred = self.predict_net((predictions, predictions_length), training=training)
+        pred, _ = self.predict_net((predictions, predictions_length), training=training)
         logits = self.joint_net((enc, pred), training=training)
         return logits, logits_length
 

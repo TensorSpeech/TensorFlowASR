@@ -50,11 +50,14 @@ class RnnTransducerBlock(Layer):
             if layer_norm
             else None
         )
-        self.projection = tf.keras.layers.Dense(
-            dmodel,
-            name="projection",
-            kernel_regularizer=kernel_regularizer,
-            bias_regularizer=bias_regularizer,
+        self.projection = tf.keras.layers.TimeDistributed(
+            tf.keras.layers.Dense(
+                dmodel,
+                name="projection",
+                kernel_regularizer=kernel_regularizer,
+                bias_regularizer=bias_regularizer,
+            ),
+            name="tprojection",
         )
 
     def call(self, inputs, training=False):
@@ -105,7 +108,7 @@ class RnnTransducerBlock(Layer):
         output_shape, output_length_shape = input_shape
         if self.reduction is not None:
             output_shape, output_length_shape = self.reduction.compute_output_shape((output_shape, output_length_shape))
-        output_shape = output_shape[:-1] + (self.projection.units,)
+        output_shape = self.projection.compute_output_shape(output_shape)
         return output_shape, output_length_shape
 
 
