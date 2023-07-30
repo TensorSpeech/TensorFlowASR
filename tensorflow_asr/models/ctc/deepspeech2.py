@@ -155,7 +155,7 @@ class RnnBlock(Layer):
             use_bias=True,
             name=rnn_type,
             zero_output_for_mask=True,
-            dtype=self.dtype,
+            dtype=tf.float32 if self.dtype == tf.bfloat16 else self.dtype,
         )
         if bidirectional:
             self.rnn = tf.keras.layers.Bidirectional(self.rnn, name=f"b{rnn_type}")
@@ -168,7 +168,11 @@ class RnnBlock(Layer):
 
     def call(self, inputs, training=False):
         outputs, outputs_length = inputs
+        if self.dtype == tf.bfloat16:
+            outputs = tf.cast(outputs, tf.float32)
         outputs = self.rnn(outputs, training=training)  # mask auto populate
+        if self.dtype == tf.bfloat16:
+            outputs = tf.cast(outputs, self.dtype)
         outputs = self.bn(outputs, training=training)
         if self.rowconv is not None:
             outputs = self.rowconv(outputs, training=training)

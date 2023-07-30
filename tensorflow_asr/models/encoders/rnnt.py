@@ -44,6 +44,7 @@ class RnnTransducerBlock(Layer):
             zero_output_for_mask=True,
             kernel_regularizer=kernel_regularizer,
             bias_regularizer=bias_regularizer,
+            dtype=tf.float32 if self.dtype == tf.bfloat16 else self.dtype,
         )
         self.ln = (
             tf.keras.layers.LayerNormalization(name="ln", gamma_regularizer=kernel_regularizer, beta_regularizer=bias_regularizer)
@@ -64,7 +65,11 @@ class RnnTransducerBlock(Layer):
         outputs, outputs_length = inputs
         if self.reduction is not None:
             outputs, outputs_length = self.reduction((outputs, outputs_length))
+        if self.dtype == tf.bfloat16:
+            outputs = tf.cast(outputs, tf.float32)
         outputs, *_ = self.rnn(outputs, training=training)
+        if self.dtype == tf.bfloat16:
+            outputs = tf.cast(outputs, self.dtype)
         if self.ln is not None:
             outputs = self.ln(outputs, training=training)
         outputs = self.projection(outputs, training=training)

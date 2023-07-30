@@ -74,7 +74,7 @@ class TransducerPrediction(Layer):
                 zero_output_for_mask=True,
                 kernel_regularizer=kernel_regularizer,
                 bias_regularizer=bias_regularizer,
-                dtype=self.dtype,
+                dtype=tf.float32 if self.dtype == tf.bfloat16 else self.dtype,
             )
             ln = (
                 tf.keras.layers.LayerNormalization(name=f"ln_{i}", gamma_regularizer=kernel_regularizer, beta_regularizer=bias_regularizer)
@@ -114,7 +114,11 @@ class TransducerPrediction(Layer):
         outputs, outputs_length = inputs
         outputs, outputs_length = self.label_encoder((outputs, outputs_length), training=training)
         for i, rnn in enumerate(self.rnns):
+            if self.dtype == tf.bfloat16:
+                outputs = tf.cast(outputs, tf.float32)
             outputs, *_ = rnn(outputs, training=training)  # mask auto populate
+            if self.dtype == tf.bfloat16:
+                outputs = tf.cast(outputs, self.dtype)
             if self.lns[i] is not None:
                 outputs = self.lns[i](outputs, training=training)
             if self.projections[i] is not None:
