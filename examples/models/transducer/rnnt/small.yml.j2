@@ -23,21 +23,21 @@ model_config:
             num_masks: 1
             mask_factor: 27
     encoder_reduction_factors: [6,0,0,0]
-    encoder_dmodel: 256
+    encoder_dmodel: 320
     encoder_rnn_type: lstm
-    encoder_rnn_units: 512
+    encoder_rnn_units: 1024
     encoder_nlayers: 4
     encoder_layer_norm: True
     prediction_label_encode_mode: embedding
-    prediction_embed_dim: 512
+    prediction_embed_dim: 640
     prediction_num_rnns: 1
-    prediction_rnn_units: 512
+    prediction_rnn_units: 1024
     prediction_rnn_type: lstm
     prediction_rnn_unroll: False
     prediction_layer_norm: True
-    prediction_projection_units: 256
+    prediction_projection_units: 320
     prediction_projection_temporal: True
-    joint_dim: 256
+    joint_dim: 320
     prejoint_encoder_linear: False
     prejoint_prediction_linear: False
     postjoint_linear: False
