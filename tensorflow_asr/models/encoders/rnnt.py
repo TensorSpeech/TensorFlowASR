@@ -11,25 +11,13 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+""" http://arxiv.org/abs/1811.06621 """
 
 import tensorflow as tf
 
-from tensorflow_asr.models.base_layer import Layer
+from tensorflow_asr.models.base_layer import Layer, Reshape
 from tensorflow_asr.models.layers.subsampling import TimeReduction
 from tensorflow_asr.utils import layer_util, math_util
-
-
-class Reshape(Layer):
-    def call(self, inputs):
-        outputs, outputs_length = inputs
-        outputs = math_util.merge_two_last_dims(outputs)
-        outputs = math_util.apply_mask(outputs, mask=tf.sequence_mask(outputs_length, maxlen=tf.shape(outputs)[1], dtype=tf.bool))
-        return outputs, outputs_length
-
-    def compute_output_shape(self, input_shape):
-        output_shape, output_length_shape = input_shape
-        output_shape = list(output_shape)
-        return (output_shape[0], output_shape[1], output_shape[2] * output_shape[3]), tuple(output_length_shape)
 
 
 class RnnTransducerBlock(Layer):
@@ -46,9 +34,8 @@ class RnnTransducerBlock(Layer):
         **kwargs,
     ):
         super().__init__(**kwargs)
-
-        RnnClass = layer_util.get_rnn(rnn_type)
-        self.rnn = RnnClass(
+        self.reduction = TimeReduction(reduction_factor, name="reduction") if reduction_factor > 0 else None
+        self.rnn = layer_util.get_rnn(rnn_type)(
             units=rnn_units,
             return_sequences=True,
             name=rnn_type,
@@ -58,27 +45,25 @@ class RnnTransducerBlock(Layer):
             kernel_regularizer=kernel_regularizer,
             bias_regularizer=bias_regularizer,
         )
-
-        if layer_norm:
-            self.ln = tf.keras.layers.LayerNormalization(name="ln", gamma_regularizer=kernel_regularizer, beta_regularizer=bias_regularizer)
-        else:
-            self.ln = None
-
-        if reduction_factor > 0:
-            self.reduction = TimeReduction(reduction_factor, name="reduction")
-        else:
-            self.reduction = None
-
-        self.projection = tf.keras.layers.Dense(dmodel, name="projection", kernel_regularizer=kernel_regularizer, bias_regularizer=bias_regularizer)
+        self.ln = (
+            tf.keras.layers.LayerNormalization(name="ln", gamma_regularizer=kernel_regularizer, beta_regularizer=bias_regularizer)
+            if layer_norm
+            else None
+        )
+        self.projection = tf.keras.layers.Dense(
+            dmodel,
+            name="projection",
+            kernel_regularizer=kernel_regularizer,
+            bias_regularizer=bias_regularizer,
+        )
 
     def call(self, inputs, training=False):
         outputs, outputs_length = inputs
-        outputs = self.rnn(outputs, training=training, mask=getattr(outputs, "_keras_mask", None))
-        outputs = outputs[0]
+        if self.reduction is not None:
+            outputs, outputs_length = self.reduction((outputs, outputs_length))
+        outputs, *_ = self.rnn(outputs, training=training)
         if self.ln is not None:
             outputs = self.ln(outputs, training=training)
-        if self.reduction is not None:
-            outputs, outputs_length = self.reduction([outputs, outputs_length])
         outputs = self.projection(outputs, training=training)
         return outputs, outputs_length
 
@@ -117,15 +102,17 @@ class RnnTransducerBlock(Layer):
             return outputs, outputs_length, new_states
 
     def compute_output_shape(self, input_shape):
-        if self.reduction is None:
-            return tuple(input_shape)
-        return self.reduction.compute_output_shape(input_shape)
+        output_shape, output_length_shape = input_shape
+        if self.reduction is not None:
+            output_shape, output_length_shape = self.reduction.compute_output_shape((output_shape, output_length_shape))
+        output_shape = output_shape[:-1] + (self.projection.units,)
+        return output_shape, output_length_shape
 
 
 class RnnTransducerEncoder(Layer):
     def __init__(
         self,
-        reductions: dict = {0: 3, 1: 2},
+        reduction_factors: list = [6, 0, 0, 0, 0, 0, 0, 0],
         dmodel: int = 640,
         nlayers: int = 8,
         rnn_type: str = "lstm",
@@ -137,12 +124,14 @@ class RnnTransducerEncoder(Layer):
         **kwargs,
     ):
         super().__init__(**kwargs)
-        self._dmodel = dmodel
+        assert len(reduction_factors) == nlayers, "reduction_factors length must be equal to nlayers"
         self.reshape = Reshape(name="reshape")
 
-        self.blocks = [
-            RnnTransducerBlock(
-                reduction_factor=reductions.get(i, 0) if reductions else 0,  # key is index, value is the factor
+        self.time_reduction_factor = 1
+        self.blocks = []
+        for i in range(nlayers):
+            block = RnnTransducerBlock(
+                reduction_factor=reduction_factors[i],
                 dmodel=dmodel,
                 rnn_type=rnn_type,
                 rnn_units=rnn_units,
@@ -152,13 +141,8 @@ class RnnTransducerEncoder(Layer):
                 bias_regularizer=bias_regularizer,
                 name=f"block_{i}",
             )
-            for i in range(nlayers)
-        ]
-
-        self.time_reduction_factor = 1
-        for block in self.blocks:
-            if block.reduction is not None:
-                self.time_reduction_factor *= block.reduction.time_reduction_factor
+            self.blocks.append(block)
+            self.time_reduction_factor *= getattr(block.reduction, "time_reduction_factor", 1)
 
     def get_initial_state(self, batch_size=1):
         """Get zeros states
@@ -174,7 +158,7 @@ class RnnTransducerEncoder(Layer):
     def call(self, inputs, training=False):
         outputs, outputs_length = self.reshape(inputs)
         for block in self.blocks:
-            outputs, outputs_length = block([outputs, outputs_length], training=training)
+            outputs, outputs_length = block((outputs, outputs_length), training=training)
         return outputs, outputs_length
 
     def call_next(self, features, features_length, previous_encoder_states, *args, **kwargs):
@@ -208,8 +192,7 @@ class RnnTransducerEncoder(Layer):
         return mask, None
 
     def compute_output_shape(self, input_shape):
-        output_shape, output_length_shape = self.reshape.compute_output_shape(input_shape)
-        output_shape = list(output_shape)
-        output_shape[1] = None if output_shape[1] is None else math_util.legacy_get_reduced_length(output_shape[1], self.time_reduction_factor)
-        output_shape[2] = self._dmodel
-        return tuple(output_shape), output_length_shape
+        output_shape = self.reshape.compute_output_shape(input_shape)
+        for block in self.blocks:
+            output_shape = block.compute_output_shape(output_shape)
+        return output_shape

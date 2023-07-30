@@ -271,7 +271,7 @@ class FeatureExtraction(Layer):
         nsamples = tf.reduce_sum(tf.cast(mask, tf.int32), axis=1)
         nframes = tf.vectorized_map(self.get_nframes, nsamples, warn=False)
         padded_nframes = self.get_nframes(tf.shape(signals, tf.int32)[1])
-        return tf.sequence_mask(nframes, padded_nframes, dtype=tf.bool), None
+        return tf.sequence_mask(nframes, maxlen=padded_nframes, dtype=tf.bool), None
 
     def compute_output_shape(self, input_shape):
         signal_shape, signal_length_shape = input_shape

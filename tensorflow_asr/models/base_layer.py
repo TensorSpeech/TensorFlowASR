@@ -32,11 +32,14 @@ class Layer(keras.layers.Layer):
 
 class Reshape(Layer):
     def call(self, inputs):
-        return math_util.merge_two_last_dims(inputs)
+        outputs, outputs_length = inputs
+        outputs = math_util.merge_two_last_dims(outputs)
+        return outputs, outputs_length
 
     def compute_output_shape(self, input_shape):
-        b, h, w, d = input_shape
-        return (b, h, w * d)
+        output_shape, output_length_shape = input_shape
+        output_shape = output_shape[:2] + (output_shape[2] * output_shape[3],)
+        return output_shape, output_length_shape
 
 
 class Identity(Layer):

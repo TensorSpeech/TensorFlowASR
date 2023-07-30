@@ -26,7 +26,7 @@ class RnnTransducer(Transducer):
         blank: int,
         vocab_size: int,
         speech_config: dict,
-        encoder_reductions: dict = {0: 3, 1: 2},
+        encoder_reduction_factors: list = [6, 0, 0, 0, 0, 0, 0, 0],
         encoder_dmodel: int = 640,
         encoder_nlayers: int = 8,
         encoder_rnn_type: str = "lstm",
@@ -59,7 +59,7 @@ class RnnTransducer(Transducer):
         super().__init__(
             speech_config=speech_config,
             encoder=RnnTransducerEncoder(
-                reductions=encoder_reductions,
+                reduction_factors=encoder_reduction_factors,
                 dmodel=encoder_dmodel,
                 nlayers=encoder_nlayers,
                 rnn_type=encoder_rnn_type,

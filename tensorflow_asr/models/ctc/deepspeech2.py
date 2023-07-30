@@ -14,24 +14,11 @@
 
 import tensorflow as tf
 
-from tensorflow_asr.models.base_layer import Identity, Layer
+from tensorflow_asr.models.base_layer import Identity, Layer, Reshape
 from tensorflow_asr.models.ctc.base_ctc import CtcModel
 from tensorflow_asr.models.layers.row_conv_1d import RowConv1D
 from tensorflow_asr.models.layers.sequence_wise_bn import SequenceBatchNorm
 from tensorflow_asr.utils import layer_util, math_util
-
-
-class Reshape(Layer):
-    def call(self, inputs):
-        outputs, outputs_length = inputs
-        outputs = math_util.merge_two_last_dims(outputs)
-        return outputs, outputs_length
-
-    def compute_output_shape(self, input_shape):
-        output_shape, output_length_shape = input_shape
-        b, t, f, c = output_shape
-        return (b, t, f * c), output_length_shape
-
 
 # ----------------------------------- CONV ----------------------------------- #
 
@@ -62,7 +49,7 @@ class ConvBlock(Layer):
         outputs = self.relu(outputs, training=training)
         outputs = self.do(outputs, training=training)
         outputs_length = math_util.conv_output_length(
-            outputs_length, filter_size=self.conv.filters, padding=self.conv.padding, stride=self.conv.strides[0]
+            outputs_length, filter_size=self.conv.kernel_size[0], padding=self.conv.padding, stride=self.conv.strides[0]
         )
         return outputs, outputs_length
 
@@ -70,7 +57,7 @@ class ConvBlock(Layer):
         outputs, outputs_length = inputs
         maxlen = tf.shape(outputs)[1]
         maxlen, outputs_length = (
-            math_util.conv_output_length(length, filter_size=self.conv.filters, padding=self.conv.padding, stride=self.conv.strides[0])
+            math_util.conv_output_length(length, filter_size=self.conv.kernel_size[0], padding=self.conv.padding, stride=self.conv.strides[0])
             for length in (maxlen, outputs_length)
         )
         mask = tf.sequence_mask(outputs_length, maxlen=maxlen, dtype=tf.bool)
@@ -129,7 +116,7 @@ class ConvModule(Layer):
         maxlen = tf.shape(outputs)[1]
         for conv in self.convs:
             maxlen, outputs_length = (
-                math_util.conv_output_length(length, filter_size=conv.conv.filters, padding=conv.conv.padding, stride=conv.conv.strides[0])
+                math_util.conv_output_length(length, filter_size=conv.conv.kernel_size[0], padding=conv.conv.padding, stride=conv.conv.strides[0])
                 for length in (maxlen, outputs_length)
             )
         mask = tf.sequence_mask(outputs_length, maxlen=maxlen, dtype=tf.bool)
@@ -160,8 +147,7 @@ class RnnBlock(Layer):
         **kwargs,
     ):
         super().__init__(**kwargs)
-        RnnClass = layer_util.get_rnn(rnn_type)
-        self.rnn = RnnClass(
+        self.rnn = layer_util.get_rnn(rnn_type)(
             units,
             dropout=dropout,
             unroll=unroll,
@@ -180,9 +166,9 @@ class RnnBlock(Layer):
         if not bidirectional and rowconv > 0:
             self.rowconv = RowConv1D(filters=units, future_context=rowconv, name="rowconv")
 
-    def call(self, inputs, training=False, mask=None):
+    def call(self, inputs, training=False):
         outputs, outputs_length = inputs
-        outputs = self.rnn(outputs, training=training, mask=mask[0] if mask else getattr(outputs, "_keras_mask", None))
+        outputs = self.rnn(outputs, training=training) # mask auto populate
         outputs = self.bn(outputs, training=training)
         if self.rowconv is not None:
             outputs = self.rowconv(outputs, training=training)
@@ -190,7 +176,7 @@ class RnnBlock(Layer):
 
     def compute_output_shape(self, input_shape):
         output_shape, output_length_shape = input_shape
-        output_shape = output_shape[:-1] + (self.rnn.units,)
+        output_shape = self.rnn.compute_output_shape(output_shape)
         return output_shape, output_length_shape
 
 
@@ -222,16 +208,17 @@ class RnnModule(Layer):
             for i in range(nlayers)
         ]
 
-    def call(self, inputs, training=False, mask=None):
+    def call(self, inputs, training=False):
         outputs = inputs
         for block in self.blocks:
-            outputs = block(outputs, training=training, mask=mask)
+            outputs = block(outputs, training=training)
         return outputs
 
     def compute_output_shape(self, input_shape):
-        output_shape, output_length_shape = input_shape
-        output_shape = output_shape[:-1] + (self.blocks[-1].rnn.units,)
-        return output_shape, output_length_shape
+        output_shape = input_shape
+        for block in self.blocks:
+            output_shape = block.compute_output_shape(output_shape)
+        return output_shape
 
 
 # ------------------------------ FULLY CONNECTED ----------------------------- #
@@ -282,9 +269,10 @@ class FcModule(Layer):
         return outputs
 
     def compute_output_shape(self, input_shape):
-        output_shape, output_length_shape = input_shape
-        output_shape = output_shape[:-1] + (self.blocks[-1].fc.units,)
-        return output_shape, output_length_shape
+        output_shape = input_shape
+        for block in self.blocks:
+            output_shape = block.compute_output_shape(output_shape)
+        return output_shape
 
 
 class DeepSpeech2Encoder(Layer):

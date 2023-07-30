@@ -14,15 +14,10 @@
 
 import tensorflow as tf
 
-from tensorflow_asr.models.base_layer import Layer
+from tensorflow_asr.models.base_layer import Layer, Reshape
 from tensorflow_asr.models.ctc.base_ctc import CtcModel
 from tensorflow_asr.models.layers.convolution import Conv1D
 from tensorflow_asr.utils import math_util
-
-
-class Reshape(tf.keras.layers.Layer):
-    def call(self, inputs):
-        return math_util.merge_two_last_dims(inputs)
 
 
 class JasperSubBlock(tf.keras.layers.Layer):
@@ -286,8 +281,8 @@ class JasperEncoder(Layer):
         self.time_reduction_factor *= self.third_additional_block.reduction_factor
 
     def call(self, inputs, training=False):
-        outputs, inputs_length = inputs
-        outputs = self.reshape(outputs)
+        outputs, outputs_length = inputs
+        outputs, outputs_length = self.reshape((outputs, outputs_length))
         outputs = self.first_additional_block(outputs, training=training)
 
         residuals = []
@@ -296,7 +291,7 @@ class JasperEncoder(Layer):
 
         outputs = self.second_additional_block(outputs, training=training)
         outputs = self.third_additional_block(outputs, training=training)
-        outputs_length = math_util.get_reduced_length(inputs_length, self.time_reduction_factor)
+        outputs_length = math_util.get_reduced_length(outputs_length, self.time_reduction_factor)
         outputs = math_util.apply_mask(outputs, mask=tf.sequence_mask(outputs_length, maxlen=tf.shape(outputs)[1], dtype=tf.bool))
         return outputs, outputs_length
 

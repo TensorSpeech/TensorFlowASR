@@ -12,6 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+""" http://arxiv.org/abs/2005.08100 """
 
 import tensorflow as tf
 
@@ -96,6 +97,9 @@ class FFModule(Layer):
         outputs = self.post_norm(outputs, training=training)
         outputs = self.residual([inputs, outputs], training=training)
         return outputs
+
+    def compute_output_shape(self, input_shape):
+        return input_shape
 
 
 class MHSAModule(Layer):
@@ -187,7 +191,7 @@ class MHSAModule(Layer):
 
     def compute_output_shape(self, input_shape):
         output_shape, *_ = input_shape
-        return tf.TensorShape(output_shape)
+        return output_shape
 
 
 class ConvModule(Layer):
@@ -294,6 +298,9 @@ class ConvModule(Layer):
         outputs = self.post_norm(outputs, training=training)
         outputs = self.residual([inputs, outputs], training=training)
         return outputs
+
+    def compute_output_shape(self, input_shape):
+        return input_shape
 
 
 class ConformerBlock(Layer):
@@ -413,7 +420,7 @@ class ConformerBlock(Layer):
 
     def compute_output_shape(self, input_shape):
         output_shape, *_ = input_shape
-        return tf.TensorShape(output_shape)
+        return output_shape
 
 
 class ConformerEncoder(Layer):
@@ -580,7 +587,9 @@ class ConformerEncoder(Layer):
         return self.conv_subsampling.compute_mask(inputs, mask=mask)
 
     def compute_output_shape(self, input_shape):
-        outputs_shape, outputs_length_shape = self.conv_subsampling.compute_output_shape(input_shape)
-        outputs_shape = list(outputs_shape)
-        outputs_shape[-1] = self._dmodel
-        return outputs_shape, outputs_length_shape
+        output_shape, output_length_shape = self.conv_subsampling.compute_output_shape(input_shape)
+        output_shape = self.linear.compute_output_shape(output_shape)
+        output_shape = self.do.compute_output_shape(output_shape)
+        for cblock in self.conformer_blocks:
+            output_shape = cblock.compute_output_shape(output_shape)
+        return output_shape, output_length_shape

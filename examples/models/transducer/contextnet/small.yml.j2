@@ -250,7 +250,7 @@ learning_config:
     tensorboard:
       log_dir: {{modeldir}}/tensorboard
       histogram_freq: 1
-      write_graph: True
-      write_images: True
+      write_graph: False
+      write_images: False
       update_freq: epoch
-      profile_batch: 2
+      profile_batch: 100

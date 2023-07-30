@@ -9,19 +9,19 @@ model_config:
       sample_rate: 16000
       frame_ms: 25
       stride_ms: 10
-      num_feature_bins: 128
-      feature_type: spectrogram
-    conv_type: conv1d
-    conv_kernels: [5, 5, 5]
-    conv_strides: [1, 1, 2]
-    conv_filters: [512, 512, 512]
+      num_feature_bins: 80
+      feature_type: log_mel_spectrogram
+    conv_type: conv2d
+    conv_kernels: [[11, 41], [11, 21], [11, 21]]
+    conv_strides: [[3, 2], [2, 1], [1, 1]]
+    conv_filters: [32, 32, 96]
     conv_dropout: 0.1
-    conv_padding: causal
-    rnn_nlayers: 2
-    rnn_type: lstm
+    conv_padding: same
+    rnn_nlayers: 5
+    rnn_type: gru
     rnn_bn_type: bn
     rnn_units: 512
-    rnn_bidirectional: False
+    rnn_bidirectional: True
     rnn_unroll: False
     rnn_rowconv: 0
     rnn_dropout: 0.1

@@ -11,12 +11,13 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+""" http://arxiv.org/abs/2005.03191 """
 
 from typing import List
 
 import tensorflow as tf
 
-from tensorflow_asr.models.base_layer import Layer
+from tensorflow_asr.models.base_layer import Layer, Reshape
 from tensorflow_asr.utils import math_util
 
 L2 = tf.keras.regularizers.l2(1e-6)
@@ -35,12 +36,7 @@ def get_activation(
     raise ValueError("activation must be either 'silu', 'swish', 'relu' or 'linear'")
 
 
-class Reshape(tf.keras.layers.Layer):
-    def call(self, inputs):
-        return math_util.merge_two_last_dims(inputs)
-
-
-class ConvModule(tf.keras.layers.Layer):
+class ConvModule(Layer):
     def __init__(
         self,
         kernel_size: int = 3,
@@ -68,13 +64,32 @@ class ConvModule(tf.keras.layers.Layer):
         self.activation = get_activation(activation)
 
     def call(self, inputs, training=False):
-        outputs = self.conv(inputs, training=training)
+        outputs, outputs_length = inputs
+        outputs = self.conv(outputs, training=training)
+        outputs_length = math_util.conv_output_length(
+            outputs_length, filter_size=self.conv.kernel_size[0], padding=self.conv.padding, stride=self.conv.strides[0]
+        )
         outputs = self.bn(outputs, training=training)
         outputs = self.activation(outputs)
-        return outputs
+        return outputs, outputs_length
+
+    def compute_mask(self, inputs, mask=None):
+        outputs, outputs_length = inputs
+        maxlen = tf.shape(outputs)[1]
+        maxlen, outputs_length = (
+            math_util.conv_output_length(length, filter_size=self.conv.kernel_size[0], padding=self.conv.padding, stride=self.conv.strides[0])
+            for length in (maxlen, outputs_length)
+        )
+        mask = tf.sequence_mask(outputs_length, maxlen=maxlen, dtype=tf.bool)
+        return mask, None
+
+    def compute_output_shape(self, input_shape):
+        output_shape, output_length_shape = input_shape
+        output_shape = self.conv.compute_output_shape(output_shape)
+        return output_shape, output_length_shape
 
 
-class SEModule(tf.keras.layers.Layer):
+class SEModule(Layer):
     def __init__(
         self,
         kernel_size: int = 3,
@@ -103,11 +118,10 @@ class SEModule(tf.keras.layers.Layer):
         self.fc2 = tf.keras.layers.Dense(filters, name="fc2")
 
     def call(self, inputs, training=False):
-        features, inputs_length = inputs
-        outputs = self.conv(features, training=training)  # [B, T, E]
+        outputs, outputs_length = inputs
+        outputs, outputs_length = self.conv((outputs, outputs_length), training=training)  # [B, T, E]
 
-        mask = tf.sequence_mask(inputs_length, maxlen=tf.shape(outputs)[1])
-        se = self.global_avg_pool(outputs, mask=mask)  # [B, 1, E]
+        se = self.global_avg_pool(outputs)  # [B, 1, E], mask auto populate
         se = self.fc1(se, training=training)
         se = self.activation(se)
         se = self.fc2(se, training=training)
@@ -115,10 +129,16 @@ class SEModule(tf.keras.layers.Layer):
 
         se = tf.tile(se, [1, tf.shape(outputs)[1], 1])  # [B, 1, E] => [B, T, E]
         outputs = tf.multiply(outputs, se)  # [B, T, E]
-        return outputs
+        return outputs, outputs_length
+
+    def compute_mask(self, inputs, mask=None):
+        return self.conv.compute_mask(inputs, mask=mask)
+
+    def compute_output_shape(self, input_shape):
+        return self.conv.compute_output_shape(input_shape)
 
 
-class ConvBlock(tf.keras.layers.Layer):
+class ConvBlock(Layer):
     def __init__(
         self,
         nlayers: int = 3,
@@ -192,20 +212,28 @@ class ConvBlock(tf.keras.layers.Layer):
         self.activation = get_activation(activation)
 
     def call(self, inputs, training=False):
-        features, inputs_length = inputs
-        outputs = features
+        _inputs, _inputs_length = inputs
+        outputs, outputs_length = _inputs, _inputs_length
         for conv in self.convs:
-            outputs = conv(outputs, training=training)
-        outputs = self.last_conv(outputs, training=training)
-        inputs_length = math_util.conv_output_length(
-            inputs_length, filter_size=self.last_conv.conv.kernel_size[0], padding=self.last_conv.conv.padding, stride=self.last_conv.strides
-        )
-        outputs = self.se([outputs, inputs_length], training=training)
+            outputs, outputs_length = conv((outputs, outputs_length), training=training)
+        outputs, outputs_length = self.last_conv((outputs, outputs_length), training=training)
+        outputs, outputs_length = self.se((outputs, outputs_length), training=training)
         if self.residual is not None:
-            res = self.residual(features, training=training)
+            res, _ = self.residual((_inputs, _inputs_length), training=training)
             outputs = tf.add(outputs, res)
         outputs = self.activation(outputs)
-        return outputs, inputs_length
+        return outputs, outputs_length
+
+    def compute_mask(self, inputs, mask=None):
+        return self.last_conv.compute_mask(inputs, mask=mask)
+
+    def compute_output_shape(self, input_shape):
+        output_shape = input_shape
+        for conv in self.convs:
+            output_shape = conv.compute_output_shape(output_shape)
+        output_shape = self.last_conv.compute_output_shape(output_shape)
+        output_shape = self.se.compute_output_shape(output_shape)
+        return output_shape
 
 
 class ContextNetEncoder(Layer):
@@ -222,27 +250,25 @@ class ContextNetEncoder(Layer):
         self.reshape = Reshape(name="reshape")
 
         self.blocks = []
+        self.time_reduction_factor = 1
         for i, config in enumerate(blocks):
-            self.blocks.append(
-                ConvBlock(
-                    **config,
-                    alpha=alpha,
-                    kernel_regularizer=kernel_regularizer,
-                    bias_regularizer=bias_regularizer,
-                    name=f"block_{i}",
-                )
+            block = ConvBlock(
+                **config,
+                alpha=alpha,
+                kernel_regularizer=kernel_regularizer,
+                bias_regularizer=bias_regularizer,
+                name=f"block_{i}",
             )
+            self.blocks.append(block)
+            self.time_reduction_factor *= block.time_reduction_factor
 
         self.dmodel = self.blocks[-1].dmodel
-        self.time_reduction_factor = 1
-        for block in self.blocks:
-            self.time_reduction_factor *= block.time_reduction_factor
 
     def call(self, inputs, training=False):
         outputs, outputs_length = inputs
-        outputs = self.reshape(outputs)
+        outputs, outputs_length = self.reshape((outputs, outputs_length))
         for block in self.blocks:
-            outputs, outputs_length = block([outputs, outputs_length], training=training)
+            outputs, outputs_length = block((outputs, outputs_length), training=training)
         return outputs, outputs_length
 
     def call_next(self, features, features_length, *args, **kwargs):
@@ -271,9 +297,8 @@ class ContextNetEncoder(Layer):
         return mask, None
 
     def compute_output_shape(self, input_shape):
-        inputs_shape, inputs_length_shape = input_shape
-        outputs_size = self.dmodel
-        outputs_time = None if inputs_shape[1] is None else math_util.legacy_get_reduced_length(inputs_shape[1], self.time_reduction_factor)
-        outputs_batch = inputs_shape[0]
-        outputs_shape = [outputs_batch, outputs_time, outputs_size]
-        return tuple(outputs_shape), tuple(inputs_length_shape)
+        output_shape = input_shape
+        output_shape = self.reshape.compute_output_shape(output_shape)
+        for block in self.blocks:
+            output_shape = block.compute_output_shape(output_shape)
+        return output_shape

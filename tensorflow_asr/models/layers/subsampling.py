@@ -33,21 +33,21 @@ class TimeReduction(Layer):
         shape = shape_util.shape_list(outputs)
         outputs = tf.pad(outputs, [[0, 0], [0, self.padding(shape[1])], [0, 0]])
         outputs = tf.reshape(outputs, [shape[0], -1, shape[-1] * self.time_reduction_factor])
+        outputs_length = math_util.get_reduced_length(outputs_length, reduction_factor=self.time_reduction_factor)
         return outputs, outputs_length
 
     def compute_mask(self, inputs, mask=None):
         outputs, outputs_length = inputs
         maxlen = tf.shape(outputs)[1]
-        maxlen, outputs_length = [math_util.get_reduced_length(length, self.time_reduction_factor) for length in (maxlen, outputs_length)]
+        maxlen, outputs_length = (math_util.get_reduced_length(length, self.time_reduction_factor) for length in (maxlen, outputs_length))
         mask = tf.sequence_mask(outputs_length, maxlen=maxlen, dtype=tf.bool)
         return mask, None
 
     def compute_output_shape(self, input_shape):
-        inputs_shape, inputs_length_shape = input_shape
-        reduced_time = math_util.legacy_get_reduced_length(inputs_shape[1], self.time_reduction_factor)
-        inputs_shape = list(inputs_shape)
-        inputs_shape[1] = reduced_time
-        return inputs_shape, inputs_length_shape
+        output_shape, output_length_shape = input_shape
+        reduced_time = math_util.legacy_get_reduced_length(output_shape[1], self.time_reduction_factor)
+        output_shape = output_shape[:1] + (reduced_time,) + output_shape[2:]
+        return output_shape, output_length_shape
 
 
 class VggSubsampling(Layer):
@@ -127,23 +127,23 @@ class VggSubsampling(Layer):
         outputs, outputs_length = inputs
         maxlen = tf.shape(outputs)[1]
         for pool in (self.maxpool1, self.maxpool2):
-            maxlen, outputs_length = [
+            maxlen, outputs_length = (
                 math_util.conv_output_length(length, pool.pool_size[0], padding=pool.padding, stride=pool.strides[0])
                 for length in (maxlen, outputs_length)
-            ]
+            )
         mask = tf.sequence_mask(outputs_length, maxlen=maxlen, dtype=tf.bool)
         return mask, None
 
     def compute_output_shape(self, input_shape):
-        inputs_shape, inputs_length_shape = input_shape
-        outputs_shape = self.conv1.compute_output_shape(inputs_shape)
+        output_shape, output_length_shape = input_shape
+        outputs_shape = self.conv1.compute_output_shape(output_shape)
         outputs_shape = self.conv2.compute_output_shape(outputs_shape)
         outputs_shape = self.maxpool1.compute_output_shape(outputs_shape)
         outputs_shape = self.conv3.compute_output_shape(outputs_shape)
         outputs_shape = self.conv4.compute_output_shape(outputs_shape)
         outputs_shape = self.maxpool2.compute_output_shape(outputs_shape)
-        outputs_shape = list(outputs_shape[:2]) + [outputs_shape[2] * outputs_shape[3]]
-        return outputs_shape, inputs_length_shape
+        outputs_shape = outputs_shape[:2] + (outputs_shape[2] * outputs_shape[3],)
+        return outputs_shape, output_length_shape
 
 
 class Conv2dSubsampling(Layer):
@@ -214,21 +214,21 @@ class Conv2dSubsampling(Layer):
         outputs, outputs_length = inputs
         maxlen = tf.shape(outputs)[1]
         for block in self.convs:
-            maxlen, outputs_length = [
+            maxlen, outputs_length = (
                 math_util.conv_output_length(
                     length, filter_size=block.layers[0].kernel_size[0], padding=block.layers[0].padding, stride=block.layers[0].strides[0]
                 )
                 for length in (maxlen, outputs_length)
-            ]
+            )
         mask = tf.sequence_mask(outputs_length, maxlen=maxlen, dtype=tf.bool)
         return mask, None
 
     def compute_output_shape(self, input_shape):
-        outputs_shape, inputs_length_shape = input_shape
+        output_shape, output_length_shape = input_shape
         for block in self.convs:
-            outputs_shape = block.layers[0].compute_output_shape(outputs_shape)
-        outputs_shape = list(outputs_shape[:2]) + [outputs_shape[2] * outputs_shape[3]]
-        return tuple(outputs_shape), inputs_length_shape
+            output_shape = block.layers[0].compute_output_shape(output_shape)
+        output_shape = output_shape[:2] + (output_shape[2] * output_shape[3],)
+        return output_shape, output_length_shape
 
 
 class Conv1dSubsampling(Layer):
@@ -299,18 +299,18 @@ class Conv1dSubsampling(Layer):
         outputs, outputs_length = inputs
         maxlen = tf.shape(outputs)[1]
         for block in self.convs:
-            maxlen, outputs_length = [
+            maxlen, outputs_length = (
                 math_util.conv_output_length(
                     length, filter_size=block.layers[0].kernel_size[0], padding=block.layers[0].padding, stride=block.layers[0].strides[0]
                 )
                 for length in (maxlen, outputs_length)
-            ]
+            )
         mask = tf.sequence_mask(outputs_length, maxlen=maxlen, dtype=tf.bool)
         return mask, None
 
     def compute_output_shape(self, input_shape):
-        outputs_shape, inputs_length_shape = input_shape
-        outputs_shape = list(outputs_shape[:2]) + [outputs_shape[2] * outputs_shape[3]]
+        output_shape, output_length_shape = input_shape
+        output_shape = output_shape[:2] + (output_shape[2] * output_shape[3],)
         for block in self.convs:
-            outputs_shape = block.layers[0].compute_output_shape(outputs_shape)
-        return tuple(outputs_shape), inputs_length_shape
+            output_shape = block.layers[0].compute_output_shape(output_shape)
+        return output_shape, output_length_shape
