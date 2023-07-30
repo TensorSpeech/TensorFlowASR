@@ -14,7 +14,6 @@
 # limitations under the License.
 
 import tensorflow as tf
-from keras.models import Model
 
 from tensorflow_asr.models.layers.feature_extraction import FeatureExtraction
 from tensorflow_asr.optimizers.accumulation import GradientAccumulator
@@ -23,7 +22,7 @@ from tensorflow_asr.utils import data_util, env_util, file_util
 logger = tf.get_logger()
 
 
-class BaseModelLayer(Model):  # pylint: disable=abstract-method
+class BaseModelLayer(tf.keras.Model):  # pylint: disable=abstract-method
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self._output_shape = None
@@ -33,7 +32,7 @@ class BaseModelLayer(Model):  # pylint: disable=abstract-method
         return input_shape
 
 
-class BaseModel(Model):
+class BaseModel(tf.keras.Model):
     def __init__(self, speech_config: dict, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.feature_extraction = FeatureExtraction(**speech_config)

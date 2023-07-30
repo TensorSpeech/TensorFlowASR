@@ -17,8 +17,6 @@ logger.setLevel(os.environ.get("LOG_LEVEL", "info").upper())
 logger.propagate = False
 warnings.simplefilter("ignore")
 
-from keras.layers import Layer
-
 try:
     from keras.utils import tf_utils
 except ImportError:
@@ -43,9 +41,9 @@ def compute_output_shape(self, input_shape):
 
 
 # monkey patch
-Layer.output_shape = output_shape
-Layer.build = build
-Layer.compute_output_shape = compute_output_shape
+tf.keras.layers.Layer.output_shape = output_shape
+tf.keras.layers.Layer.build = build
+tf.keras.layers.Layer.compute_output_shape = compute_output_shape
 
 from tensorflow_asr.models import *
 from tensorflow_asr.optimizers import *
