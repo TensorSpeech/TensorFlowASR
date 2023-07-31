@@ -589,7 +589,8 @@ class ConformerEncoder(Layer):
     def compute_output_shape(self, input_shape):
         output_shape, output_length_shape = self.conv_subsampling.compute_output_shape(input_shape)
         output_shape = self.linear.compute_output_shape(output_shape)
+        output_shape, relative_position_encoding_shape = self.relpe.compute_output_shape(output_shape)
         output_shape = self.do.compute_output_shape(output_shape)
         for cblock in self.conformer_blocks:
-            output_shape = cblock.compute_output_shape(output_shape)
+            output_shape = cblock.compute_output_shape((output_shape, relative_position_encoding_shape, None, None))
         return output_shape, output_length_shape
