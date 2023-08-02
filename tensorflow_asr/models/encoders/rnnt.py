@@ -51,15 +51,7 @@ class RnnTransducerBlock(Layer):
             if layer_norm
             else None
         )
-        self.projection = tf.keras.layers.TimeDistributed(
-            tf.keras.layers.Dense(
-                dmodel,
-                name="projection",
-                kernel_regularizer=kernel_regularizer,
-                bias_regularizer=bias_regularizer,
-            ),
-            name="tprojection",
-        )
+        self.projection = tf.keras.layers.Dense(dmodel, name="projection", kernel_regularizer=kernel_regularizer, bias_regularizer=bias_regularizer)
 
     def call(self, inputs, training=False):
         outputs, outputs_length = inputs

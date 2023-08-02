@@ -15,9 +15,10 @@
 
 import tensorflow as tf
 
+from tensorflow_asr import schemas
 from tensorflow_asr.models.layers.feature_extraction import FeatureExtraction
 from tensorflow_asr.optimizers.accumulation import GradientAccumulator
-from tensorflow_asr.utils import data_util, env_util, file_util
+from tensorflow_asr.utils import env_util, file_util
 
 logger = tf.get_logger()
 
@@ -87,12 +88,6 @@ class BaseModel(tf.keras.Model):
         with file_util.read_file(filepath) as path:
             super().load_weights(filepath=path, by_name=by_name, skip_mismatch=skip_mismatch, options=options)
 
-    @property
-    def metrics(self):
-        if not hasattr(self, "_tfasr_metrics"):
-            self._tfasr_metrics = {}
-        return list(self._tfasr_metrics.values())
-
     def reset_metrics(self):
         super().reset_metrics()
         self.reset_states()  # reset all stateful states also
@@ -115,14 +110,14 @@ class BaseModel(tf.keras.Model):
         batch_size : int, optional
             Batch size, by default None
         """
-        inputs = tf.keras.Input(shape=input_shape, batch_size=batch_size, dtype=tf.float32)
-        inputs_length = tf.keras.Input(shape=[], batch_size=batch_size, dtype=tf.int32)
+        signals = tf.keras.Input(shape=input_shape, batch_size=batch_size, dtype=tf.float32)
+        signals_length = tf.keras.Input(shape=[], batch_size=batch_size, dtype=tf.int32)
         predictions = tf.keras.Input(shape=prediction_shape, batch_size=batch_size, dtype=tf.int32)
         predictions_length = tf.keras.Input(shape=[], batch_size=batch_size, dtype=tf.int32)
         self(
-            data_util.create_inputs(
-                inputs=inputs,
-                inputs_length=inputs_length,
+            schemas.TrainInput(
+                inputs=signals,
+                inputs_length=signals_length,
                 predictions=predictions,
                 predictions_length=predictions_length,
             ),
@@ -157,18 +152,15 @@ class BaseModel(tf.keras.Model):
         self.gwn_config = gwn_config
         self.gradn = tf.keras.regularizers.get(gradn_config) if gradn_config else None
         self.distribute_reduction_method = "sum"
-        self.add_custom_metric(tf.keras.metrics.Mean(name="loss"))
         super().compile(optimizer=optimizer, loss=loss, run_eagerly=run_eagerly, **kwargs)
 
     def call_logits(self, features, features_length, *args, training=False):
         raise NotImplementedError()
 
-    def call(self, inputs, training=False):
-        signals, signals_length = inputs["inputs"], inputs["inputs_length"]
-        predictions, predictions_length = inputs["predictions"], inputs["predictions_length"]
-        features, features_length = self.feature_extraction((signals, signals_length), training=training)
-        logits, logits_length = self.call_logits(features, features_length, predictions, predictions_length, training=training)
-        return data_util.create_logits(logits=logits, logits_length=logits_length)
+    def call(self, inputs: schemas.TrainInput, training=False):
+        features, features_length = self.feature_extraction((inputs.inputs, inputs.inputs_length), training=training)
+        logits, logits_length = self.call_logits(features, features_length, inputs.predictions, inputs.predictions_length, training=training)
+        return schemas.TrainOutput(logits=logits, logits_length=logits_length)
 
     # -------------------------------- STEP FUNCTIONS -------------------------------------
     def apply_gwn(self) -> list:
@@ -187,20 +179,23 @@ class BaseModel(tf.keras.Model):
             del logs["predictions"]
         return logs
 
-    def train_step(self, batch):
-        inputs, y_true = batch
+    def train_step(self, data):
+        x = data[0]
+        y, y_length = data[1]
+        y._keras_length = y_length
+        sample_weight = None
 
         with tf.GradientTape() as tape:
             original_weights = self.apply_gwn()
-            y_pred = self(inputs, training=True)
+
+            y_pred, y_pred_length = self(x, training=True)
+            y_pred._keras_length = y_pred_length
+
             self.remove_gwn(original_weights)
-            per_sample_loss = self.loss(y_true=y_true, y_pred=y_pred)
-            global_batch_size = self._get_global_batch_size(y_pred)
-            loss = tf.nn.compute_average_loss(per_sample_loss, global_batch_size=global_batch_size)
-            if self.use_loss_scale:
-                scaled_loss = self.optimizer.get_scaled_loss(loss)
+            loss = self.compute_loss(x, y, y_pred, sample_weight)
 
         if self.use_loss_scale:
+            scaled_loss = self.optimizer.get_scaled_loss(loss)
             gradients = tape.gradient(scaled_loss, self.trainable_weights, unconnected_gradients=tf.UnconnectedGradients.ZERO)
             gradients = self.optimizer.get_unscaled_gradients(gradients)
         else:
@@ -221,26 +216,28 @@ class BaseModel(tf.keras.Model):
         if self.use_ga:
             tf.cond(self.ga.is_apply_step, self.ga.reset, lambda: None)
 
-        self._tfasr_metrics["loss"].update_state(per_sample_loss)
-        return {
-            "loss": self._tfasr_metrics["loss"].result() / self.distribute_strategy.num_replicas_in_sync,
-        }
+        return self.compute_metrics(x, y, y_pred, sample_weight)
 
-    def test_step(self, batch):
-        inputs, y_true = batch
-        y_pred = self(inputs, training=False)
-        per_sample_loss = self.loss(y_true=y_true, y_pred=y_pred)
-        self._tfasr_metrics["loss"].update_state(per_sample_loss)
-        return {m.name: m.result() / self.distribute_strategy.num_replicas_in_sync for m in self.metrics}
+    def test_step(self, data):
+        x = data[0]
+        y, y_length = data[1]
+        y._keras_length = y_length
+        sample_weight = None
 
-    def predict_step(self, batch):
-        inputs, y_true = batch
+        y_pred, y_pred_length = self(x, training=True)
+        y_pred._keras_length = y_pred_length
+
+        self.compute_loss(x, y, y_pred, sample_weight)
+        return self.compute_metrics(x, y, y_pred, sample_weight)
+
+    def predict_step(self, data):
+        inputs, y_true = data
         _tokens = self.recognize(**inputs)["tokens"]
         _beam_tokens = self.recognize_beam(**inputs)["tokens"]
         return {
             "_tokens": _tokens,
             "_beam_tokens": _beam_tokens,
-            "_labels": y_true["labels"],
+            "_labels": y_true.labels,
         }
 
     # -------------------------------- INFERENCE FUNCTIONS -------------------------------------

@@ -33,10 +33,9 @@ model_config:
 
 learning_config:
   optimizer_config:
-    class_name: Custom>AdamW
+    class_name: Adam
     config:
       learning_rate: 0.001
-      weight_decay: 1e-3
       beta_1: 0.9
       beta_2: 0.98
       epsilon: 1e-9

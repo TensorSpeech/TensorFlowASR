@@ -14,27 +14,25 @@
 
 import tensorflow as tf
 
+from tensorflow_asr import schemas
+
 logger = tf.get_logger()
 
 
 class CtcLoss(tf.keras.losses.Loss):
-    def __init__(
-        self,
-        blank=0,
-        name=None,
-    ):
-        super().__init__(reduction=tf.keras.losses.Reduction.NONE, name=name)
+    def __init__(self, blank=0, reduction=tf.keras.losses.Reduction.AUTO, name=None):
+        super().__init__(reduction=reduction, name=name)
         self.blank = blank
         logger.info("Use CTC loss")
 
     def call(self, y_true, y_pred):
         return tf.nn.ctc_loss(
-            logits=y_pred["logits"],
-            logit_length=y_pred["logits_length"],
-            labels=y_true["labels"],
-            label_length=y_true["labels_length"],
+            logits=y_pred,
+            logit_length=y_pred._keras_length,
+            labels=y_true,
+            label_length=y_true._keras_length,
             logits_time_major=False,
-            unique=tf.nn.ctc_unique_labels(y_true["labels"]),  # enable a faster, memory efficient implementation on TPU.
+            unique=tf.nn.ctc_unique_labels(y_true),  # enable a faster, memory efficient implementation on TPU.
             blank_index=self.blank,
             name=self.name,
         )

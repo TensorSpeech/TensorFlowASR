@@ -45,7 +45,6 @@ class TransducerPrediction(Layer):
         rnn_unroll: bool = False,
         layer_norm: bool = True,
         projection_units: int = 0,
-        projection_temporal: bool = False,
         kernel_regularizer=None,
         bias_regularizer=None,
         name="transducer_prediction",
@@ -91,7 +90,6 @@ class TransducerPrediction(Layer):
                 if projection_units > 0
                 else None
             )
-            projection = tf.keras.layers.TimeDistributed(projection, name=f"tprojection_{i}") if projection and projection_temporal else None
             self.rnns.append(rnn)
             self.lns.append(ln)
             self.projections.append(projection)
@@ -285,7 +283,6 @@ class Transducer(BaseModel):
         prediction_rnn_unroll: bool = False,
         prediction_layer_norm: bool = True,
         prediction_projection_units: int = 0,
-        prediction_projection_temporal: bool = False,
         prediction_trainable: bool = True,
         joint_dim: int = 1024,
         joint_activation: str = "tanh",
@@ -314,7 +311,6 @@ class Transducer(BaseModel):
             rnn_unroll=prediction_rnn_unroll,
             layer_norm=prediction_layer_norm,
             projection_units=prediction_projection_units,
-            projection_temporal=prediction_projection_temporal,
             kernel_regularizer=kernel_regularizer,
             bias_regularizer=bias_regularizer,
             trainable=prediction_trainable,

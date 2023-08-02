@@ -17,10 +17,9 @@ logger.setLevel(os.environ.get("LOG_LEVEL", "info").upper())
 logger.propagate = False
 warnings.simplefilter("ignore")
 
-try:
-    from keras.utils import tf_utils
-except ImportError:
-    from keras.src.utils import tf_utils
+from keras.engine import compile_utils
+
+from tensorflow_asr.utils import tf_util
 
 
 @property
@@ -31,7 +30,7 @@ def output_shape(self):
 
 
 def build(self, input_shape):
-    self._tfasr_output_shape = tf_utils.convert_shapes(self.compute_output_shape(input_shape), to_tuples=True)
+    self._tfasr_output_shape = tf_util.convert_shapes(self.compute_output_shape(input_shape), to_tuples=True)
     self._build_input_shape = input_shape
     self.built = True
 
@@ -40,10 +39,15 @@ def compute_output_shape(self, input_shape):
     return input_shape
 
 
+def match_dtype_and_rank(y_t, y_p, sw):
+    return y_t, y_p, sw
+
+
 # monkey patch
 tf.keras.layers.Layer.output_shape = output_shape
 tf.keras.layers.Layer.build = build
 tf.keras.layers.Layer.compute_output_shape = compute_output_shape
+compile_utils.match_dtype_and_rank = match_dtype_and_rank
 
 from tensorflow_asr.models import *
 from tensorflow_asr.optimizers import *

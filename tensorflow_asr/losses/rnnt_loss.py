@@ -19,6 +19,7 @@ import os
 import numpy as np
 import tensorflow as tf
 
+from tensorflow_asr import schemas
 from tensorflow_asr.utils import env_util
 
 logger = tf.get_logger()
@@ -36,14 +37,10 @@ except ImportError:
 
 
 class RnntLoss(tf.keras.losses.Loss):
-    def __init__(
-        self,
-        blank,
-        name=None,
-    ):
+    def __init__(self, blank, reduction=tf.keras.losses.Reduction.AUTO, name=None):
         if blank != 0 and not use_warprnnt:  # restrict blank index
             raise ValueError("rnnt_loss in tensorflow must use blank = 0")
-        super().__init__(reduction=tf.keras.losses.Reduction.NONE, name=name)
+        super().__init__(reduction=reduction, name=name)
         self.blank = blank
         self.use_cpu = USE_CPU_LOSS if USE_CPU_LOSS else (not env_util.has_devices("GPU") and not env_util.has_devices("TPU"))
         if self.use_cpu:
@@ -52,56 +49,40 @@ class RnntLoss(tf.keras.losses.Loss):
             logger.info("Use GPU/TPU implementation for RNNT loss")
 
     def call(self, y_true, y_pred):
-        logits, logit_length, labels, label_length = y_pred["logits"], y_pred["logits_length"], y_true["labels"], y_true["labels_length"]
-        if self.use_cpu:
-            with tf.device("/CPU:0"):
-                return rnnt_loss(
-                    logits=logits,
-                    logit_length=logit_length,
-                    labels=labels,
-                    label_length=label_length,
-                    blank=self.blank,
-                    name=self.name,
-                    use_cpu=self.use_cpu,
-                )
-        else:
-            return rnnt_loss(
-                logits=logits,
-                logit_length=logit_length,
-                labels=labels,
-                label_length=label_length,
-                blank=self.blank,
-                name=self.name,
-                use_cpu=self.use_cpu,
-            )
+        return rnnt_loss(
+            logits=y_pred,
+            logits_length=y_pred._keras_length,
+            labels=y_true,
+            labels_length=y_true._keras_length,
+            blank=self.blank,
+            name=self.name,
+            use_cpu=self.use_cpu,
+        )
 
 
 def rnnt_loss(
     logits,
+    logits_length,
     labels,
-    label_length,
-    logit_length,
+    labels_length,
     blank=0,
     name=None,
     use_cpu=False,
 ):
-    if use_warprnnt:
-        return rnnt_loss_warprnnt(
-            logits=logits,
-            labels=labels,
-            label_length=label_length,
-            logit_length=logit_length,
-            blank=blank,
-            use_cpu=use_cpu,
-        )
-    return rnnt_loss_tf(
+    kwargs = dict(
         logits=logits,
         labels=labels,
-        label_length=label_length,
-        logit_length=logit_length,
-        name=name,
+        label_length=labels_length,
+        logit_length=logits_length,
+        blank=blank,
         use_cpu=use_cpu,
+        name=name,
     )
+    loss_fn = rnnt_loss_warprnnt if use_warprnnt else rnnt_loss_tf
+    if use_cpu:
+        with tf.device("/CPU:0"):
+            return loss_fn(**kwargs)
+    return loss_fn(**kwargs)
 
 
 # ------------------------ RNNT LOSS IN WARP TRANDUCER ----------------------- #
@@ -114,6 +95,7 @@ def rnnt_loss_warprnnt(
     logit_length,
     blank=0,
     use_cpu=False,
+    **kwargs,
 ):
     if use_cpu:
         logits = tf.nn.log_softmax(logits)
@@ -320,6 +302,7 @@ def rnnt_loss_tf(
     logit_length,
     name=None,
     use_cpu=False,
+    **kwargs,
 ):
     name = "rnnt_loss" if name is None else name
     with tf.name_scope(name):

@@ -236,15 +236,13 @@ class FcBlock(Layer):
         **kwargs,
     ):
         super().__init__(**kwargs)
-        self.fc = tf.keras.layers.TimeDistributed(tf.keras.layers.Dense(units, name="fc"), name="tfc")
-        self.bn = tf.keras.layers.BatchNormalization(name="bn")
+        self.fc = tf.keras.layers.Dense(units, name="fc")
         self.relu = tf.keras.layers.ReLU(name="relu")
         self.do = tf.keras.layers.Dropout(dropout, name="dropout")
 
     def call(self, inputs, training=False):
         outputs, outputs_length = inputs
         outputs = self.fc(outputs, training=training)
-        outputs = self.bn(outputs, training=training)
         outputs = self.relu(outputs, training=training)
         outputs = self.do(outputs, training=training)
         return outputs, outputs_length
@@ -351,7 +349,7 @@ class DeepSpeech2Encoder(Layer):
 class DeepSpeech2Decoder(Layer):
     def __init__(self, vocab_size: int, **kwargs):
         super().__init__(**kwargs)
-        self.vocab = tf.keras.layers.TimeDistributed(tf.keras.layers.Dense(vocab_size, name="logits"), name="tlogits")
+        self.vocab = tf.keras.layers.Dense(vocab_size, name="logits")
 
     def call(self, inputs, training=False):
         logits, logits_length = inputs
