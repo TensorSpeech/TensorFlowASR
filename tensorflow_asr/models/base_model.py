@@ -183,6 +183,7 @@ class BaseModel(tf.keras.Model):
         x = data[0]
         y, y_length = data[1]
         y._keras_length = y_length
+        y._keras_mask = None
         sample_weight = None
 
         with tf.GradientTape() as tape:
@@ -190,6 +191,7 @@ class BaseModel(tf.keras.Model):
 
             y_pred, y_pred_length = self(x, training=True)
             y_pred._keras_length = y_pred_length
+            y_pred._keras_mask = None
 
             self.remove_gwn(original_weights)
             loss = self.compute_loss(x, y, y_pred, sample_weight)
@@ -222,10 +224,12 @@ class BaseModel(tf.keras.Model):
         x = data[0]
         y, y_length = data[1]
         y._keras_length = y_length
+        y._keras_mask = None
         sample_weight = None
 
         y_pred, y_pred_length = self(x, training=True)
         y_pred._keras_length = y_pred_length
+        y_pred._keras_mask = None
 
         self.compute_loss(x, y, y_pred, sample_weight)
         return self.compute_metrics(x, y, y_pred, sample_weight)
