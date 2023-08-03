@@ -32,12 +32,25 @@ class ConvBlock(Layer):
         filters: int = 32,
         padding: str = "causal",
         dropout: float = 0.1,
+        kernel_regularizer=None,
+        bias_regularizer=None,
         **kwargs,
     ):
         super().__init__(**kwargs)
-        CnnClass = layer_util.get_conv(conv_type)
-        self.conv = CnnClass(filters=filters, kernel_size=kernels, strides=strides, padding=padding, name=conv_type)
-        self.bn = tf.keras.layers.BatchNormalization(name="bn")
+        self.conv = layer_util.get_conv(conv_type)(
+            filters=filters,
+            kernel_size=kernels,
+            strides=strides,
+            padding=padding,
+            name=conv_type,
+            kernel_regularizer=kernel_regularizer,
+            bias_regularizer=bias_regularizer,
+        )
+        self.bn = tf.keras.layers.BatchNormalization(
+            name="bn",
+            gamma_regularizer=kernel_regularizer,
+            beta_regularizer=bias_regularizer,
+        )
         self.relu = tf.keras.layers.ReLU(name="relu")
         self.do = tf.keras.layers.Dropout(dropout, name="dropout")
         self.time_reduction_factor = self.conv.strides[0]
@@ -78,6 +91,8 @@ class ConvModule(Layer):
         filters: list = [32, 32, 96],
         padding: str = "causal",
         dropout: float = 0.1,
+        kernel_regularizer=None,
+        bias_regularizer=None,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -98,6 +113,8 @@ class ConvModule(Layer):
                 dropout=dropout,
                 padding=padding,
                 name=f"block_{i}",
+                kernel_regularizer=kernel_regularizer,
+                bias_regularizer=bias_regularizer,
             )
             self.convs.append(conv_block)
             self.time_reduction_factor *= conv_block.time_reduction_factor
@@ -144,6 +161,8 @@ class RnnBlock(Layer):
         unroll: bool = False,
         rowconv: int = 0,
         dropout: float = 0.1,
+        kernel_regularizer=None,
+        bias_regularizer=None,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -156,15 +175,32 @@ class RnnBlock(Layer):
             name=rnn_type,
             zero_output_for_mask=True,
             dtype=tf.float32 if self.dtype == tf.bfloat16 else self.dtype,
+            kernel_regularizer=kernel_regularizer,
+            bias_regularizer=bias_regularizer,
         )
         if bidirectional:
             self.rnn = tf.keras.layers.Bidirectional(self.rnn, name=f"b{rnn_type}")
         if bn_type not in ("bn", "sbn"):
             raise ValueError(f"bn_type must be in {('bn', 'sbn')}")
-        self.bn = SequenceBatchNorm(time_major=False, name="bn") if bn_type == "sbn" else tf.keras.layers.BatchNormalization(name="bn")
+        self.bn = (
+            SequenceBatchNorm(
+                time_major=False,
+                name="bn",
+                gamma_regularizer=kernel_regularizer,
+                beta_regularizer=bias_regularizer,
+            )
+            if bn_type == "sbn"
+            else tf.keras.layers.BatchNormalization(
+                name="bn",
+                gamma_regularizer=kernel_regularizer,
+                beta_regularizer=bias_regularizer,
+            )
+        )
         self.rowconv = None
         if not bidirectional and rowconv > 0:
-            self.rowconv = RowConv1D(filters=units, future_context=rowconv, name="rowconv")
+            self.rowconv = RowConv1D(
+                filters=units, future_context=rowconv, name="rowconv", kernel_regularizer=kernel_regularizer, bias_regularizer=bias_regularizer
+            )
 
     def call(self, inputs, training=False):
         outputs, outputs_length = inputs
@@ -195,6 +231,8 @@ class RnnModule(Layer):
         unroll: bool = False,
         rowconv: int = 0,
         dropout: float = 0.1,
+        kernel_regularizer=None,
+        bias_regularizer=None,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -207,6 +245,8 @@ class RnnModule(Layer):
                 unroll=unroll,
                 rowconv=rowconv,
                 dropout=dropout,
+                kernel_regularizer=kernel_regularizer,
+                bias_regularizer=bias_regularizer,
                 name=f"block_{i}",
             )
             for i in range(nlayers)
@@ -233,16 +273,20 @@ class FcBlock(Layer):
         self,
         units: int = 1024,
         dropout: float = 0.1,
+        kernel_regularizer=None,
+        bias_regularizer=None,
         **kwargs,
     ):
         super().__init__(**kwargs)
-        self.fc = tf.keras.layers.Dense(units, name="fc")
+        self.fc = tf.keras.layers.Dense(units, kernel_regularizer=kernel_regularizer, bias_regularizer=bias_regularizer, name="fc")
+        self.bn = tf.keras.layers.BatchNormalization(name="bn", gamma_regularizer=kernel_regularizer, beta_regularizer=bias_regularizer)
         self.relu = tf.keras.layers.ReLU(name="relu")
         self.do = tf.keras.layers.Dropout(dropout, name="dropout")
 
     def call(self, inputs, training=False):
         outputs, outputs_length = inputs
         outputs = self.fc(outputs, training=training)
+        outputs = self.bn(outputs, training=training)
         outputs = self.relu(outputs, training=training)
         outputs = self.do(outputs, training=training)
         return outputs, outputs_length
@@ -259,10 +303,15 @@ class FcModule(Layer):
         nlayers: int = 0,
         units: int = 1024,
         dropout: float = 0.1,
+        kernel_regularizer=None,
+        bias_regularizer=None,
         **kwargs,
     ):
         super().__init__(**kwargs)
-        self.blocks = [FcBlock(units=units, dropout=dropout, name=f"block_{i}") for i in range(nlayers)]
+        self.blocks = [
+            FcBlock(units=units, dropout=dropout, kernel_regularizer=kernel_regularizer, bias_regularizer=bias_regularizer, name=f"block_{i}")
+            for i in range(nlayers)
+        ]
 
     def call(self, inputs, training=False):
         outputs = inputs
@@ -297,6 +346,8 @@ class DeepSpeech2Encoder(Layer):
         fc_nlayers: int = 0,
         fc_units: int = 1024,
         fc_dropout: float = 0.1,
+        kernel_regularizer=None,
+        bias_regularizer=None,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -307,6 +358,8 @@ class DeepSpeech2Encoder(Layer):
             filters=conv_filters,
             padding=conv_padding,
             dropout=conv_dropout,
+            kernel_regularizer=kernel_regularizer,
+            bias_regularizer=bias_regularizer,
             name="conv_module",
         )
         self.rnn_module = RnnModule(
@@ -318,12 +371,16 @@ class DeepSpeech2Encoder(Layer):
             unroll=rnn_unroll,
             rowconv=rnn_rowconv,
             dropout=rnn_dropout,
+            kernel_regularizer=kernel_regularizer,
+            bias_regularizer=bias_regularizer,
             name="rnn_module",
         )
         self.fc_module = FcModule(
             nlayers=fc_nlayers,
             units=fc_units,
             dropout=fc_dropout,
+            kernel_regularizer=kernel_regularizer,
+            bias_regularizer=bias_regularizer,
             name="fc_module",
         )
         self.time_reduction_factor = self.conv_module.time_reduction_factor
@@ -347,9 +404,15 @@ class DeepSpeech2Encoder(Layer):
 
 
 class DeepSpeech2Decoder(Layer):
-    def __init__(self, vocab_size: int, **kwargs):
+    def __init__(
+        self,
+        vocab_size: int,
+        kernel_regularizer=None,
+        bias_regularizer=None,
+        **kwargs,
+    ):
         super().__init__(**kwargs)
-        self.vocab = tf.keras.layers.Dense(vocab_size, name="logits")
+        self.vocab = tf.keras.layers.Dense(vocab_size, name="logits", kernel_regularizer=kernel_regularizer, bias_regularizer=bias_regularizer)
 
     def call(self, inputs, training=False):
         logits, logits_length = inputs
@@ -387,6 +450,8 @@ class DeepSpeech2(CtcModel):
         fc_units: int = 1024,
         fc_dropout: float = 0.1,
         name: str = "deepspeech2",
+        kernel_regularizer=None,
+        bias_regularizer=None,
         **kwargs,
     ):
         super().__init__(
@@ -410,9 +475,16 @@ class DeepSpeech2(CtcModel):
                 fc_nlayers=fc_nlayers,
                 fc_units=fc_units,
                 fc_dropout=fc_dropout,
+                kernel_regularizer=kernel_regularizer,
+                bias_regularizer=bias_regularizer,
                 name="encoder",
             ),
-            decoder=DeepSpeech2Decoder(vocab_size=vocab_size, name="decoder"),
+            decoder=DeepSpeech2Decoder(
+                vocab_size=vocab_size,
+                kernel_regularizer=kernel_regularizer,
+                bias_regularizer=bias_regularizer,
+                name="decoder",
+            ),
             name=name,
             **kwargs,
         )

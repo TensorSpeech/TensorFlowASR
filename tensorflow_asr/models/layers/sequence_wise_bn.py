@@ -17,9 +17,11 @@ import tensorflow as tf
 
 # https://arxiv.org/abs/1510.01378
 class SequenceBatchNorm(tf.keras.layers.Layer):
-    def __init__(self, name, time_major=False, **kwargs):
-        super(SequenceBatchNorm, self).__init__(name=name, **kwargs)
+    def __init__(self, name, time_major=False, gamma_regularizer=None, beta_regularizer=None, **kwargs):
+        super().__init__(name=name, **kwargs)
         self.time_major = time_major
+        self.gamma_regularizer = tf.keras.regularizers.get(gamma_regularizer)
+        self.beta_regularizer = tf.keras.regularizers.get(beta_regularizer)
 
     def build(
         self,
@@ -29,7 +31,7 @@ class SequenceBatchNorm(tf.keras.layers.Layer):
             shape=[input_shape[-1]],
             name="beta",
             initializer="zeros",
-            regularizer=None,
+            regularizer=self.beta_regularizer,
             constraint=None,
             trainable=True,
         )
@@ -37,7 +39,7 @@ class SequenceBatchNorm(tf.keras.layers.Layer):
             shape=[input_shape[-1]],
             name="gamma",
             initializer="ones",
-            regularizer=None,
+            regularizer=self.gamma_regularizer,
             constraint=None,
             trainable=True,
         )
