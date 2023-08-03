@@ -218,7 +218,8 @@ class BaseModel(tf.keras.Model):
         if self.use_ga:
             tf.cond(self.ga.is_apply_step, self.ga.reset, lambda: None)
 
-        return self.compute_metrics(x, y, y_pred, sample_weight)
+        metrics = self.compute_metrics(x, y, y_pred, sample_weight)
+        return tf.nest.map_structure(lambda x: x / self.distribute_strategy.num_replicas_in_sync, metrics)
 
     def test_step(self, data):
         x = data[0]
@@ -232,12 +233,14 @@ class BaseModel(tf.keras.Model):
         y_pred._keras_mask = None
 
         self.compute_loss(x, y, y_pred, sample_weight)
-        return self.compute_metrics(x, y, y_pred, sample_weight)
+        metrics = self.compute_metrics(x, y, y_pred, sample_weight)
+        return tf.nest.map_structure(lambda x: x / self.distribute_strategy.num_replicas_in_sync, metrics)
 
     def predict_step(self, data):
-        inputs, y_true = data
-        _tokens = self.recognize(**inputs)["tokens"]
-        _beam_tokens = self.recognize_beam(**inputs)["tokens"]
+        x, y_true = data
+        inputs = schemas.PredictInput(x.inputs, x.inputs_length)
+        _tokens = self.recognize(inputs=inputs).tokens
+        _beam_tokens = self.recognize_beam(inputs=inputs).tokens
         return {
             "_tokens": _tokens,
             "_beam_tokens": _beam_tokens,
@@ -246,11 +249,11 @@ class BaseModel(tf.keras.Model):
 
     # -------------------------------- INFERENCE FUNCTIONS -------------------------------------
 
-    def recognize(self, *args, **kwargs):
+    def recognize(self, inputs: schemas.PredictInput, **kwargs) -> schemas.PredictOutput:
         """Greedy decoding function that used in self.predict_step"""
         raise NotImplementedError()
 
-    def recognize_beam(self, *args, **kwargs):
+    def recognize_beam(self, inputs: schemas.PredictInput, **kwargs) -> schemas.PredictOutput:
         """Beam search decoding function that used in self.predict_step"""
         raise NotImplementedError()
 

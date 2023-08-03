@@ -18,5 +18,13 @@ TrainInput = collections.namedtuple("TrainInput", ("inputs", "inputs_length", "p
 TrainOutput = collections.namedtuple("TrainOutput", ("logits", "logits_length"))
 TrainLabel = collections.namedtuple("TrainLabel", ("labels", "labels_length"))
 
-PredictInput = collections.namedtuple("PredictInput", ("inputs", "inputs_length", "previous_encoder_states", "previous_decoder_states"))
-PredictOutput = collections.namedtuple("PredictOutput", ("tokens", "next_tokens", "next_encoder_states", "next_decoder_states"))
+PredictInput = collections.namedtuple(
+    "PredictInput",
+    ("inputs", "inputs_length", "previous_encoder_states", "previous_decoder_states"),
+    defaults=(None, None),
+)
+PredictOutput = collections.namedtuple(
+    "PredictOutput",
+    ("tokens", "next_tokens", "next_encoder_states", "next_decoder_states"),
+    defaults=(None, None),
+)

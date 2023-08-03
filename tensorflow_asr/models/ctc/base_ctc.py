@@ -15,6 +15,7 @@
 
 import tensorflow as tf
 
+from tensorflow_asr import schemas
 from tensorflow_asr.losses.ctc_loss import CtcLoss
 from tensorflow_asr.models.base_model import BaseModel
 from tensorflow_asr.utils import layer_util
@@ -90,22 +91,15 @@ class CtcModel(BaseModel):
 
     # -------------------------------- GREEDY -------------------------------------
 
-    def recognize(
-        self,
-        inputs: tf.Tensor,
-        inputs_length: tf.Tensor,
-        previous_encoder_states=None,
-        previous_decoder_states=None,
-        **kwargs,
-    ):
+    def recognize(self, inputs: schemas.PredictInput, **kwargs):
         with tf.name_scope(f"{self.name}_recognize"):
-            features, features_length = self.feature_extraction((inputs, inputs_length), training=False)
+            features, features_length = self.feature_extraction((inputs.inputs, inputs.inputs_length), training=False)
             (
                 outputs,
                 outputs_length,
                 next_encoder_states,
                 next_decoder_states,
-            ) = self.call_next(features, features_length, previous_encoder_states, previous_decoder_states)
+            ) = self.call_next(features, features_length, inputs.previous_encoder_states, inputs.previous_decoder_states)
             tokens, _ = tf.nn.ctc_greedy_decoder(
                 inputs=tf.transpose(outputs, perm=[1, 0, 2]),
                 sequence_length=outputs_length,
@@ -114,31 +108,24 @@ class CtcModel(BaseModel):
             )
             tokens = tf.reshape(tokens[0].values, tokens[0].dense_shape)
             tokens = tf.cast(tokens, dtype=tf.int32)
-            return {
-                "tokens": tokens,
-                "next_encoder_states": next_encoder_states,
-                "next_decoder_states": next_decoder_states,
-            }
+            return schemas.PredictOutput(
+                tokens=tokens,
+                next_tokens=None,
+                next_encoder_states=next_encoder_states,
+                next_decoder_states=next_decoder_states,
+            )
 
     # -------------------------------- BEAM SEARCH -------------------------------------
 
-    def recognize_beam(
-        self,
-        inputs: tf.Tensor,
-        inputs_length: tf.Tensor,
-        previous_encoder_states=None,
-        previous_decoder_states=None,
-        beam_width: int = 10,
-        **kwargs,
-    ):
+    def recognize_beam(self, inputs: schemas.PredictOutput, beam_width: int = 10, **kwargs):
         with tf.name_scope(f"{self.name}_recognize_beam"):
-            features, features_length = self.feature_extraction((inputs, inputs_length), training=False)
+            features, features_length = self.feature_extraction((inputs.inputs, inputs.inputs_length), training=False)
             (
                 outputs,
                 outputs_length,
                 next_encoder_states,
                 next_decoder_states,
-            ) = self.call_next(features, features_length, previous_encoder_states, previous_decoder_states)
+            ) = self.call_next(features, features_length, inputs.previous_encoder_states, inputs.previous_decoder_states)
             tokens, _ = tf.nn.ctc_beam_search_decoder(
                 inputs=tf.transpose(outputs, perm=[1, 0, 2]),
                 sequence_length=outputs_length,
@@ -146,11 +133,12 @@ class CtcModel(BaseModel):
             )
             tokens = tf.reshape(tokens[0].values, tokens[0].dense_shape)
             tokens = tf.cast(tokens, dtype=tf.int32)
-            return {
-                "tokens": tokens,
-                "next_encoder_states": next_encoder_states,
-                "next_decoder_states": next_decoder_states,
-            }
+            return schemas.PredictOutput(
+                tokens=tokens,
+                next_tokens=None,
+                next_encoder_states=next_encoder_states,
+                next_decoder_states=next_decoder_states,
+            )
 
     # -------------------------------- TFLITE -------------------------------------
 

@@ -18,6 +18,7 @@ import collections
 
 import tensorflow as tf
 
+from tensorflow_asr import schemas
 from tensorflow_asr.losses.rnnt_loss import RnntLoss
 from tensorflow_asr.models.base_layer import Layer
 from tensorflow_asr.models.base_model import BaseModel
@@ -123,7 +124,7 @@ class TransducerPrediction(Layer):
                 outputs = self.projections[i](outputs, training=training)
         return outputs, outputs_length
 
-    def call_next(self, inputs, previous_decoder_states, tflite: bool = False):
+    def call_next(self, inputs, previous_decoder_states):
         """
         Recognize function for prediction network from the previous predicted tokens
 
@@ -391,7 +392,6 @@ class Transducer(BaseModel):
         current_frames: tf.Tensor,
         previous_tokens: tf.Tensor,
         previous_decoder_states: tf.Tensor,
-        tflite: bool = False,
     ):
         """
         Decode current frame given previous predicted token and states
@@ -413,22 +413,14 @@ class Transducer(BaseModel):
             Output of joint network of the current frame, new states of prediction network
         """
         with tf.name_scope(f"{self.name}_call_next"):
-            y, new_states = self.predict_net.call_next(previous_tokens, previous_decoder_states, tflite=tflite)
+            y, new_states = self.predict_net.call_next(previous_tokens, previous_decoder_states)
             ytu = self.joint_net([current_frames, y], training=False)
             ytu = tf.nn.log_softmax(ytu)
             return ytu, new_states
 
     # -------------------------------- GREEDY -------------------------------------
 
-    def recognize(
-        self,
-        inputs: tf.Tensor,
-        inputs_length: tf.Tensor,
-        previous_encoder_states=None,
-        previous_decoder_states=None,
-        tflite: bool = False,
-        **kwargs,
-    ):
+    def recognize(self, inputs: schemas.PredictInput, **kwargs):
         """
         Recognize greedy from input signals
 
@@ -440,8 +432,6 @@ class Transducer(BaseModel):
             Input signals lenghts
         previous_encoder_states: tf.Tensor, shape [B, nlayers, nstates, rnn_units] or None
         previous_decoder_states: tf.Tensor, shape [B, num_rnns, nstates, rnn_units] or None
-        tflite : bool, optional
-            Enable tflite, by default False
 
         Returns
         -------
@@ -454,8 +444,8 @@ class Transducer(BaseModel):
             )
         """
         with tf.name_scope(f"{self.name}_recognize"):
-            features, features_length = self.feature_extraction((inputs, inputs_length), training=False)
-            encoded, encoded_length, next_encoder_states = self.encoder.call_next(features, features_length, previous_encoder_states)
+            features, features_length = self.feature_extraction((inputs.inputs, inputs.inputs_length), training=False)
+            encoded, encoded_length, next_encoder_states = self.encoder.call_next(features, features_length, inputs.previous_encoder_states)
 
             nframes = tf.expand_dims(encoded_length, axis=-1)  # [B, 1]
             batch_size, max_frames, _ = shape_util.shape_list(encoded)
@@ -464,7 +454,7 @@ class Transducer(BaseModel):
             # Previous predicted tokens, initially are blanks, shape [B, 1]
             previous_tokens = tf.ones([batch_size, 1], dtype=tf.int32, name="previous_tokens") * self.blank
             # Previous states of the prediction network, initially are zeros, shape [B, num_rnns, nstates, rnn_units]
-            previous_decoder_states = previous_decoder_states or self.predict_net.get_initial_state(batch_size)
+            previous_decoder_states = inputs.previous_decoder_states or self.predict_net.get_initial_state(batch_size)
             # Assumption that number of tokens can not exceed (2 * the size of output of encoder + 1), this is mostly for static runs like TPU or TFLite # pylint: disable=line-too-long
             max_tokens = max_frames * 2 + 1
             # All of the tokens that are getting recognized, initially are blanks, shape [B, nframes * 2 + 1]
@@ -485,7 +475,7 @@ class Transducer(BaseModel):
 
             def body(_frame_indices, _previous_tokens, _previous_decoder_states, _tokens, _tokens_indices):
                 _current_frames = tf.expand_dims(tf.gather_nd(encoded, tf.minimum(_frame_indices, nframes - 1), batch_dims=1), axis=1)  # [B, 1, E]
-                _log_softmax, _states = self.call_next(_current_frames, _previous_tokens, _previous_decoder_states, tflite=tflite)
+                _log_softmax, _states = self.call_next(_current_frames, _previous_tokens, _previous_decoder_states)
                 _current_tokens = tf.reshape(tf.argmax(_log_softmax, axis=-1, output_type=tf.int32), [batch_size, 1])  # [B, 1, 1] -> [B, 1]
                 # conditions, blanks are ignored
                 _equal_blank = tf.equal(_current_tokens, self.blank)  # [B, 1]
@@ -520,12 +510,12 @@ class Transducer(BaseModel):
                 tokens_indices,
             ) = tf.while_loop(cond, body, loop_vars=(frame_indices, previous_tokens, previous_decoder_states, tokens, tokens_indices))
 
-            return {
-                "tokens": tokens,
-                "next_encoder_states": next_encoder_states,
-                "next_tokens": next_tokens,
-                "next_decoder_states": next_decoder_states,
-            }
+            return schemas.PredictOutput(
+                tokens=tokens,
+                next_tokens=next_tokens,
+                next_encoder_states=next_encoder_states,
+                next_decoder_states=next_decoder_states,
+            )
 
     # def recognize_tflite_with_timestamp(self, signal, predicted, states):
     #     features = self.speech_featurizer.tf_extract(signal)
@@ -654,16 +644,8 @@ class Transducer(BaseModel):
 
     # -------------------------------- BEAM SEARCH -------------------------------------
 
-    def recognize_beam(
-        self,
-        inputs: tf.Tensor,
-        inputs_length: tf.Tensor,
-        previous_encoder_states=None,
-        previous_decoder_states=None,
-        tflite: bool = False,
-        **kwargs,
-    ):
-        return self.recognize(inputs, inputs_length, previous_encoder_states, previous_decoder_states, tflite=tflite)
+    def recognize_beam(self, inputs: schemas.PredictInput, **kwargs):
+        return self.recognize(inputs=inputs, **kwargs)
 
     # def _perform_beam_search_batch(
     #     self,
