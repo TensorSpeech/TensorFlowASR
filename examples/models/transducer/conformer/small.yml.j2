@@ -92,7 +92,7 @@ learning_config:
 
   running_config:
     batch_size: 3
-    num_epochs: 100
+    num_epochs: 300
     checkpoint:
       filepath: {{modeldir}}/checkpoints/{epoch:02d}.h5
       save_best_only: False
@@ -105,7 +105,7 @@ learning_config:
     tensorboard:
       log_dir: {{modeldir}}/tensorboard
       histogram_freq: 1
-      write_graph: True
+      write_graph: False
       write_images: False
       update_freq: epoch
       profile_batch: 100
