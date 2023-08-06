@@ -51,14 +51,14 @@ learning_config:
       beta_2: 0.98
       epsilon: 1e-9
 
-  gwn_config: null
+  {# gwn_config: null
 
   gradn_config:
     class_name: tensorflow_asr.optimizers.regularizers>TimeDependentGaussianGradientNoise
     config:
       mean: 0.0
       eta: 1.0
-      gamma: 0.55
+      gamma: 0.55 #}
 
   running_config:
     batch_size: 4
