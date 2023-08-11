@@ -1,0 +1,251 @@
+{% import "examples/configs/librispeech/sentencepiece/sp.yml.j2" as decoder_config with context %}
+{{decoder_config}}
+
+model_config:
+  class_name: tensorflow_asr.models.transducer>ContextNet
+  config:
+    name: contextnet
+    speech_config:
+      sample_rate: 16000
+      frame_ms: 25
+      stride_ms: 10
+      num_feature_bins: 80
+      feature_type: log_mel_spectrogram
+    encoder_alpha: 0.5
+    encoder_blocks:
+      # C0
+      - nlayers: 1
+        kernel_size: 5
+        filters: 256
+        strides: 1
+        residual: False
+        activation: silu
+        padding: causal
+      # C1-C2
+      - nlayers: 5
+        kernel_size: 5
+        filters: 256
+        strides: 1
+        residual: True
+        activation: silu
+        padding: causal
+      - nlayers: 5
+        kernel_size: 5
+        filters: 256
+        strides: 1
+        residual: True
+        activation: silu
+        padding: causal
+      # C3
+      - nlayers: 5
+        kernel_size: 5
+        filters: 256
+        strides: 2
+        residual: True
+        activation: silu
+        padding: causal
+      # C4-C6
+      - nlayers: 5
+        kernel_size: 5
+        filters: 256
+        strides: 1
+        residual: True
+        activation: silu
+        padding: causal
+      - nlayers: 5
+        kernel_size: 5
+        filters: 256
+        strides: 1
+        residual: True
+        activation: silu
+        padding: causal
+      - nlayers: 5
+        kernel_size: 5
+        filters: 256
+        strides: 1
+        residual: True
+        activation: silu
+        padding: causal
+      # C7
+      - nlayers: 5
+        kernel_size: 5
+        filters: 256
+        strides: 2
+        residual: True
+        activation: silu
+        padding: causal
+      # C8 - C10
+      - nlayers: 5
+        kernel_size: 5
+        filters: 256
+        strides: 1
+        residual: True
+        activation: silu
+        padding: causal
+      - nlayers: 5
+        kernel_size: 5
+        filters: 256
+        strides: 1
+        residual: True
+        activation: silu
+        padding: causal
+      - nlayers: 5
+        kernel_size: 5
+        filters: 256
+        strides: 1
+        residual: True
+        activation: silu
+        padding: causal
+      # C11 - C13
+      - nlayers: 5
+        kernel_size: 5
+        filters: 512
+        strides: 1
+        residual: True
+        activation: silu
+        padding: causal
+      - nlayers: 5
+        kernel_size: 5
+        filters: 512
+        strides: 1
+        residual: True
+        activation: silu
+        padding: causal
+      - nlayers: 5
+        kernel_size: 5
+        filters: 512
+        strides: 1
+        residual: True
+        activation: silu
+        padding: causal
+      # C14
+      - nlayers: 5
+        kernel_size: 5
+        filters: 512
+        strides: 2
+        residual: True
+        activation: silu
+        padding: causal
+      # C15 - C21
+      - nlayers: 5
+        kernel_size: 5
+        filters: 512
+        strides: 1
+        residual: True
+        activation: silu
+        padding: causal
+      - nlayers: 5
+        kernel_size: 5
+        filters: 512
+        strides: 1
+        residual: True
+        activation: silu
+        padding: causal
+      - nlayers: 5
+        kernel_size: 5
+        filters: 512
+        strides: 1
+        residual: True
+        activation: silu
+        padding: causal
+      - nlayers: 5
+        kernel_size: 5
+        filters: 512
+        strides: 1
+        residual: True
+        activation: silu
+        padding: causal
+      - nlayers: 5
+        kernel_size: 5
+        filters: 512
+        strides: 1
+        residual: True
+        activation: silu
+        padding: causal
+      - nlayers: 5
+        kernel_size: 5
+        filters: 512
+        strides: 1
+        residual: True
+        activation: silu
+        padding: causal
+      - nlayers: 5
+        kernel_size: 5
+        filters: 512
+        strides: 1
+        residual: True
+        activation: silu
+        padding: causal
+      # C22
+      - nlayers: 1
+        kernel_size: 5
+        filters: 640
+        strides: 1
+        residual: False
+        activation: silu
+        padding: causal
+    prediction_label_encode_mode: embedding
+    prediction_embed_dim: 640
+    prediction_num_rnns: 1
+    prediction_rnn_units: 512
+    prediction_rnn_type: lstm
+    prediction_rnn_implementation: 2
+    prediction_rnn_unroll: False
+    prediction_layer_norm: True
+    prediction_projection_units: 0
+    joint_dim: 512
+    prejoint_encoder_linear: True
+    prejoint_prediction_linear: True
+    postjoint_linear: False
+    joint_activation: tanh
+    joint_mode: add
+    blank: 0
+    vocab_size: {{decoder_config.vocabsize}}
+    kernel_regularizer:
+      class_name: l2
+      config:
+        l2: 1e-6
+    bias_regularizer:
+      class_name: l2
+      config:
+        l2: 1e-6
+
+
+learning_config:
+  optimizer_config:
+    class_name: Adam
+    config:
+      learning_rate:
+        class_name: tensorflow_asr.optimizers.schedules>TransformerSchedule
+        config:
+          dmodel: 320
+          warmup_steps: 15000
+          max_lr: 0.0025
+          min_lr: 1e-6
+      beta_1: 0.9
+      beta_2: 0.98
+      epsilon: 1e-9
+
+  gwn_config: null
+
+  gradn_config: null
+
+  running_config:
+    batch_size: 4
+    num_epochs: 300
+    checkpoint:
+      filepath: {{modeldir}}/checkpoints/{epoch:02d}.h5
+      save_best_only: False
+      save_weights_only: True
+      save_freq: epoch
+    backup_and_restore:
+      backup_dir: {{modeldir}}/states
+      save_freq: epoch
+      delete_checkpoint: False
+    tensorboard:
+      log_dir: {{modeldir}}/tensorboard
+      histogram_freq: 1
+      write_graph: False
+      write_images: False
+      update_freq: epoch
+      profile_batch: 100
