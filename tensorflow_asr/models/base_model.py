@@ -228,7 +228,7 @@ class BaseModel(tf.keras.Model):
         y._keras_mask = None
         sample_weight = None
 
-        y_pred, y_pred_length = self(x, training=True)
+        y_pred, y_pred_length = self(x, training=False)
         y_pred._keras_length = y_pred_length
         y_pred._keras_mask = None
 
