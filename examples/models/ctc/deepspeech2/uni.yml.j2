@@ -27,12 +27,12 @@ model_config:
     conv_strides: [ [ 3, 2 ], [ 2, 2 ], [ 1, 2 ] ]
     conv_filters: [ 32, 32, 96 ]
     conv_dropout: 0.1
-    conv_padding: same
+    conv_padding: causal
     rnn_nlayers: 5
     rnn_type: lstm
     rnn_bn_type: bn
     rnn_units: 512
-    rnn_bidirectional: True
+    rnn_bidirectional: False
     rnn_unroll: False
     rnn_rowconv: 0
     rnn_dropout: 0.1
