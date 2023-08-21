@@ -1,4 +1,4 @@
-{% import "examples/configs/librispeech/sentencepiece/sp.yml.j2" as decoder_config with context %}
+{% import "examples/configs/librispeech/characters/char.yml.j2" as decoder_config with context %}
 {{decoder_config}}
 
 model_config:
@@ -24,7 +24,7 @@ model_config:
             mask_factor: 27
     conv_type: conv2d
     conv_kernels: [ [ 11, 41 ], [ 11, 21 ], [ 11, 21 ] ]
-    conv_strides: [ [ 3, 2 ], [ 2, 2 ], [ 1, 2 ] ]
+    conv_strides: [ [ 3, 2 ], [ 1, 2 ], [ 1, 2 ] ]
     conv_filters: [ 32, 32, 96 ]
     conv_dropout: 0.1
     conv_padding: causal
@@ -60,7 +60,7 @@ learning_config:
       epsilon: 1e-9
 
   running_config:
-    batch_size: 16
+    batch_size: 32
     num_epochs: 300
     checkpoint:
       filepath: {{modeldir}}/checkpoints/{epoch:02d}.h5
