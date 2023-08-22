@@ -10,7 +10,7 @@ model_config:
       frame_ms: 25
       stride_ms: 10
       num_feature_bins: 128
-      feature_type: spectrogram
+      feature_type: log_mel_spectrogram
       augmentation_config:
         feature_augment:
           time_masking:
@@ -36,7 +36,7 @@ model_config:
     rnn_unroll: False
     rnn_rowconv: 0
     rnn_dropout: 0.1
-    fc_nlayers: 1
+    fc_nlayers: 0
     fc_units: 1024
     fc_dropout: 0.1
     blank: 0

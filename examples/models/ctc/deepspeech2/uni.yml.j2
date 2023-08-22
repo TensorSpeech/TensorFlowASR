@@ -1,4 +1,4 @@
-{% import "examples/configs/librispeech/characters/char.yml.j2" as decoder_config with context %}
+{% import "examples/configs/librispeech/sentencepiece/sp.yml.j2" as decoder_config with context %}
 {{decoder_config}}
 
 model_config:
@@ -10,7 +10,7 @@ model_config:
       frame_ms: 25
       stride_ms: 10
       num_feature_bins: 128
-      feature_type: spectrogram
+      feature_type: log_mel_spectrogram
     conv_type: conv2d
     conv_kernels: [ [ 11, 41 ], [ 11, 21 ], [ 11, 21 ] ]
     conv_strides: [ [ 3, 2 ], [ 1, 2 ], [ 1, 2 ] ]
@@ -25,7 +25,7 @@ model_config:
     rnn_unroll: False
     rnn_rowconv: 0
     rnn_dropout: 0.1
-    fc_nlayers: 1
+    fc_nlayers: 0
     fc_units: 1024
     fc_dropout: 0.1
     blank: 0
