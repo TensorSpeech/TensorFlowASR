@@ -11,24 +11,13 @@ model_config:
       stride_ms: 10
       num_feature_bins: 128
       feature_type: spectrogram
-      augmentation_config:
-        feature_augment:
-          time_masking:
-            prob: 1.0
-            num_masks: 5
-            mask_factor: 100
-            p_upperbound: 0.05
-          freq_masking:
-            prob: 1.0
-            num_masks: 1
-            mask_factor: 27
     conv_type: conv2d
     conv_kernels: [ [ 11, 41 ], [ 11, 21 ], [ 11, 21 ] ]
     conv_strides: [ [ 3, 2 ], [ 1, 2 ], [ 1, 2 ] ]
     conv_filters: [ 32, 32, 96 ]
     conv_dropout: 0.1
     conv_padding: causal
-    rnn_nlayers: 5
+    rnn_nlayers: 7
     rnn_type: lstm
     rnn_bn_type: bn
     rnn_units: 512
