@@ -15,41 +15,37 @@ model_config:
     conv_kernels: [ [ 11, 41 ], [ 11, 21 ] ]
     conv_strides: [ [ 2, 2 ], [ 1, 2 ] ]
     conv_filters: [ 32, 32 ]
-    conv_dropout: 0.5
+    conv_dropout: 0.1
     conv_padding: same
     rnn_nlayers: 5
-    rnn_type: gru
+    rnn_type: lstm
     rnn_units: 800
     rnn_bidirectional: True
     rnn_unroll: False
     rnn_rowconv: 0
-    rnn_dropout: 0.5
+    rnn_dropout: 0.1
     fc_nlayers: 1
     fc_units: 1600
-    fc_dropout: 0.5
+    fc_dropout: 0.1
     blank: 0
     vocab_size: {{decoder_config.vocabsize}}
     kernel_regularizer:
       class_name: l2
       config:
-        l2: 0.0005
+        l2: 1e-6
     bias_regularizer:
       class_name: l2
       config:
-        l2: 0.0005
+        l2: 1e-6
 
 learning_config:
   optimizer_config:
-    class_name: SGD
+    class_name: Adam
     config:
-      learning_rate:
-        class_name: PolynomialDecay
-        config:
-          initial_learning_rate: 0.001
-          decay_steps: 5000
-          end_learning_rate: 0.0001
-          power: 0.5
-      momentum: 0.90
+      learning_rate: 0.0005
+      beta_1: 0.9
+      beta_2: 0.98
+      epsilon: 1e-9
 
   running_config:
     batch_size: 16
