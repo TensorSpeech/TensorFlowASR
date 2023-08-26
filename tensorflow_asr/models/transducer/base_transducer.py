@@ -131,9 +131,7 @@ class TransducerPrediction(Layer):
         Parameters
         ----------
         inputs : tf.Tensor, shape [B, 1]
-        states : tf.Tensor, shape [B, num_rnns, nstates, rnn_units]
-        tflite : bool, optional
-            Enable tflite mode, by default False
+        previous_decoder_states : tf.Tensor, shape [B, num_rnns, nstates, rnn_units]
 
         Returns
         -------
@@ -202,7 +200,7 @@ class TransducerJointMerge(Layer):
 
     def compute_output_shape(self, input_shape):
         enc_shape, pred_shape = input_shape
-        return (enc_shape[0], enc_shape[1], pred_shape[1], enc_shape[-1])
+        return enc_shape[0], enc_shape[1], pred_shape[1], enc_shape[-1]
 
 
 class TransducerJoint(Layer):
@@ -263,7 +261,7 @@ class TransducerJoint(Layer):
         encoder_shape, prediction_shape = input_shape
         batch_shape = encoder_shape[0]
         encoder_time_shape, prediction_time_shape = encoder_shape[1], prediction_shape[1]
-        return (batch_shape, encoder_time_shape, prediction_time_shape, self.ffn_out.units)
+        return batch_shape, encoder_time_shape, prediction_time_shape, self.ffn_out.units
 
 
 class Transducer(BaseModel):
@@ -341,19 +339,19 @@ class Transducer(BaseModel):
             original_weights = {}
             if self.gwn_config.get("encoder_step") is not None and self.gwn_config.get("encoder_stddev") is not None:
                 original_weights["encoder"] = tf.cond(
-                    tf.greater_equal((self.optimizer.iterations), self.gwn_config["encoder_step"]),
+                    tf.greater_equal(self.optimizer.iterations, self.gwn_config["encoder_step"]),
                     lambda: layer_util.add_gwn(self.encoder.trainable_weights, stddev=self.gwn_config["encoder_stddev"]),
                     lambda: self.encoder.trainable_weights,
                 )
             if self.gwn_config.get("predict_net_step") is not None and self.gwn_config.get("predict_net_stddev") is not None:
                 original_weights["predict_net"] = tf.cond(
-                    tf.greater_equal((self.optimizer.iterations), self.gwn_config["predict_net_step"]),
+                    tf.greater_equal(self.optimizer.iterations, self.gwn_config["predict_net_step"]),
                     lambda: layer_util.add_gwn(self.predict_net.trainable_weights, stddev=self.gwn_config["predict_net_stddev"]),
                     lambda: self.predict_net.trainable_weights,
                 )
             if self.gwn_config.get("joint_net_step") is not None and self.gwn_config.get("joint_net_stddev") is not None:
                 original_weights["joint_net"] = tf.cond(
-                    tf.greater_equal((self.optimizer.iterations), self.gwn_config["joint_net_step"]),
+                    tf.greater_equal(self.optimizer.iterations, self.gwn_config["joint_net_step"]),
                     lambda: layer_util.add_gwn(self.joint_net.trainable_weights, stddev=self.gwn_config["joint_net_stddev"]),
                     lambda: self.joint_net.trainable_weights,
                 )
@@ -364,19 +362,19 @@ class Transducer(BaseModel):
         if self.gwn_config:
             if original_weights.get("encoder") is not None:
                 tf.cond(
-                    tf.greater_equal((self.optimizer.iterations), self.gwn_config["encoder_step"]),
+                    tf.greater_equal(self.optimizer.iterations, self.gwn_config["encoder_step"]),
                     lambda: layer_util.sub_gwn(original_weights["encoder"], self.encoder.trainable_weights),
                     lambda: None,
                 )
             if original_weights.get("predict_net") is not None:
                 tf.cond(
-                    tf.greater_equal((self.optimizer.iterations), self.gwn_config["predict_net_step"]),
+                    tf.greater_equal(self.optimizer.iterations, self.gwn_config["predict_net_step"]),
                     lambda: layer_util.sub_gwn(original_weights["predict_net"], self.predict_net.trainable_weights),
                     lambda: None,
                 )
             if original_weights.get("joint_net") is not None:
                 tf.cond(
-                    tf.greater_equal((self.optimizer.iterations), self.gwn_config["joint_net_step"]),
+                    tf.greater_equal(self.optimizer.iterations, self.gwn_config["joint_net_step"]),
                     lambda: layer_util.sub_gwn(original_weights["joint_net"], self.joint_net.trainable_weights),
                     lambda: None,
                 )
@@ -402,10 +400,8 @@ class Transducer(BaseModel):
             Output of the encoder network of the current frame
         previous_tokens : tf.Tensor, shape [B, 1]
             Predicted token of the previous frame
-        previous_states : tf.Tensor, shape [B, num_rnns, nstates, state_size]
+        previous_decoder_states : tf.Tensor, shape [B, num_rnns, nstates, state_size]
             States got from previous frame
-        tflite : bool, optional
-            Enable tflite, by default False
 
         Returns
         -------
@@ -426,16 +422,11 @@ class Transducer(BaseModel):
 
         Parameters
         ----------
-        inputs : tf.Tensor, shape [B, nsamples=None]
-            Input signals
-        inputs_length : tf.Tensor, shape [B]
-            Input signals lenghts
-        previous_encoder_states: tf.Tensor, shape [B, nlayers, nstates, rnn_units] or None
-        previous_decoder_states: tf.Tensor, shape [B, num_rnns, nstates, rnn_units] or None
+        inputs : schemas.PredictInput
 
         Returns
         -------
-        dict of
+        named tuple of
             (
                 tokens, will be feed to text_featurizer.detokenize or text_featurizer.detokenize_unicode_points,
                 next_encoder_states, if encoder does not have states, returns None, will be used to predict next chunk of audio,
@@ -455,11 +446,12 @@ class Transducer(BaseModel):
             previous_tokens = tf.ones([batch_size, 1], dtype=tf.int32, name="previous_tokens") * self.blank
             # Previous states of the prediction network, initially are zeros, shape [B, num_rnns, nstates, rnn_units]
             previous_decoder_states = inputs.previous_decoder_states or self.predict_net.get_initial_state(batch_size)
-            # Assumption that number of tokens can not exceed (2 * the size of output of encoder + 1), this is mostly for static runs like TPU or TFLite # pylint: disable=line-too-long
+            # Assumption that number of tokens can not exceed (2 * the size of output of encoder + 1), this is mostly for static runs like TPU or TFLite
             max_tokens = max_frames * 2 + 1
             # All of the tokens that are getting recognized, initially are blanks, shape [B, nframes * 2 + 1]
             tokens = tf.ones([batch_size, max_tokens], dtype=tf.int32, name="tokens") * self.blank
-            # The current indices of the token that are currently being recognized, shape [B, 1], the tokens indices are started with 1 so that any blank token recognized got updated to index 0 to avoid affecting results
+            # The current indices of the token that are currently being recognized, shape [B, 1], the tokens indices are started with 1 so that any
+            # blank token recognized got updated to index 0 to avoid affecting results
             tokens_indices = tf.ones([batch_size, 1], dtype=tf.int32, name="tokens_indices")
 
             def cond(_frame_indices, _previous_tokens, _previous_decoder_states, _tokens, _tokens_indices):

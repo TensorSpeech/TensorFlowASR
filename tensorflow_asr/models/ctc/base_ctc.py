@@ -45,13 +45,13 @@ class CtcModel(BaseModel):
             original_weights = {}
             if self.gwn_config.get("encoder_step") is not None and self.gwn_config.get("encoder_stddev") is not None:
                 original_weights["encoder"] = tf.cond(
-                    tf.greater_equal((self.optimizer.iterations), self.gwn_config["encoder_step"]),
+                    tf.greater_equal(self.optimizer.iterations, self.gwn_config["encoder_step"]),
                     lambda: layer_util.add_gwn(self.encoder.trainable_weights, stddev=self.gwn_config["encoder_stddev"]),
                     lambda: self.encoder.trainable_weights,
                 )
             if self.gwn_config.get("decoder_step") is not None and self.gwn_config.get("decoder_stddev") is not None:
                 original_weights["decoder"] = tf.cond(
-                    tf.greater_equal((self.optimizer.iterations), self.gwn_config["decoder_step"]),
+                    tf.greater_equal(self.optimizer.iterations, self.gwn_config["decoder_step"]),
                     lambda: layer_util.add_gwn(self.decoder.trainable_weights, stddev=self.gwn_config["decoder_stddev"]),
                     lambda: self.decoder.trainable_weights,
                 )
@@ -62,13 +62,13 @@ class CtcModel(BaseModel):
         if self.gwn_config:
             if original_weights.get("encoder") is not None:
                 tf.cond(
-                    tf.greater_equal((self.optimizer.iterations), self.gwn_config["encoder_step"]),
+                    tf.greater_equal(self.optimizer.iterations, self.gwn_config["encoder_step"]),
                     lambda: layer_util.sub_gwn(original_weights["encoder"], self.encoder.trainable_weights),
                     lambda: None,
                 )
             if original_weights.get("decoder") is not None:
                 tf.cond(
-                    tf.greater_equal((self.optimizer.iterations), self.gwn_config["decoder_step"]),
+                    tf.greater_equal(self.optimizer.iterations, self.gwn_config["decoder_step"]),
                     lambda: layer_util.sub_gwn(original_weights["decoder"], self.decoder.trainable_weights),
                     lambda: None,
                 )
@@ -117,7 +117,7 @@ class CtcModel(BaseModel):
 
     # -------------------------------- BEAM SEARCH -------------------------------------
 
-    def recognize_beam(self, inputs: schemas.PredictOutput, beam_width: int = 10, **kwargs):
+    def recognize_beam(self, inputs: schemas.PredictInput, beam_width: int = 10, **kwargs):
         with tf.name_scope(f"{self.name}_recognize_beam"):
             features, features_length = self.feature_extraction((inputs.inputs, inputs.inputs_length), training=False)
             (
