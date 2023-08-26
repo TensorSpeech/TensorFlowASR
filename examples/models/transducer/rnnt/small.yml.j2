@@ -11,7 +11,7 @@ model_config:
       stride_ms: 10
       num_feature_bins: 80
       feature_type: log_mel_spectrogram
-    encoder_reduction_factors: [3,0,2,0] # downsampled to 30ms and add 2 reduction after second layer
+    encoder_reduction_factors: [ 3, 0, 2, 0 ] # downsampled to 30ms and add 2 reduction after second layer
     encoder_dmodel: 320
     encoder_rnn_type: lstm
     encoder_rnn_units: 1024
@@ -46,19 +46,16 @@ learning_config:
   optimizer_config:
     class_name: Adam
     config:
-      learning_rate: 0.001
+      learning_rate:
+        class_name: PolynomialDecay
+        config:
+          initial_learning_rate: 0.001
+          decay_steps: 5000
+          end_learning_rate: 0.0001
+          power: 0.5
       beta_1: 0.9
       beta_2: 0.98
       epsilon: 1e-9
-
-  {# gwn_config: null
-
-  gradn_config:
-    class_name: tensorflow_asr.optimizers.regularizers>TimeDependentGaussianGradientNoise
-    config:
-      mean: 0.0
-      eta: 1.0
-      gamma: 0.55 #}
 
   running_config:
     batch_size: 4
