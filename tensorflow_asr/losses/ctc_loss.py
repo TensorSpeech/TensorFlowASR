@@ -14,8 +14,6 @@
 
 import tensorflow as tf
 
-from tensorflow_asr import schemas
-
 logger = tf.get_logger()
 
 

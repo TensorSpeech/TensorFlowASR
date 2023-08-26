@@ -19,7 +19,6 @@ import os
 import numpy as np
 import tensorflow as tf
 
-from tensorflow_asr import schemas
 from tensorflow_asr.utils import env_util
 
 logger = tf.get_logger()
@@ -30,9 +29,7 @@ try:
     from warprnnt_tensorflow import rnnt_loss as warp_rnnt_loss
 
     use_warprnnt = True
-    logger.info("Use RNNT loss in WarpRnnt")
 except ImportError:
-    logger.info("Use RNNT loss in TensorFlow")
     use_warprnnt = False
 
 
@@ -43,10 +40,7 @@ class RnntLoss(tf.keras.losses.Loss):
         super().__init__(reduction=reduction, name=name)
         self.blank = blank
         self.use_cpu = USE_CPU_LOSS if USE_CPU_LOSS else (not env_util.has_devices("GPU") and not env_util.has_devices("TPU"))
-        if self.use_cpu:
-            logger.info("Use CPU implementation for RNNT loss")
-        else:
-            logger.info("Use GPU/TPU implementation for RNNT loss")
+        logger.info(f"Use {'CPU' if self.use_cpu else 'GPU/TPU'} implementation for RNNT loss in {'WarpRnnt' if use_warprnnt else 'Tensorflow'}")
 
     def call(self, y_true, y_pred):
         return rnnt_loss(

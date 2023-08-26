@@ -16,11 +16,44 @@ import tensorflow as tf
 
 from tensorflow_asr.models.base_layer import Identity, Layer, Reshape
 from tensorflow_asr.models.ctc.base_ctc import CtcModel
-from tensorflow_asr.models.layers.row_conv_1d import RowConv1D
-from tensorflow_asr.models.layers.sequence_wise_bn import SequenceBatchNorm
+from tensorflow_asr.models.layers.convolution import DepthwiseConv1D
 from tensorflow_asr.utils import layer_util, math_util
 
 # ----------------------------------- CONV ----------------------------------- #
+
+
+class RowConv1D(Layer):
+    def __init__(
+        self,
+        future_width=2,
+        activation="relu",
+        regularizer=None,
+        **kwargs,
+    ):
+        assert future_width >= 0, "Future context must be positive"
+        super().__init__(**kwargs)
+        self.conv = DepthwiseConv1D(
+            kernel_size=future_width * 2 + 1,
+            strides=1,
+            padding="causal",
+            use_bias=False,
+            depthwise_regularizer=regularizer,
+            bias_regularizer=regularizer,
+            name="conv",
+        )
+        self.bn = tf.keras.layers.BatchNormalization(name="bn", gamma_regularizer=regularizer, beta_regularizer=regularizer)
+        self.activation = tf.keras.activations.get(activation)
+
+    def call(self, inputs, training=False):
+        outputs = self.conv(inputs, training=training)
+        outputs = self.bn(outputs, training=training)
+        outputs = self.activation(outputs, training=training)
+        return outputs
+
+    def compute_output_shape(self, input_shape):
+        output_shape = self.conv.compute_output_shape(input_shape)
+        output_shape = self.bn.compute_output_shape(output_shape)
+        return output_shape
 
 
 class ConvBlock(Layer):
@@ -46,11 +79,7 @@ class ConvBlock(Layer):
             kernel_regularizer=kernel_regularizer,
             bias_regularizer=bias_regularizer,
         )
-        self.bn = tf.keras.layers.BatchNormalization(
-            name="bn",
-            gamma_regularizer=kernel_regularizer,
-            beta_regularizer=bias_regularizer,
-        )
+        self.bn = tf.keras.layers.BatchNormalization(name="bn", gamma_regularizer=kernel_regularizer, beta_regularizer=bias_regularizer)
         self.relu = tf.keras.layers.ReLU(name="relu")
         self.do = tf.keras.layers.Dropout(dropout, name="dropout")
         self.time_reduction_factor = self.conv.strides[0]
@@ -155,7 +184,6 @@ class RnnBlock(Layer):
     def __init__(
         self,
         rnn_type: str = "lstm",
-        bn_type: str = "bn",
         units: int = 1024,
         bidirectional: bool = True,
         unroll: bool = False,
@@ -180,27 +208,9 @@ class RnnBlock(Layer):
         )
         if bidirectional:
             self.rnn = tf.keras.layers.Bidirectional(self.rnn, name=f"b{rnn_type}")
-        if bn_type not in ("bn", "sbn"):
-            raise ValueError(f"bn_type must be in {('bn', 'sbn')}")
-        self.bn = (
-            SequenceBatchNorm(
-                time_major=False,
-                name="bn",
-                gamma_regularizer=kernel_regularizer,
-                beta_regularizer=bias_regularizer,
-            )
-            if bn_type == "sbn"
-            else tf.keras.layers.BatchNormalization(
-                name="bn",
-                gamma_regularizer=kernel_regularizer,
-                beta_regularizer=bias_regularizer,
-            )
-        )
         self.rowconv = None
         if not bidirectional and rowconv > 0:
-            self.rowconv = RowConv1D(
-                filters=units, future_context=rowconv, name="rowconv", kernel_regularizer=kernel_regularizer, bias_regularizer=bias_regularizer
-            )
+            self.rowconv = RowConv1D(future_width=rowconv, name="rowconv", regularizer=kernel_regularizer, activation="relu")
 
     def call(self, inputs, training=False):
         outputs, outputs_length = inputs
@@ -209,7 +219,6 @@ class RnnBlock(Layer):
         outputs = self.rnn(outputs, training=training)  # mask auto populate
         if self.dtype == tf.bfloat16:
             outputs = tf.cast(outputs, self.dtype)
-        outputs = self.bn(outputs, training=training)
         if self.rowconv is not None:
             outputs = self.rowconv(outputs, training=training)
         return outputs, outputs_length
@@ -225,7 +234,6 @@ class RnnModule(Layer):
         self,
         nlayers: int = 5,
         rnn_type: str = "lstm",
-        bn_type: str = "bn",
         units: int = 1024,
         bidirectional: bool = True,
         unroll: bool = False,
@@ -239,7 +247,6 @@ class RnnModule(Layer):
         self.blocks = [
             RnnBlock(
                 rnn_type=rnn_type,
-                bn_type=bn_type,
                 units=units,
                 bidirectional=bidirectional,
                 unroll=unroll,
@@ -279,14 +286,12 @@ class FcBlock(Layer):
     ):
         super().__init__(**kwargs)
         self.fc = tf.keras.layers.Dense(units, kernel_regularizer=kernel_regularizer, bias_regularizer=bias_regularizer, name="fc")
-        self.bn = tf.keras.layers.BatchNormalization(name="bn", gamma_regularizer=kernel_regularizer, beta_regularizer=bias_regularizer)
         self.relu = tf.keras.layers.ReLU(name="relu")
         self.do = tf.keras.layers.Dropout(dropout, name="dropout")
 
     def call(self, inputs, training=False):
         outputs, outputs_length = inputs
         outputs = self.fc(outputs, training=training)
-        outputs = self.bn(outputs, training=training)
         outputs = self.relu(outputs, training=training)
         outputs = self.do(outputs, training=training)
         return outputs, outputs_length
@@ -337,7 +342,6 @@ class DeepSpeech2Encoder(Layer):
         conv_dropout: float = 0.1,
         rnn_nlayers: int = 5,
         rnn_type: str = "lstm",
-        rnn_bn_type: str = "sbn",
         rnn_units: int = 1024,
         rnn_bidirectional: bool = True,
         rnn_unroll: bool = False,
@@ -365,7 +369,6 @@ class DeepSpeech2Encoder(Layer):
         self.rnn_module = RnnModule(
             nlayers=rnn_nlayers,
             rnn_type=rnn_type,
-            bn_type=rnn_bn_type,
             units=rnn_units,
             bidirectional=rnn_bidirectional,
             unroll=rnn_unroll,
@@ -440,7 +443,6 @@ class DeepSpeech2(CtcModel):
         conv_dropout: float = 0.1,
         rnn_nlayers: int = 5,
         rnn_type: str = "lstm",
-        rnn_bn_type: str = "bn",
         rnn_units: int = 1024,
         rnn_bidirectional: bool = True,
         rnn_unroll: bool = False,
@@ -466,7 +468,6 @@ class DeepSpeech2(CtcModel):
                 conv_dropout=conv_dropout,
                 rnn_nlayers=rnn_nlayers,
                 rnn_type=rnn_type,
-                rnn_bn_type=rnn_bn_type,
                 rnn_units=rnn_units,
                 rnn_bidirectional=rnn_bidirectional,
                 rnn_unroll=rnn_unroll,
