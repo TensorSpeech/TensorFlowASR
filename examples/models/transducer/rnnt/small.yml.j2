@@ -47,12 +47,12 @@ learning_config:
     class_name: Adam
     config:
       learning_rate:
-        class_name: PolynomialDecay
+        class_name: tensorflow_asr.optimizers.schedules>TransformerSchedule
         config:
-          initial_learning_rate: 0.001
-          decay_steps: 5000
-          end_learning_rate: 0.0001
-          power: 0.5
+          dmodel: 320
+          warmup_steps: 10000
+          max_lr: null
+          min_lr: null
       beta_1: 0.9
       beta_2: 0.98
       epsilon: 1e-9
