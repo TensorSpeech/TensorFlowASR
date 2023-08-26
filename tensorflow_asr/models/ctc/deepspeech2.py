@@ -47,7 +47,7 @@ class RowConv1D(Layer):
     def call(self, inputs, training=False):
         outputs = self.conv(inputs, training=training)
         outputs = self.bn(outputs, training=training)
-        outputs = self.activation(outputs, training=training)
+        outputs = self.activation(outputs)
         return outputs
 
     def compute_output_shape(self, input_shape):
