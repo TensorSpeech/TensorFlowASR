@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import tensorflow as tf
+from packaging import version
 
 from tensorflow_asr.models.base_layer import Identity, Layer, Reshape
 from tensorflow_asr.models.ctc.base_ctc import CtcModel
@@ -202,7 +203,8 @@ class RnnBlock(Layer):
             use_bias=True,
             name=rnn_type,
             zero_output_for_mask=True,
-            dtype=tf.float32 if self.dtype == tf.bfloat16 else self.dtype,
+            # https://github.com/tensorflow/tensorflow/issues/61352#issuecomment-1647276639
+            dtype=tf.float32 if self.dtype == tf.bfloat16 and version.parse(tf.version.VERSION) < version.parse("2.13.0") else None,
             kernel_regularizer=kernel_regularizer,
             bias_regularizer=bias_regularizer,
         )
@@ -214,10 +216,10 @@ class RnnBlock(Layer):
 
     def call(self, inputs, training=False):
         outputs, outputs_length = inputs
-        if self.dtype == tf.bfloat16:
-            outputs = tf.cast(outputs, tf.float32)
+        if self.dtype != self.rnn.dtype:
+            outputs = tf.cast(outputs, self.rnn.dtype)
         outputs = self.rnn(outputs, training=training)  # mask auto populate
-        if self.dtype == tf.bfloat16:
+        if self.dtype != self.rnn.dtype:
             outputs = tf.cast(outputs, self.dtype)
         if self.rowconv is not None:
             outputs = self.rowconv(outputs, training=training)

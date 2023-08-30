@@ -14,6 +14,7 @@
 """ http://arxiv.org/abs/1811.06621 """
 
 import tensorflow as tf
+from packaging import version
 
 from tensorflow_asr.models.base_layer import Layer, Reshape
 from tensorflow_asr.models.layers.subsampling import TimeReduction
@@ -44,7 +45,8 @@ class RnnTransducerBlock(Layer):
             zero_output_for_mask=True,
             kernel_regularizer=kernel_regularizer,
             bias_regularizer=bias_regularizer,
-            dtype=tf.float32 if self.dtype == tf.bfloat16 else self.dtype,
+            # https://github.com/tensorflow/tensorflow/issues/61352#issuecomment-1647276639
+            dtype=tf.float32 if self.dtype == tf.bfloat16 and version.parse(tf.version.VERSION) < version.parse("2.13.0") else None,
         )
         self.ln = (
             tf.keras.layers.LayerNormalization(name="ln", gamma_regularizer=kernel_regularizer, beta_regularizer=bias_regularizer)
@@ -57,10 +59,10 @@ class RnnTransducerBlock(Layer):
         outputs, outputs_length = inputs
         if self.reduction is not None:
             outputs, outputs_length = self.reduction((outputs, outputs_length))
-        if self.dtype == tf.bfloat16:
+        if self.dtype != self.rnn.dtype:
             outputs = tf.cast(outputs, tf.float32)
         outputs, *_ = self.rnn(outputs, training=training)
-        if self.dtype == tf.bfloat16:
+        if self.dtype != self.rnn.dtype:
             outputs = tf.cast(outputs, self.dtype)
         if self.ln is not None:
             outputs = self.ln(outputs, training=training)
