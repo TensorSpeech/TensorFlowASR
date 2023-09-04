@@ -200,4 +200,4 @@ class RnnTransducerEncoder(Layer):
         output_shape = self.reshape.compute_output_shape(output_shape)
         for block in self.blocks:
             output_shape = block.compute_output_shape(output_shape)
-        return output_shape, caching_shape
+        return *output_shape, caching_shape

@@ -409,7 +409,7 @@ class DeepSpeech2Encoder(Layer):
         outputs = self.conv_module(outputs, training=training)
         outputs = self.rnn_module(outputs, training=training)
         outputs = self.fc_module(outputs, training=training)
-        return outputs, caching
+        return *outputs, caching
 
     def compute_mask(self, inputs, mask=None):
         *outputs, caching = inputs
@@ -420,4 +420,4 @@ class DeepSpeech2Encoder(Layer):
         output_shape = self.conv_module.compute_output_shape(output_shape)
         output_shape = self.rnn_module.compute_output_shape(output_shape)
         output_shape = self.fc_module.compute_output_shape(output_shape)
-        return output_shape, caching_shape
+        return *output_shape, caching_shape
