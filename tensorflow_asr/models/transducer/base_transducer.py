@@ -116,11 +116,7 @@ class TransducerPrediction(Layer):
         outputs, outputs_length = inputs
         outputs, outputs_length = self.label_encoder((outputs, outputs_length), training=training)
         for i, rnn in enumerate(self.rnns):
-            # if self.dtype != rnn.dtype:
-            #     outputs = tf.cast(outputs, tf.float32)
             outputs, *_ = rnn(outputs, training=training)  # mask auto populate
-            # if self.dtype != rnn.dtype:
-            #     outputs = tf.cast(outputs, self.dtype)
             if self.lns[i] is not None:
                 outputs = self.lns[i](outputs, training=training)
             if self.projections[i] is not None:

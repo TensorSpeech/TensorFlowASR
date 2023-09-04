@@ -1,4 +1,5 @@
 # pylint: disable=protected-access
+import importlib
 import os
 import warnings
 
@@ -17,14 +18,15 @@ logger.setLevel(os.environ.get("LOG_LEVEL", "info").upper())
 logger.propagate = False
 warnings.simplefilter("ignore")
 
-from keras.engine import compile_utils
-
 from tensorflow_asr.utils import tf_util
+from tensorflow_asr.utils.env_util import KERAS_SRC
+
+compile_utils = importlib.import_module(f"{KERAS_SRC}.engine.compile_utils")
 
 
 @property
 def output_shape(self):
-    if self._tfasr_output_shape is None:
+    if not hasattr(self, "_tfasr_output_shape") or self._tfasr_output_shape is None:
         raise AttributeError(f"The layer {self.name} has never been called and thus has no defined output shape.")
     return self._tfasr_output_shape
 

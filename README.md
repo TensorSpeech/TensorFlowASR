@@ -5,7 +5,7 @@
   <img alt="GitHub" src="https://img.shields.io/github/license/TensorSpeech/TensorFlowASR?logo=apache&logoColor=green">
 </a>
 <img alt="python" src="https://img.shields.io/badge/python-%3E%3D3.6-blue?logo=python">
-<img alt="tensorflow" src="https://img.shields.io/badge/tensorflow-%3E%3D2.8.0-orange?logo=tensorflow">
+<img alt="tensorflow" src="https://img.shields.io/badge/tensorflow-%3E%3D2.12.0-orange?logo=tensorflow">
 <a href="https://pypi.org/project/TensorFlowASR/">
   <img alt="PyPI" src="https://img.shields.io/pypi/v/TensorFlowASR?color=%234285F4&label=release&logo=pypi&logoColor=%234285F4">
 </a>
@@ -109,18 +109,7 @@ pip3 install "TensorFlowASR[tf2.x]" # or pip3 install "TensorFlowASR[tf2.x-gpu]"
 git clone https://github.com/TensorSpeech/TensorFlowASR.git
 cd TensorFlowASR
 pip3 install -e ".[dev]"
-pip3 install -e ".[tf2.x]" # or ".[tf2.x-gpu]"
-```
-
-For macos m1 and above
-
-```bash
-conda create -y -n tfasr
-conda activate tfasr
-conda config --env --set subdir osx-64 # tensorflow-text package available only on x86/64 env
-conda install python=3.10.12 tensorflow=2.x # install tensorflow with conda for extra dependencies
-pip install -e ".[dev]"
-pip install -e ".[tf2.x]"
+pip3 install -e ".[tf2.x]" # or ".[tf2.x-gpu]" or ".[tf2.x-apple]" for apple m1 machine
 ```
 
 ### Running in a container

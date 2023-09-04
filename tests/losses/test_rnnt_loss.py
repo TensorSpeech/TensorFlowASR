@@ -195,11 +195,11 @@ class WarpRNNTTest(tf.test.TestCase):
         self._run_rnnt(acts, labels, input_lengths, label_lengths, expected_costs, expected_grads)
 
     def test_multiple_batches_gpu(self):
-        rnnt_losses.use_warprnnt = False
+        rnnt_losses.WARPRNNT_SPEC = False
         self._test_multiple_batches(use_gpu=True)
 
     def test_multiple_batches_cpu(self):
-        rnnt_losses.use_warprnnt = False
+        rnnt_losses.WARPRNNT_SPEC = False
         self._test_multiple_batches(use_gpu=False)
 
 

@@ -223,11 +223,7 @@ class RnnBlock(Layer):
 
     def call(self, inputs, training=False):
         outputs, outputs_length = inputs
-        if self.dtype != self.rnn.dtype:
-            outputs = tf.cast(outputs, self.rnn.dtype)
         outputs = self.rnn(outputs, training=training)  # mask auto populate
-        if self.dtype != self.rnn.dtype:
-            outputs = tf.cast(outputs, self.dtype)
         if self.rowconv is not None:
             outputs = self.rowconv(outputs, training=training)
         return outputs, outputs_length

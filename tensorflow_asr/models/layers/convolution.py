@@ -17,14 +17,14 @@
 Causal padding supported Conv1D, Conv2D, DepthwiseConv1D, DepthwiseConv2D
 """
 
+import importlib
+
 import tensorflow as tf
 
-try:
-    from keras.layers.convolutional.base_conv import Conv
-    from keras.utils import conv_utils
-except ImportError:
-    from keras.src.layers.convolutional.base_conv import Conv
-    from keras.src.utils import conv_utils
+from tensorflow_asr.utils.env_util import KERAS_SRC
+
+Conv = importlib.import_module(f"{KERAS_SRC}.layers.convolutional.base_conv").Conv
+conv_utils = importlib.import_module(f"{KERAS_SRC}.utils.conv_utils")
 
 
 def _validate_init(self):  # removed check padding causal

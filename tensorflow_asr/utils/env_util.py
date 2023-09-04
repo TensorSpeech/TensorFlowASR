@@ -18,8 +18,11 @@ from typing import List, Union
 
 import numpy as np
 import tensorflow as tf
+from packaging import version
 
 logger = tf.get_logger()
+
+KERAS_SRC = "keras.src" if version.parse(tf.version.VERSION) >= version.parse("2.13.0") else "keras"
 
 
 def setup_devices(

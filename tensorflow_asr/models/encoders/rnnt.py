@@ -63,11 +63,7 @@ class RnnTransducerBlock(Layer):
         outputs, outputs_length = inputs
         if self.reduction is not None:
             outputs, outputs_length = self.reduction((outputs, outputs_length))
-        if self.dtype != self.rnn.dtype:
-            outputs = tf.cast(outputs, tf.float32)
         outputs, *_ = self.rnn(outputs, training=training)
-        if self.dtype != self.rnn.dtype:
-            outputs = tf.cast(outputs, self.dtype)
         if self.ln is not None:
             outputs = self.ln(outputs, training=training)
         outputs = self.projection(outputs, training=training)

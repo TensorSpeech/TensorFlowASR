@@ -1,55 +1,23 @@
 SoundFile==0.12.1
 nltk==3.8.1
 sentencepiece==0.1.99
-tqdm==4.65.0
-librosa==0.10.0.post2
-PyYAML==6.0
+tqdm==4.66.1
+librosa==0.10.1
+PyYAML==6.0.1
 sounddevice==0.4.6
 jinja2==3.1.2
 fire==0.5.0
-jiwer==3.0.2
+jiwer==3.0.3
 chardet==5.1.0
 charset-normalizer==2.1.1
 
 # extra=dev
-pytest==7.3.1
-black==23.3.0
-pylint==2.17.4
+pytest==7.4.1
+black==23.7.0
+pylint==2.17.5
 matplotlib==3.7.2
 pydot==1.4.2
 graphviz==0.20.1
-
-# # extra=tf2.8
-# tensorflow>=2.8.0,<2.9.0
-# tensorflow-text>=2.8.0,<2.9.0
-
-# # extra=tf2.8-gpu
-# tensorflow-gpu>=2.8.0,<2.9.0
-# tensorflow-text>=2.8.0,<2.9.0
-
-# # extra=tf2.9
-# tensorflow>=2.9.0,<2.10.0
-# tensorflow-text>=2.9.0,<2.10.0
-
-# # extra=tf2.9-gpu
-# tensorflow-gpu>=2.9.0,<2.10.0
-# tensorflow-text>=2.9.0,<2.10.0
-
-# # extra=tf2.10
-# tensorflow>=2.10.0,<2.11.0
-# tensorflow-text>=2.10.0,<2.11.0
-
-# # extra=tf2.10-gpu
-# tensorflow-gpu>=2.10.0,<2.11.0
-# tensorflow-text>=2.10.0,<2.11.0
-
-# # extra=tf2.11
-# tensorflow>=2.11.0,<2.12.0
-# tensorflow-text>=2.11.0,<2.12.0
-
-# # extra=tf2.11-gpu
-# tensorflow-gpu>=2.11.0,<2.12.0
-# tensorflow-text>=2.11.0,<2.12.0
 
 # extra=tf2.12
 tensorflow>=2.12.0,<2.13.0
@@ -68,5 +36,9 @@ tensorflow>=2.13.0,<2.14.0
 tensorflow-text>=2.13.0,<2.14.0
 
 # extra=tf2.13-gpu
-tensorflow-gpu>=2.13.0,<2.14.0
+tensorflow>=2.13.0,<2.14.0
 tensorflow-text>=2.13.0,<2.14.0
+
+# extra=tf2.13-apple
+tensorflow>=2.13.0,<2.14.0 # https://blog.tensorflow.org/2023/07/whats-new-in-tensorflow-213-and-keras-213.html
+tensorflow-text@ https://github.com/sun1638650145/Libraries-and-Extensions-for-TensorFlow-for-Apple-Silicon/releases/download/v2.13/tensorflow_text-2.13.0-cp310-cp310-macosx_11_0_arm64.whl

@@ -14,6 +14,7 @@
 # limitations under the License.
 # RNNT loss implementation in pure TensorFlow is borrowed from [iamjanvijay's repo](https://github.com/iamjanvijay/rnnt)
 
+import importlib.util
 import os
 
 import numpy as np
@@ -21,26 +22,24 @@ import tensorflow as tf
 
 from tensorflow_asr.utils import env_util
 
-logger = tf.get_logger()
+warp_rnnt_loss = importlib.import_module("warprnnt_tensorflow").rnnt_loss if importlib.util.find_spec("warprnnt_tensorflow") is not None else None
 
 USE_CPU_LOSS = os.getenv("USE_CPU_LOSS", "False") == "True"
 
-try:
-    from warprnnt_tensorflow import rnnt_loss as warp_rnnt_loss
-
-    use_warprnnt = True
-except ImportError:
-    use_warprnnt = False
+logger = tf.get_logger()
 
 
 class RnntLoss(tf.keras.losses.Loss):
     def __init__(self, blank, reduction=tf.keras.losses.Reduction.AUTO, name=None):
-        if blank != 0 and not use_warprnnt:  # restrict blank index
+        if blank != 0 and warp_rnnt_loss is None:  # restrict blank index
             raise ValueError("rnnt_loss in tensorflow must use blank = 0")
         super().__init__(reduction=reduction, name=name)
         self.blank = blank
         self.use_cpu = USE_CPU_LOSS if USE_CPU_LOSS else (not env_util.has_devices("GPU") and not env_util.has_devices("TPU"))
-        logger.info(f"Use {'CPU' if self.use_cpu else 'GPU/TPU'} implementation for RNNT loss in {'WarpRnnt' if use_warprnnt else 'Tensorflow'}")
+        logger.info(
+            f"Use {'CPU' if self.use_cpu else 'GPU/TPU'} implementation for RNNT loss \
+                in {'Tensorflow' if warp_rnnt_loss is None else 'WarpRNNT'}"
+        )
 
     def call(self, y_true, y_pred):
         return rnnt_loss(
@@ -72,7 +71,7 @@ def rnnt_loss(
         use_cpu=use_cpu,
         name=name,
     )
-    loss_fn = rnnt_loss_warprnnt if use_warprnnt else rnnt_loss_tf
+    loss_fn = rnnt_loss_tf if warp_rnnt_loss is None else rnnt_loss_warprnnt
     if use_cpu:
         with tf.device("/CPU:0"):
             return loss_fn(**kwargs)

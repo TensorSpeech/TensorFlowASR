@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import json
 import os
 
 from tensorflow_asr import datasets, tf, tokenizers  # import to aid logging messages
@@ -57,11 +58,11 @@ def main(
     shapes = datasets.get_global_shape(config, strategy, train_dataset, eval_dataset, batch_size=bs)
 
     train_data_loader = train_dataset.create(shapes["batch_size"], padded_shapes=shapes["padded_shapes"])
-    logger.info(f"train_data_loader.element_spec = {train_data_loader.element_spec}")
+    logger.info(f"train_data_loader.element_spec = {json.dumps(train_data_loader.element_spec, indent=2, default=str)}")
 
     eval_data_loader = eval_dataset.create(shapes["batch_size"], padded_shapes=shapes["padded_shapes"])
     if eval_data_loader:
-        logger.info(f"eval_data_loader.element_spec = {eval_data_loader.element_spec}")
+        logger.info(f"eval_data_loader.element_spec = {json.dumps(eval_data_loader.element_spec, indent=2, default=str)}")
 
     with strategy.scope():
         model = tf.keras.models.model_from_config(config.model_config)

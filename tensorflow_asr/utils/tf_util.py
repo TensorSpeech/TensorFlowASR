@@ -1,9 +1,10 @@
+import importlib
+
 import tensorflow as tf
 
-try:
-    from keras.utils import tf_utils
-except ImportError:
-    from keras.src.utils import tf_utils
+from tensorflow_asr.utils.env_util import KERAS_SRC
+
+tf_utils = importlib.import_module(f"{KERAS_SRC}.utils.tf_utils")
 
 
 def convert_shapes(input_shape, to_tuples=True):

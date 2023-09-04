@@ -13,21 +13,17 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import importlib
 import math
 
 import tensorflow as tf
 from keras.layers import EinsumDense
 from keras.layers import MultiHeadAttention as KerasMultiHeadAttention
 
-try:
-    from keras.layers.multi_head_attention import _build_attention_equation, _build_proj_equation, _get_output_shape
-except ImportError:
-    try:
-        from keras.layers.attention.multi_head_attention import _build_attention_equation, _build_proj_equation, _get_output_shape
-    except ImportError:
-        from keras.src.layers.attention.multi_head_attention import _build_attention_equation, _build_proj_equation, _get_output_shape
-
 from tensorflow_asr.models.layers.memory import Memory
+from tensorflow_asr.utils.env_util import KERAS_SRC
+
+mha_module = importlib.import_module(f"{KERAS_SRC}.layers.attention.multi_head_attention")
 
 
 def rel_left_shift(x):
@@ -227,7 +223,7 @@ class MultiHeadAttention(KerasMultiHeadAttention):
             self._dot_product_equation,
             self._combine_equation,
             attn_scores_rank,
-        ) = _build_attention_equation(rank, attn_axes=self._attention_axes)
+        ) = mha_module._build_attention_equation(rank, attn_axes=self._attention_axes)
         norm_axes = tuple(range(attn_scores_rank - len(self._attention_axes), attn_scores_rank))
         self._softmax = tf.keras.layers.Softmax(axis=norm_axes, dtype=tf.float32)  # stable training
         self._dropout_layer = tf.keras.layers.Dropout(rate=self._dropout, dtype=self.dtype)
@@ -359,12 +355,12 @@ class MultiHeadRelativeAttention(MultiHeadAttention):
         else:
             self._relative_position_encoding_shape = tf.TensorShape(relative_position_encoding)
         with tf.init_scope():  # pylint: disable=not-context-manager
-            einsum_equation, bias_axes, output_rank = _build_proj_equation(
+            einsum_equation, bias_axes, output_rank = mha_module._build_proj_equation(
                 self._relative_position_encoding_shape.rank - 1, bound_dims=1, output_dims=2
             )
             self._encoding_dense = EinsumDense(
                 einsum_equation,
-                output_shape=_get_output_shape(output_rank - 1, [self._num_heads, self._key_dim]),
+                output_shape=mha_module._get_output_shape(output_rank - 1, [self._num_heads, self._key_dim]),
                 bias_axes=bias_axes if self._use_bias else None,
                 name="encoding",
                 **self._get_common_kwargs_for_sublayer(),

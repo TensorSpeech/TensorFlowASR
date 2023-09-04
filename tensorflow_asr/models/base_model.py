@@ -14,13 +14,11 @@
 # limitations under the License.
 
 import copy
+import importlib
 
 import tensorflow as tf
 from keras import callbacks as callbacks_module
-from keras.engine import base_layer, data_adapter, training_utils
-from keras.engine.training import _disallow_inside_tf_function, _get_verbosity, _minimum_control_deps, reduce_per_replica
-from keras.optimizers import optimizer
-from keras.utils import tf_utils, version_utils
+from keras.optimizers import Optimizer
 from tensorflow.python.eager import context  # pylint: disable=no-name-in-module
 
 from tensorflow_asr import schemas
@@ -28,17 +26,19 @@ from tensorflow_asr.models.layers.feature_extraction import FeatureExtraction
 from tensorflow_asr.optimizers.accumulation import GradientAccumulator
 from tensorflow_asr.utils import env_util, file_util
 
+base_layer = importlib.import_module(f"{env_util.KERAS_SRC}.engine.base_layer")
+data_adapter = importlib.import_module(f"{env_util.KERAS_SRC}.engine.data_adapter")
+training_utils = importlib.import_module(f"{env_util.KERAS_SRC}.engine.training_utils")
+
+tf_utils = importlib.import_module(f"{env_util.KERAS_SRC}.utils.tf_utils")
+version_utils = importlib.import_module(f"{env_util.KERAS_SRC}.utils.version_utils")
+
+_disallow_inside_tf_function = importlib.import_module(f"{env_util.KERAS_SRC}.engine.training")._disallow_inside_tf_function
+_get_verbosity = importlib.import_module(f"{env_util.KERAS_SRC}.engine.training")._get_verbosity
+_minimum_control_deps = importlib.import_module(f"{env_util.KERAS_SRC}.engine.training")._minimum_control_deps
+reduce_per_replica = importlib.import_module(f"{env_util.KERAS_SRC}.engine.training").reduce_per_replica
+
 logger = tf.get_logger()
-
-
-class BaseModelLayer(tf.keras.Model):  # pylint: disable=abstract-method
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self._output_shape = None
-        self.supports_masking = True
-
-    def compute_output_shape(self, input_shape):
-        return input_shape
 
 
 class BaseModel(tf.keras.Model):
@@ -320,7 +320,9 @@ class BaseModel(tf.keras.Model):
                 train_function = tf.function(train_function, reduce_retracing=True)
                 self.train_tf_function = train_function
             # fmt: off
-            self.train_function = lambda it, cache: self._cluster_coordinator.schedule(train_function, args=(it, cache, self._steps_per_execution.value())) # pylint: disable=line-too-long
+            self.train_function = lambda it, cache: self._cluster_coordinator.schedule(
+                train_function, args=(it, cache, self._steps_per_execution.value())
+            )  # pylint: disable=line-too-long
             # fmt: on
         else:
 
@@ -513,7 +515,7 @@ class BaseModel(tf.keras.Model):
                 if self.stop_training:
                     break
 
-            if isinstance(self.optimizer, optimizer.Optimizer) and epochs > 0:
+            if isinstance(self.optimizer, Optimizer) and epochs > 0:
                 self.optimizer.finalize_variable_values(self.trainable_variables)
 
             # If eval data_handler exists, delete it after all epochs are done.
