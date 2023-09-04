@@ -254,26 +254,21 @@ class MultiHeadAttention(KerasMultiHeadAttention):
             else:
                 self._memory = None
 
-    def _update_with_memory(self, query, key, value):
+    def reset_caching(self):
         if self._memory is None:
-            return query, key, value
+            return None
+        return self._memory.reset_caching()
 
-        key = self._memory.attach_memory(key)
-        value = self._memory.attach_memory(value)
-
-        self._memory(query)  # update memory
-
-        return query, key, value
-
-    def get_states(self):
+    def _update_with_memory(self, query, key, value, caching=None):
         if self._memory is None:
-            return (None, None)
-        return self._memory.get_states()
+            return query, key, value, caching
 
-    def reset_states(self, states=(None, None)):
-        if self._memory is None:
-            return
-        self._memory.reset_states(states)
+        key = self._memory.attach_memory(key, memories=caching)
+        value = self._memory.attach_memory(value, memories=caching)
+
+        caching = self._memory(query, memories=caching)  # update memory
+
+        return query, key, value, caching
 
     def call(
         self,
@@ -284,12 +279,12 @@ class MultiHeadAttention(KerasMultiHeadAttention):
         use_causal_mask=False,
         use_auto_mask=True,
     ):
-        query, key, value, *_ = inputs
+        query, key, value, caching, *_ = inputs
 
         if not self._built_from_signature:
             self._build_from_signature(query=query, value=value, key=key)
 
-        query, key, value = self._update_with_memory(query, key, value)
+        query, key, value, caching = self._update_with_memory(query, key, value, caching=caching)
 
         if use_auto_mask:
             attention_mask = self._compute_attention_mask(query, value, key=key, attention_mask=attention_mask, use_causal_mask=use_causal_mask)
@@ -309,12 +304,12 @@ class MultiHeadAttention(KerasMultiHeadAttention):
         attention_output = self._output_dense(attention_output)
 
         if return_attention_scores:
-            return attention_output, attention_scores
-        return attention_output
+            return attention_output, caching, attention_scores
+        return attention_output, caching
 
     def compute_output_shape(self, input_shape):
-        query_shape, *_ = input_shape
-        return tf.TensorShape(query_shape)
+        query_shape, _, _, caching_shape, *_ = input_shape
+        return query_shape, caching_shape
 
 
 class MultiHeadRelativeAttention(MultiHeadAttention):
@@ -417,12 +412,12 @@ class MultiHeadRelativeAttention(MultiHeadAttention):
         use_auto_mask=True,
         return_attention_scores=False,
     ):
-        query, key, value, relative_position_encoding, content_attention_bias, positional_attention_bias, *_ = inputs
+        query, key, value, caching, relative_position_encoding, content_attention_bias, positional_attention_bias, *_ = inputs
 
         if not self._built_from_signature:
             self._build_from_signature(query, value, relative_position_encoding, key=key)
 
-        query, key, value = self._update_with_memory(query, key, value)
+        query, key, value, caching = self._update_with_memory(query, key, value, caching=caching)
 
         if use_auto_mask:
             attention_mask = self._compute_attention_mask(query, value, key=key, attention_mask=attention_mask, use_causal_mask=use_causal_mask)
@@ -456,5 +451,5 @@ class MultiHeadRelativeAttention(MultiHeadAttention):
         attention_output = self._output_dense(attention_output)
 
         if return_attention_scores:
-            return attention_output, attention_scores
-        return attention_output
+            return attention_output, caching, attention_scores
+        return attention_output, caching

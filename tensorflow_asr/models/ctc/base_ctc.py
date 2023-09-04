@@ -73,10 +73,11 @@ class CtcModel(BaseModel):
                     lambda: None,
                 )
 
-    def call_logits(self, features, features_length, *args, training=False):
-        logits, logits_length = self.encoder((features, features_length), training=training)
+    def call(self, inputs: schemas.TrainInput, training=False):
+        features, features_length = self.feature_extraction((inputs["inputs"], inputs["inputs_length"]), training=training)
+        logits, logits_length, caching = self.encoder((features, features_length, inputs.get("caching")), training=training)
         logits, logits_length = self.decoder((logits, logits_length), training=training)
-        return logits, logits_length
+        return schemas.TrainOutput(logits=logits, logits_length=logits_length, caching=caching)
 
     def call_next(
         self,

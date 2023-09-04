@@ -62,9 +62,9 @@ class FFModule(Layer):
         super().__init__(name=name, **kwargs)
         assert norm_position in ("pre", "post", "none")
         self.pre_norm = (
-            tf.keras.layers.LayerNormalization(name="ln", gamma_regularizer=kernel_regularizer, beta_regularizer=kernel_regularizer)
+            tf.keras.layers.LayerNormalization(name="ln", gamma_regularizer=kernel_regularizer, beta_regularizer=kernel_regularizer, dtype=self.dtype)
             if norm_position == "pre"
-            else Identity(name="preiden" if norm_position == "none" else "iden")
+            else Identity(name="preiden" if norm_position == "none" else "iden", dtype=self.dtype)
         )
         self.ffn1 = tf.keras.layers.Dense(
             units=scale_factor * input_dim,
@@ -72,21 +72,23 @@ class FFModule(Layer):
             kernel_regularizer=kernel_regularizer,
             bias_regularizer=bias_regularizer,
             activation="swish",
+            dtype=self.dtype,
         )
-        self.do1 = tf.keras.layers.Dropout(rate=dropout, name="dropout_1")
+        self.do1 = tf.keras.layers.Dropout(rate=dropout, name="dropout_1", dtype=self.dtype)
         self.ffn2 = tf.keras.layers.Dense(
             units=input_dim,
             name="dense_2",
             kernel_regularizer=kernel_regularizer,
             bias_regularizer=bias_regularizer,
+            dtype=self.dtype,
         )
-        self.do2 = tf.keras.layers.Dropout(rate=dropout, name="dropout_2")
+        self.do2 = tf.keras.layers.Dropout(rate=dropout, name="dropout_2", dtype=self.dtype)
         self.post_norm = (
-            tf.keras.layers.LayerNormalization(name="ln", gamma_regularizer=kernel_regularizer, beta_regularizer=kernel_regularizer)
+            tf.keras.layers.LayerNormalization(name="ln", gamma_regularizer=kernel_regularizer, beta_regularizer=kernel_regularizer, dtype=self.dtype)
             if norm_position == "post"
-            else Identity(name="postiden" if norm_position == "none" else "iden")
+            else Identity(name="postiden" if norm_position == "none" else "iden", dtype=self.dtype)
         )
-        self.residual = Residual(factor=residual_factor, regularizer=bias_regularizer, name="residual")
+        self.residual = Residual(factor=residual_factor, regularizer=bias_regularizer, name="residual", dtype=self.dtype)
 
     def call(self, inputs, training=False):
         outputs = self.pre_norm(inputs, training=training)
@@ -135,9 +137,9 @@ class MHSAModule(Layer):
         assert norm_position in ("pre", "post", "none")
         assert mha_type in ("relmha", "mha")
         self.pre_norm = (
-            tf.keras.layers.LayerNormalization(name="ln", gamma_regularizer=kernel_regularizer, beta_regularizer=kernel_regularizer)
+            tf.keras.layers.LayerNormalization(name="ln", gamma_regularizer=kernel_regularizer, beta_regularizer=kernel_regularizer, dtype=self.dtype)
             if norm_position == "pre"
-            else Identity(name="preiden" if norm_position == "none" else "iden")
+            else Identity(name="preiden" if norm_position == "none" else "iden", dtype=self.dtype)
         )
         if mha_type == "relmha":
             self.mha = MultiHeadRelativeAttention(
@@ -148,6 +150,7 @@ class MHSAModule(Layer):
                 kernel_regularizer=kernel_regularizer,
                 bias_regularizer=bias_regularizer,
                 name="mhsa",
+                dtype=self.dtype,
             )
         else:
             self.mha = MultiHeadAttention(
@@ -158,14 +161,15 @@ class MHSAModule(Layer):
                 kernel_regularizer=kernel_regularizer,
                 bias_regularizer=bias_regularizer,
                 name="mhsa",
+                dtype=self.dtype,
             )
-        self.do = tf.keras.layers.Dropout(dropout, name="dropout")
+        self.do = tf.keras.layers.Dropout(dropout, name="dropout", dtype=self.dtype)
         self.post_norm = (
-            tf.keras.layers.LayerNormalization(name="ln", gamma_regularizer=kernel_regularizer, beta_regularizer=kernel_regularizer)
+            tf.keras.layers.LayerNormalization(name="ln", gamma_regularizer=kernel_regularizer, beta_regularizer=kernel_regularizer, dtype=self.dtype)
             if norm_position == "post"
-            else Identity(name="postiden" if norm_position == "none" else "iden")
+            else Identity(name="postiden" if norm_position == "none" else "iden", dtype=self.dtype)
         )
-        self.residual = Residual(factor=residual_factor, regularizer=bias_regularizer, name="residual")
+        self.residual = Residual(factor=residual_factor, regularizer=bias_regularizer, name="residual", dtype=self.dtype)
 
     def call(
         self,
@@ -175,10 +179,10 @@ class MHSAModule(Layer):
         use_causal_mask=False,
         use_auto_mask=True,
     ):
-        _inputs, relative_position_encoding, content_attention_bias, positional_attention_bias = inputs
+        _inputs, caching, relative_position_encoding, content_attention_bias, positional_attention_bias = inputs
         outputs = self.pre_norm(_inputs, training=training)
-        outputs = self.mha(
-            [outputs, outputs, outputs, relative_position_encoding, content_attention_bias, positional_attention_bias],
+        outputs, caching = self.mha(
+            [outputs, outputs, outputs, caching, relative_position_encoding, content_attention_bias, positional_attention_bias],
             training=training,
             attention_mask=attention_mask,
             use_causal_mask=use_causal_mask,
@@ -187,11 +191,11 @@ class MHSAModule(Layer):
         outputs = self.do(outputs, training=training)
         outputs = self.post_norm(outputs, training=training)
         outputs = self.residual([_inputs, outputs], training=training)
-        return outputs
+        return outputs, caching
 
     def compute_output_shape(self, input_shape):
-        output_shape, *_ = input_shape
-        return output_shape
+        output_shape, caching_shape, *_ = input_shape
+        return output_shape, caching_shape
 
 
 class ConvModule(Layer):
@@ -233,9 +237,9 @@ class ConvModule(Layer):
         super().__init__(name=name, **kwargs)
         assert norm_position in ("pre", "post", "none")
         self.pre_norm = (
-            tf.keras.layers.LayerNormalization(name="ln", gamma_regularizer=kernel_regularizer, beta_regularizer=kernel_regularizer)
+            tf.keras.layers.LayerNormalization(name="ln", gamma_regularizer=kernel_regularizer, beta_regularizer=kernel_regularizer, dtype=self.dtype)
             if norm_position == "pre"
-            else Identity(name="preiden" if norm_position == "none" else "iden")
+            else Identity(name="preiden" if norm_position == "none" else "iden", dtype=self.dtype)
         )
         self.pw_conv_1 = Conv1D(
             filters=scale_factor * input_dim,
@@ -245,8 +249,9 @@ class ConvModule(Layer):
             name="pw_conv_1",
             kernel_regularizer=kernel_regularizer,
             bias_regularizer=bias_regularizer,
+            dtype=self.dtype,
         )
-        self.glu = GLU(axis=-1, name="glu")
+        self.glu = GLU(axis=-1, name="glu", dtype=self.dtype)
         if use_group_conv:
             self.dw_conv = Conv1D(
                 filters=input_dim,
@@ -257,6 +262,7 @@ class ConvModule(Layer):
                 name="dw_conv",
                 kernel_regularizer=kernel_regularizer,
                 bias_regularizer=bias_regularizer,
+                dtype=self.dtype,
             )
         else:
             self.dw_conv = DepthwiseConv1D(
@@ -266,9 +272,12 @@ class ConvModule(Layer):
                 name="dw_conv",
                 kernel_regularizer=kernel_regularizer,
                 bias_regularizer=bias_regularizer,
+                dtype=self.dtype,
             )
-        self.bn = tf.keras.layers.BatchNormalization(name="bn", gamma_regularizer=kernel_regularizer, beta_regularizer=bias_regularizer)
-        self.swish = tf.keras.layers.Activation(tf.nn.swish, name="swish")
+        self.bn = tf.keras.layers.BatchNormalization(
+            name="bn", gamma_regularizer=kernel_regularizer, beta_regularizer=bias_regularizer, dtype=self.dtype
+        )
+        self.swish = tf.keras.layers.Activation(tf.nn.swish, name="swish", dtype=self.dtype)
         self.pw_conv_2 = Conv1D(
             filters=input_dim,
             kernel_size=1,
@@ -277,14 +286,15 @@ class ConvModule(Layer):
             name="pw_conv_2",
             kernel_regularizer=kernel_regularizer,
             bias_regularizer=bias_regularizer,
+            dtype=self.dtype,
         )
-        self.do = tf.keras.layers.Dropout(rate=dropout, name="dropout")
+        self.do = tf.keras.layers.Dropout(rate=dropout, name="dropout", dtype=self.dtype)
         self.post_norm = (
-            tf.keras.layers.LayerNormalization(name="ln", gamma_regularizer=kernel_regularizer, beta_regularizer=kernel_regularizer)
+            tf.keras.layers.LayerNormalization(name="ln", gamma_regularizer=kernel_regularizer, beta_regularizer=kernel_regularizer, dtype=self.dtype)
             if norm_position == "post"
-            else Identity(name="postiden" if norm_position == "none" else "iden")
+            else Identity(name="postiden" if norm_position == "none" else "iden", dtype=self.dtype)
         )
-        self.residual = Residual(factor=residual_factor, regularizer=bias_regularizer, name="residual")
+        self.residual = Residual(factor=residual_factor, regularizer=bias_regularizer, name="residual", dtype=self.dtype)
 
     def call(self, inputs, training=False):
         outputs = self.pre_norm(inputs, training=training)
@@ -339,9 +349,9 @@ class ConformerBlock(Layer):
         super().__init__(name=name, **kwargs)
         assert block_norm_position in ("pre", "post", "none")
         self.pre_norm = (
-            tf.keras.layers.LayerNormalization(name="ln", gamma_regularizer=kernel_regularizer, beta_regularizer=kernel_regularizer)
+            tf.keras.layers.LayerNormalization(name="ln", gamma_regularizer=kernel_regularizer, beta_regularizer=kernel_regularizer, dtype=self.dtype)
             if block_norm_position == "pre"
-            else Identity(name="preiden" if block_norm_position == "none" else "iden")
+            else Identity(name="preiden" if block_norm_position == "none" else "iden", dtype=self.dtype)
         )
         self.ffm1 = FFModule(
             input_dim=input_dim,
@@ -352,6 +362,7 @@ class ConformerBlock(Layer):
             name="ff_module_1",
             kernel_regularizer=kernel_regularizer,
             bias_regularizer=bias_regularizer,
+            dtype=self.dtype,
         )
         self.mhsam = MHSAModule(
             dmodel=input_dim,
@@ -365,6 +376,7 @@ class ConformerBlock(Layer):
             kernel_regularizer=kernel_regularizer,
             bias_regularizer=bias_regularizer,
             name="mhsa_module",
+            dtype=self.dtype,
         )
         self.convm = ConvModule(
             input_dim=input_dim,
@@ -378,6 +390,7 @@ class ConformerBlock(Layer):
             use_group_conv=convm_use_group_conv,
             kernel_regularizer=kernel_regularizer,
             bias_regularizer=bias_regularizer,
+            dtype=self.dtype,
         )
         self.ffm2 = FFModule(
             input_dim=input_dim,
@@ -388,11 +401,12 @@ class ConformerBlock(Layer):
             name="ff_module_2",
             kernel_regularizer=kernel_regularizer,
             bias_regularizer=bias_regularizer,
+            dtype=self.dtype,
         )
         self.post_norm = (
-            tf.keras.layers.LayerNormalization(name="ln", gamma_regularizer=kernel_regularizer, beta_regularizer=kernel_regularizer)
+            tf.keras.layers.LayerNormalization(name="ln", gamma_regularizer=kernel_regularizer, beta_regularizer=kernel_regularizer, dtype=self.dtype)
             if block_norm_position == "post"
-            else Identity(name="postiden" if block_norm_position == "none" else "iden")
+            else Identity(name="postiden" if block_norm_position == "none" else "iden", dtype=self.dtype)
         )
 
     def call(
@@ -403,11 +417,11 @@ class ConformerBlock(Layer):
         use_causal_mask=False,
         use_auto_mask=True,
     ):
-        inputs, relative_position_encoding, content_attention_bias, positional_attention_bias = inputs
+        inputs, caching, relative_position_encoding, content_attention_bias, positional_attention_bias = inputs
         outputs = self.pre_norm(inputs, training=training)
         outputs = self.ffm1(outputs, training=training)
-        outputs = self.mhsam(
-            [outputs, relative_position_encoding, content_attention_bias, positional_attention_bias],
+        outputs, caching = self.mhsam(
+            [outputs, caching, relative_position_encoding, content_attention_bias, positional_attention_bias],
             training=training,
             attention_mask=attention_mask,
             use_causal_mask=use_causal_mask,
@@ -416,11 +430,11 @@ class ConformerBlock(Layer):
         outputs = self.convm(outputs, training=training)
         outputs = self.ffm2(outputs, training=training)
         outputs = self.post_norm(outputs, training=training)
-        return outputs
+        return outputs, caching
 
     def compute_output_shape(self, input_shape):
-        output_shape, *_ = input_shape
-        return output_shape
+        output_shape, caching_shape, *_ = input_shape
+        return output_shape, caching_shape
 
 
 class ConformerEncoder(Layer):
@@ -474,27 +488,26 @@ class ConformerEncoder(Layer):
             name="subsampling",
             kernel_regularizer=kernel_regularizer,
             bias_regularizer=bias_regularizer,
+            dtype=self.dtype,
         )
         self.time_reduction_factor = self.conv_subsampling.time_reduction_factor
 
         self.linear = tf.keras.layers.Dense(
-            dmodel,
-            name="linear",
-            kernel_regularizer=kernel_regularizer,
-            bias_regularizer=bias_regularizer,
+            dmodel, name="linear", kernel_regularizer=kernel_regularizer, bias_regularizer=bias_regularizer, dtype=self.dtype
         )
-        self.do = tf.keras.layers.Dropout(dropout, name="dropout")
+        self.do = tf.keras.layers.Dropout(dropout, name="dropout", dtype=self.dtype)
 
         self._mha_type = mha_type
         self._num_heads = num_heads
         self._key_dim = head_size
+        self._memory_length = memory_length
         self._use_attention_causal_mask = use_attention_causal_mask
         self._use_attention_auto_mask = use_attention_auto_mask
 
         if self._mha_type == "relmha":
-            self.relpe = RelativePositionalEncoding(interleave=interleave_relpe, memory_length=memory_length, name="relpe")
+            self.relpe = RelativePositionalEncoding(interleave=interleave_relpe, memory_length=memory_length, name="relpe", dtype=self.dtype)
         else:
-            self.relpe = PositionalEncoding(interleave=interleave_relpe, name="pe")
+            self.relpe = PositionalEncoding(interleave=interleave_relpe, name="pe", dtype=self.dtype)
 
         self.conformer_blocks = [
             ConformerBlock(
@@ -517,6 +530,7 @@ class ConformerEncoder(Layer):
                 kernel_regularizer=kernel_regularizer,
                 bias_regularizer=bias_regularizer,
                 name=f"block_{i}",
+                dtype=self.dtype,
             )
             for i in range(self._num_blocks)
         ]
@@ -528,6 +542,7 @@ class ConformerEncoder(Layer):
                 trainable=True,
                 initializer="zeros",
                 regularizer=self._bias_regularizer,
+                dtype=self.variable_dtype,
             )
             self.positional_attention_bias = self.add_weight(
                 name="positional_attention_bias",
@@ -535,35 +550,44 @@ class ConformerEncoder(Layer):
                 trainable=True,
                 initializer="zeros",
                 regularizer=self._bias_regularizer,
+                dtype=self.variable_dtype,
             )
         else:
             self.content_attention_bias, self.positional_attention_bias = None, None
 
-    def get_states(self):
-        return [block.mhsam.mha.get_states() for block in self.conformer_blocks]
-
-    def reset_states(self, states=None):
-        if states is None:
-            states = [(None, None) for _ in range(self._num_blocks)]
-        for i, memory_states in enumerate(states):
-            self.conformer_blocks[i].mhsam.mha.reset_states(memory_states)
+    def reset_caching(self, batch_size):
+        if self._memory_length is None:
+            return None
+        # fmt: off
+        return [
+            tf.zeros(shape=(batch_size, self._memory_length, self._dmodel), dtype=self.dtype)
+            for _ in range(self._num_blocks)
+        ]
+        # fmt: on
 
     def call(self, inputs, training=False):
-        outputs, outputs_length = inputs
+        outputs, outputs_length, caching = inputs
         outputs, outputs_length = self.conv_subsampling([outputs, outputs_length], training=training)
         outputs = self.linear(outputs, training=training)
         outputs, relative_position_encoding = self.relpe(outputs, training=training)
         outputs = self.do(outputs, training=training)
-
-        for cblock in self.conformer_blocks:
-            outputs = cblock(
-                [outputs, relative_position_encoding, self.content_attention_bias, self.positional_attention_bias],
+        new_caching = []
+        for i, cblock in enumerate(self.conformer_blocks):
+            outputs, new_cache = cblock(
+                [
+                    outputs,
+                    None if caching is None else caching[i],
+                    relative_position_encoding,
+                    self.content_attention_bias,
+                    self.positional_attention_bias,
+                ],
                 training=training,
                 use_causal_mask=self._use_attention_causal_mask,
                 use_auto_mask=self._use_attention_auto_mask,
             )
-
-        return outputs, outputs_length
+            new_caching.append(new_cache)
+        new_caching = None if self._memory_length is None else new_caching
+        return outputs, outputs_length, new_caching
 
     def call_next(self, features, features_length, *args, **kwargs):
         """
@@ -580,17 +604,19 @@ class ConformerEncoder(Layer):
             Outputs, outputs_length, new_states
         """
         with tf.name_scope(f"{self.name}_call_next"):
-            outputs, outputs_length = self.call((features, features_length), training=False)
+            outputs, outputs_length, _ = self.call((features, features_length, None), training=False)
             return outputs, outputs_length, None
 
     def compute_mask(self, inputs, mask=None):
-        return self.conv_subsampling.compute_mask(inputs, mask=mask)
+        *outputs, caching = inputs
+        return *self.conv_subsampling.compute_mask(outputs, mask=mask), getattr(caching, "_keras_mask", None)
 
     def compute_output_shape(self, input_shape):
-        output_shape, output_length_shape = self.conv_subsampling.compute_output_shape(input_shape)
+        output_shape, output_length_shape, caching_shape = input_shape
+        output_shape, output_length_shape = self.conv_subsampling.compute_output_shape((output_shape, output_length_shape))
         output_shape = self.linear.compute_output_shape(output_shape)
         output_shape, relative_position_encoding_shape = self.relpe.compute_output_shape(output_shape)
         output_shape = self.do.compute_output_shape(output_shape)
         for cblock in self.conformer_blocks:
-            output_shape = cblock.compute_output_shape((output_shape, relative_position_encoding_shape, None, None))
-        return output_shape, output_length_shape
+            output_shape, caching_shape = cblock.compute_output_shape((output_shape, caching_shape, relative_position_encoding_shape, None, None))
+        return output_shape, output_length_shape, caching_shape

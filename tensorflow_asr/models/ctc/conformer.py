@@ -36,6 +36,7 @@ class ConformerDecoder(Layer):
             kernel_regularizer=kernel_regularizer,
             bias_regularizer=bias_regularizer,
             name="logits",
+            dtype=self.dtype,
         )
 
     def call(self, inputs, training=False):
@@ -126,3 +127,18 @@ class Conformer(CtcModel):
         )
         self.dmodel = encoder_dmodel
         self.time_reduction_factor = self.encoder.conv_subsampling.time_reduction_factor
+
+    def reset_caching(self):
+        return self.encoder.reset_caching(self._batch_size)
+
+    def make(self, input_shape=[None], prediction_shape=[None], batch_size=None, **kwargs):
+        self._batch_size = int(batch_size / self.distribute_strategy.num_replicas_in_sync)
+        caching = (
+            None
+            if self.encoder._memory_length is None
+            else [
+                tf.keras.Input(shape=[self.encoder._memory_length, self.encoder._dmodel], batch_size=batch_size, dtype=tf.float32)
+                for _ in range(self.encoder._num_blocks)
+            ]
+        )
+        return super().make(input_shape, prediction_shape, batch_size, caching, **kwargs)

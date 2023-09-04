@@ -14,7 +14,6 @@
 """ http://arxiv.org/abs/1811.06621 """
 
 import tensorflow as tf
-from packaging import version
 
 from tensorflow_asr.models.base_layer import Layer, Reshape
 from tensorflow_asr.models.layers.subsampling import TimeReduction
@@ -35,7 +34,7 @@ class RnnTransducerBlock(Layer):
         **kwargs,
     ):
         super().__init__(**kwargs)
-        self.reduction = TimeReduction(reduction_factor, name="reduction") if reduction_factor > 0 else None
+        self.reduction = TimeReduction(reduction_factor, name="reduction", dtype=self.dtype) if reduction_factor > 0 else None
         self.rnn = layer_util.get_rnn(rnn_type)(
             units=rnn_units,
             return_sequences=True,
@@ -45,15 +44,20 @@ class RnnTransducerBlock(Layer):
             zero_output_for_mask=True,
             kernel_regularizer=kernel_regularizer,
             bias_regularizer=bias_regularizer,
-            # https://github.com/tensorflow/tensorflow/issues/61352#issuecomment-1647276639
-            dtype=tf.float32 if self.dtype == tf.bfloat16 and version.parse(tf.version.VERSION) < version.parse("2.13.0") else None,
+            dtype=self.dtype,
         )
         self.ln = (
-            tf.keras.layers.LayerNormalization(name="ln", gamma_regularizer=kernel_regularizer, beta_regularizer=bias_regularizer)
+            tf.keras.layers.LayerNormalization(name="ln", gamma_regularizer=kernel_regularizer, beta_regularizer=bias_regularizer, dtype=self.dtype)
             if layer_norm
             else None
         )
-        self.projection = tf.keras.layers.Dense(dmodel, name="projection", kernel_regularizer=kernel_regularizer, bias_regularizer=bias_regularizer)
+        self.projection = tf.keras.layers.Dense(
+            dmodel,
+            name="projection",
+            kernel_regularizer=kernel_regularizer,
+            bias_regularizer=bias_regularizer,
+            dtype=self.dtype,
+        )
 
     def call(self, inputs, training=False):
         outputs, outputs_length = inputs
@@ -127,7 +131,7 @@ class RnnTransducerEncoder(Layer):
     ):
         super().__init__(**kwargs)
         assert len(reduction_factors) == nlayers, "reduction_factors length must be equal to nlayers"
-        self.reshape = Reshape(name="reshape")
+        self.reshape = Reshape(name="reshape", dtype=self.dtype)
 
         self.time_reduction_factor = 1
         self.blocks = []
@@ -142,6 +146,7 @@ class RnnTransducerEncoder(Layer):
                 kernel_regularizer=kernel_regularizer,
                 bias_regularizer=bias_regularizer,
                 name=f"block_{i}",
+                dtype=self.dtype,
             )
             self.blocks.append(block)
             self.time_reduction_factor *= getattr(block.reduction, "time_reduction_factor", 1)
@@ -158,10 +163,11 @@ class RnnTransducerEncoder(Layer):
         return tf.stack(states, axis=0)
 
     def call(self, inputs, training=False):
-        outputs, outputs_length = self.reshape(inputs)
+        outputs, outputs_length, caching = inputs
+        outputs, outputs_length = self.reshape((outputs, outputs_length))
         for block in self.blocks:
             outputs, outputs_length = block((outputs, outputs_length), training=training)
-        return outputs, outputs_length
+        return outputs, outputs_length, caching
 
     def call_next(self, features, features_length, previous_encoder_states, *args, **kwargs):
         """
@@ -187,14 +193,15 @@ class RnnTransducerEncoder(Layer):
             return outputs, outputs_length, tf.transpose(tf.stack(new_states, axis=0), perm=[2, 0, 1, 3])
 
     def compute_mask(self, inputs, mask=None):
-        outputs, outputs_length = inputs
+        outputs, outputs_length, caching = inputs
         maxlen = tf.shape(outputs)[1]
         maxlen, outputs_length = (math_util.get_reduced_length(length, self.time_reduction_factor) for length in (maxlen, outputs_length))
         mask = tf.sequence_mask(outputs_length, maxlen=maxlen, dtype=tf.bool)
-        return mask, None
+        return mask, None, getattr(caching, "_keras_mask", None)
 
     def compute_output_shape(self, input_shape):
-        output_shape = self.reshape.compute_output_shape(input_shape)
+        *output_shape, caching_shape = input_shape
+        output_shape = self.reshape.compute_output_shape(output_shape)
         for block in self.blocks:
             output_shape = block.compute_output_shape(output_shape)
-        return output_shape
+        return output_shape, caching_shape

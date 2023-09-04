@@ -42,7 +42,14 @@ class Residual(Layer):
 
     def build(self, input_shape):
         if self._factor == "rezero":
-            self._alpha = self.add_weight(name="alpha", shape=[], initializer=self._initializer, regularizer=self._regularizer, trainable=True)
+            self._alpha = self.add_weight(
+                name="alpha",
+                shape=[],
+                initializer=self._initializer,
+                regularizer=self._regularizer,
+                trainable=True,
+                dtype=self.variable_dtype,
+            )
         else:
             assert isinstance(self._factor, (int, float))
             self._alpha = tf.convert_to_tensor(self._factor, dtype=self.compute_dtype)

@@ -39,12 +39,14 @@ class Pointwiseffn(Layer):
             kernel_regularizer=kernel_regularizer,
             bias_regularizer=bias_regularizer,
             name="ffn_1",
+            dtype=self.dtype,
         )
         self.ffn2 = tf.keras.layers.Dense(
             units=dmodel,
             kernel_regularizer=kernel_regularizer,
             bias_regularizer=bias_regularizer,
             name="ffn_2",
+            dtype=self.dtype,
         )
 
     def call(self, inputs, training=False):
@@ -78,7 +80,9 @@ class TransformerBlock(Layer):
         self.norm1 = (
             None
             if self._norm_position == "none"
-            else tf.keras.layers.LayerNormalization(beta_regularizer=kernel_regularizer, gamma_regularizer=bias_regularizer, name="ln_1")
+            else tf.keras.layers.LayerNormalization(
+                beta_regularizer=kernel_regularizer, gamma_regularizer=bias_regularizer, name="ln_1", dtype=self.dtype
+            )
         )
         self.mha = (
             MultiHeadAttention(
@@ -89,6 +93,7 @@ class TransformerBlock(Layer):
                 kernel_regularizer=kernel_regularizer,
                 bias_regularizer=bias_regularizer,
                 name="mhsa",
+                dtype=self.dtype,
             )
             if mha_type == "mha"
             else MultiHeadRelativeAttention(
@@ -99,14 +104,17 @@ class TransformerBlock(Layer):
                 kernel_regularizer=kernel_regularizer,
                 bias_regularizer=bias_regularizer,
                 name="mhsa",
+                dtype=self.dtype,
             )
         )
-        self.do1 = tf.keras.layers.Dropout(dropout, name="do_1")
-        self.residual1 = Residual(factor=residual_factor, regularizer=bias_regularizer, name="residual_1")
+        self.do1 = tf.keras.layers.Dropout(dropout, name="do_1", dtype=self.dtype)
+        self.residual1 = Residual(factor=residual_factor, regularizer=bias_regularizer, name="residual_1", dtype=self.dtype)
         self.norm2 = (
             None
             if self._norm_position == "none"
-            else tf.keras.layers.LayerNormalization(beta_regularizer=kernel_regularizer, gamma_regularizer=bias_regularizer, name="ln_2")
+            else tf.keras.layers.LayerNormalization(
+                beta_regularizer=kernel_regularizer, gamma_regularizer=bias_regularizer, name="ln_2", dtype=self.dtype
+            )
         )
         self.pwffn = Pointwiseffn(
             dmodel=dmodel,
@@ -115,9 +123,10 @@ class TransformerBlock(Layer):
             kernel_regularizer=kernel_regularizer,
             bias_regularizer=bias_regularizer,
             name="pwffn",
+            dtype=self.dtype,
         )
-        self.do2 = tf.keras.layers.Dropout(dropout, name="do_2")
-        self.residual2 = Residual(factor=residual_factor, regularizer=bias_regularizer, name="residual_2")
+        self.do2 = tf.keras.layers.Dropout(dropout, name="do_2", dtype=self.dtype)
+        self.residual2 = Residual(factor=residual_factor, regularizer=bias_regularizer, name="residual_2", dtype=self.dtype)
 
     def call(
         self,
@@ -127,11 +136,11 @@ class TransformerBlock(Layer):
         use_causal_mask=False,
         use_auto_mask=True,
     ):
-        original_outputs, relative_position_encoding, content_attention_bias, positional_attention_bias = inputs
+        original_outputs, caching, relative_position_encoding, content_attention_bias, positional_attention_bias = inputs
         outputs = self.norm1(original_outputs, training=training) if self._norm_position == "pre" else original_outputs
-        outputs = self.mha(
+        outputs, caching = self.mha(
             (
-                [outputs, outputs, outputs, relative_position_encoding, content_attention_bias, positional_attention_bias]
+                [outputs, outputs, outputs, caching, relative_position_encoding, content_attention_bias, positional_attention_bias]
                 if self._mha_type == "relmha"
                 else [outputs, outputs, outputs]
             ),
@@ -148,7 +157,11 @@ class TransformerBlock(Layer):
         outputs = self.do2(outputs, training=training)
         outputs = self.norm2(outputs, training=training) if self._norm_position == "post" else outputs
         outputs = self.residual2([original_outputs, outputs], training=training)
-        return outputs
+        return outputs, caching
+
+    def compute_output_shape(self, input_shape):
+        output_shape, caching_shape, *_ = input_shape
+        return output_shape, caching_shape
 
 
 class TransformerEncoder(Layer):
@@ -178,6 +191,8 @@ class TransformerEncoder(Layer):
         self._use_attention_causal_mask = use_attention_causal_mask
         self._use_attention_auto_mask = use_attention_auto_mask
         self._num_blocks = num_blocks
+        self._dmodel = dmodel
+        self._memory_length = memory_length
 
         subsampling_name = subsampling.pop("type", None)
         if subsampling_name == "vgg":
@@ -193,15 +208,22 @@ class TransformerEncoder(Layer):
             name="subsampling",
             kernel_regularizer=kernel_regularizer,
             bias_regularizer=bias_regularizer,
+            dtype=self.dtype,
         )
         self.time_reduction_factor = self.subsampling.time_reduction_factor
-        self.linear = tf.keras.layers.Dense(units=dmodel, kernel_regularizer=kernel_regularizer, bias_regularizer=bias_regularizer, name="linear")
-        self.do = tf.keras.layers.Dropout(dropout, name="dropout")
+        self.linear = tf.keras.layers.Dense(
+            units=dmodel,
+            kernel_regularizer=kernel_regularizer,
+            bias_regularizer=bias_regularizer,
+            name="linear",
+            dtype=self.dtype,
+        )
+        self.do = tf.keras.layers.Dropout(dropout, name="dropout", dtype=self.dtype)
 
         if mha_type == "relmha":
-            self.relpe = RelativePositionalEncoding(interleave=interleave_relpe, memory_length=memory_length, name="relpe")
+            self.relpe = RelativePositionalEncoding(interleave=interleave_relpe, memory_length=memory_length, name="relpe", dtype=self.dtype)
         else:
-            self.relpe = PositionalEncoding(interleave=interleave_relpe, name="pe")
+            self.relpe = PositionalEncoding(interleave=interleave_relpe, name="pe", dtype=self.dtype)
 
         self.blocks = [
             TransformerBlock(
@@ -218,6 +240,7 @@ class TransformerEncoder(Layer):
                 kernel_regularizer=kernel_regularizer,
                 bias_regularizer=bias_regularizer,
                 name=f"block_{i}",
+                dtype=self.dtype,
             )
             for i in range(self._num_blocks)
         ]
@@ -229,6 +252,7 @@ class TransformerEncoder(Layer):
                 trainable=True,
                 initializer="zeros",
                 regularizer=bias_regularizer,
+                dtype=self.variable_dtype,
             )
             self.positional_attention_bias = self.add_weight(
                 name="positional_attention_bias",
@@ -236,33 +260,44 @@ class TransformerEncoder(Layer):
                 trainable=True,
                 initializer="zeros",
                 regularizer=bias_regularizer,
+                dtype=self.variable_dtype,
             )
         else:
             self.content_attention_bias, self.positional_attention_bias = None, None
 
-    def get_states(self):
-        return [block.mha.get_states() for block in self.blocks]
-
-    def reset_states(self, states=None):
-        if states is None:
-            states = [(None, None) for _ in range(self._num_blocks)]
-        for i, memory_states in enumerate(states):
-            self.blocks[i].mha.reset_states(memory_states)
+    def reset_caching(self, batch_size):
+        if self._memory_length is None:
+            return None
+        # fmt: off
+        return [
+            tf.zeros(shape=(batch_size, self._memory_length, self._dmodel), dtype=self.dtype)
+            for _ in range(self._num_blocks)
+        ]
+        # fmt: on
 
     def call(self, inputs, training=False):
-        outputs, outputs_length = inputs
+        outputs, outputs_length, caching = inputs
         outputs, outputs_length = self.subsampling([outputs, outputs_length], training=training)
         outputs = self.linear(outputs, training=training)
         outputs, relative_position_encoding = self.relpe(outputs, training=training)
         outputs = self.do(outputs, training=training)
-        for block in self.blocks:
-            outputs = block(
-                [outputs, relative_position_encoding, self.content_attention_bias, self.positional_attention_bias],
+        new_caching = []
+        for i, block in enumerate(self.blocks):
+            outputs, new_cache = block(
+                [
+                    outputs,
+                    None if caching is None else caching[i],
+                    relative_position_encoding,
+                    self.content_attention_bias,
+                    self.positional_attention_bias,
+                ],
                 training=training,
                 use_causal_mask=self._use_attention_causal_mask,
                 use_auto_mask=self._use_attention_auto_mask,
             )
-        return outputs, outputs_length
+            new_caching.append(new_cache)
+        new_caching = None if self._memory_length is None else new_caching
+        return outputs, outputs_length, new_caching
 
     def call_next(self, features, features_length, *args, **kwargs):
         """
@@ -279,14 +314,19 @@ class TransformerEncoder(Layer):
             Outputs, outputs_length, new_states
         """
         with tf.name_scope(f"{self.name}_call_next"):
-            outputs, outputs_length = self.call((features, features_length), training=False)
+            outputs, outputs_length, _ = self.call((features, features_length, None), training=False)
             return outputs, outputs_length, None
 
+    def compute_mask(self, inputs, mask=None):
+        *outputs, caching = inputs
+        return *self.conv_subsampling.compute_mask(outputs, mask=mask), getattr(caching, "_keras_mask", None)
+
     def compute_output_shape(self, input_shape):
-        output_shape, output_length_shape = self.subsampling.compute_output_shape(input_shape)
+        output_shape, output_length_shape, caching_shape = input_shape
+        output_shape, output_length_shape = self.subsampling.compute_output_shape((output_shape, output_length_shape))
         output_shape = self.linear.compute_output_shape(output_shape)
-        output_shape, _ = self.relpe.compute_output_shape(output_shape)
+        output_shape, relative_position_encoding_shape = self.relpe.compute_output_shape(output_shape)
         output_shape = self.do.compute_output_shape(output_shape)
         for block in self.blocks:
-            output_shape = block.compute_output_shape(output_shape)
-        return output_shape, output_length_shape
+            output_shape, caching_shape = block.compute_output_shape((output_shape, caching_shape, relative_position_encoding_shape, None, None))
+        return output_shape, output_length_shape, caching_shape

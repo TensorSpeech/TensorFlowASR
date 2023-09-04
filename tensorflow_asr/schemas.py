@@ -14,9 +14,35 @@
 
 import collections
 
-TrainInput = collections.namedtuple("TrainInput", ("inputs", "inputs_length", "predictions", "predictions_length"))
-TrainOutput = collections.namedtuple("TrainOutput", ("logits", "logits_length"))
-TrainLabel = collections.namedtuple("TrainLabel", ("labels", "labels_length"))
+
+def TrainInput(inputs, inputs_length, predictions, predictions_length, caching=None):
+    outputs = {
+        "inputs": inputs,
+        "inputs_length": inputs_length,
+        "predictions": predictions,
+        "predictions_length": predictions_length,
+    }
+    if caching is not None:
+        outputs["caching"] = caching
+    return outputs
+
+
+def TrainOutput(logits, logits_length, caching=None):
+    outputs = {
+        "logits": logits,
+        "logits_length": logits_length,
+    }
+    if caching is not None:
+        outputs["caching"] = caching
+    return outputs
+
+
+def TrainLabel(labels, labels_length):
+    return {
+        "labels": labels,
+        "labels_length": labels_length,
+    }
+
 
 PredictInput = collections.namedtuple(
     "PredictInput",

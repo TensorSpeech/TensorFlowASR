@@ -59,8 +59,11 @@ class ConvModule(Layer):
             pointwise_regularizer=kernel_regularizer,
             bias_regularizer=bias_regularizer,
             name="conv",
+            dtype=self.dtype,
         )
-        self.bn = tf.keras.layers.BatchNormalization(name="bn")
+        self.bn = tf.keras.layers.BatchNormalization(
+            name="bn", gamma_regularizer=kernel_regularizer, beta_regularizer=bias_regularizer, dtype=self.dtype
+        )
         self.activation = get_activation(activation)
 
     def call(self, inputs, training=False):
@@ -111,11 +114,24 @@ class SEModule(Layer):
             kernel_regularizer=kernel_regularizer,
             bias_regularizer=bias_regularizer,
             name="conv_module",
+            dtype=self.dtype,
         )
-        self.global_avg_pool = tf.keras.layers.GlobalAveragePooling1D(keepdims=True, name="global_avg_pool")
+        self.global_avg_pool = tf.keras.layers.GlobalAveragePooling1D(keepdims=True, name="global_avg_pool", dtype=self.dtype)
         self.activation = get_activation(activation)
-        self.fc1 = tf.keras.layers.Dense(filters // 8, name="fc1")
-        self.fc2 = tf.keras.layers.Dense(filters, name="fc2")
+        self.fc1 = tf.keras.layers.Dense(
+            filters // 8,
+            kernel_regularizer=kernel_regularizer,
+            bias_regularizer=bias_regularizer,
+            name="fc1",
+            dtype=self.dtype,
+        )
+        self.fc2 = tf.keras.layers.Dense(
+            filters,
+            kernel_regularizer=kernel_regularizer,
+            bias_regularizer=bias_regularizer,
+            name="fc2",
+            dtype=self.dtype,
+        )
 
     def call(self, inputs, training=False):
         outputs, outputs_length = inputs
@@ -171,6 +187,7 @@ class ConvBlock(Layer):
                     kernel_regularizer=kernel_regularizer,
                     bias_regularizer=bias_regularizer,
                     name=f"conv_module_{i}",
+                    dtype=self.dtype,
                 )
             )
 
@@ -183,6 +200,7 @@ class ConvBlock(Layer):
             kernel_regularizer=kernel_regularizer,
             bias_regularizer=bias_regularizer,
             name=f"conv_module_{nlayers - 1}",
+            dtype=self.dtype,
         )
 
         self.se = SEModule(
@@ -194,6 +212,7 @@ class ConvBlock(Layer):
             kernel_regularizer=kernel_regularizer,
             bias_regularizer=bias_regularizer,
             name="se",
+            dtype=self.dtype,
         )
 
         self.residual = None
@@ -207,6 +226,7 @@ class ConvBlock(Layer):
                 kernel_regularizer=kernel_regularizer,
                 bias_regularizer=bias_regularizer,
                 name="residual",
+                dtype=self.dtype,
             )
 
         self.activation = get_activation(activation)
@@ -247,7 +267,7 @@ class ContextNetEncoder(Layer):
     ):
         super().__init__(**kwargs)
 
-        self.reshape = Reshape(name="reshape")
+        self.reshape = Reshape(name="reshape", dtype=self.dtype)
 
         self.blocks = []
         self.time_reduction_factor = 1
@@ -258,6 +278,7 @@ class ContextNetEncoder(Layer):
                 kernel_regularizer=kernel_regularizer,
                 bias_regularizer=bias_regularizer,
                 name=f"block_{i}",
+                dtype=self.dtype,
             )
             self.blocks.append(block)
             self.time_reduction_factor *= block.time_reduction_factor
@@ -265,11 +286,11 @@ class ContextNetEncoder(Layer):
         self.dmodel = self.blocks[-1].dmodel
 
     def call(self, inputs, training=False):
-        outputs, outputs_length = inputs
+        outputs, outputs_length, caching = inputs
         outputs, outputs_length = self.reshape((outputs, outputs_length))
         for block in self.blocks:
             outputs, outputs_length = block((outputs, outputs_length), training=training)
-        return outputs, outputs_length
+        return outputs, outputs_length, caching
 
     def call_next(self, features, features_length, *args, **kwargs):
         """
@@ -286,19 +307,19 @@ class ContextNetEncoder(Layer):
             Outputs, outputs_length, new_states
         """
         with tf.name_scope(f"{self.name}_call_next"):
-            outputs, outputs_length = self.call((features, features_length), training=False)
+            outputs, outputs_length, _ = self.call((features, features_length, None), training=False)
             return outputs, outputs_length, None
 
     def compute_mask(self, inputs, mask=None):
-        outputs, outputs_length = inputs
+        outputs, outputs_length, caching = inputs
         maxlen = tf.shape(outputs)[1]
         maxlen, outputs_length = (math_util.get_reduced_length(length, self.time_reduction_factor) for length in (maxlen, outputs_length))
         mask = tf.sequence_mask(outputs_length, maxlen=maxlen, dtype=tf.bool)
-        return mask, None
+        return mask, None, getattr(caching, "_keras_mask", None)
 
     def compute_output_shape(self, input_shape):
-        output_shape = input_shape
+        *output_shape, caching_shape = input_shape
         output_shape = self.reshape.compute_output_shape(output_shape)
         for block in self.blocks:
             output_shape = block.compute_output_shape(output_shape)
-        return output_shape
+        return output_shape, caching_shape

@@ -55,9 +55,9 @@ class TransducerPrediction(Layer):
         super().__init__(name=name, **kwargs)
         assert label_encoder_mode in ("one_hot", "embedding"), "label_encode_mode must be either 'one_hot' or 'embedding'"
         self.label_encoder = (
-            Embedding(vocab_size, embed_dim, regularizer=kernel_regularizer, name=label_encoder_mode)
+            Embedding(vocab_size, embed_dim, regularizer=kernel_regularizer, name=label_encoder_mode, dtype=self.dtype)
             if label_encoder_mode == "embedding"
-            else OneHotBlank(blank=blank, depth=vocab_size, name=label_encoder_mode)
+            else OneHotBlank(blank=blank, depth=vocab_size, name=label_encoder_mode, dtype=self.dtype)
         )
         # Initialize rnn layers
         RnnClass = layer_util.get_rnn(rnn_type)
@@ -75,11 +75,12 @@ class TransducerPrediction(Layer):
                 zero_output_for_mask=True,
                 kernel_regularizer=kernel_regularizer,
                 bias_regularizer=bias_regularizer,
-                # https://github.com/tensorflow/tensorflow/issues/61352#issuecomment-1647276639
-                dtype=tf.float32 if self.dtype == tf.bfloat16 and version.parse(tf.version.VERSION) < version.parse("2.13.0") else None,
+                dtype=self.dtype,
             )
             ln = (
-                tf.keras.layers.LayerNormalization(name=f"ln_{i}", gamma_regularizer=kernel_regularizer, beta_regularizer=bias_regularizer)
+                tf.keras.layers.LayerNormalization(
+                    name=f"ln_{i}", gamma_regularizer=kernel_regularizer, beta_regularizer=bias_regularizer, dtype=self.dtype
+                )
                 if layer_norm
                 else None
             )
@@ -89,6 +90,7 @@ class TransducerPrediction(Layer):
                     name=f"projection_{i}",
                     kernel_regularizer=kernel_regularizer,
                     bias_regularizer=bias_regularizer,
+                    dtype=self.dtype,
                 )
                 if projection_units > 0
                 else None
@@ -227,19 +229,43 @@ class TransducerJoint(Layer):
         self.postjoint_linear = postjoint_linear
 
         if self.prejoint_encoder_linear:
-            self.ffn_enc = tf.keras.layers.Dense(joint_dim, name="enc", kernel_regularizer=kernel_regularizer, bias_regularizer=bias_regularizer)
+            self.ffn_enc = tf.keras.layers.Dense(
+                joint_dim,
+                name="enc",
+                kernel_regularizer=kernel_regularizer,
+                bias_regularizer=bias_regularizer,
+                dtype=self.dtype,
+            )
         if self.prejoint_prediction_linear:
-            self.ffn_pred = tf.keras.layers.Dense(joint_dim, use_bias=False, name="pred", kernel_regularizer=kernel_regularizer)
+            self.ffn_pred = tf.keras.layers.Dense(
+                joint_dim,
+                use_bias=False,
+                name="pred",
+                kernel_regularizer=kernel_regularizer,
+                dtype=self.dtype,
+            )
 
-        self.joint = TransducerJointMerge(joint_mode=joint_mode, name="merge")
+        self.joint = TransducerJointMerge(joint_mode=joint_mode, name="merge", dtype=self.dtype)
 
         activation = activation.lower()
-        self.activation = tf.keras.layers.Activation(activation, name=activation)
+        self.activation = tf.keras.layers.Activation(activation, name=activation, dtype=self.dtype)
 
         if self.postjoint_linear:
-            self.ffn = tf.keras.layers.Dense(joint_dim, name="ffn", kernel_regularizer=kernel_regularizer, bias_regularizer=bias_regularizer)
+            self.ffn = tf.keras.layers.Dense(
+                joint_dim,
+                name="ffn",
+                kernel_regularizer=kernel_regularizer,
+                bias_regularizer=bias_regularizer,
+                dtype=self.dtype,
+            )
 
-        self.ffn_out = tf.keras.layers.Dense(vocab_size, name="vocab", kernel_regularizer=kernel_regularizer, bias_regularizer=bias_regularizer)
+        self.ffn_out = tf.keras.layers.Dense(
+            vocab_size,
+            name="vocab",
+            kernel_regularizer=kernel_regularizer,
+            bias_regularizer=bias_regularizer,
+            dtype=self.dtype,
+        )
 
     def call(self, inputs, training=False):
         # enc has shape [B, T, E]
@@ -316,6 +342,7 @@ class Transducer(BaseModel):
             bias_regularizer=bias_regularizer,
             trainable=prediction_trainable,
             name="prediction",
+            dtype=self.dtype,
         )
         self.joint_net = TransducerJoint(
             vocab_size=vocab_size,
@@ -329,6 +356,7 @@ class Transducer(BaseModel):
             bias_regularizer=bias_regularizer,
             trainable=joint_trainable,
             name="joint",
+            dtype=self.dtype,
         )
         self.time_reduction_factor = 1
 
@@ -381,11 +409,12 @@ class Transducer(BaseModel):
                     lambda: None,
                 )
 
-    def call_logits(self, features, features_length, predictions, predictions_length, training=False):
-        enc, logits_length = self.encoder((features, features_length), training=training)
-        pred, _ = self.predict_net((predictions, predictions_length), training=training)
+    def call(self, inputs: schemas.TrainInput, training=False):
+        features, features_length = self.feature_extraction((inputs["inputs"], inputs["inputs_length"]), training=training)
+        enc, logits_length, caching = self.encoder((features, features_length, inputs.get("caching")), training=training)
+        pred, _ = self.predict_net((inputs["predictions"], inputs["predictions_length"]), training=training)
         logits = self.joint_net((enc, pred), training=training)
-        return logits, logits_length
+        return schemas.TrainOutput(logits=logits, logits_length=logits_length, caching=caching)
 
     def call_next(
         self,

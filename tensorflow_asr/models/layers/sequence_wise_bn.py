@@ -34,6 +34,7 @@ class SequenceBatchNorm(tf.keras.layers.Layer):
             regularizer=self.beta_regularizer,
             constraint=None,
             trainable=True,
+            dtype=self.variable_dtype,
         )
         self.gamma = self.add_weight(
             shape=[input_shape[-1]],
@@ -42,6 +43,7 @@ class SequenceBatchNorm(tf.keras.layers.Layer):
             regularizer=self.gamma_regularizer,
             constraint=None,
             trainable=True,
+            dtype=self.variable_dtype,
         )
 
     def call(
