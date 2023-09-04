@@ -35,10 +35,9 @@ class RnntLoss(tf.keras.losses.Loss):
             raise ValueError("rnnt_loss in tensorflow must use blank = 0")
         super().__init__(reduction=reduction, name=name)
         self.blank = blank
-        self.use_cpu = USE_CPU_LOSS if USE_CPU_LOSS else (not env_util.has_devices("GPU") and not env_util.has_devices("TPU"))
+        self.use_cpu = USE_CPU_LOSS or (not env_util.has_devices("GPU") and not env_util.has_devices("TPU"))
         logger.info(
-            f"Use {'CPU' if self.use_cpu else 'GPU/TPU'} implementation for RNNT loss \
-                in {'Tensorflow' if warp_rnnt_loss is None else 'WarpRNNT'}"
+            f"Use {'CPU' if self.use_cpu else 'GPU/TPU'} implementation for RNNT loss in {'Tensorflow' if warp_rnnt_loss is None else 'WarpRNNT'}"
         )
 
     def call(self, y_true, y_pred):
