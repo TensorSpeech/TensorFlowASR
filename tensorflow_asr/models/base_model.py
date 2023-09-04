@@ -451,7 +451,6 @@ class BaseModel(tf.keras.Model):
                         ):
                             callbacks.on_train_batch_begin(step)
                             tmp_logs, caching = self.train_function(iterator, caching=caching)
-                            print(caching)
                             if data_handler.should_sync:
                                 context.async_wait()
                             # No error, now safe to assign to logs.
