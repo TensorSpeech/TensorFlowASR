@@ -571,7 +571,7 @@ class ConformerEncoder(Layer):
         outputs = self.linear(outputs, training=training)
         outputs, relative_position_encoding = self.relpe(outputs, training=training)
         outputs = self.do(outputs, training=training)
-        new_caching = []
+        new_caching = None if self._memory_length is None else []
         for i, cblock in enumerate(self.conformer_blocks):
             outputs, new_cache = cblock(
                 [
@@ -585,8 +585,8 @@ class ConformerEncoder(Layer):
                 use_causal_mask=self._use_attention_causal_mask,
                 use_auto_mask=self._use_attention_auto_mask,
             )
-            new_caching.append(new_cache)
-        new_caching = None if self._memory_length is None else new_caching
+            if new_caching is not None:
+                new_caching.append(new_cache)
         return outputs, outputs_length, new_caching
 
     def call_next(self, features, features_length, *args, **kwargs):
