@@ -122,7 +122,7 @@ class TimeMasking(AugmentationMethod):
             mval = get_mask_value(spectrogram, mask_value=self.mask_value)
             for _ in range(self.num_masks):
                 t = tf.random.uniform([], minval=0, maxval=self.mask_factor, dtype=tf.int32)
-                t = tf.minimum(t, tf.cast(tf.cast(T, dtype=tf.float32) * self.p_upperbound, dtype=tf.int32))
+                t = tf.minimum(t, tf.cast(tf.cast(T, dtype=spectrogram.dtype) * self.p_upperbound, dtype=tf.int32))
                 t0 = tf.random.uniform([], minval=0, maxval=(T - t), dtype=tf.int32)
                 indices = tf.reshape(tf.range(T), indices_shape)
                 condition = tf.math.logical_and(tf.math.greater_equal(indices, t0), tf.math.less(indices, t0 + t))
