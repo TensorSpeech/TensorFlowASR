@@ -28,7 +28,7 @@ model_config:
       kernels: [3, 3]
       strides: [2, 2]
       paddings: ["causal", "causal"]
-      norms: ["none", "none"]
+      norms: ["bn", "bn"]
       activations: ["relu", "relu"]
     encoder_ffm_residual_factor: 0.5
     encoder_mhsam_residual_factor: 1.0
@@ -52,7 +52,7 @@ model_config:
     prediction_rnn_type: lstm
     prediction_rnn_implementation: 2
     prediction_rnn_unroll: False
-    prediction_layer_norm: False
+    prediction_layer_norm: True
     prediction_projection_units: 0
     joint_dim: 320
     prejoint_encoder_linear: True
@@ -79,7 +79,7 @@ learning_config:
         class_name: tensorflow_asr.optimizers.schedules>TransformerSchedule
         config:
           dmodel: 144
-          warmup_steps: 20000
+          warmup_steps: 10000
           max_lr: 0.004166666667
           min_lr: null
       beta_1: 0.9
