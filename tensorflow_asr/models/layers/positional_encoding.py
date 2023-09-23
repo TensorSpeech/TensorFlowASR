@@ -62,7 +62,7 @@ class PositionalEncoding(Layer):
         **kwargs,
     ):
         super().__init__(**kwargs)
-        self.do = tf.keras.layers.Dropout(dropout, name="dropout")
+        self.do = tf.keras.layers.Dropout(dropout, dtype=self.dtype, name="dropout")
         self._scale = scale
         self._interleave = interleave
 

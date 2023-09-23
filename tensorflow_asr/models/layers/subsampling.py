@@ -74,6 +74,7 @@ class VggSubsampling(Layer):
             kernel_regularizer=kernel_regularizer,
             bias_regularizer=bias_regularizer,
             activation=activation,
+            dtype=self.dtype,
         )
         self.conv2 = Conv2D(
             filters=filters[0],
@@ -84,8 +85,9 @@ class VggSubsampling(Layer):
             kernel_regularizer=kernel_regularizer,
             bias_regularizer=bias_regularizer,
             activation=activation,
+            dtype=self.dtype,
         )
-        self.maxpool1 = tf.keras.layers.MaxPool2D(pool_size=pool_size, strides=strides, padding=padding, name="maxpool_1")
+        self.maxpool1 = tf.keras.layers.MaxPool2D(pool_size=pool_size, strides=strides, padding=padding, dtype=self.dtype, name="maxpool_1")
         self.conv3 = Conv2D(
             filters=filters[1],
             kernel_size=kernel_size,
@@ -95,6 +97,7 @@ class VggSubsampling(Layer):
             kernel_regularizer=kernel_regularizer,
             bias_regularizer=bias_regularizer,
             activation=activation,
+            dtype=self.dtype,
         )
         self.conv4 = Conv2D(
             filters=filters[1],
@@ -105,8 +108,9 @@ class VggSubsampling(Layer):
             kernel_regularizer=kernel_regularizer,
             bias_regularizer=bias_regularizer,
             activation=activation,
+            dtype=self.dtype,
         )
-        self.maxpool2 = tf.keras.layers.MaxPool2D(pool_size=pool_size, strides=strides, padding=padding, name="maxpool_2")
+        self.maxpool2 = tf.keras.layers.MaxPool2D(pool_size=pool_size, strides=strides, padding=padding, dtype=self.dtype, name="maxpool_2")
         self.time_reduction_factor = self.maxpool1.pool_size[0] * self.maxpool2.pool_size[0]
 
     def call(self, inputs, training=False):
@@ -175,6 +179,7 @@ class Conv2dSubsampling(Layer):
                     name=f"conv_{i}",
                     kernel_regularizer=kernel_regularizer,
                     bias_regularizer=bias_regularizer,
+                    dtype=self.dtype,
                 )
             )
             if norms[i] == "batch":
@@ -183,6 +188,7 @@ class Conv2dSubsampling(Layer):
                         name=f"bn_{i}",
                         gamma_regularizer=kernel_regularizer,
                         beta_regularizer=bias_regularizer,
+                        dtype=self.dtype,
                     )
                 )
             elif norms[i] == "layer":
@@ -191,9 +197,10 @@ class Conv2dSubsampling(Layer):
                         name=f"ln_{i}",
                         gamma_regularizer=kernel_regularizer,
                         beta_regularizer=bias_regularizer,
+                        dtype=self.dtype,
                     )
                 )
-            subblock.add(tf.keras.layers.Activation(activations[i], name=f"{activations[i]}_{i}"))
+            subblock.add(tf.keras.layers.Activation(activations[i], name=f"{activations[i]}_{i}", dtype=self.dtype))
             self.convs.append(subblock)
             self.time_reduction_factor *= subblock.layers[0].strides[0]
 
@@ -260,6 +267,7 @@ class Conv1dSubsampling(Layer):
                     name=f"conv_{i}",
                     kernel_regularizer=kernel_regularizer,
                     bias_regularizer=bias_regularizer,
+                    dtype=self.dtype,
                 )
             )
             if norms[i] == "batch":
@@ -268,6 +276,7 @@ class Conv1dSubsampling(Layer):
                         name=f"bn_{i}",
                         gamma_regularizer=kernel_regularizer,
                         beta_regularizer=bias_regularizer,
+                        dtype=self.dtype,
                     )
                 )
             elif norms[i] == "layer":
@@ -276,9 +285,10 @@ class Conv1dSubsampling(Layer):
                         name=f"ln_{i}",
                         gamma_regularizer=kernel_regularizer,
                         beta_regularizer=bias_regularizer,
+                        dtype=self.dtype,
                     )
                 )
-            subblock.add(tf.keras.layers.Activation(activations[i], name=f"{activations[i]}_{i}"))
+            subblock.add(tf.keras.layers.Activation(activations[i], name=f"{activations[i]}_{i}", dtype=self.dtype))
             self.convs.append(subblock)
             self.time_reduction_factor *= subblock.layers[0].strides[0]
 
