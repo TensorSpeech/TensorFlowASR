@@ -1,33 +1,35 @@
-{% set modeldir = "E:/Miscellanea/Models/local/transducer/transformer" %}
-{% set datadir = "E:/MLDL/Datasets/ASR/LibriSpeech" %}
-
-{# {% import "examples/configs/librispeech/wp.yml.j2" as decoder_config with context %} #}
-{% import "examples/configs/librispeech/wp_whitespace.yml.j2" as decoder_config with context %}
-{# {% import "examples/configs/librispeech/sp.yml.j2" as decoder_config with context %} #}
-{# {% import "examples/configs/librispeech/char.yml.j2" as decoder_config with context %} #}
-
-speech_config:
-  sample_rate: 16000
-  frame_ms: 25
-  stride_ms: 10
-  num_feature_bins: 80
-  feature_type: log_mel_spectrogram
-
+{% import "examples/configs/librispeech/sentencepiece/sp.yml.j2" as decoder_config with context %}
 {{decoder_config}}
 
 model_config:
   class_name: tensorflow_asr.models.transducer>Transformer
   config:
     name: transformer
+    speech_config:
+      sample_rate: 16000
+      frame_ms: 25
+      stride_ms: 10
+      num_feature_bins: 80
+      feature_type: log_mel_spectrogram
+      augmentation_config:
+        feature_augment:
+          time_masking:
+            prob: 1.0
+            num_masks: 5
+            mask_factor: 100
+            p_upperbound: 0.05
+          freq_masking:
+            prob: 1.0
+            num_masks: 1
+            mask_factor: 27
     encoder_subsampling:
       type: conv2d
-      nlayers: 2
-      filters: 512
-      kernel_size: 3
-      strides: 2
-      padding: causal
-      norm: none
-      activation: relu
+      filters: [144, 144]
+      kernels: [3, 3]
+      strides: [2, 2]
+      paddings: ["causal", "causal"]
+      norms: ["batch", "batch"]
+      activations: ["relu", "relu"]
     encoder_dropout: 0.1
     encoder_residual_factor: 1.0
     encoder_norm_position: post
@@ -41,7 +43,7 @@ model_config:
     encoder_use_attention_causal_mask: False
     encoder_use_attention_auto_mask: True
     encoder_pwffn_activation: relu
-    encoder_memory_length: 512
+    encoder_memory_length: null
     prediction_label_encode_mode: embedding
     prediction_embed_dim: 512
     prediction_num_rnns: 1
@@ -59,55 +61,18 @@ model_config:
     joint_mode: add
     blank: 0
     vocab_size: {{decoder_config.vocabsize}}
+    kernel_regularizer:
+      class_name: l2
+      config:
+        l2: 1e-6
+    bias_regularizer:
+      class_name: l2
+      config:
+        l2: 1e-6
 
 learning_config:
-  train_dataset_config:
-    enabled: True
-    augmentation_config:
-      feature_augment:
-        time_masking:
-          prob: 1.0
-          num_masks: 5
-          mask_factor: 100
-          p_upperbound: 0.05
-        freq_masking:
-          prob: 1.0
-          num_masks: 1
-          mask_factor: 27
-    data_paths:
-      - {{datadir}}/dev-clean/transcripts.tsv
-    tfrecords_dir: null
-    shuffle: True
-    cache: True
-    buffer_size: 100
-    drop_remainder: True
-    stage: train
-    metadata: {{decoder_config.metadata}}
-
-  eval_dataset_config:
-    enabled: False
-    data_paths:
-      - {{datadir}}/dev-clean/transcripts.tsv
-    tfrecords_dir: null
-    shuffle: False
-    cache: True
-    buffer_size: 100
-    drop_remainder: True
-    stage: eval
-    metadata: {{decoder_config.metadata}}
-
-  test_dataset_config:
-    data_paths:
-      - {{datadir}}/test-clean/transcripts.tsv
-    tfrecords_dir: null
-    shuffle: False
-    cache: True
-    buffer_size: 100
-    drop_remainder: False
-    stage: test
-
   optimizer_config:
-    class_name: adam
+    class_name: Adam
     config:
       learning_rate:
         class_name: tensorflow_asr.optimizers.schedules>TransformerSchedule
@@ -115,14 +80,18 @@ learning_config:
           dmodel: 512
           warmup_steps: 10000
           max_lr: null
-          min_lr: 1e-6
+          min_lr: null
       beta_1: 0.9
       beta_2: 0.98
       epsilon: 1e-9
 
+  gwn_config: null
+
+  gradn_config: null
+
   running_config:
     batch_size: 2
-    num_epochs: 100
+    num_epochs: 300
     checkpoint:
       filepath: {{modeldir}}/checkpoints/{epoch:02d}.h5
       save_best_only: False
@@ -135,7 +104,7 @@ learning_config:
     tensorboard:
       log_dir: {{modeldir}}/tensorboard
       histogram_freq: 1
-      write_graph: True
-      write_images: True
+      write_graph: False
+      write_images: False
       update_freq: epoch
-      profile_batch: 2
+      profile_batch: 100
