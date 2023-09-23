@@ -13,19 +13,19 @@ model_config:
       feature_type: spectrogram
     conv_type: conv2d
     conv_kernels: [ [ 11, 41 ], [ 11, 21 ] ]
-    conv_strides: [ [ 2, 2 ], [ 1, 2 ] ]
+    conv_strides: [ [ 3, 2 ], [ 1, 2 ] ]
     conv_filters: [ 32, 32 ]
     conv_dropout: 0.1
     conv_padding: same
     rnn_nlayers: 5
     rnn_type: lstm
-    rnn_units: 800
+    rnn_units: 512
     rnn_bidirectional: True
     rnn_unroll: False
     rnn_rowconv: 0
     rnn_dropout: 0.1
     fc_nlayers: 1
-    fc_units: 1600
+    fc_units: 1024
     fc_dropout: 0.1
     blank: 0
     vocab_size: {{decoder_config.vocabsize}}
