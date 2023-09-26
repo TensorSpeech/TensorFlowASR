@@ -245,13 +245,13 @@ class BaseModel(tf.keras.Model):
 
     def predict_step(self, data):
         x, y_true = data
-        inputs = schemas.PredictInput(x.inputs, x.inputs_length)
+        inputs = schemas.PredictInput(x["inputs"], x["inputs_length"])
         _tokens = self.recognize(inputs=inputs).tokens
         _beam_tokens = self.recognize_beam(inputs=inputs).tokens
         return {
             "_tokens": _tokens,
             "_beam_tokens": _beam_tokens,
-            "_labels": y_true.labels,
+            "_labels": y_true["labels"],
         }
 
     # ------------------------------------ FIT ----------------------------------- #
