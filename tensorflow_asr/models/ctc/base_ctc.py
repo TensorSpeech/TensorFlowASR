@@ -140,16 +140,3 @@ class CtcModel(BaseModel):
                 next_encoder_states=next_encoder_states,
                 next_decoder_states=next_decoder_states,
             )
-
-    # -------------------------------- TFLITE -------------------------------------
-
-    # def make_tflite_function(self, greedy: bool = False):
-    #     if greedy:
-    #         return tf.function(
-    #             self.recognize_tflite,
-    #             input_signature=[tf.TensorSpec([None], dtype=tf.float32)],
-    #         )
-    #     return tf.function(
-    #         self.recognize_beam_tflite,
-    #         input_signature=[tf.TensorSpec([None], dtype=tf.float32)],
-    #     )

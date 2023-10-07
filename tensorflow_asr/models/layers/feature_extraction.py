@@ -94,7 +94,7 @@ class FeatureExtraction(Layer):
         """
         assert feature_type in asdict(FEATURE_TYPES()).values(), f"feature_type must be in {asdict(FEATURE_TYPES()).values()}"
 
-        super().__init__(name=feature_type, **kwargs)
+        super().__init__(name=feature_type, trainable=False, **kwargs)
         self.sample_rate = sample_rate
 
         self.frame_ms = frame_ms

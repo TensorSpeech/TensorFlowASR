@@ -61,7 +61,7 @@ class PositionalEncoding(Layer):
         interleave=False,
         **kwargs,
     ):
-        super().__init__(**kwargs)
+        super().__init__(trainable=False, **kwargs)
         self.do = tf.keras.layers.Dropout(dropout, dtype=self.dtype, name="dropout")
         self._scale = scale
         self._interleave = interleave
@@ -105,7 +105,7 @@ class RelativePositionalEncoding(PositionalEncoding):
         if self._scale is not None:
             outputs *= self._scale
         batch_size, length, dmodel = shape_util.shape_list(outputs)
-        start = tf.constant(0, dtype=tf.int32) if self._memory_length is None else -tf.convert_to_tensor(self._memory_length, dtype=tf.int32)
+        start = tf.constant(0, dtype=tf.int32) if self._memory_length is None else (-1 * tf.convert_to_tensor(self._memory_length, dtype=tf.int32))
         position = compute_position(start=start, end=length, step=1, dtype=outputs.dtype)
         pe = compute_sinusoid_position_encoding(
             position=position,

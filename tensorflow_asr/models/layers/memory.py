@@ -29,7 +29,7 @@ def _shift(tensor, shift):
 
 class Memory(Layer):
     def __init__(self, batch_size, memory_length, dmodel, **kwargs):
-        super().__init__(trainable=False, **kwargs)
+        super().__init__(trainable=False, trainable=False, **kwargs)
         assert memory_length > 0, "memory_length must be integer"
         self.batch_size = batch_size
         self.memory_length = memory_length

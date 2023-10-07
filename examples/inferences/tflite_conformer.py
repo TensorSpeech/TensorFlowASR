@@ -14,9 +14,12 @@
 
 import argparse
 
+import fire
 import tensorflow as tf
 
-from tensorflow_asr.features.speech_featurizers import read_raw_audio
+from tensorflow_asr.utils import data_util
+
+logger = tf.get_logger()
 
 parser = argparse.ArgumentParser(prog="Conformer non streaming")
 
@@ -32,20 +35,28 @@ parser.add_argument("--nstates", type=int, default=2, help="Number of RNN states
 
 parser.add_argument("--statesize", type=int, default=320, help="Size of RNN state in prediction network")
 
-args = parser.parse_args()
 
-tflitemodel = tf.lite.Interpreter(model_path=args.tflite)
+def main(
+    file_path: str,
+    tflite_path: str,
+    previous_encoder_states_shape: list = None,
+    previous_decoder_states_shape: list = None,
+    blank_index: int = 0,
+):
+    tflitemodel = tf.lite.Interpreter(model_path=tflite_path)
+    signal = data_util.read_raw_audio(file_path)
+    signal = tf.reshape(signal, [1, -1])
 
-signal = read_raw_audio(args.filename)
+    input_details = tflitemodel.get_input_details()
+    output_details = tflitemodel.get_output_details()
+    tflitemodel.resize_tensor_input(input_details[0]["index"], signal.shape)
+    tflitemodel.allocate_tensors()
+    tflitemodel.set_tensor(input_details[0]["index"], signal)
+    tflitemodel.set_tensor(input_details[1]["index"], tf.constant(blank_index, dtype=tf.int32))
+    tflitemodel.set_tensor(input_details[2]["index"], tf.zeros(previous_encoder_states_shape, dtype=tf.float32))
+    tflitemodel.invoke()
+    hyp = tflitemodel.get_tensor(output_details[0]["index"])
 
-input_details = tflitemodel.get_input_details()
-output_details = tflitemodel.get_output_details()
-tflitemodel.resize_tensor_input(input_details[0]["index"], signal.shape)
-tflitemodel.allocate_tensors()
-tflitemodel.set_tensor(input_details[0]["index"], signal)
-tflitemodel.set_tensor(input_details[1]["index"], tf.constant(args.blank, dtype=tf.int32))
-tflitemodel.set_tensor(input_details[2]["index"], tf.zeros([args.num_rnns, args.nstates, 1, args.statesize], dtype=tf.float32))
-tflitemodel.invoke()
-hyp = tflitemodel.get_tensor(output_details[0]["index"])
-
-print("".join([chr(u) for u in hyp]))
+    transcript = "".join([chr(u) for u in hyp])
+    logger.info(f"Transcript: {transcript}")
+    return transcript

@@ -536,5 +536,26 @@ class BaseModel(tf.keras.Model):
 
     # ---------------------------------- TFLITE ---------------------------------- #
 
-    def make_tflite_function(self, *args, **kwargs):
-        pass
+    def make_tflite_function(self, batch_size=1):
+        return tf.function(
+            lambda inputs, inputs_length, previous_encoder_states, previous_decoder_states: self.recognize(
+                schemas.PredictInput(
+                    inputs=inputs,
+                    inputs_length=inputs_length,
+                    previous_encoder_states=previous_encoder_states,
+                    previous_decoder_states=previous_decoder_states,
+                )
+            ),
+            input_signature=[
+                schemas.PredictInput(
+                    inputs=tf.TensorSpec([batch_size, None], dtype=tf.float32),
+                    inputs_length=tf.TensorSpec([batch_size], dtype=tf.int32),
+                    previous_encoder_states=(
+                        tf.TensorSpec(self.encoder.get_initial_state(batch_size), dtype=tf.float32)
+                        if hasattr(self.encoder, "get_initial_state")
+                        else None
+                    ),
+                    previous_decoder_states=tf.TensorSpec(self.predict_net.get_initial_state(batch_size).get_shape(), dtype=tf.float32),
+                )
+            ],
+        )

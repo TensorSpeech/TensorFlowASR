@@ -904,16 +904,3 @@ class Transducer(BaseModel):
     #         y_hat_states = tf.gather_nd(B.states.stack(), y_hat_score_index)
 
     #         return Hypothesis(index=y_hat_index, prediction=y_hat_prediction, states=y_hat_states)
-
-    # -------------------------------- TFLITE -------------------------------------
-
-    # def make_tflite_function(self, timestamp: bool = False):
-    #     tflite_func = self.recognize_tflite_with_timestamp if timestamp else self.recognize_tflite
-    #     return tf.function(
-    #         tflite_func,
-    #         input_signature=[
-    #             tf.TensorSpec([None], dtype=tf.float32),
-    #             tf.TensorSpec([], dtype=tf.int32),
-    #             tf.TensorSpec(self.predict_net.get_initial_state().get_shape(), dtype=tf.float32),
-    #         ],
-    #     )
