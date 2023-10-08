@@ -23,7 +23,7 @@
             "program": "./examples/inferences/main.py",
             "args": [
                 "--file-path",
-                "~/Data/Persona/MachineLearning/Datasets/LibriSpeech/test-clean/1188/133604/1188-133604-0000.flac",
+                "/Users/nglehuy/Data/Persona/MachineLearning/Datasets/LibriSpeech/test-clean/61/70970/61-70970-0030.flac",
                 "--config-path",
                 "~/Data/Persona/Projects/TensorFlowASR/examples/models/transducer/contextnet/small.yml.j2",
                 "--h5",

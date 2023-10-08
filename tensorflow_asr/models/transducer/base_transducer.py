@@ -561,7 +561,7 @@ class Transducer(BaseModel):
             nframes = encoded_length
 
             previous_tokens = inputs.previous_tokens or tf.ones([1, 1], dtype=tf.int32) * self.blank
-            token_index = tf.zeros([], dtype=tf.int32)
+            token_index = tf.ones([], dtype=tf.int32) * -1
             tokens = tf.TensorArray(
                 dtype=tf.int32,
                 size=tf.reshape(nframes, shape=[]) * max_tokens_per_frame,
@@ -603,33 +603,53 @@ class Transducer(BaseModel):
             ):
                 _current_frame = tf.expand_dims(tf.gather_nd(encoded, _frame, batch_dims=1), axis=1)  # [1, 1, E]
                 _log_softmax, _states = self.call_next(_current_frame, _previous_tokens, _previous_decoder_states)
-                _current_token = tf.reshape(tf.argmax(_log_softmax, axis=-1, output_type=tf.int32), [1, 1])  # [1, 1, 1] -> [1, 1]
-                # conditions, blanks are ignored
-                _equal_blank = tf.equal(_current_token, self.blank)  # [1, 1]
-                # content updates
-                _next_tokens = tf.where(_equal_blank, _previous_tokens, _current_token)
-                _next_decoder_states = tf.where(tf.reshape(_equal_blank, [1, 1, 1, 1]), _previous_decoder_states, _states)
-                _tokens = _tokens.write(_token_index, tf.reshape(_next_tokens, shape=[]))
-                # step updates
-                _frame_index = tf.reshape(_frame, shape=[])
-                _current_frame_num_tokens = tf.add(_num_tokens_per_frame.read(_frame_index), 1)
-                _num_tokens_per_frame = _num_tokens_per_frame.write(_frame_index, _current_frame_num_tokens)
-                _next_frame = tf.where(
+                _current_tokens = tf.reshape(tf.argmax(_log_softmax, axis=-1, output_type=tf.int32), [1, 1])  # [1, 1, 1] -> [1, 1]
+
+                ##################### conditions, blanks are ignored
+                _equal_blank = tf.equal(_current_tokens, self.blank)  # [1, 1]
+
+                ##################### step updates
+                __frame_index = tf.reshape(_frame, shape=[])
+                __equal_blank_index = tf.reshape(_equal_blank, shape=[])
+                # only non-blank tokens are counted in number of tokens per frame
+                _current_frame_num_tokens = tf.where(
+                    __equal_blank_index,
+                    _num_tokens_per_frame.read(__frame_index),
+                    tf.add(_num_tokens_per_frame.read(__frame_index), 1),
+                )
+                _num_tokens_per_frame = _num_tokens_per_frame.write(__frame_index, _current_frame_num_tokens)
+                # increase frame index if current tokens are blank or number of tokens per frame exceeds max tokens per frame
+                _frame = tf.where(
                     tf.logical_or(_equal_blank, tf.greater_equal(_current_frame_num_tokens, _max_tokens_per_frame)),
                     tf.add(_frame, 1),
                     _frame,
                 )
-                _next_token_index = tf.where(tf.reshape(_equal_blank, shape=[]), _token_index, tf.add(_token_index, 1))  # only write non blank tokens
-                # return
+                # increase token index if current token is not blank, so that it can be appended to tokens array
+                _token_index = tf.where(__equal_blank_index, _token_index, tf.add(_token_index, 1))
+
+                ##################### content updates
+                # keep previous tokens if current tokens are blank
+                _current_tokens = tf.where(_equal_blank, _previous_tokens, _current_tokens)
+                # keep previous states if current tokens are blank
+                _states = tf.where(tf.reshape(_equal_blank, [1, 1, 1, 1]), _previous_decoder_states, _states)
+                # token_index initialized as -1, so that the first recognized token will be at index 0
+                # therefore only update (append) tokens when token_index >= 0
+                _tokens = tf.cond(
+                    tf.greater_equal(_token_index, 0),
+                    lambda: _tokens.write(_token_index, tf.reshape(_current_tokens, shape=[])),
+                    lambda: _tokens,
+                )
+
+                ##################### return
                 return (
-                    _next_frame,
+                    _frame,
                     _nframes,
-                    _next_tokens,
-                    _next_token_index,
+                    _current_tokens,
+                    _token_index,
                     _tokens,
                     _num_tokens_per_frame,
                     _max_tokens_per_frame,
-                    _next_decoder_states,
+                    _states,
                 )
 
             (

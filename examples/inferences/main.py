@@ -45,6 +45,7 @@ def main(
     signal_length = tf.reshape(tf.shape(signal)[1], [1])
 
     outputs = model.recognize(schemas.PredictInput(signal, signal_length))
+    print(outputs.tokens)
     transcript = tokenizer.detokenize(outputs.tokens)[0].numpy().decode("utf-8")
 
     logger.info(f"Transcript: {transcript}")
