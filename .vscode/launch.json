@@ -14,6 +14,21 @@
                 "-s",
                 "./tests/test_rnnt_loss.py"
             ]
+        },
+        {
+            "name": "Test Prediction",
+            "type": "python",
+            "request": "launch",
+            "justMyCode": true,
+            "program": "./examples/inferences/main.py",
+            "args": [
+                "--file-path",
+                "~/Data/Persona/MachineLearning/Datasets/LibriSpeech/test-clean/1188/133604/1188-133604-0000.flac",
+                "--config-path",
+                "~/Data/Persona/Projects/TensorFlowASR/examples/models/transducer/contextnet/small.yml.j2",
+                "--h5",
+                "~/Data/Persona/MachineLearning/Models/transducer/sp1k-contextnet/small/28.h5"
+            ]
         }
     ]
 }

@@ -24,6 +24,7 @@ from tensorflow.python.eager import context  # pylint: disable=no-name-in-module
 from tensorflow_asr import schemas
 from tensorflow_asr.models.layers.feature_extraction import FeatureExtraction
 from tensorflow_asr.optimizers.accumulation import GradientAccumulator
+from tensorflow_asr.tokenizers import Tokenizer
 from tensorflow_asr.utils import env_util, file_util
 
 base_layer = importlib.import_module(f"{env_util.KERAS_SRC}.engine.base_layer")
@@ -536,26 +537,31 @@ class BaseModel(tf.keras.Model):
 
     # ---------------------------------- TFLITE ---------------------------------- #
 
-    def make_tflite_function(self, batch_size=1):
-        return tf.function(
-            lambda inputs, inputs_length, previous_encoder_states, previous_decoder_states: self.recognize(
+    def make_tflite_function(self, tokenizer: Tokenizer, batch_size=1):
+        @tf.function(
+            input_signature=[
+                tf.TensorSpec([batch_size, None], dtype=tf.float32),
+                tf.TensorSpec([batch_size], dtype=tf.int32),
+                tf.TensorSpec([batch_size, 1], dtype=tf.int32),
+                tf.TensorSpec(self.encoder.get_initial_state(batch_size), dtype=tf.float32) if hasattr(self.encoder, "get_initial_state") else None,
+                tf.TensorSpec(self.predict_net.get_initial_state(batch_size).get_shape(), dtype=tf.float32),
+            ],
+        )
+        def tflite_func(inputs, inputs_length, previous_tokens, previous_encoder_states, previous_decoder_states):
+            outputs = self.recognize(
                 schemas.PredictInput(
                     inputs=inputs,
                     inputs_length=inputs_length,
+                    previous_tokens=previous_tokens,
                     previous_encoder_states=previous_encoder_states,
                     previous_decoder_states=previous_decoder_states,
                 )
-            ),
-            input_signature=[
-                schemas.PredictInput(
-                    inputs=tf.TensorSpec([batch_size, None], dtype=tf.float32),
-                    inputs_length=tf.TensorSpec([batch_size], dtype=tf.int32),
-                    previous_encoder_states=(
-                        tf.TensorSpec(self.encoder.get_initial_state(batch_size), dtype=tf.float32)
-                        if hasattr(self.encoder, "get_initial_state")
-                        else None
-                    ),
-                    previous_decoder_states=tf.TensorSpec(self.predict_net.get_initial_state(batch_size).get_shape(), dtype=tf.float32),
-                )
-            ],
-        )
+            )
+            return schemas.PredictOutput(
+                tokens=tokenizer.detokenize_unicode_points(outputs.tokens),
+                scores=outputs.scores,
+                encoder_states=outputs.encoder_states,
+                decoder_states=outputs.decoder_states,
+            )
+
+        return tflite_func

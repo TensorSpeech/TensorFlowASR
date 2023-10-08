@@ -18,6 +18,7 @@ import tensorflow as tf
 from tqdm import tqdm
 
 from tensorflow_asr.models.base_model import BaseModel
+from tensorflow_asr.tokenizers import Tokenizer
 from tensorflow_asr.utils import file_util
 
 logger = tf.get_logger()
@@ -80,9 +81,11 @@ def evaluate_hypotheses(filepath: str):
 
 def convert_tflite(
     model: BaseModel,
+    tokenizer: Tokenizer,
     output: str,
+    batch_size: int = 1,
 ):
-    concrete_func = model.make_tflite_function().get_concrete_function()
+    concrete_func = model.make_tflite_function(tokenizer=tokenizer, batch_size=batch_size).get_concrete_function()
     converter = tf.lite.TFLiteConverter.from_concrete_functions([concrete_func])
     converter.target_spec.supported_ops = [
         tf.lite.OpsSet.TFLITE_BUILTINS,  # enable TensorFlow Lite ops.

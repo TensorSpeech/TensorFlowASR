@@ -442,7 +442,7 @@ class Transducer(BaseModel):
 
     # -------------------------------- GREEDY -------------------------------------
 
-    def recognize(self, inputs: schemas.PredictInput, **kwargs):
+    def recognize(self, inputs: schemas.PredictInput, max_tokens_per_frame: int = 3, **kwargs):
         """
         Recognize greedy from input signals
 
@@ -460,6 +460,18 @@ class Transducer(BaseModel):
                 next_decoder_states, next states of predict_net, will be used to predict next chunk of audio,
             )
         """
+        return tf.cond(
+            tf.equal(tf.shape(inputs.inputs_length)[0], 1),
+            lambda: self.recognize_single(inputs, max_tokens_per_frame=max_tokens_per_frame, **kwargs),
+            lambda: self.recognize_batch(inputs, **kwargs),
+        )
+
+    def recognize_batch(self, inputs: schemas.PredictInput, **kwargs):
+        """
+        Ref: https://arxiv.org/pdf/1801.00841.pdf
+        This is a greedy decoding algorithm that greedily select the best token at each time step
+        Only apply for batch size > 1
+        """
         with tf.name_scope(f"{self.name}_recognize"):
             features, features_length = self.feature_extraction((inputs.inputs, inputs.inputs_length), training=False)
             encoded, encoded_length, next_encoder_states = self.encoder.call_next(features, features_length, inputs.previous_encoder_states)
@@ -469,10 +481,10 @@ class Transducer(BaseModel):
             # The current indices of the output of encoder, shape [B, 1]
             frame_indices = tf.zeros([batch_size, 1], dtype=tf.int32, name="frame_indices")
             # Previous predicted tokens, initially are blanks, shape [B, 1]
-            previous_tokens = tf.ones([batch_size, 1], dtype=tf.int32, name="previous_tokens") * self.blank
+            previous_tokens = inputs.previous_tokens or tf.ones([batch_size, 1], dtype=tf.int32, name="previous_tokens") * self.blank
             # Previous states of the prediction network, initially are zeros, shape [B, num_rnns, nstates, rnn_units]
             previous_decoder_states = inputs.previous_decoder_states or self.predict_net.get_initial_state(batch_size)
-            # Assumption that number of tokens can not exceed (2 * the size of output of encoder + 1), this is mostly for static runs like TPU or TFLite
+            # Assumption that number of tokens can not exceed (2 * the size of output of encoder + 1), this is for static runs like TPU or TFLite
             max_tokens = max_frames * 2 + 1
             # All of the tokens that are getting recognized, initially are blanks, shape [B, nframes * 2 + 1]
             tokens = tf.ones([batch_size, max_tokens], dtype=tf.int32, name="tokens") * self.blank
@@ -530,6 +542,123 @@ class Transducer(BaseModel):
 
             return schemas.PredictOutput(
                 tokens=tokens,
+                next_tokens=next_tokens,
+                next_encoder_states=next_encoder_states,
+                next_decoder_states=next_decoder_states,
+            )
+
+    def recognize_single(self, inputs: schemas.PredictInput, max_tokens_per_frame: int = 3, **kwargs):
+        """
+        Ref: https://arxiv.org/pdf/1801.00841.pdf
+        This is a greedy decoding algorithm that greedily select the best token at each time step
+        Only apply for batch size 1
+        """
+        with tf.name_scope(f"{self.name}_decode_greedy"):
+            features, features_length = self.feature_extraction((inputs.inputs, inputs.inputs_length), training=False)
+            encoded, encoded_length, next_encoder_states = self.encoder.call_next(features, features_length, inputs.previous_encoder_states)
+
+            frame = tf.zeros([1, 1], dtype=tf.int32)
+            nframes = encoded_length
+
+            previous_tokens = inputs.previous_tokens or tf.ones([1, 1], dtype=tf.int32) * self.blank
+            token_index = tf.zeros([], dtype=tf.int32)
+            tokens = tf.TensorArray(
+                dtype=tf.int32,
+                size=tf.reshape(nframes, shape=[]) * max_tokens_per_frame,
+                dynamic_size=False,
+                clear_after_read=False,
+                element_shape=tf.TensorShape([]),
+            )
+            num_tokens_per_frame = tf.TensorArray(
+                dtype=tf.int32,
+                size=tf.reshape(nframes, shape=[]),
+                dynamic_size=False,
+                clear_after_read=False,
+                element_shape=tf.TensorShape([]),
+            )
+
+            previous_decoder_states = inputs.previous_decoder_states or self.predict_net.get_initial_state(1)
+
+            def condition(
+                _frame,
+                _nframes,
+                _previous_tokens,
+                _token_index,
+                _tokens,
+                _num_tokens_per_frame,
+                _max_tokens_per_frame,
+                _previous_decoder_states,
+            ):
+                return tf.less(_frame, _nframes)
+
+            def body(
+                _frame,
+                _nframes,
+                _previous_tokens,
+                _token_index,
+                _tokens,
+                _num_tokens_per_frame,
+                _max_tokens_per_frame,
+                _previous_decoder_states,
+            ):
+                _current_frame = tf.expand_dims(tf.gather_nd(encoded, _frame, batch_dims=1), axis=1)  # [1, 1, E]
+                _log_softmax, _states = self.call_next(_current_frame, _previous_tokens, _previous_decoder_states)
+                _current_token = tf.reshape(tf.argmax(_log_softmax, axis=-1, output_type=tf.int32), [1, 1])  # [1, 1, 1] -> [1, 1]
+                # conditions, blanks are ignored
+                _equal_blank = tf.equal(_current_token, self.blank)  # [1, 1]
+                # content updates
+                _next_tokens = tf.where(_equal_blank, _previous_tokens, _current_token)
+                _next_decoder_states = tf.where(tf.reshape(_equal_blank, [1, 1, 1, 1]), _previous_decoder_states, _states)
+                _tokens = _tokens.write(_token_index, tf.reshape(_next_tokens, shape=[]))
+                # step updates
+                _frame_index = tf.reshape(_frame, shape=[])
+                _current_frame_num_tokens = tf.add(_num_tokens_per_frame.read(_frame_index), 1)
+                _num_tokens_per_frame = _num_tokens_per_frame.write(_frame_index, _current_frame_num_tokens)
+                _next_frame = tf.where(
+                    tf.logical_or(_equal_blank, tf.greater_equal(_current_frame_num_tokens, _max_tokens_per_frame)),
+                    tf.add(_frame, 1),
+                    _frame,
+                )
+                _next_token_index = tf.where(tf.reshape(_equal_blank, shape=[]), _token_index, tf.add(_token_index, 1))  # only write non blank tokens
+                # return
+                return (
+                    _next_frame,
+                    _nframes,
+                    _next_tokens,
+                    _next_token_index,
+                    _tokens,
+                    _num_tokens_per_frame,
+                    _max_tokens_per_frame,
+                    _next_decoder_states,
+                )
+
+            (
+                frame,
+                nframes,
+                next_tokens,
+                token_index,
+                tokens,
+                num_tokens_per_frame,
+                max_tokens_per_frame,
+                next_decoder_states,
+            ) = tf.while_loop(
+                condition,
+                body,
+                loop_vars=(
+                    frame,
+                    nframes,
+                    previous_tokens,
+                    token_index,
+                    tokens,
+                    num_tokens_per_frame,
+                    max_tokens_per_frame,
+                    previous_decoder_states,
+                ),
+                back_prop=False,
+            )
+
+            return schemas.PredictOutput(
+                tokens=tf.reshape(tokens.stack(), shape=[1, -1]),
                 next_tokens=next_tokens,
                 next_encoder_states=next_encoder_states,
                 next_decoder_states=next_decoder_states,

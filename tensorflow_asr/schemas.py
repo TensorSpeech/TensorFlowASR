@@ -46,8 +46,8 @@ def TrainLabel(labels, labels_length):
 
 PredictInput = collections.namedtuple(
     "PredictInput",
-    ("inputs", "inputs_length", "previous_encoder_states", "previous_decoder_states"),
-    defaults=(None, None),
+    ("inputs", "inputs_length", "previous_tokens", "previous_encoder_states", "previous_decoder_states"),
+    defaults=(None, None, None),
 )
 PredictOutput = collections.namedtuple(
     "PredictOutput",

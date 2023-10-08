@@ -54,7 +54,7 @@ def main(
 
     model: tf.keras.Model = tf.keras.models.model_from_config(config.model_config)
     model.make(batch_size=batch_size)
-    model.load_weights(h5, by_name=file_util.is_hdf5_filepath(h5), skip_mismatch=True)
+    model.load_weights(h5, by_name=file_util.is_hdf5_filepath(h5), skip_mismatch=False)
     model.jit_compile = jit_compile
     model.summary()
 
