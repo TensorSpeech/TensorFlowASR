@@ -286,6 +286,7 @@ class SentencePieceTokenizer(Tokenizer):
             model_prefix=os.path.splitext(decoder_config.vocabulary)[0],
             model_type=decoder_config.model_type,
             vocab_size=decoder_config.vocab_size,
+            hard_vocab_limit=True,
             unk_id=decoder_config.unknown_index,
             bos_id=decoder_config.bos_index,
             eos_id=decoder_config.eos_index,
@@ -297,6 +298,8 @@ class SentencePieceTokenizer(Tokenizer):
             user_defined_symbols="",
             max_sentencepiece_length=decoder_config.max_sentencepiece_length,
             max_sentence_length=decoder_config.max_sentence_length,  # bytes
+            remove_extra_whitespaces=True,
+            random_seed=42,
         )
 
         return cls(decoder_config)
