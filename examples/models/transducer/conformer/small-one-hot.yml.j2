@@ -41,18 +41,18 @@ model_config:
     encoder_interleave_relpe: True
     encoder_use_attention_causal_mask: False
     encoder_use_attention_auto_mask: True
-    encoder_kernel_size: 32
+    encoder_kernel_size: 31
     encoder_dropout: 0.1
     encoder_padding: causal
     encoder_memory_length: null
-    prediction_label_encode_mode: embedding
-    prediction_embed_dim: 320
+    prediction_label_encode_mode: one_hot
+    prediction_embed_dim: {{decoder_config.vocabsize}}
     prediction_num_rnns: 1
     prediction_rnn_units: 320
     prediction_rnn_type: lstm
     prediction_rnn_implementation: 2
     prediction_rnn_unroll: False
-    prediction_layer_norm: True
+    prediction_layer_norm: False
     prediction_projection_units: 0
     joint_dim: 320
     prejoint_encoder_linear: True
@@ -86,8 +86,14 @@ learning_config:
       beta_2: 0.98
       epsilon: 1e-9
 
+  gwn_config:
+    predict_net_step: 20000
+    predict_net_stddev: 0.075
+
+  gradn_config: null
+
   running_config:
-    batch_size: 3
+    batch_size: 2
     num_epochs: 300
     checkpoint:
       filepath: {{modeldir}}/checkpoints/{epoch:02d}.h5

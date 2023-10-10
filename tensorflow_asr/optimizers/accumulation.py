@@ -14,13 +14,13 @@ class GradientAccumulator:
     def __init__(
         self,
         ga_steps,
-        trainable_variables,
+        model: tf.keras.Model,
         name="ga",
     ):
         self.name = name
         if ga_steps is None:
             raise ValueError("ga_steps must be defined")
-        if trainable_variables is None:
+        if model.trainable_variables is None:
             raise ValueError("trainable_variables must be defined")
         self._ga_steps = tf.constant(ga_steps, dtype=tf.int32)
         self._accum_step = tf.Variable(
@@ -30,16 +30,8 @@ class GradientAccumulator:
             aggregation=tf.VariableAggregation.ONLY_FIRST_REPLICA,
             name="accum_step",
         )
-        self._gradients = [
-            tf.Variable(
-                tf.zeros_like(v),
-                trainable=False,
-                synchronization=tf.VariableSynchronization.ON_READ,
-                aggregation=tf.VariableAggregation.NONE,
-                name=f"{name}_{i}",
-            )
-            for i, v in enumerate(trainable_variables)
-        ]
+        self._gradients = [None for _ in model.trainable_variables]
+        self._gradient_inited = False
 
     @property
     def step(self):
@@ -57,20 +49,36 @@ class GradientAccumulator:
     @property
     def gradients(self):
         """The accumulated gradients on the current replica."""
+        if not self._gradient_inited:
+            raise ValueError("gradients are not initialized")
         return tf.cond(  # zeros gradients so that apply_gradient has no effect
             self.is_apply_step,
-            lambda: list(gradient.value() for gradient in self._gradients),
-            lambda: list(tf.zeros_like(gradient) for gradient in self._gradients),
+            lambda: [gradient.value() if gradient is not None else gradient for gradient in self._gradients],
+            lambda: [tf.zeros_like(gradient) if gradient is not None else gradient for gradient in self._gradients],
         )
 
     def accumulate(self, gradients):
         """Accumulates :obj:`gradients` on the current replica."""
+        if not self._gradient_inited:
+            for i, gradient in enumerate(gradients):
+                if gradient is None:
+                    continue
+                self._gradients[i] = tf.Variable(
+                    tf.zeros_like(gradient),
+                    trainable=False,
+                    synchronization=tf.VariableSynchronization.ON_READ,
+                    aggregation=tf.VariableAggregation.NONE,
+                    name=f"{self.name}_{i}",
+                )
+            self._gradient_inited = True
         for accum_gradient, gradient in zip(self._gradients, gradients):
-            accum_gradient.assign_add(gradient, read_value=False)
+            if gradient is not None and accum_gradient is not None:
+                accum_gradient.assign_add(gradient, read_value=False)
         self._accum_step.assign_add(1)
 
     def reset(self):
         """Resets the accumulated gradients on the current replica."""
         self._accum_step.assign(0)
         for gradient in self._gradients:
-            gradient.assign(tf.zeros_like(gradient), read_value=False)
+            if gradient is not None:
+                gradient.assign(tf.zeros_like(gradient), read_value=False)

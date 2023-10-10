@@ -152,7 +152,7 @@ class BaseModel(tf.keras.Model):
                 logger.info("Using loss scale")
         if isinstance(ga_steps, int) and ga_steps > 1:
             self.use_ga = True
-            self.ga = GradientAccumulator(ga_steps=ga_steps, trainable_variables=self.trainable_variables)
+            self.ga = GradientAccumulator(ga_steps=ga_steps, model=self)
             logger.info(f"Using gradient accumulation with accumulate steps = {ga_steps}")
         else:
             self.use_ga = False
@@ -203,10 +203,10 @@ class BaseModel(tf.keras.Model):
 
         if self.use_loss_scale:
             scaled_loss = self.optimizer.get_scaled_loss(loss)
-            gradients = tape.gradient(scaled_loss, self.trainable_weights, unconnected_gradients=tf.UnconnectedGradients.ZERO)
+            gradients = tape.gradient(scaled_loss, self.trainable_variables)
             gradients = self.optimizer.get_unscaled_gradients(gradients)
         else:
-            gradients = tape.gradient(loss, self.trainable_weights, unconnected_gradients=tf.UnconnectedGradients.ZERO)
+            gradients = tape.gradient(loss, self.trainable_variables)
 
         if self.use_ga:  # perform gradient accumulation
             self.ga.accumulate(gradients=gradients)
@@ -222,6 +222,7 @@ class BaseModel(tf.keras.Model):
 
         if self.use_ga:
             tf.cond(self.ga.is_apply_step, self.ga.reset, lambda: None)
+            self.optimizer.iterations.assign(self.optimizer.iterations // tf.cast(self.ga.total_steps, self.optimizer.iterations.dtype))
 
         metrics = self.compute_metrics(x, y, y_pred, sample_weight)
         metrics = tf.nest.map_structure(lambda x: x / self.distribute_strategy.num_replicas_in_sync, metrics)
