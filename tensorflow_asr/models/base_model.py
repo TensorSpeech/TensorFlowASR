@@ -224,7 +224,10 @@ class BaseModel(tf.keras.Model):
             tf.cond(self.ga.is_apply_step, self.ga.reset, lambda: None)
             self.optimizer.iterations.assign(self.optimizer.iterations // tf.cast(self.ga.total_steps, self.optimizer.iterations.dtype))
 
-        metrics = self.compute_metrics(x, y, y_pred, sample_weight)
+        if self.use_ga:
+            metrics = tf.cond(self.ga.is_apply_step, lambda: self.compute_metrics(x, y, y_pred, sample_weight), self.get_metrics_result)
+        else:
+            metrics = self.compute_metrics(x, y, y_pred, sample_weight)
         metrics = tf.nest.map_structure(lambda x: x / self.distribute_strategy.num_replicas_in_sync, metrics)
         return metrics, caching
 
