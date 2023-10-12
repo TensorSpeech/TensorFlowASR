@@ -22,7 +22,7 @@ class GradientAccumulator:
             raise ValueError("ga_steps must be defined")
         if model.trainable_variables is None:
             raise ValueError("trainable_variables must be defined")
-        self._ga_steps = tf.constant(ga_steps, dtype=tf.int32)
+        self._ga_steps = ga_steps
         self._accum_step = tf.Variable(
             tf.constant(0, dtype=tf.int32),
             trainable=False,
