@@ -257,3 +257,12 @@ def get_nsamples(
     sample_rate: int = 16000,
 ):
     return math.ceil(float(duration) * sample_rate)
+
+
+def slice_batch_tensor(
+    tensor: tf.Tensor,
+    index: int,
+    batch_size: int,
+):
+    sliced_tensor = tensor[index * batch_size : (index + 1) * batch_size]
+    return tf.ensure_shape(sliced_tensor, [batch_size] + tensor.shape.as_list()[1:])

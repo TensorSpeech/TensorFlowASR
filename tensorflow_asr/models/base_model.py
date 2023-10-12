@@ -25,7 +25,7 @@ from tensorflow_asr import schemas
 from tensorflow_asr.models.layers.feature_extraction import FeatureExtraction
 from tensorflow_asr.optimizers.accumulation import GradientAccumulator
 from tensorflow_asr.tokenizers import Tokenizer
-from tensorflow_asr.utils import env_util, file_util
+from tensorflow_asr.utils import env_util, file_util, math_util
 
 base_layer = importlib.import_module(f"{env_util.KERAS_SRC}.engine.base_layer")
 data_adapter = importlib.import_module(f"{env_util.KERAS_SRC}.engine.data_adapter")
@@ -120,6 +120,7 @@ class BaseModel(tf.keras.Model):
         signals_length = tf.keras.Input(shape=[], batch_size=batch_size, dtype=tf.int32)
         predictions = tf.keras.Input(shape=prediction_shape, batch_size=batch_size, dtype=tf.int32)
         predictions_length = tf.keras.Input(shape=[], batch_size=batch_size, dtype=tf.int32)
+        self._per_replica_batch_size = int(batch_size / self.distribute_strategy.num_replicas_in_sync)
         self(
             schemas.TrainInput(
                 inputs=signals,
@@ -181,7 +182,7 @@ class BaseModel(tf.keras.Model):
             del logs["predictions"]
         return logs
 
-    def train_step(self, data, caching=None):
+    def _train_step(self, data, caching=None):
         x = data[0]
         if caching is not None:
             x["caching"] = caching
@@ -208,30 +209,33 @@ class BaseModel(tf.keras.Model):
         else:
             gradients = tape.gradient(loss, self.trainable_variables)
 
-        if self.use_ga:  # perform gradient accumulation
-            self.ga.accumulate(gradients=gradients)
-            gradients = self.ga.gradients
+        return gradients, caching
 
-        if self.gradn is not None:
-            if self.use_ga:
-                gradients = tf.cond(self.ga.is_apply_step, lambda: self.gradn(step=self.optimizer.iterations, gradients=gradients), lambda: gradients)
-            else:
-                gradients = self.gradn(step=self.optimizer.iterations, gradients=gradients)
-
-        self.optimizer.apply_gradients(zip(gradients, self.trainable_variables))
-
-        if self.use_ga:
-            tf.cond(self.ga.is_apply_step, self.ga.reset, lambda: None)
-            self.optimizer.iterations.assign(self.optimizer.iterations // tf.cast(self.ga.total_steps, self.optimizer.iterations.dtype))
-
-        if self.use_ga:
-            metrics = tf.cond(self.ga.is_apply_step, lambda: self.compute_metrics(x, y, y_pred, sample_weight), self.get_metrics_result)
+    def train_step(self, data, caching=None):
+        if not self.use_ga:
+            gradients, caching = self._train_step(data, caching=caching)
         else:
-            metrics = self.compute_metrics(x, y, y_pred, sample_weight)
+            if caching is None:
+                for i in tf.range(self.ga.total_steps):
+                    per_ga_step_data = tf.nest.map_structure(lambda x: math_util.slice_batch_tensor(x, i, self._per_replica_batch_size), data)
+                    per_ga_gradients, _ = self._train_step(per_ga_step_data)
+                    self.ga.accumulate(per_ga_gradients)
+            else:
+                for i in tf.range(self.ga.total_steps):
+                    per_ga_step_data = tf.nest.map_structure(lambda x: math_util.slice_batch_tensor(x, i, self._per_replica_batch_size), data)
+                    per_ga_gradients, caching = self._train_step(per_ga_step_data, caching=caching)
+                    self.ga.accumulate(per_ga_gradients)
+            gradients = self.ga.gradients
+        if self.gradn is not None:
+            gradients = self.gradn(step=self.optimizer.iterations, gradients=gradients)
+        self.optimizer.apply_gradients(zip(gradients, self.trainable_variables))
+        if self.use_ga:
+            self.ga.reset()
+        metrics = self.get_metrics_result()
         metrics = tf.nest.map_structure(lambda x: x / self.distribute_strategy.num_replicas_in_sync, metrics)
         return metrics, caching
 
-    def test_step(self, data):
+    def _test_step(self, data):
         x = data[0]
         y, y_length = data[1]["labels"], data[1]["labels_length"]
         y._keras_length = y_length
@@ -244,7 +248,15 @@ class BaseModel(tf.keras.Model):
         y_pred._keras_mask = None
 
         self.compute_loss(x, y, y_pred, sample_weight)
-        metrics = self.compute_metrics(x, y, y_pred, sample_weight)
+
+    def test_step(self, data):
+        if not self.use_ga:
+            self._test_step(data)
+        else:
+            for i in tf.range(self.ga.total_steps):
+                per_ga_step_data = tf.nest.map_structure(lambda x: math_util.slice_batch_tensor(x, i, self._per_replica_batch_size), data)
+                self._test_step(per_ga_step_data)
+        metrics = self.get_metrics_result()
         metrics = tf.nest.map_structure(lambda x: x / self.distribute_strategy.num_replicas_in_sync, metrics)
         return metrics
 

@@ -100,8 +100,12 @@ def get_global_shape(
     strategy,
     *datasets,
     batch_size: int = None,
+    ga_steps: int = None,
 ):
-    global_batch_size = (batch_size or config.learning_config.running_config.batch_size) * strategy.num_replicas_in_sync
+    batch_size = (batch_size or config.learning_config.running_config.batch_size) * strategy.num_replicas_in_sync
+    ds_batch_size = batch_size
+    if ga_steps is not None and ga_steps > 1:
+        ds_batch_size *= ga_steps
 
     max_input_length, max_label_length = 0, 0
     for dset in datasets:
@@ -127,7 +131,8 @@ def get_global_shape(
     )
 
     return dict(
-        batch_size=global_batch_size,
+        ds_batch_size=ds_batch_size,
+        batch_size=batch_size,
         input_shape=input_shape,
         prediction_shape=prediction_shape,
         label_shape=label_shape,

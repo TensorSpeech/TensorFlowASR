@@ -127,10 +127,9 @@ class Conformer(Transducer):
         self.time_reduction_factor = self.encoder.conv_subsampling.time_reduction_factor
 
     def reset_caching(self):
-        return self.encoder.reset_caching(self._batch_size)
+        return self.encoder.reset_caching(self._per_replica_batch_size)
 
     def make(self, input_shape=[None], prediction_shape=[None], batch_size=None, **kwargs):
-        self._batch_size = int(batch_size / self.distribute_strategy.num_replicas_in_sync)
         caching = (
             None
             if self.encoder._memory_length is None
