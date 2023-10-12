@@ -26,7 +26,7 @@ from tensorflow_asr.utils import math_util
 class FEATURE_TYPES:
     SPECTROGRAM: str = "spectrogram"
     LOG_MEL_SPECTROGRAM: str = "log_mel_spectrogram"
-    MFCC: str = "mffc"
+    MFCC: str = "mfcc"
     LOG_GAMMATONE_SPECTROGRAM: str = "log_gammatone_spectrogram"
 
 
@@ -38,7 +38,7 @@ class FeatureExtraction(Layer):
         stride_ms=10,
         num_feature_bins=80,
         feature_type="log_mel_spectrogram",
-        preemphasis=0.0,
+        preemphasis=0.97,
         pad_end=True,
         use_librosa_like_stft=False,
         output_floor=1e-10,
