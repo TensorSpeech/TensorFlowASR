@@ -20,7 +20,7 @@ import os
 import numpy as np
 import tensorflow as tf
 
-from tensorflow_asr.utils import env_util
+from tensorflow_asr.utils import env_util, shape_util
 
 warp_rnnt_loss = importlib.import_module("warprnnt_tensorflow").rnnt_loss if importlib.util.find_spec("warprnnt_tensorflow") is not None else None
 
@@ -216,10 +216,7 @@ def backward_dp(
 
 
 def compute_rnnt_loss_and_grad_helper(logits, labels, label_length, logit_length, use_cpu=False):
-    batch_size = tf.shape(logits)[0]
-    input_max_len = tf.shape(logits)[1]
-    target_max_len = tf.shape(logits)[2]
-    vocab_size = tf.shape(logits)[3]
+    batch_size, input_max_len, target_max_len, vocab_size = shape_util.shape_list(logits)
 
     one_hot_labels = tf.one_hot(tf.tile(tf.expand_dims(labels, axis=1), multiples=[1, input_max_len, 1]), depth=vocab_size)
 
