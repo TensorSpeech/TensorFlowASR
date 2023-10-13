@@ -262,6 +262,7 @@ def compute_rnnt_loss_and_grad_helper(logits, labels, label_length, logit_length
         tf.concat([tf.reshape(tf.range(batch_size, dtype=tf.int64), shape=[batch_size, 1]), tf.cast(indices, dtype=tf.int64)], axis=1),
         tf.ones(batch_size, dtype=tf.float32),
         [batch_size, input_max_len, target_max_len],
+        name="last_grads_blank_scatter",
     )
     grads_blank = grads_blank + last_grads_blank
 
@@ -284,7 +285,12 @@ def compute_rnnt_loss_and_grad_helper(logits, labels, label_length, logit_length
     scatter_idx = tf.concat([g, f], axis=3)
     # TODO - improve the part of code for scatter_idx computation.
     probs = tf.exp(log_probs)
-    grads_truth_scatter = tf.scatter_nd(scatter_idx, grads_truth, [batch_size, input_max_len, target_max_len, vocab_size - 1])
+    grads_truth_scatter = tf.scatter_nd(
+        scatter_idx,
+        grads_truth,
+        [batch_size, input_max_len, target_max_len, vocab_size - 1],
+        name="grads_truth_scatter",
+    )
     grads = tf.concat([tf.reshape(grads_blank, shape=(batch_size, input_max_len, target_max_len, -1)), grads_truth_scatter], axis=3)
     grads_logits = grads - probs * (tf.reduce_sum(grads, axis=3, keepdims=True))
 
