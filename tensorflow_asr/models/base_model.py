@@ -215,22 +215,31 @@ class BaseModel(tf.keras.Model):
 
         return gradients, caching
 
+    def _split_train_inputs(self, data):
+        splitted_x, splited_y = tf.nest.map_structure(lambda x: tf.split(x, self.ga.total_steps, axis=0), data)
+        for i, il, p, pl, l, ll in zip(
+            splitted_x["inputs"],
+            splitted_x["inputs_length"],
+            splitted_x["predictions"],
+            splitted_x["predictions_length"],
+            splited_y["labels"],
+            splited_y["labels_length"],
+        ):
+            yield (
+                schemas.TrainInput(inputs=i, inputs_length=il, predictions=p, predictions_length=pl),
+                schemas.TrainLabel(labels=l, labels_length=ll),
+            )
+
     def train_step(self, data, caching=None):
         if not self.use_ga:
             gradients, caching = self._train_step(data, caching=caching)
         else:
             if caching is None:
-                for i in tf.range(self.ga.total_steps):
-                    per_ga_step_data = tf.nest.map_structure(
-                        lambda x: x[i * self._per_replica_batch_size : (i + 1) * self._per_replica_batch_size], data
-                    )
+                for per_ga_step_data in self._split_train_inputs(data):
                     per_ga_gradients, _ = self._train_step(per_ga_step_data)
                     self.ga.accumulate(per_ga_gradients)
             else:
-                for i in tf.range(self.ga.total_steps):
-                    per_ga_step_data = tf.nest.map_structure(
-                        lambda x: x[i * self._per_replica_batch_size : (i + 1) * self._per_replica_batch_size], data
-                    )
+                for per_ga_step_data in self._split_train_inputs(data):
                     per_ga_gradients, caching = self._train_step(per_ga_step_data, caching=caching)
                     self.ga.accumulate(per_ga_gradients)
             gradients = self.ga.gradients
