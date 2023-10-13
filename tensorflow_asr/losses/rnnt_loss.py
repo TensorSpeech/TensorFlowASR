@@ -30,7 +30,12 @@ logger = tf.get_logger()
 
 
 class RnntLoss(tf.keras.losses.Loss):
-    def __init__(self, blank, reduction=tf.keras.losses.Reduction.AUTO, name=None):
+    def __init__(
+        self,
+        blank,
+        reduction=tf.keras.losses.Reduction.AUTO,
+        name=None,
+    ):
         if blank != 0 and warp_rnnt_loss is None:  # restrict blank index
             raise ValueError("rnnt_loss in tensorflow must use blank = 0")
         super().__init__(reduction=reduction, name=name)
@@ -216,7 +221,10 @@ def backward_dp(
 
 
 def compute_rnnt_loss_and_grad_helper(logits, labels, label_length, logit_length, use_cpu=False):
-    batch_size, input_max_len, target_max_len, vocab_size = shape_util.shape_list(logits)
+    batch_size = shape_util.get_dim(logits, 0)
+    input_max_len = shape_util.get_dim(logits, 1)
+    target_max_len = shape_util.get_dim(logits, 2)
+    vocab_size = shape_util.get_dim(logits, 3)
 
     one_hot_labels = tf.one_hot(tf.tile(tf.expand_dims(labels, axis=1), multiples=[1, input_max_len, 1]), depth=vocab_size)
 

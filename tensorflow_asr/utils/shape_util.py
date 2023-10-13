@@ -30,3 +30,8 @@ def get_shape_invariants(tensor):
 def get_float_spec(tensor):
     shape = get_shape_invariants(tensor)
     return tf.TensorSpec(shape, dtype=tf.float32)
+
+
+def get_dim(tensor, i):
+    """Get value of tensor shape[i] preferring static value if available."""
+    return tf.compat.dimension_value(tensor.shape[i]) or tf.shape(tensor)[i]
