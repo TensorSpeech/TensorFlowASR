@@ -132,7 +132,7 @@ class BaseModel(tf.keras.Model):
             training=False,
         )
         return tf.nest.map_structure(
-            lambda x: shape_util.shape_list_per_replica(x, num_replicas=self.distribute_strategy.num_replicas_in_sync),
+            lambda x: shape_util.shape_list_per_replica(x, per_replica_batch_size=self._per_replica_batch_size),
             outputs,
         )  # compute output shape
 

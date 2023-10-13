@@ -22,9 +22,9 @@ def shape_list(x, out_type=tf.int32):
     return [dynamic[i] if s is None else s for i, s in enumerate(static)]
 
 
-def shape_list_per_replica(x, num_replicas):
+def shape_list_per_replica(x, per_replica_batch_size):
     shapes = x.shape.as_list()
-    shapes[0] = shapes[0] // num_replicas
+    shapes[0] = int(per_replica_batch_size)
     return shapes
 
 
