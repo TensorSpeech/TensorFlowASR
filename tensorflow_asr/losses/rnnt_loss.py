@@ -34,16 +34,23 @@ class RnntLoss(tf.keras.losses.Loss):
         self,
         blank,
         reduction=tf.keras.losses.Reduction.AUTO,
+        output_shapes=None,
         name=None,
     ):
         if blank != 0 and warp_rnnt_loss is None:  # restrict blank index
-            raise ValueError("rnnt_loss in tensorflow must use blank = 0")
+            raise ValueError("RNNT loss in tensorflow must use blank = 0")
         super().__init__(reduction=reduction, name=name)
         self.blank = blank
         self.use_cpu = USE_CPU_LOSS or (not env_util.has_devices("GPU") and not env_util.has_devices("TPU"))
-        logger.info(
-            f"Use {'CPU' if self.use_cpu else 'GPU/TPU'} implementation for RNNT loss in {'Tensorflow' if warp_rnnt_loss is None else 'WarpRNNT'}"
-        )
+        self.output_shapes = output_shapes
+        # fmt: off
+        logger.info(f"[RNNT loss] Use {'CPU' if self.use_cpu else 'GPU/TPU'} implementation in {'Tensorflow' if warp_rnnt_loss is None else 'WarpRNNT'}") # pylint: disable=line-too-long
+        # fmt: on
+        if self.output_shapes:
+            logger.info(f"[RNNT loss] Use model's output shapes: {self.output_shapes}")
+            if not all(self.output_shapes):
+                logger.info("[RNNT loss] Detected dynamic shape")
+                self.output_shapes = None
 
     def call(self, y_true, y_pred):
         return rnnt_loss(
@@ -54,6 +61,7 @@ class RnntLoss(tf.keras.losses.Loss):
             blank=self.blank,
             name=self.name,
             use_cpu=self.use_cpu,
+            output_shapes=self.output_shapes,
         )
 
 
@@ -65,6 +73,7 @@ def rnnt_loss(
     blank=0,
     name=None,
     use_cpu=False,
+    output_shapes=None,
 ):
     kwargs = dict(
         logits=logits,
@@ -73,6 +82,7 @@ def rnnt_loss(
         logit_length=logits_length,
         blank=blank,
         use_cpu=use_cpu,
+        output_shapes=output_shapes,
         name=name,
     )
     loss_fn = rnnt_loss_tf if warp_rnnt_loss is None else rnnt_loss_warprnnt
@@ -220,11 +230,24 @@ def backward_dp(
     return beta
 
 
-def compute_rnnt_loss_and_grad_helper(logits, labels, label_length, logit_length, use_cpu=False):
-    batch_size = shape_util.get_dim(logits, 0)
-    input_max_len = shape_util.get_dim(logits, 1)
-    target_max_len = shape_util.get_dim(logits, 2)
-    vocab_size = shape_util.get_dim(logits, 3)
+def compute_rnnt_loss_and_grad_helper(
+    logits,
+    labels,
+    label_length,
+    logit_length,
+    use_cpu=False,
+    output_shapes=None,
+):
+    if output_shapes is None:  # dynamic shape
+        batch_size = shape_util.get_dim(logits, 0)
+        input_max_len = shape_util.get_dim(logits, 1)
+        target_max_len = shape_util.get_dim(logits, 2)
+        vocab_size = shape_util.get_dim(logits, 3)
+    else:
+        batch_size = output_shapes["logits"][0]
+        input_max_len = output_shapes["logits"][1]
+        target_max_len = output_shapes["logits"][2]
+        vocab_size = output_shapes["logits"][3]
 
     one_hot_labels = tf.one_hot(tf.tile(tf.expand_dims(labels, axis=1), multiples=[1, input_max_len, 1]), depth=vocab_size)
 
@@ -305,6 +328,7 @@ def rnnt_loss_tf(
     logit_length,
     name=None,
     use_cpu=False,
+    output_shapes=None,
     **kwargs,
 ):
     name = "rnnt_loss" if name is None else name
@@ -333,6 +357,7 @@ def rnnt_loss_tf(
                 label_length=label_length_t,
                 logit_length=logit_length_t,
                 use_cpu=use_cpu,
+                output_shapes=output_shapes,
             )
             result = compute_rnnt_loss_and_grad_helper(**kwargs)
 

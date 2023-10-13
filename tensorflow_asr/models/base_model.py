@@ -25,7 +25,7 @@ from tensorflow_asr import schemas
 from tensorflow_asr.models.layers.feature_extraction import FeatureExtraction
 from tensorflow_asr.optimizers.accumulation import GradientAccumulator
 from tensorflow_asr.tokenizers import Tokenizer
-from tensorflow_asr.utils import env_util, file_util, math_util
+from tensorflow_asr.utils import env_util, file_util, math_util, shape_util
 
 base_layer = importlib.import_module(f"{env_util.KERAS_SRC}.engine.base_layer")
 data_adapter = importlib.import_module(f"{env_util.KERAS_SRC}.engine.data_adapter")
@@ -102,7 +102,7 @@ class BaseModel(tf.keras.Model):
             self._tfasr_metrics = {}
         self._tfasr_metrics[metric.name] = metric
 
-    def make(self, input_shape=[None], prediction_shape=[None], batch_size=None, caching=None, **kwargs):
+    def make(self, input_shape=[None], prediction_shape=[None], batch_size=None, caching=None, **kwargs) -> schemas.TrainOutput:
         """
         Custom function for building model (uses self.build so cannot overwrite that function)
 
@@ -121,7 +121,7 @@ class BaseModel(tf.keras.Model):
         predictions = tf.keras.Input(shape=prediction_shape, batch_size=batch_size, dtype=tf.int32)
         predictions_length = tf.keras.Input(shape=[], batch_size=batch_size, dtype=tf.int32)
         self._per_replica_batch_size = int(batch_size / self.distribute_strategy.num_replicas_in_sync)
-        self(
+        outputs = self(
             schemas.TrainInput(
                 inputs=signals,
                 inputs_length=signals_length,
@@ -131,6 +131,10 @@ class BaseModel(tf.keras.Model):
             ),
             training=False,
         )
+        return tf.nest.map_structure(
+            lambda x: shape_util.shape_list_per_replica(x, num_replicas=self.distribute_strategy.num_replicas_in_sync),
+            outputs,
+        )  # compute output shape
 
     def compile(
         self,

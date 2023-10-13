@@ -355,8 +355,8 @@ class Transducer(BaseModel):
         )
         self.time_reduction_factor = 1
 
-    def compile(self, optimizer, **kwargs):
-        loss = RnntLoss(blank=self.blank, name="rnnt_loss")
+    def compile(self, optimizer, output_shapes=None, **kwargs):
+        loss = RnntLoss(blank=self.blank, output_shapes=output_shapes, name="rnnt_loss")
         return super().compile(loss, optimizer, **kwargs)
 
     def apply_gwn(self):

@@ -22,6 +22,12 @@ def shape_list(x, out_type=tf.int32):
     return [dynamic[i] if s is None else s for i, s in enumerate(static)]
 
 
+def shape_list_per_replica(x, num_replicas):
+    shapes = x.shape.as_list()
+    shapes[0] = shapes[0] // num_replicas
+    return shapes
+
+
 def get_shape_invariants(tensor):
     shapes = shape_list(tensor)
     return tf.TensorShape([i if isinstance(i, int) else None for i in shapes])

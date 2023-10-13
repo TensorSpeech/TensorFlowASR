@@ -66,7 +66,7 @@ def main(
 
     with strategy.scope():
         model = tf.keras.models.model_from_config(config.model_config)
-        model.make(**shapes)
+        output_shapes = model.make(**shapes)
         if config.learning_config.pretrained:
             model.load_weights(
                 config.learning_config.pretrained,
@@ -75,6 +75,7 @@ def main(
             )
         model.compile(
             optimizer=tf.keras.optimizers.get(config.learning_config.optimizer_config),
+            output_shapes=output_shapes,
             steps_per_execution=spx,
             jit_compile=jit_compile,
             mxp=mxp,
