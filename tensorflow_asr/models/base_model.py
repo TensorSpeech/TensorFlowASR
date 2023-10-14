@@ -215,20 +215,22 @@ class BaseModel(tf.keras.Model):
 
         return gradients, caching
 
-    def _split_train_inputs(self, data):
-        for i in range(self.ga.total_steps):
-            yield tf.nest.map_structure(lambda x: math_util.slice_batch_tensor(x, index=i, batch_size=self._per_replica_batch_size), data)
-
     def train_step(self, data, caching=None):
         if not self.use_ga:
             gradients, caching = self._train_step(data, caching=caching)
         else:
             if caching is None:
-                for per_ga_step_data in self._split_train_inputs(data):
+                for i in range(self.ga.total_steps):
+                    per_ga_step_data = tf.nest.map_structure(
+                        lambda x: math_util.slice_batch_tensor(x, index=i, batch_size=self._per_replica_batch_size), data
+                    )
                     per_ga_gradients, _ = self._train_step(per_ga_step_data)
                     self.ga.accumulate(per_ga_gradients)
             else:
-                for per_ga_step_data in self._split_train_inputs(data):
+                for i in range(self.ga.total_steps):
+                    per_ga_step_data = tf.nest.map_structure(
+                        lambda x: math_util.slice_batch_tensor(x, index=i, batch_size=self._per_replica_batch_size), data
+                    )
                     per_ga_gradients, caching = self._train_step(per_ga_step_data, caching=caching)
                     self.ga.accumulate(per_ga_gradients)
             gradients = self.ga.gradients
