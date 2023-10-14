@@ -167,8 +167,6 @@ class BaseDataset:
             raise ValueError("data_paths must be a list of string paths")
         self.cache = cache  # whether to cache transformed dataset to memory
         self.shuffle = shuffle  # whether to shuffle tf.data.Dataset
-        if buffer_size <= 0 and shuffle:
-            raise ValueError("buffer_size must be positive when shuffle is on")
         self.buffer_size = buffer_size  # shuffle buffer size
         self.stage = stage  # for defining tfrecords files
         self.enabled = enabled
@@ -276,6 +274,7 @@ class ASRDataset(BaseDataset):
         self.max_input_length = content.get("max_input_length")
         self.max_label_length = content.get("max_label_length")
         self.total_steps = int(content.get("num_entries", 0))
+        self.num_entries = self.total_steps
 
     def update_metadata(self):
         self.load_metadata()
@@ -297,6 +296,7 @@ class ASRDataset(BaseDataset):
         if self.shuffle:
             np.random.shuffle(self.entries)  # Mix transcripts.tsv
         self.total_steps = len(self.entries)
+        self.num_entries = self.total_steps
 
     # -------------------------------- LOAD AND PREPROCESS -------------------------------------
 
@@ -343,10 +343,10 @@ class ASRDataset(BaseDataset):
             dataset = dataset.cache()  # cache original (unchanged data)
 
         dataset = dataset.map(self.parse, num_parallel_calls=AUTOTUNE, deterministic=False)
-        self.total_steps = math_util.get_num_batches(self.total_steps, batch_size, drop_remainders=self.drop_remainder)
+        self.total_steps = math_util.get_num_batches(self.num_entries, batch_size, drop_remainders=self.drop_remainder)
 
         if self.shuffle:
-            dataset = dataset.shuffle(self.buffer_size, reshuffle_each_iteration=True)
+            dataset = dataset.shuffle(self.buffer_size or self.num_entries, reshuffle_each_iteration=True)
 
         if self.indefinite and self.total_steps:
             dataset = dataset.repeat()
