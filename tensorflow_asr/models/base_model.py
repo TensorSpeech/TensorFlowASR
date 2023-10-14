@@ -220,14 +220,14 @@ class BaseModel(tf.keras.Model):
             gradients, caching = self._train_step(data, caching=caching)
         else:
             if caching is None:
-                for i in range(self.ga.total_steps):
+                for i in tf.range(self.ga.total_steps):
                     per_ga_step_data = tf.nest.map_structure(
                         lambda x: math_util.slice_batch_tensor(x, index=i, batch_size=self._per_replica_batch_size), data
                     )
                     per_ga_gradients, _ = self._train_step(per_ga_step_data)
                     self.ga.accumulate(per_ga_gradients)
             else:
-                for i in range(self.ga.total_steps):
+                for i in tf.range(self.ga.total_steps):
                     per_ga_step_data = tf.nest.map_structure(
                         lambda x: math_util.slice_batch_tensor(x, index=i, batch_size=self._per_replica_batch_size), data
                     )
@@ -262,7 +262,9 @@ class BaseModel(tf.keras.Model):
             self._test_step(data)
         else:
             for i in tf.range(self.ga.total_steps):
-                per_ga_step_data = tf.nest.map_structure(lambda x: x[i * self._per_replica_batch_size : (i + 1) * self._per_replica_batch_size], data)
+                per_ga_step_data = tf.nest.map_structure(
+                    lambda x: math_util.slice_batch_tensor(x, index=i, batch_size=self._per_replica_batch_size), data
+                )
                 self._test_step(per_ga_step_data)
         metrics = self.get_metrics_result()
         metrics = tf.nest.map_structure(lambda x: x / self.distribute_strategy.num_replicas_in_sync, metrics)
