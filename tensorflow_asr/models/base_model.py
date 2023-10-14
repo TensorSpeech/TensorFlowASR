@@ -216,19 +216,8 @@ class BaseModel(tf.keras.Model):
         return gradients, caching
 
     def _split_train_inputs(self, data):
-        splitted_x, splited_y = tf.nest.map_structure(lambda x: tf.split(x, self.ga.total_steps, axis=0), data)
-        for i, il, p, pl, l, ll in zip(
-            splitted_x["inputs"],
-            splitted_x["inputs_length"],
-            splitted_x["predictions"],
-            splitted_x["predictions_length"],
-            splited_y["labels"],
-            splited_y["labels_length"],
-        ):
-            yield (
-                schemas.TrainInput(inputs=i, inputs_length=il, predictions=p, predictions_length=pl),
-                schemas.TrainLabel(labels=l, labels_length=ll),
-            )
+        for i in range(self.ga.total_steps):
+            yield tf.nest.map_structure(lambda x: math_util.slice_batch_tensor(x, index=i, batch_size=self._per_replica_batch_size), data)
 
     def train_step(self, data, caching=None):
         if not self.use_ga:
