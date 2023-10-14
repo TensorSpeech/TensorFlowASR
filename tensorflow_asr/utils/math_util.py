@@ -264,5 +264,8 @@ def slice_batch_tensor(
     index: int,
     batch_size: int,
 ):
-    sliced_tensor = tensor[index * batch_size : (index + 1) * batch_size]
-    return tf.ensure_shape(sliced_tensor, [batch_size] + tensor.shape.as_list()[1:])
+    with tf.name_scope("slice_batch_tensor"):
+        begin = [index * batch_size] + [0] * (tensor.shape.rank - 1)
+        size = [batch_size] + [-1] * (tensor.shape.rank - 1)
+        sliced_tensor = tf.slice(tensor, begin, size)
+        return sliced_tensor
