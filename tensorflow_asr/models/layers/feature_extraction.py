@@ -44,10 +44,11 @@ class FeatureExtraction(Layer):
         output_floor=1e-10,
         lower_edge_hertz=0.0,
         upper_edge_hertz=8000.0,
+        log_base="e",  # "10", "e"
         nfft=None,
         normalize_signal=False,
-        normalize_feature=False,
-        normalize_per_frame=False,
+        normalize_zscore=False,
+        normalize_min_max=True,
         padding=0,
         augmentation_config=None,
         **kwargs,
@@ -79,14 +80,16 @@ class FeatureExtraction(Layer):
             The lowest frequency of the feature analysis, by default 125.0
         upper_edge_hertz : float, optional
             The highest frequency of the feature analysis, by default 8000.0
+        log_base : str, optional
+            The base of logarithm, by default 'e'
         nfft : int, optional
             NFFT, if None, equals frame_length derived from frame_ms, by default None
         normalize_signal : bool, optional
             Normalize signals to [-1,1] range, by default False
-        normalize_feature : bool, optional
+        normalize_zscore : bool, optional
             Normalize features using z-score, by default False
-        normalize_per_frame : bool, optional
-            Normalize features in feature dim instead of n_frames dim, by default False
+        normalize_min_max : bool, optional
+            Normalize features as (value - min) / (max - min), by default True
         padding : int, optional
             Number of samples to pad with 0 before feature extraction, by default 0
         augmentation_config : dict, optional
@@ -118,9 +121,12 @@ class FeatureExtraction(Layer):
         self.lower_edge_hertz = lower_edge_hertz
         self.upper_edge_hertz = upper_edge_hertz
 
+        self.log_base = log_base
+        assert self.log_base in ("10", "e"), "log_base must be '10' or 'e'"
+
         self._normalize_signal = normalize_signal
-        self._normalize_feature = normalize_feature
-        self._normalize_per_frame = normalize_per_frame
+        self._normalize_zscore = normalize_zscore
+        self._normalize_min_max = normalize_min_max
 
         self.padding = padding
         self.nfft = self.frame_length if nfft is None else nfft
@@ -145,12 +151,17 @@ class FeatureExtraction(Layer):
     # --------------------------------- features --------------------------------- #
 
     def normalize_audio_features(self, audio_feature):
-        if not self._normalize_feature:
-            return audio_feature
-        axis = -1 if self._normalize_per_frame else 1
-        mean = tf.reduce_mean(audio_feature, axis=axis, keepdims=True)
-        stddev = tf.sqrt(tf.math.reduce_variance(audio_feature, axis=axis, keepdims=True) + 1e-9)
-        return tf.divide(tf.subtract(audio_feature, mean), stddev)
+        if self._normalize_zscore:
+            mean = tf.reduce_mean(audio_feature, axis=1, keepdims=True)
+            stddev = tf.sqrt(tf.math.reduce_variance(audio_feature, axis=1, keepdims=True) + 1e-9)
+            return tf.divide(tf.subtract(audio_feature, mean), stddev)
+        if self._normalize_min_max:
+            if self.feature_type.startswith("log_") or self.feature_type == FEATURE_TYPES.SPECTROGRAM:
+                min_value = self.logarithm(self.output_floor)
+            else:
+                min_value = tf.reduce_min(audio_feature, axis=1, keepdims=True)
+            return (audio_feature - min_value) / (tf.reduce_max(audio_feature, axis=1, keepdims=True) - min_value)
+        return audio_feature
 
     def stft(self, signal):
         signal = tf.cast(signal, tf.float32)
@@ -172,7 +183,9 @@ class FeatureExtraction(Layer):
         return fft_features
 
     def logarithm(self, S):
-        return math_util.log10(tf.maximum(S, self.output_floor))
+        if self.log_base == "10":
+            return math_util.log10(tf.maximum(S, self.output_floor))
+        return tf.math.log(tf.maximum(S, self.output_floor))
 
     def log_mel_spectrogram(self, signal):
         S = self.stft(signal)
@@ -228,7 +241,7 @@ class FeatureExtraction(Layer):
         signals, signals_length = inputs
 
         if training:
-            signals = self.augmentations.signal_augment(signals)
+            signals, signals_length = self.augmentations.signal_augment(signals, signals_length)
 
         if self.padding > 0:
             signals = tf.pad(signals, [[0, 0], [0, self.padding]], mode="CONSTANT", constant_values=0)
@@ -247,11 +260,10 @@ class FeatureExtraction(Layer):
 
         features = self.normalize_audio_features(features)
         features = tf.expand_dims(features, axis=-1)
+        features_length = tf.vectorized_map(self.get_nframes, signals_length, warn=False)
 
         if training:
-            features = self.augmentations.feature_augment(features)
-
-        features_length = tf.vectorized_map(self.get_nframes, signals_length, warn=False)
+            features, features_length = self.augmentations.feature_augment(features, features_length)
 
         return features, features_length
 

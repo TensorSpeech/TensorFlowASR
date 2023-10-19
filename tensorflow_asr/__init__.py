@@ -51,5 +51,6 @@ tf.keras.layers.Layer.build = build
 tf.keras.layers.Layer.compute_output_shape = compute_output_shape
 compile_utils.match_dtype_and_rank = match_dtype_and_rank
 
+import tensorflow_asr.callbacks
 from tensorflow_asr.models import *
 from tensorflow_asr.optimizers import *

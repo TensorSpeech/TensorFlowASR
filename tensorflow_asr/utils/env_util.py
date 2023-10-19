@@ -13,6 +13,7 @@
 # limitations under the License.
 
 
+import json
 import random
 from typing import List, Union
 
@@ -62,7 +63,6 @@ def setup_tpu(
         resolver = tf.distribute.cluster_resolver.TPUClusterResolver(tpu="grpc://" + tpu_address)
     tf.config.experimental_connect_to_cluster(resolver)
     tf.tpu.experimental.initialize_tpu_system(resolver)
-    logger.info(f"All TPUs: {tf.config.list_logical_devices('TPU')}")
     return tf.distribute.TPUStrategy(resolver)
 
 

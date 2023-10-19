@@ -28,6 +28,11 @@ class GaussNoise(AugmentationMethod):
         self.mean = mean
         self.stddev = stddev
 
-    def augment(self, inputs: tf.Tensor):
+    def augment(self, args):
+        inputs, inputs_length = args
+        prob = tf.random.uniform(shape=[], minval=0, maxval=1, dtype=tf.float32)
+        do_apply = tf.where(tf.less_equal(prob, self.prob), tf.constant(1, inputs.dtype), tf.constant(0, inputs.dtype))
         noise = tf.random.normal(shape=tf.shape(inputs), mean=self.mean, stddev=self.stddev, dtype=inputs.dtype)
-        return tf.add(inputs, noise)
+        noise *= tf.sequence_mask(inputs_length, inputs.shape[1], dtype=inputs.dtype)
+        noise *= do_apply
+        return tf.add(inputs, noise), inputs_length

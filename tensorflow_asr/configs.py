@@ -12,11 +12,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import json
 from typing import Union
 
 import tensorflow as tf
 
 from tensorflow_asr.utils import file_util
+
+logger = tf.get_logger()
 
 
 class DecoderConfig:
@@ -77,32 +80,6 @@ class DatasetConfig:
             setattr(self, k, v)
 
 
-class RunningConfig:
-    def __init__(self, config: dict = None):
-        if not config:
-            config = {}
-        self.batch_size: int = config.pop("batch_size", 2)
-        self.ga_steps: int = config.pop("ga_steps", None)
-        self.num_epochs: int = config.pop("num_epochs", 100)
-        self.checkpoint: dict = {}
-        self.backup_and_restore: dict = {}
-        self.tensorboard: dict = {}
-        self.early_stopping: dict = {}
-        for k, v in config.items():
-            setattr(self, k, v)
-            if k == "checkpoint":
-                if v and v.get("filepath"):
-                    file_util.preprocess_paths(v.get("filepath"))
-                if v and v.get("options"):
-                    self.checkpoint["options"] = tf.train.CheckpointOptions(**v.get("options"))
-            elif k == "backup_and_restore" and v:
-                if v and v.get("backup_dir"):
-                    file_util.preprocess_paths(v.get("backup_dir"), isdir=True)
-            elif k == "tensorboard":
-                if v and v.get("log_dir"):
-                    file_util.preprocess_paths(v.get("log_dir"), isdir=True)
-
-
 class DataConfig:
     def __init__(self, config: dict = None):
         if not config:
@@ -118,9 +95,12 @@ class LearningConfig:
             config = {}
         self.pretrained = file_util.preprocess_paths(config.pop("pretrained", None))
         self.optimizer_config: dict = config.pop("optimizer_config", {})
-        self.running_config = RunningConfig(config.pop("running_config", {}))
         self.gwn_config = config.pop("gwn_config", None)
         self.gradn_config = config.pop("gradn_config", None)
+        self.batch_size: int = config.pop("batch_size", 2)
+        self.ga_steps: int = config.pop("ga_steps", None)
+        self.num_epochs: int = config.pop("num_epochs", 300)
+        self.callbacks: list = config.pop("callbacks", [])
         for k, v in config.items():
             setattr(self, k, v)
 
@@ -137,3 +117,13 @@ class Config:
         self.learning_config = LearningConfig(_learning_config_dict) if training else None
         for k, v in config.items():
             setattr(self, k, v)
+        logger.info(str(self))
+
+    def __str__(self) -> str:
+        def default(x):
+            try:
+                return {k: v for k, v in vars(x).items() if not str(k).startswith("_")}
+            except:  # pylint: disable=bare-except
+                return str(x)
+
+        return json.dumps(vars(self), indent=2, default=default)

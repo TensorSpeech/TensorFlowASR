@@ -36,11 +36,12 @@ class Augmentation:
     def _augment(self, inputs, augmentations: List[AugmentationMethod]):
         outputs = inputs
         for au in augmentations:
-            p = tf.random.uniform([])
-            outputs = tf.where(tf.less(p, au.prob), au.augment(outputs), outputs)
+            outputs = au.augment(outputs)
+            # p = tf.random.uniform(shape=[], dtype=tf.float32)
+            # outputs = tf.cond(tf.less(p, au.prob), lambda: au.augment(outputs), lambda: outputs)
         return outputs
 
-    def signal_augment(self, inputs):
+    def signal_augment(self, inputs, inputs_length):
         """
         Augment audio signals
 
@@ -48,34 +49,38 @@ class Augmentation:
         ----------
         inputs : tf.Tensor, shape [B, None]
             Original audio signals
+        inputs_length : tf.Tensor, shape [B]
+            Original audio signals length
 
         Returns
         -------
         tf.Tensor, shape [B, None]
             Augmented audio signals
         """
-        return tf.vectorized_map(lambda x: self._augment(x, self.signal_augmentations), inputs, warn=False)
+        return tf.vectorized_map(lambda x: self._augment(x, self.signal_augmentations), (inputs, inputs_length), warn=False)
 
-    def feature_augment(self, inputs):
+    def feature_augment(self, inputs, inputs_length):
         """
         Augment audio features
 
         Parameters
         ----------
         inputs : tf.Tensor, shape [B, T, F]
-            _description_
+            Original audio features
+        inputs_length : tf.Tensor, shape [B]
+            Original audio features length
 
         Returns
         -------
-        _type_
-            _description_
+        tf.Tensor, shape [B, T, F]
+            Augmented audio features
         """
-        return tf.vectorized_map(lambda x: self._augment(x, self.feature_augmentations), inputs, warn=False)
+        return tf.vectorized_map(lambda x: self._augment(x, self.feature_augmentations), (inputs, inputs_length), warn=False)
 
     @staticmethod
     def parse(config: dict) -> list:
         augmentations = []
-        for key, value in config.items():
+        for key, value in sorted(config.items(), key=lambda x: x[0]):
             au = AUGMENTATIONS.get(key, None)
             if au is None:
                 raise KeyError(f"No tf augmentation named: {key}\n" f"Available tf augmentations: {AUGMENTATIONS.keys()}")

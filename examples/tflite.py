@@ -17,6 +17,7 @@ import os
 from tensorflow_asr import tf  # import to aid logging messages
 from tensorflow_asr import tokenizers
 from tensorflow_asr.configs import Config
+from tensorflow_asr.models.base_model import BaseModel
 from tensorflow_asr.utils import app_util, cli_util, env_util, file_util
 
 
@@ -35,12 +36,13 @@ def main(
     config = Config(config_path, training=False, repodir=repodir)
     tokenizer = tokenizers.get(config)
 
-    model = tf.keras.models.model_from_config(config.model_config)
+    model: BaseModel = tf.keras.models.model_from_config(config.model_config)
+    model.tokenizer = tokenizer
     model.make()
     model.load_weights(h5, by_name=file_util.is_hdf5_filepath(h5))
     model.summary()
 
-    app_util.convert_tflite(model=model, tokenizer=tokenizer, output=output, batch_size=bs)
+    app_util.convert_tflite(model=model, output=output, batch_size=bs)
 
 
 if __name__ == "__main__":

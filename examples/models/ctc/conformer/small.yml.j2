@@ -1,8 +1,8 @@
-{% import "examples/configs/librispeech/sentencepiece/sp.yml.j2" as decoder_config with context %}
+{% import "examples/configs/librispeech/sentencepiece/sp.256.yml.j2" as decoder_config with context %}
 {{decoder_config}}
 
 model_config:
-  class_name: tensorflow_asr.models.transducer>Conformer
+  class_name: tensorflow_asr.models.ctc>Conformer
   config:
     name: conformer
     speech_config:
@@ -15,8 +15,8 @@ model_config:
         feature_augment:
           time_masking:
             prob: 1.0
-            num_masks: 10
-            mask_factor: -1
+            num_masks: 5
+            mask_factor: -1 # whole utterance
             p_upperbound: 0.05
             mask_value: 0
           freq_masking:
@@ -26,7 +26,7 @@ model_config:
             mask_value: 0
     encoder_subsampling:
       type: conv2d
-      filters: [144, 144]
+      filters: [176, 176]
       kernels: [3, 3]
       strides: [2, 2]
       paddings: ["causal", "causal"]
@@ -35,9 +35,9 @@ model_config:
     encoder_ffm_residual_factor: 0.5
     encoder_mhsam_residual_factor: 1.0
     encoder_convm_residual_factor: 1.0
-    encoder_dmodel: 144
+    encoder_dmodel: 176
     encoder_num_blocks: 16
-    encoder_head_size: 36 # == dmodel // num_heads
+    encoder_head_size: 44 # == dmodel // num_heads
     encoder_num_heads: 4
     encoder_mha_type: relmha
     encoder_interleave_relpe: True
@@ -47,21 +47,6 @@ model_config:
     encoder_dropout: 0.1
     encoder_padding: causal
     encoder_memory_length: null
-    prediction_label_encode_mode: embedding
-    prediction_embed_dim: 320
-    prediction_num_rnns: 1
-    prediction_rnn_units: 320
-    prediction_rnn_type: lstm
-    prediction_rnn_implementation: 2
-    prediction_rnn_unroll: False
-    prediction_layer_norm: False
-    prediction_projection_units: 0
-    joint_dim: 320
-    prejoint_encoder_linear: True
-    prejoint_prediction_linear: True
-    postjoint_linear: False
-    joint_activation: tanh
-    joint_mode: add
     blank: 0
     vocab_size: {{decoder_config.vocabsize}}
     kernel_regularizer:
@@ -80,25 +65,23 @@ learning_config:
       learning_rate:
         class_name: tensorflow_asr.optimizers.schedules>TransformerSchedule
         config:
-          dmodel: 144
+          dmodel: 176
           warmup_steps: 10000
-          max_lr: null
-          min_lr: null
+          max_lr: 0.00150755672
+          min_lr: 1e-6
           scale: 2.0
       beta_1: 0.9
       beta_2: 0.98
       epsilon: 1e-9
       weight_decay: 1e-6
 
-  gwn_config:
-    predict_net_step: 20000
-    predict_net_stddev: 0.075
+  gwn_config: null
 
   gradn_config: null
 
-  batch_size: 2
-  ga_steps: 16
-  num_epochs: 300
+  batch_size: 8
+  ga_steps: 4
+  num_epochs: 450
 
   callbacks:
     - class_name: tensorflow_asr.callbacks>TerminateOnNaN

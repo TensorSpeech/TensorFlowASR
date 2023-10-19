@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import codecs
+import multiprocessing
 import os
 import unicodedata
 from dataclasses import asdict, dataclass
@@ -299,7 +300,7 @@ class SentencePieceTokenizer(Tokenizer):
             max_sentencepiece_length=decoder_config.max_sentencepiece_length,
             max_sentence_length=decoder_config.max_sentence_length,  # bytes
             remove_extra_whitespaces=True,
-            random_seed=42,
+            num_threads=multiprocessing.cpu_count(),
         )
 
         return cls(decoder_config)

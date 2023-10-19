@@ -81,11 +81,10 @@ def evaluate_hypotheses(filepath: str):
 
 def convert_tflite(
     model: BaseModel,
-    tokenizer: Tokenizer,
     output: str,
     batch_size: int = 1,
 ):
-    concrete_func = model.make_tflite_function(tokenizer=tokenizer, batch_size=batch_size).get_concrete_function()
+    concrete_func = model.make_tflite_function(batch_size=batch_size).get_concrete_function()
     converter = tf.lite.TFLiteConverter.from_concrete_functions([concrete_func])
     converter.target_spec.supported_ops = [
         tf.lite.OpsSet.TFLITE_BUILTINS,  # enable TensorFlow Lite ops.

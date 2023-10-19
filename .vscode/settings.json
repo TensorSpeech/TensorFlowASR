@@ -1,9 +1,5 @@
 {
-    "python.linting.pylintEnabled": true,
-    "python.linting.flake8Enabled": false,
-    "python.linting.enabled": true,
     "editor.formatOnSave": true,
-    "python.linting.lintOnSave": true,
     "python.analysis.fixAll": [
         "source.unusedImports",
     ],
@@ -16,6 +12,8 @@
         "--line-length",
         "130"
     ],
-    "python.formatting.provider": "black",
-    "autoDocstring.docstringFormat": "numpy"
+    "autoDocstring.docstringFormat": "numpy",
+    "[python]": {
+        "editor.defaultFormatter": "ms-python.black-formatter",
+    }
 }

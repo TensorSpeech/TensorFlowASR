@@ -29,10 +29,8 @@ class ConformerDecoder(Layer):
     ):
         super().__init__(**kwargs)
         self._vocab_size = vocab_size
-        self.vocab = tf.keras.layers.Conv1D(
-            filters=vocab_size,
-            kernel_size=1,
-            strides=1,
+        self.vocab = tf.keras.layers.Dense(
+            units=vocab_size,
             kernel_regularizer=kernel_regularizer,
             bias_regularizer=bias_regularizer,
             name="logits",

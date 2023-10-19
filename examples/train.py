@@ -15,8 +15,9 @@
 import json
 import os
 
-from tensorflow_asr import datasets, tf, tokenizers  # import to aid logging messages
+from tensorflow_asr import callbacks, datasets, tf, tokenizers  # import to aid logging messages
 from tensorflow_asr.configs import Config
+from tensorflow_asr.models.base_model import BaseModel
 from tensorflow_asr.utils import cli_util, env_util, file_util
 
 logger = tf.get_logger()
@@ -65,7 +66,8 @@ def main(
         logger.info(f"eval_data_loader.element_spec = {json.dumps(eval_data_loader.element_spec, indent=2, default=str)}")
 
     with strategy.scope():
-        model = tf.keras.models.model_from_config(config.model_config)
+        model: BaseModel = tf.keras.models.model_from_config(config.model_config)
+        model.tokenizer = tokenizer
         output_shapes = model.make(**shapes)
         if config.learning_config.pretrained:
             model.load_weights(
@@ -79,27 +81,17 @@ def main(
             steps_per_execution=spx,
             jit_compile=jit_compile,
             mxp=mxp,
-            ga_steps=ga_steps or config.learning_config.running_config.ga_steps,
+            ga_steps=ga_steps or config.learning_config.ga_steps,
             gwn_config=config.learning_config.gwn_config,
             gradn_config=config.learning_config.gradn_config,
         )
         model.summary()
 
-    callbacks = [
-        tf.keras.callbacks.TerminateOnNaN(),
-        tf.keras.callbacks.ModelCheckpoint(**config.learning_config.running_config.checkpoint),
-        tf.keras.callbacks.BackupAndRestore(**config.learning_config.running_config.backup_and_restore),
-        tf.keras.callbacks.TensorBoard(**config.learning_config.running_config.tensorboard),
-    ]
-    if config.learning_config.running_config.early_stopping:
-        callbacks.append(tf.keras.callbacks.EarlyStopping(**config.learning_config.running_config.early_stopping))
-    # You can add more callbacks here, and init from the `config.learning_config.running_config.your_custom_callback_options`
-
     model.fit(
         train_data_loader,
-        epochs=config.learning_config.running_config.num_epochs,
+        epochs=config.learning_config.num_epochs,
         validation_data=eval_data_loader,
-        callbacks=callbacks,
+        callbacks=callbacks.deserialize(config.learning_config.callbacks),
         steps_per_epoch=train_dataset.total_steps,
         validation_steps=eval_dataset.total_steps if eval_data_loader else None,
     )

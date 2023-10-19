@@ -47,6 +47,14 @@ class BaseModel(tf.keras.Model):
         super().__init__(*args, **kwargs)
         self.feature_extraction = FeatureExtraction(**speech_config)
 
+    @property
+    def tokenizer(self):
+        return self._tokenizer
+
+    @tokenizer.setter
+    def tokenizer(self, tokenizer: Tokenizer):
+        self._tokenizer = tokenizer
+
     def summary(
         self,
         line_length=127,
@@ -196,6 +204,7 @@ class BaseModel(tf.keras.Model):
         sample_weight = None
 
         with tf.GradientTape() as tape:
+            tape.watch(self.trainable_variables)
             original_weights = self.apply_gwn()
 
             outputs = self(x, training=True)
@@ -206,9 +215,11 @@ class BaseModel(tf.keras.Model):
             self.remove_gwn(original_weights)
             loss = self.compute_loss(x, y, y_pred, sample_weight)
 
+            if self.use_loss_scale:
+                loss = self.optimizer.get_scaled_loss(loss)
+
         if self.use_loss_scale:
-            scaled_loss = self.optimizer.get_scaled_loss(loss)
-            gradients = tape.gradient(scaled_loss, self.trainable_variables)
+            gradients = tape.gradient(loss, self.trainable_variables)
             gradients = self.optimizer.get_unscaled_gradients(gradients)
         else:
             gradients = tape.gradient(loss, self.trainable_variables)
@@ -556,7 +567,7 @@ class BaseModel(tf.keras.Model):
 
     # ---------------------------------- TFLITE ---------------------------------- #
 
-    def make_tflite_function(self, tokenizer: Tokenizer, batch_size=1):
+    def make_tflite_function(self, batch_size=1):
         @tf.function(
             input_signature=[
                 tf.TensorSpec([batch_size, None], dtype=tf.float32),
@@ -577,7 +588,7 @@ class BaseModel(tf.keras.Model):
                 )
             )
             return schemas.PredictOutput(
-                tokens=tokenizer.detokenize_unicode_points(outputs.tokens),
+                tokens=self.tokenizer.detokenize_unicode_points(outputs.tokens),
                 scores=outputs.scores,
                 encoder_states=outputs.encoder_states,
                 decoder_states=outputs.decoder_states,

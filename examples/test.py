@@ -19,6 +19,7 @@ import os
 from tensorflow_asr import datasets, tf, tokenizers  # import to aid logging messages
 from tensorflow_asr.callbacks import PredictLogger
 from tensorflow_asr.configs import Config
+from tensorflow_asr.models.base_model import BaseModel
 from tensorflow_asr.utils import app_util, cli_util, env_util, file_util
 
 logger = tf.get_logger()
@@ -52,7 +53,8 @@ def main(
     test_dataset = datasets.get(tokenizer=tokenizer, dataset_config=config.data_config.test_dataset_config, dataset_type=dataset_type)
     test_data_loader = test_dataset.create(batch_size)
 
-    model: tf.keras.Model = tf.keras.models.model_from_config(config.model_config)
+    model: BaseModel = tf.keras.models.model_from_config(config.model_config)
+    model.tokenizer = tokenizer
     model.make(batch_size=batch_size)
     model.load_weights(h5, by_name=file_util.is_hdf5_filepath(h5), skip_mismatch=False)
     model.jit_compile = jit_compile
@@ -70,7 +72,7 @@ def main(
                 test_data_loader,
                 verbose=1,
                 callbacks=[
-                    PredictLogger(tokenizer=tokenizer, test_dataset=test_dataset, output_file_path=output_file_path),
+                    PredictLogger(test_dataset=test_dataset, output_file_path=output_file_path),
                 ],
             )
 
