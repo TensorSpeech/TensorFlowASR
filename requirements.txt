@@ -43,6 +43,10 @@ tensorflow-text @ https://github.com/sun1638650145/Libraries-and-Extensions-for-
 tensorflow>=2.14.0,<2.15.0
 tensorflow-text>=2.14.0,<2.15.0
 
+# extra=tf2.14-gpu
+tensorflow[and-cuda]>=2.14.0,<2.15.0
+tensorflow-text>=2.14.0,<2.15.0
+
 # extra=tf2.14-apple
 tensorflow>=2.14.0,<2.15.0 # https://blog.tensorflow.org/2023/07/whats-new-in-tensorflow-213-and-keras-213.html
 tensorflow-text @ https://github.com/sun1638650145/Libraries-and-Extensions-for-TensorFlow-for-Apple-Silicon/releases/download/v2.14/tensorflow_text-2.14.0-cp310-cp310-macosx_11_0_arm64.whl
