@@ -252,7 +252,7 @@ class BaseModel(tf.keras.Model):
             self.ga.reset()
         metrics = self.get_metrics_result()
         metrics = tf.nest.map_structure(lambda x: x / self.distribute_strategy.num_replicas_in_sync, metrics)
-        return metrics, caching
+        return metrics
 
     def _test_step(self, data):
         x = data[0]
