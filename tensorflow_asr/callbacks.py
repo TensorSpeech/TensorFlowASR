@@ -12,11 +12,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import importlib
+
 import numpy as np
 import tensorflow as tf
 
 from tensorflow_asr.datasets import ASRDataset
 from tensorflow_asr.utils import file_util
+from tensorflow_asr.utils.env_util import KERAS_SRC
+
+serialization_lib = importlib.import_module(f"{KERAS_SRC}.saving.serialization_lib")
 
 
 @tf.keras.utils.register_keras_serializable("tensorflow_asr.callbacks")
@@ -131,7 +136,7 @@ class TensorBoard(tf.keras.callbacks.TensorBoard):
         profile_batch=0,
         embeddings_freq=0,
         embeddings_metadata=None,
-        **kwargs
+        **kwargs,
     ):
         log_dir = file_util.preprocess_paths(log_dir, isdir=True)
         super().__init__(
@@ -144,7 +149,7 @@ class TensorBoard(tf.keras.callbacks.TensorBoard):
             profile_batch,
             embeddings_freq,
             embeddings_metadata,
-            **kwargs
+            **kwargs,
         )
 
     def on_train_batch_end(self, batch, logs=None):
@@ -183,7 +188,7 @@ class ModelCheckpoint(tf.keras.callbacks.ModelCheckpoint):
         save_freq="epoch",
         options=None,
         initial_value_threshold=None,
-        **kwargs
+        **kwargs,
     ):
         filepath = file_util.preprocess_paths(filepath)
         if options is not None:
@@ -230,5 +235,5 @@ class EarlyStopping(tf.keras.callbacks.EarlyStopping):
 
 def deserialize(callback_config):
     if isinstance(callback_config, list):
-        return [tf.keras.saving.deserialize_keras_object(c) for c in callback_config]
-    return tf.keras.saving.deserialize_keras_object(callback_config)
+        return [serialization_lib.deserialize_keras_object(c) for c in callback_config]
+    return serialization_lib.deserialize_keras_object(callback_config)
