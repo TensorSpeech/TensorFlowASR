@@ -102,7 +102,7 @@ learning_config:
 
   callbacks:
     - class_name: tensorflow_asr.callbacks>TerminateOnNaN
-      config: null
+      config: {}
     - class_name: tensorflow_asr.callbacks>ModelCheckpoint
       config:
         filepath: {{modeldir}}/checkpoints/{epoch:02d}.h5
