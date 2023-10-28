@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 PROJECT_DIR=$(realpath "$(dirname $0)/..")
 
