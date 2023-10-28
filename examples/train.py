@@ -56,7 +56,14 @@ def main(
         dataset_type=dataset_type,
     )
 
-    shapes = datasets.get_global_shape(config, strategy, train_dataset, eval_dataset, batch_size=bs, ga_steps=ga_steps)
+    shapes = datasets.get_global_shape(
+        config,
+        strategy,
+        train_dataset,
+        eval_dataset,
+        batch_size=bs or config.learning_config.batch_size,
+        ga_steps=ga_steps or config.learning_config.ga_steps,
+    )
 
     train_data_loader = train_dataset.create(shapes["ds_batch_size"], padded_shapes=shapes["padded_shapes"])
     logger.info(f"train_data_loader.element_spec = {json.dumps(train_data_loader.element_spec, indent=2, default=str)}")

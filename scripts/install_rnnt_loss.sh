@@ -1,16 +1,26 @@
-#!/usr/bin/env sh
+#!/bin/bash
 
-mkdir -p externals
-cd ./externals || exit
+PROJECT_DIR=$(realpath "$(dirname $0)/..")
+cd "$PROJECT_DIR" || exit
+
+mkdir -p $PROJECT_DIR/externals
+cd $PROJECT_DIR/externals || exit
+
+TF_VERSION=$(python3 -c "import tensorflow as tf; print(tf.__version__)")
 
 # Install rnnt_loss
 if [ ! -d warp-transducer ]; then
-    git clone https://github.com/nglehuy/warp-transducer.git
+    git clone --depth 1 https://github.com/nglehuy/warp-transducer.git
+    cd $PROJECT_DIR/externals/warp-transducer/tensorflow_binding
+    git clone --depth 1 --branch v$TF_VERSION https://github.com/tensorflow/tensorflow.git
+    cd ../../
 fi
 
-cd ./warp-transducer || exit
-rm -rf build
-mkdir -p build && cd build || exit
+TENSORFLOW_SRC_PATH="$PROJECT_DIR/externals/warp-transducer/tensorflow_binding/tensorflow"
+
+rm -rf $PROJECT_DIR/externals/warp-transducer/build
+mkdir -p $PROJECT_DIR/externals/warp-transducer/build
+cd $PROJECT_DIR/externals/warp-transducer/build || exit
 
 if [ "$CUDA_HOME" ]; then
   cmake \
@@ -27,16 +37,14 @@ else
       -DCMAKE_CXX_COMPILER_LAUNCHER="$(which g++)" ..
 fi
 
-make
+make -j $(nproc)
 
-cd ../tensorflow_binding || exit
+cd $PROJECT_DIR/externals/warp-transducer/tensorflow_binding || exit
 
 if [ "$CUDA_HOME" ]; then
-  CUDA="$CUDA_HOME" python setup.py install
+  CUDA="$CUDA_HOME" python3 setup.py install
 else
-  python setup.py install
+  python3 setup.py install
 fi
 
-cd ../..
-
-cd ..
+cd $PROJECT_DIR || exit
