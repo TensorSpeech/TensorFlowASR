@@ -206,12 +206,11 @@ class BaseModel(tf.keras.Model):
         with tf.GradientTape() as tape:
             tape.watch(self.trainable_variables)
             original_weights = self.apply_gwn()
-
             outputs = self(x, training=True)
+            tape.watch(outputs)
             y_pred, y_pred_length, caching = outputs["logits"], outputs["logits_length"], outputs.get("caching")
             y_pred._keras_length = y_pred_length
             y_pred._keras_mask = None
-
             self.remove_gwn(original_weights)
             loss = self.compute_loss(x, y, y_pred, sample_weight)
 
