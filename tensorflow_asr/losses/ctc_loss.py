@@ -14,6 +14,8 @@
 
 import tensorflow as tf
 
+from tensorflow_asr.utils import env_util
+
 logger = tf.get_logger()
 
 
@@ -21,13 +23,14 @@ class CtcLoss(tf.keras.losses.Loss):
     def __init__(self, blank=0, reduction=tf.keras.losses.Reduction.AUTO, name=None):
         super().__init__(reduction=reduction, name=name)
         self.blank = blank
+        self.use_tpu = env_util.has_devices("TPU")
         logger.info("Use CTC loss")
 
     def call(self, y_true, y_pred):
         return tf.nn.ctc_loss(
             logits=y_pred,
             logit_length=y_pred._keras_length,
-            labels=y_true,
+            labels=y_true if self.use_tpu else tf.sparse.from_dense(y_true),
             label_length=y_true._keras_length,
             logits_time_major=False,
             unique=tf.nn.ctc_unique_labels(y_true),  # enable a faster, memory efficient implementation on TPU.
