@@ -27,7 +27,7 @@ class CtcLoss(tf.keras.losses.Loss):
         return tf.nn.ctc_loss(
             logits=y_pred,
             logit_length=y_pred._keras_length,
-            labels=tf.sparse.from_dense(y_true),
+            labels=y_true,
             label_length=y_true._keras_length,
             logits_time_major=False,
             unique=tf.nn.ctc_unique_labels(y_true),  # enable a faster, memory efficient implementation on TPU.
