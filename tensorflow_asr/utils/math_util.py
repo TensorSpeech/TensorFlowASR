@@ -269,3 +269,12 @@ def slice_batch_tensor(
         size = [batch_size] + [-1] * (tensor.shape.rank - 1)
         sliced_tensor = tf.slice(tensor, begin, size)
         return sliced_tensor
+
+
+def compute_time_length(
+    tensor: tf.Tensor,
+    dtype=tf.int32,
+):
+    with tf.name_scope("compute_time_length"):
+        batch_size, time_length, *_ = shape_util.shape_list(tensor)
+        return tf.cast(tf.repeat(time_length, batch_size, axis=0), dtype=dtype)

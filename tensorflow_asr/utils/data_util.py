@@ -31,3 +31,10 @@ def load_and_convert_to_wav(
 def read_raw_audio(audio: tf.Tensor):
     wave, _ = tf.audio.decode_wav(audio, desired_channels=1, desired_samples=-1)
     return tf.reshape(wave, shape=[-1])  # reshape for using tf.signal
+
+
+def attach_length_to_data(inputs, inputs_length):
+    setattr(inputs, "_keras_length", inputs_length)
+    if hasattr(inputs, "_keras_mask"):
+        delattr(inputs, "_keras_mask")
+    return inputs, inputs_length

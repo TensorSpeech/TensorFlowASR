@@ -12,8 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
-import json
+import os
 import random
 from typing import List, Union
 
@@ -24,6 +23,8 @@ from packaging import version
 logger = tf.get_logger()
 
 KERAS_SRC = "keras.src" if version.parse(tf.version.VERSION) >= version.parse("2.13.0") else "keras"
+
+LENGTH_AS_OUTPUT = os.environ.get("LENGTH_AS_OUTPUT", "False").lower() == "true"
 
 
 def setup_devices(

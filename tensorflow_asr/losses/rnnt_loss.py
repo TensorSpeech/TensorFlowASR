@@ -20,7 +20,7 @@ import os
 import numpy as np
 import tensorflow as tf
 
-from tensorflow_asr.utils import env_util, shape_util
+from tensorflow_asr.utils import env_util, math_util, shape_util
 
 warp_rnnt_loss = importlib.import_module("warprnnt_tensorflow").rnnt_loss if importlib.util.find_spec("warprnnt_tensorflow") is not None else None
 
@@ -55,9 +55,9 @@ class RnntLoss(tf.keras.losses.Loss):
     def call(self, y_true, y_pred):
         return rnnt_loss(
             logits=y_pred,
-            logits_length=y_pred._keras_length,
+            logits_length=math_util.compute_time_length(y_pred) if env_util.LENGTH_AS_OUTPUT else y_pred._keras_length,
             labels=y_true,
-            labels_length=y_true._keras_length,
+            labels_length=math_util.compute_time_length(y_true) if env_util.LENGTH_AS_OUTPUT else y_true._keras_length,
             blank=self.blank,
             name=self.name,
             use_cpu=self.use_cpu,

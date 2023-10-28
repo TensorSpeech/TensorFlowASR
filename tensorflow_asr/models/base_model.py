@@ -25,7 +25,7 @@ from tensorflow_asr import schemas
 from tensorflow_asr.models.layers.feature_extraction import FeatureExtraction
 from tensorflow_asr.optimizers.accumulation import GradientAccumulator
 from tensorflow_asr.tokenizers import Tokenizer
-from tensorflow_asr.utils import env_util, file_util, math_util, shape_util
+from tensorflow_asr.utils import data_util, env_util, file_util, math_util, shape_util
 
 base_layer = importlib.import_module(f"{env_util.KERAS_SRC}.engine.base_layer")
 data_adapter = importlib.import_module(f"{env_util.KERAS_SRC}.engine.data_adapter")
@@ -45,7 +45,7 @@ logger = tf.get_logger()
 class BaseModel(tf.keras.Model):
     def __init__(self, speech_config: dict, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.feature_extraction = FeatureExtraction(**speech_config)
+        self.feature_extraction = FeatureExtraction(**speech_config, dtype=self.dtype)
 
     @property
     def tokenizer(self):
@@ -198,9 +198,7 @@ class BaseModel(tf.keras.Model):
         x = data[0]
         if caching is not None:
             x["caching"] = caching
-        y, y_length = data[1]["labels"], data[1]["labels_length"]
-        y._keras_length = y_length
-        y._keras_mask = None
+        y, _ = data_util.attach_length_to_data(data[1]["labels"], data[1]["labels_length"])
         sample_weight = None
 
         with tf.GradientTape() as tape:
@@ -208,16 +206,13 @@ class BaseModel(tf.keras.Model):
             original_weights = self.apply_gwn()
             outputs = self(x, training=True)
             tape.watch(outputs["logits"])
-            y_pred, y_pred_length, caching = outputs["logits"], outputs["logits_length"], outputs.get("caching")
-            y_pred._keras_length = y_pred_length
-            y_pred._keras_mask = None
+            y_pred, caching = outputs["logits"], outputs.get("caching")
+            y_pred, _ = data_util.attach_length_to_data(y_pred, outputs["logits_length"])
             self.remove_gwn(original_weights)
             loss = self.compute_loss(x, y, y_pred, sample_weight)
 
-            if self.use_loss_scale:
-                loss = self.optimizer.get_scaled_loss(loss)
-
         if self.use_loss_scale:
+            loss = self.optimizer.get_scaled_loss(loss)
             gradients = tape.gradient(loss, self.trainable_variables)
             gradients = self.optimizer.get_unscaled_gradients(gradients)
         else:
@@ -229,7 +224,7 @@ class BaseModel(tf.keras.Model):
         if not self.use_ga:
             gradients, caching = self._train_step(data, caching=caching)
         else:
-            if caching is None:
+            if caching is None:  # separate 2 cases for tf.while_loop to avoid errors
                 for i in tf.range(self.ga.total_steps):
                     per_ga_step_data = tf.nest.map_structure(
                         lambda x: math_util.slice_batch_tensor(x, index=i, batch_size=self._per_replica_batch_size), data
@@ -255,15 +250,11 @@ class BaseModel(tf.keras.Model):
 
     def _test_step(self, data):
         x = data[0]
-        y, y_length = data[1]["labels"], data[1]["labels_length"]
-        y._keras_length = y_length
-        y._keras_mask = None
+        y, _ = data_util.attach_length_to_data(data[1]["labels"], data[1]["labels_length"])
         sample_weight = None
 
         outputs = self(x, training=False)
-        y_pred, y_pred_length = outputs["logits"], outputs["logits_length"]
-        y_pred._keras_length = y_pred_length
-        y_pred._keras_mask = None
+        y_pred, _ = data_util.attach_length_to_data(outputs["logits"], outputs["logits_length"])
 
         self.compute_loss(x, y, y_pred, sample_weight)
 

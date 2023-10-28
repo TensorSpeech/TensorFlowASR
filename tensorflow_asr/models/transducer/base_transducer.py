@@ -409,7 +409,11 @@ class Transducer(BaseModel):
         enc, logits_length, caching = self.encoder((features, features_length, inputs.get("caching")), training=training)
         pred, _ = self.predict_net((inputs["predictions"], inputs["predictions_length"]), training=training)
         logits = self.joint_net((enc, pred), training=training)
-        return schemas.TrainOutput(logits=logits, logits_length=logits_length, caching=caching)
+        return schemas.TrainOutput(
+            logits=logits,
+            logits_length=logits_length,
+            caching=caching,
+        )
 
     def call_next(
         self,
