@@ -48,7 +48,7 @@ class FeatureExtraction(Layer):
         nfft=None,
         normalize_signal=False,
         normalize_zscore=False,
-        normalize_min_max=True,
+        normalize_min_max=False,
         padding=0,
         augmentation_config=None,
         **kwargs,
