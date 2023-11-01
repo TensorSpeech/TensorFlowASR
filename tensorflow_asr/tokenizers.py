@@ -292,9 +292,10 @@ class SentencePieceTokenizer(Tokenizer):
             bos_id=decoder_config.bos_index,
             eos_id=decoder_config.eos_index,
             pad_id=decoder_config.pad_index,
+            character_coverage=decoder_config.character_coverage,
             unk_surface="",  # change default unk surface U+2047("⁇") by ""
             allow_whitespace_only_pieces=False,
-            split_by_whitespace=False,
+            split_by_whitespace=(not decoder_config.keep_whitespace),
             treat_whitespace_as_suffix=False,
             user_defined_symbols="",
             max_sentencepiece_length=decoder_config.max_sentencepiece_length,

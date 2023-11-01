@@ -53,6 +53,7 @@ class DecoderConfig:
         self.keep_whitespace: bool = config.pop("keep_whitespace", False)
         self.max_sentence_length: int = config.pop("max_sentence_length", 1048576)  # bytes
         self.max_sentencepiece_length: int = config.pop("max_sentencepiece_length", 16)  # bytes
+        self.character_coverage: float = config.pop("character_coverage", 1.0)  # 0.9995 for languages with rich character, else 1.0
 
         self.train_files = config.pop("train_files", [])
         self.eval_files = config.pop("eval_files", [])

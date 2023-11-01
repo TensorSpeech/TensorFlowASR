@@ -23,6 +23,8 @@ decoder_config:
   normalization_form: NFKC
   max_sentencepiece_length: 16
   max_sentence_length: 1048576
+  character_coverage: 1.0
+  keep_whitespace: False
   train_files:
     - {{datadir}}/train-clean-100/transcripts.tsv
     - {{datadir}}/train-clean-360/transcripts.tsv
