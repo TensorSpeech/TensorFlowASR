@@ -286,7 +286,7 @@ class ASRDataset(BaseDataset):
     def read_entries(self):
         if hasattr(self, "entries") and len(self.entries) > 0:
             return
-        self.data_paths = file_util.preprocess_paths(self.data_paths, enabled=self.enabled)
+        self.data_paths = file_util.preprocess_paths(self.data_paths, enabled=self.enabled, check_exists=True)
         for file_path in self.data_paths:
             logger.info(f"Reading {file_path} ...")
             with tf.io.gfile.GFile(file_path, "r") as f:

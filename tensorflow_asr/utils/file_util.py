@@ -76,6 +76,7 @@ def preprocess_paths(
     paths: Union[List[str], str],
     isdir: bool = False,
     enabled: bool = True,
+    check_exists: bool = False,
 ) -> Union[List[str], str]:
     """Expand the path to the root "/" and makedirs
 
@@ -89,15 +90,20 @@ def preprocess_paths(
         return paths
     if isinstance(paths, (list, tuple)):
         paths = [path if is_cloud_path(path) else os.path.abspath(os.path.expanduser(path)) for path in paths]
-        for path in paths:
+        for i, path in enumerate(paths):
             dirpath = path if isdir else os.path.dirname(path)
             if not tf.io.gfile.exists(dirpath):
-                tf.io.gfile.makedirs(dirpath)
+                if check_exists:
+                    paths.pop(i)
+                else:
+                    tf.io.gfile.makedirs(dirpath)
         return paths
     if isinstance(paths, str):
         paths = paths if is_cloud_path(paths) else os.path.abspath(os.path.expanduser(paths))
         dirpath = paths if isdir else os.path.dirname(paths)
         if not tf.io.gfile.exists(dirpath):
+            if check_exists:
+                return None
             tf.io.gfile.makedirs(dirpath)
         return paths
     return None
