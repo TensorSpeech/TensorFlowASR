@@ -398,18 +398,10 @@ class MultiHeadRelativeAttention(MultiHeadAttention):
         attention_mask=None,
         training=None,
     ):
-        content_attention_bias = content_attention_bias or self.content_attention_bias
-        positional_attention_bias = positional_attention_bias or self.positional_attention_bias
-        content_attention = tf.einsum(
-            self._dot_product_equation,
-            key,
-            (query + tf.cast(content_attention_bias, query.dtype)),
-        )  # BSNH,BTNH->BNTS
-        positional_attention = tf.einsum(
-            self._dot_product_equation,
-            position,
-            (query + tf.cast(positional_attention_bias, query.dtype)),
-        )  # BRNH,BTNH->BNTR
+        cbias = self.content_attention_bias if content_attention_bias is None else content_attention_bias
+        pbias = self.positional_attention_bias if positional_attention_bias is None else positional_attention_bias
+        content_attention = tf.einsum(self._dot_product_equation, key,(query + tf.cast(cbias, query.dtype)))  # BSNH,BTNH->BNTS
+        positional_attention = tf.einsum(self._dot_product_equation, position, (query + tf.cast(pbias, query.dtype)))  # BRNH,BTNH->BNTR
         positional_attention = rel_left_shift(positional_attention)
 
         attention_scores = content_attention + tf.slice(positional_attention, begin=[0, 0, 0, 0], size=tf.shape(content_attention))
