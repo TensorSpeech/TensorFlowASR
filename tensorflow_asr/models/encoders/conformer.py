@@ -128,6 +128,7 @@ class MHSAModule(Layer):
         mha_type="relmha",
         norm_position="pre",
         memory_length=None,
+        use_attention_bias=False,
         kernel_regularizer=L2,
         bias_regularizer=L2,
         name="mhsa_module",
@@ -147,6 +148,7 @@ class MHSAModule(Layer):
                 key_dim=head_size,
                 output_shape=dmodel,
                 memory_length=memory_length,
+                use_attention_bias=use_attention_bias,
                 kernel_regularizer=kernel_regularizer,
                 bias_regularizer=bias_regularizer,
                 name="mhsa",
@@ -158,6 +160,7 @@ class MHSAModule(Layer):
                 key_dim=head_size,
                 output_shape=dmodel,
                 memory_length=memory_length,
+                use_attention_bias=use_attention_bias,
                 kernel_regularizer=kernel_regularizer,
                 bias_regularizer=bias_regularizer,
                 name="mhsa",
@@ -333,6 +336,7 @@ class ConformerBlock(Layer):
         num_heads=4,
         mha_type="relmha",
         mhsam_residual_factor=1.0,
+        mhsam_use_attention_bias=False,
         kernel_size=32,
         padding="causal",
         convm_scale_factor=2,
@@ -369,6 +373,7 @@ class ConformerBlock(Layer):
             head_size=head_size,
             num_heads=num_heads,
             residual_factor=mhsam_residual_factor,
+            use_attention_bias=mhsam_use_attention_bias,
             dropout=dropout,
             mha_type=mha_type,
             norm_position=module_norm_position,
@@ -454,6 +459,7 @@ class ConformerEncoder(Layer):
         ffm_scale_factor=4,
         ffm_residual_factor=0.5,
         mhsam_residual_factor=1.0,
+        mhsam_use_attention_bias=False,
         convm_scale_factor=2,
         convm_residual_factor=1.0,
         convm_use_group_conv=False,
@@ -519,6 +525,7 @@ class ConformerEncoder(Layer):
                 num_heads=num_heads,
                 mha_type=mha_type,
                 mhsam_residual_factor=mhsam_residual_factor,
+                mhsam_use_attention_bias=mhsam_use_attention_bias,
                 kernel_size=kernel_size,
                 padding=padding,
                 convm_scale_factor=convm_scale_factor,
@@ -535,7 +542,7 @@ class ConformerEncoder(Layer):
             for i in range(self._num_blocks)
         ]
 
-        if self._mha_type == "relmha":
+        if self._mha_type == "relmha" and not mhsam_use_attention_bias:
             self.content_attention_bias = self.add_weight(
                 name="content_attention_bias",
                 shape=[self._num_heads, self._key_dim],

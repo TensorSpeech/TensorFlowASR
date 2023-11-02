@@ -326,6 +326,7 @@ class MultiHeadRelativeAttention(MultiHeadAttention):
         activity_regularizer=None,
         kernel_constraint=None,
         bias_constraint=None,
+        use_attention_bias=False,
         **kwargs,
     ):
         super().__init__(
@@ -347,6 +348,7 @@ class MultiHeadRelativeAttention(MultiHeadAttention):
             **kwargs,
         )
         self._relative_position_encoding_shape = None
+        self._use_attention_bias = use_attention_bias
 
     def _build_from_signature(self, query, value, relative_position_encoding, key=None):
         super()._build_from_signature(query=query, value=value, key=key)
@@ -365,6 +367,25 @@ class MultiHeadRelativeAttention(MultiHeadAttention):
                 name="encoding",
                 **self._get_common_kwargs_for_sublayer(),
             )
+            if self._use_attention_bias:
+                self.content_attention_bias = self.add_weight(
+                    name="content_attention_bias",
+                    shape=[self._num_heads, self._key_dim],
+                    trainable=True,
+                    initializer="zeros",
+                    regularizer=self._bias_regularizer,
+                    dtype=self.variable_dtype,
+                )
+                self.positional_attention_bias = self.add_weight(
+                    name="positional_attention_bias",
+                    shape=[self._num_heads, self._key_dim],
+                    trainable=True,
+                    initializer="zeros",
+                    regularizer=self._bias_regularizer,
+                    dtype=self.variable_dtype,
+                )
+            else:
+                self.content_attention_bias, self.positional_attention_bias = None, None
 
     def _compute_attention(
         self,
@@ -372,11 +393,13 @@ class MultiHeadRelativeAttention(MultiHeadAttention):
         key,
         value,
         position,
-        content_attention_bias,
-        positional_attention_bias,
+        content_attention_bias=None,
+        positional_attention_bias=None,
         attention_mask=None,
         training=None,
     ):
+        content_attention_bias = content_attention_bias or self.content_attention_bias
+        positional_attention_bias = positional_attention_bias or self.positional_attention_bias
         content_attention = tf.einsum(
             self._dot_product_equation,
             key,

@@ -92,19 +92,21 @@ def preprocess_paths(
         paths = [path if is_cloud_path(path) else os.path.abspath(os.path.expanduser(path)) for path in paths]
         for i, path in enumerate(paths):
             dirpath = path if isdir else os.path.dirname(path)
-            if not tf.io.gfile.exists(dirpath):
+            if not tf.io.gfile.exists(path):
                 if check_exists:
-                    paths.pop(i)
+                    paths[i] = None
                 else:
-                    tf.io.gfile.makedirs(dirpath)
-        return paths
+                    if not tf.io.gfile.exists(dirpath):
+                        tf.io.gfile.makedirs(dirpath)
+        return list(filter(None, paths))
     if isinstance(paths, str):
         paths = paths if is_cloud_path(paths) else os.path.abspath(os.path.expanduser(paths))
         dirpath = paths if isdir else os.path.dirname(paths)
-        if not tf.io.gfile.exists(dirpath):
+        if not tf.io.gfile.exists(paths):
             if check_exists:
                 return None
-            tf.io.gfile.makedirs(dirpath)
+            if not tf.io.gfile.exists(dirpath):
+                tf.io.gfile.makedirs(dirpath)
         return paths
     return None
 
