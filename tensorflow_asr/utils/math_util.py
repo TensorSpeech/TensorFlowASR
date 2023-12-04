@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import ast
 import math
 from typing import Union
 
@@ -19,6 +20,29 @@ import numpy as np
 import tensorflow as tf
 
 from tensorflow_asr.utils import shape_util
+
+UNARY_OPS = (ast.UAdd, ast.USub)
+BINARY_OPS = (ast.Add, ast.Sub, ast.Mult, ast.Div, ast.Mod)
+
+
+def is_arithmetic(s):
+    def _is_arithmetic(node):
+        if isinstance(node, ast.Constant):
+            return True
+        if isinstance(node, ast.Expression):
+            return _is_arithmetic(node.body)
+        if isinstance(node, ast.UnaryOp):
+            valid_op = isinstance(node.op, UNARY_OPS)
+            return valid_op and _is_arithmetic(node.operand)
+        if isinstance(node, ast.BinOp):
+            valid_op = isinstance(node.op, BINARY_OPS)
+            return valid_op and _is_arithmetic(node.left) and _is_arithmetic(node.right)
+        raise ValueError(f"Unsupported type {node}")
+
+    try:
+        return _is_arithmetic(ast.parse(s, mode="eval"))
+    except (SyntaxError, ValueError):
+        return False
 
 
 def log10(x):
