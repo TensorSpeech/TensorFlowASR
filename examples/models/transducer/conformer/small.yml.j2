@@ -21,7 +21,7 @@ model_config:
             mask_value: 0
           freq_masking:
             prob: 1.0
-            num_masks: 1
+            num_masks: 2
             mask_factor: 27
             mask_value: 0
     encoder_subsampling:
@@ -54,7 +54,7 @@ model_config:
     prediction_rnn_type: lstm
     prediction_rnn_implementation: 2
     prediction_rnn_unroll: False
-    prediction_layer_norm: True
+    prediction_layer_norm: False
     prediction_projection_units: 0
     joint_dim: 320
     prejoint_encoder_linear: True
@@ -82,12 +82,13 @@ learning_config:
         config:
           dmodel: 144
           warmup_steps: 10000
-          max_lr: 0.05/(144**0.5)
+          max_lr: null
           min_lr: null
-          scale: 1.0
+          scale: 2.0
       beta_1: 0.9
       beta_2: 0.98
       epsilon: 1e-9
+      weight_decay: 1e-6
 
   gwn_config:
     predict_net_step: 20000
