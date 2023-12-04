@@ -21,7 +21,7 @@ model_config:
             mask_value: 0
           freq_masking:
             prob: 1.0
-            num_masks: 2
+            num_masks: 1
             mask_factor: 27
             mask_value: 0
     encoder_subsampling:
@@ -68,13 +68,12 @@ learning_config:
         config:
           dmodel: 176
           warmup_steps: 10000
-          max_lr: null
-          min_lr: 1e-6
+          max_lr: 0.02/(176**0.5)
+          min_lr: null
           scale: 2.0
       beta_1: 0.9
       beta_2: 0.98
       epsilon: 1e-9
-      weight_decay: 1e-6
 
   gwn_config: null
 

@@ -211,6 +211,9 @@ class BaseModel(tf.keras.Model):
             self.remove_gwn(original_weights)
             loss = self.compute_loss(x, y, y_pred, sample_weight)
 
+        if self.use_ga:
+            loss /= self.ga.total_steps
+
         if self.use_loss_scale:
             loss = self.optimizer.get_scaled_loss(loss)
             gradients = tape.gradient(loss, self.trainable_variables)
