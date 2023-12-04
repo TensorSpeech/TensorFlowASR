@@ -22,8 +22,8 @@ class TransformerSchedule(tf.keras.optimizers.schedules.LearningRateSchedule):
         self.dmodel = tf.convert_to_tensor(dmodel, dtype=tf.float32)
         self.scale = tf.convert_to_tensor(scale, dtype=tf.float32)
         self.warmup_steps = tf.convert_to_tensor(warmup_steps, dtype=tf.float32)
-        self.max_lr = max_lr
-        self.min_lr = min_lr
+        self.max_lr = eval(max_lr) if isinstance(max_lr, str) else max_lr
+        self.min_lr = eval(min_lr) if isinstance(min_lr, str) else min_lr
 
     def __call__(self, current_step):
         # lr = (d_model^-0.5) * min(step^-0.5, step*(warm_up^-1.5))
