@@ -319,7 +319,7 @@ class TransformerEncoder(Layer):
 
     def compute_mask(self, inputs, mask=None):
         *outputs, caching = inputs
-        return *self.conv_subsampling.compute_mask(outputs, mask=mask), getattr(caching, "_keras_mask", None)
+        return *self.subsampling.compute_mask(outputs, mask=mask), getattr(caching, "_keras_mask", None)
 
     def compute_output_shape(self, input_shape):
         output_shape, output_length_shape, caching_shape = input_shape
