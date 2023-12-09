@@ -111,7 +111,7 @@ class CtcModel(BaseModel):
                 merge_repeated=True,
                 blank_index=self.blank,
             )
-            tokens = tf.reshape(tokens[0].values, tokens[0].dense_shape)
+            tokens = tf.sparse.to_dense(tokens[0])
             tokens = tf.cast(tokens, dtype=tf.int32)
             return schemas.PredictOutput(
                 tokens=tokens,
@@ -136,7 +136,7 @@ class CtcModel(BaseModel):
                 sequence_length=outputs_length,
                 beam_width=beam_width,
             )
-            tokens = tf.reshape(tokens[0].values, tokens[0].dense_shape)
+            tokens = tf.sparse.to_dense(tokens[0])
             tokens = tf.cast(tokens, dtype=tf.int32)
             return schemas.PredictOutput(
                 tokens=tokens,

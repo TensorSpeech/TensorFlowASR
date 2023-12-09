@@ -68,6 +68,7 @@ class TransformerBlock(Layer):
         pwffn_activation="relu",
         dropout=0.1,
         memory_length=None,
+        use_attention_bias=False,
         kernel_regularizer=None,
         bias_regularizer=None,
         **kwargs,
@@ -90,6 +91,7 @@ class TransformerBlock(Layer):
                 key_dim=head_size,
                 output_shape=dmodel,
                 memory_length=memory_length,
+                use_attention_bias=use_attention_bias,
                 kernel_regularizer=kernel_regularizer,
                 bias_regularizer=bias_regularizer,
                 name="mhsa",
@@ -101,6 +103,7 @@ class TransformerBlock(Layer):
                 key_dim=head_size,
                 output_shape=dmodel,
                 memory_length=memory_length,
+                use_attention_bias=use_attention_bias,
                 kernel_regularizer=kernel_regularizer,
                 bias_regularizer=bias_regularizer,
                 name="mhsa",
@@ -180,6 +183,7 @@ class TransformerEncoder(Layer):
         interleave_relpe=True,
         use_attention_causal_mask=False,
         use_attention_auto_mask=True,
+        use_attention_bias=False,
         pwffn_activation="relu",
         memory_length=None,
         kernel_regularizer=None,
@@ -237,6 +241,7 @@ class TransformerEncoder(Layer):
                 pwffn_activation=pwffn_activation,
                 dropout=dropout,
                 memory_length=memory_length,
+                use_attention_bias=use_attention_bias,
                 kernel_regularizer=kernel_regularizer,
                 bias_regularizer=bias_regularizer,
                 name=f"block_{i}",
@@ -245,7 +250,7 @@ class TransformerEncoder(Layer):
             for i in range(self._num_blocks)
         ]
 
-        if mha_type == "relmha":
+        if mha_type == "relmha" and not use_attention_bias:
             self.content_attention_bias = self.add_weight(
                 name="content_attention_bias",
                 shape=[num_heads, head_size],

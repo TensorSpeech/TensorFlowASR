@@ -41,6 +41,10 @@ class DeepSpeech2Decoder(Layer):
         logits = self.vocab(logits, training=training)
         return logits, logits_length
 
+    def call_next(self, logits, logits_length, *args, **kwargs):
+        outputs, outputs_length = self((logits, logits_length), training=False)
+        return outputs, outputs_length, None
+
     def compute_output_shape(self, input_shape):
         output_shape, output_length_shape = input_shape
         output_shape = self.vocab.compute_output_shape(output_shape)
