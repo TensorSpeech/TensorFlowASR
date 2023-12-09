@@ -91,7 +91,6 @@ class TransformerBlock(Layer):
                 key_dim=head_size,
                 output_shape=dmodel,
                 memory_length=memory_length,
-                use_attention_bias=use_attention_bias,
                 kernel_regularizer=kernel_regularizer,
                 bias_regularizer=bias_regularizer,
                 name="mhsa",
