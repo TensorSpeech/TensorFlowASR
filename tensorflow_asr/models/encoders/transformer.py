@@ -141,11 +141,7 @@ class TransformerBlock(Layer):
         original_outputs, caching, relative_position_encoding, content_attention_bias, positional_attention_bias = inputs
         outputs = self.norm1(original_outputs, training=training) if self._norm_position == "pre" else original_outputs
         outputs, caching = self.mha(
-            (
-                [outputs, outputs, outputs, caching, relative_position_encoding, content_attention_bias, positional_attention_bias]
-                if self._mha_type == "relmha"
-                else [outputs, outputs, outputs]
-            ),
+            [outputs, outputs, outputs, caching, relative_position_encoding, content_attention_bias, positional_attention_bias],
             training=training,
             attention_mask=attention_mask,
             use_causal_mask=use_causal_mask,
