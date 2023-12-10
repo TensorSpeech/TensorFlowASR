@@ -59,12 +59,14 @@ class PositionalEncoding(Layer):
         dropout=0.0,
         scale=None,
         interleave=False,
+        reverse=False,
         **kwargs,
     ):
         super().__init__(trainable=False, **kwargs)
         self.do = tf.keras.layers.Dropout(dropout, dtype=self.dtype, name="dropout")
         self._scale = scale
         self._interleave = interleave
+        self._reverse = reverse
 
     def call(self, inputs, training=False):
         outputs = inputs
@@ -72,6 +74,8 @@ class PositionalEncoding(Layer):
             outputs *= self._scale
         batch_size, length, dmodel = shape_util.shape_list(outputs)
         position = compute_position(start=0, end=length, step=1, dtype=outputs.dtype)
+        if self._reverse:
+            position = tf.reverse(position, axis=[0])
         pe = compute_sinusoid_position_encoding(
             position=position,
             batch_size=batch_size,
@@ -95,9 +99,10 @@ class RelativePositionalEncoding(PositionalEncoding):
         scale=None,
         interleave=False,
         memory_length=None,
+        reverse=False,
         **kwargs,
     ):
-        super().__init__(dropout, scale, interleave, **kwargs)
+        super().__init__(dropout, scale, interleave, reverse, **kwargs)
         self._memory_length = memory_length
 
     def call(self, inputs, training=False):
@@ -105,8 +110,14 @@ class RelativePositionalEncoding(PositionalEncoding):
         if self._scale is not None:
             outputs *= self._scale
         batch_size, length, dmodel = shape_util.shape_list(outputs)
-        start = tf.constant(0, dtype=tf.int32) if self._memory_length is None else (-1 * tf.convert_to_tensor(self._memory_length, dtype=tf.int32))
-        position = compute_position(start=start, end=length, step=1, dtype=outputs.dtype)
+        position = compute_position(start=0, end=length, step=1, dtype=outputs.dtype)
+        if self._reverse:
+            position = tf.reverse(position, axis=[0])
+        if self._memory_length is not None:
+            memory_position = compute_position(start=0, end=self._memory_length, step=1, dtype=outputs.dtype)
+            if self._reverse:
+                memory_position = tf.reverse(memory_position, axis=[0])
+            position = tf.concat([memory_position, position], axis=0)
         pe = compute_sinusoid_position_encoding(
             position=position,
             batch_size=batch_size,

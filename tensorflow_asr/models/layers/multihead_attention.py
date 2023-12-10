@@ -57,7 +57,6 @@ def rel_left_shift(x):
     x = tf.reshape(x, x_shape)
 
     x = tf.transpose(x, perm=[2, 3, 0, 1])  # TRBN -> BNTR
-    x *= tf.linalg.band_part(tf.ones((1, 1, x_shape[0], x_shape[1]), x.dtype), -1, 0)
     return x
 
 
@@ -400,11 +399,12 @@ class MultiHeadRelativeAttention(MultiHeadAttention):
     ):
         cbias = self.content_attention_bias if content_attention_bias is None else content_attention_bias
         pbias = self.positional_attention_bias if positional_attention_bias is None else positional_attention_bias
-        content_attention = tf.einsum(self._dot_product_equation, key,(query + tf.cast(cbias, query.dtype)))  # BSNH,BTNH->BNTS
+        content_attention = tf.einsum(self._dot_product_equation, key, (query + tf.cast(cbias, query.dtype)))  # BSNH,BTNH->BNTS
         positional_attention = tf.einsum(self._dot_product_equation, position, (query + tf.cast(pbias, query.dtype)))  # BRNH,BTNH->BNTR
         positional_attention = rel_left_shift(positional_attention)
+        positional_attention = positional_attention[:, :, :, -content_attention.shape[-1] :]
 
-        attention_scores = content_attention + tf.slice(positional_attention, begin=[0, 0, 0, 0], size=tf.shape(content_attention))
+        attention_scores = content_attention + positional_attention
         attention_scores = tf.multiply(attention_scores, 1.0 / math.sqrt(float(self._key_dim)))
 
         attention_scores = self._masked_softmax(attention_scores, attention_mask)

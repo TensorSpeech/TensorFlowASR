@@ -220,7 +220,13 @@ class TransformerEncoder(Layer):
         self.do = tf.keras.layers.Dropout(dropout, name="dropout", dtype=self.dtype)
 
         if mha_type == "relmha":
-            self.relpe = RelativePositionalEncoding(interleave=interleave_relpe, memory_length=memory_length, name="relpe", dtype=self.dtype)
+            self.relpe = RelativePositionalEncoding(
+                interleave=interleave_relpe,
+                memory_length=memory_length,
+                reverse=True,  # reverse because in paper, Q is defined in revered order
+                name="relpe",
+                dtype=self.dtype,
+            )
         else:
             self.relpe = PositionalEncoding(interleave=interleave_relpe, name="pe", dtype=self.dtype)
 
