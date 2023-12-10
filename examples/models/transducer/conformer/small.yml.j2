@@ -43,6 +43,7 @@ model_config:
     encoder_interleave_relpe: True
     encoder_use_attention_causal_mask: False
     encoder_use_attention_auto_mask: True
+    encoder_mhsam_use_attention_bias: True
     encoder_kernel_size: 32
     encoder_dropout: 0.1
     encoder_padding: causal
@@ -83,11 +84,12 @@ learning_config:
           dmodel: 144
           warmup_steps: 10000
           max_lr: 0.05/(144**0.5)
-          min_lr: null
-          scale: 1.0
+          min_lr: 1e-6
+          scale: 2.0
       beta_1: 0.9
       beta_2: 0.98
       epsilon: 1e-9
+      weight_decay: 1e-6
 
   gwn_config:
     predict_net_step: 20000
