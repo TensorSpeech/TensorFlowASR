@@ -26,7 +26,7 @@ from tensorflow_asr.utils.env_util import KERAS_SRC
 mha_module = importlib.import_module(f"{KERAS_SRC}.layers.attention.multi_head_attention")
 
 
-def rel_left_shift(x):
+def rel_left_shift(x, mask_upper_triangle=False):
     """
     Relative left shift
 
@@ -55,6 +55,8 @@ def rel_left_shift(x):
     x = tf.reshape(x, [x_shape[1] + 1, x_shape[0], x_shape[2], x_shape[3]])
     x = tf.slice(x, [1, 0, 0, 0], [-1, -1, -1, -1])
     x = tf.reshape(x, x_shape)
+    if mask_upper_triangle:
+        x *= tf.reverse(tf.linalg.band_part(tf.ones((x_shape[0], x_shape[1]), x.dtype), 0, -1), [0, 1])[..., tf.newaxis, tf.newaxis]
 
     x = tf.transpose(x, perm=[2, 3, 0, 1])  # TRBN -> BNTR
     return x
