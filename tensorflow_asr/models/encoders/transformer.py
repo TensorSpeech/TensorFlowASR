@@ -223,7 +223,6 @@ class TransformerEncoder(Layer):
             self.relpe = RelativePositionalEncoding(
                 interleave=interleave_relpe,
                 memory_length=memory_length,
-                reverse=True,  # reverse because in paper, Q is defined in revered order
                 name="relpe",
                 dtype=self.dtype,
             )

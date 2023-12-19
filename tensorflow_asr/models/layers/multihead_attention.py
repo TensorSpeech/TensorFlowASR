@@ -26,7 +26,7 @@ from tensorflow_asr.utils.env_util import KERAS_SRC
 mha_module = importlib.import_module(f"{KERAS_SRC}.layers.attention.multi_head_attention")
 
 
-def rel_left_shift(x, mask_upper_triangle=False):
+def rel_left_shift(x, causal=False):
     """
     Relative left shift
 
@@ -48,17 +48,32 @@ def rel_left_shift(x, mask_upper_triangle=False):
     Returns:
         x: left shifted, shape BNTR
     """
-    x = tf.transpose(x, perm=[2, 3, 0, 1])  # BNTR -> TRBN
-    x_shape = tf.shape(x)
+    b, n, t, r = tf.shape(x)
 
-    x = tf.pad(x, [[0, 0], [1, 0], [0, 0], [0, 0]])  # shift on position time dimension R
-    x = tf.reshape(x, [x_shape[1] + 1, x_shape[0], x_shape[2], x_shape[3]])
-    x = tf.slice(x, [1, 0, 0, 0], [-1, -1, -1, -1])
-    x = tf.reshape(x, x_shape)
-    if mask_upper_triangle:
-        x *= tf.reverse(tf.linalg.band_part(tf.ones((x_shape[0], x_shape[1]), x.dtype), 0, -1), [0, 1])[..., tf.newaxis, tf.newaxis]
+    if causal:
+        x = tf.pad(x, [[0, 0], [0, 0], [0, 0], [1, 0]])
+        x = tf.reshape(x, [b, n, -1])
+        x = tf.pad(x, [[0, 0], [0, 0], [r - t, 0]])
+        x = tf.reshape(x, [b, n, 1 + t, r])
+        x = tf.slice(x, begin=[0, 0, 1, 0], size=[-1, -1, -1, -1])
+    else:
+        x = tf.pad(x, [[0, 0], [0, 0], [0, 0], [0, 1]])
+        x = tf.reshape(x, [b, n, -1])
+        x = tf.pad(x, [[0, 0], [0, 0], [0, r - t]])
+        x = tf.reshape(x, [b, n, 1 + t, r])
+        x = tf.slice(x, begin=[0, 0, 0, (t - 1)], size=[-1, -1, t, -1])
 
-    x = tf.transpose(x, perm=[2, 3, 0, 1])  # TRBN -> BNTR
+    # x = tf.transpose(x, perm=[2, 3, 0, 1])  # BNTR -> TRBN
+    # x_shape = tf.shape(x)
+
+    # x = tf.pad(x, [[0, 0], [1, 0], [0, 0], [0, 0]])  # shift on position time dimension R
+    # x = tf.reshape(x, [x_shape[1] + 1, x_shape[0], x_shape[2], x_shape[3]])
+    # x = tf.slice(x, [1, 0, 0, 0], [-1, -1, -1, -1])
+    # x = tf.reshape(x, x_shape)
+    # if mask_upper_triangle:
+    #     x *= tf.reverse(tf.linalg.band_part(tf.ones((x_shape[0], x_shape[1]), x.dtype), 0, -1), [0, 1])[..., tf.newaxis, tf.newaxis]
+
+    # x = tf.transpose(x, perm=[2, 3, 0, 1])  # TRBN -> BNTR
     return x
 
 
@@ -328,6 +343,7 @@ class MultiHeadRelativeAttention(MultiHeadAttention):
         kernel_constraint=None,
         bias_constraint=None,
         use_attention_bias=False,
+        causal=False,
         **kwargs,
     ):
         super().__init__(
@@ -350,6 +366,7 @@ class MultiHeadRelativeAttention(MultiHeadAttention):
         )
         self._relative_position_encoding_shape = None
         self._use_attention_bias = use_attention_bias
+        self._causal = causal
 
     def _build_from_signature(self, query, value, relative_position_encoding, key=None):
         super()._build_from_signature(query=query, value=value, key=key)
@@ -403,8 +420,12 @@ class MultiHeadRelativeAttention(MultiHeadAttention):
         pbias = self.positional_attention_bias if positional_attention_bias is None else positional_attention_bias
         content_attention = tf.einsum(self._dot_product_equation, key, (query + tf.cast(cbias, query.dtype)))  # BSNH,BTNH->BNTS
         positional_attention = tf.einsum(self._dot_product_equation, position, (query + tf.cast(pbias, query.dtype)))  # BRNH,BTNH->BNTR
-        positional_attention = rel_left_shift(positional_attention)
-        positional_attention = positional_attention[:, :, :, -content_attention.shape[-1] :]
+        positional_attention = rel_left_shift(positional_attention, causal=self._causal)  # BNTR -> BNTS
+        positional_attention = tf.slice(
+            positional_attention,
+            begin=[0, 0, 0, tf.shape(positional_attention)[-1] - tf.shape(content_attention)[-1]],
+            size=[-1, -1, -1, tf.shape(content_attention)[-1]],
+        )
 
         attention_scores = content_attention + positional_attention
         attention_scores = tf.multiply(attention_scores, 1.0 / math.sqrt(float(self._key_dim)))
