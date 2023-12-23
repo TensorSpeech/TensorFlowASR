@@ -121,7 +121,11 @@ class RelativeSinusoidalPositionalEncoding(SinusoidalPositionalEncoding):
             pe, _ = tf.map_fn(
                 fn=lambda x: (
                     tf.pad(  # [B, length + self._memory_length, dmodel]
-                        tf.slice(x[0], [(length + self._memory_length - x[1] - self._memory_length), 0], [x[1] + self._memory_length, -1]),
+                        tf.slice(
+                            x[0],
+                            begin=[(length + self._memory_length - x[1] - self._memory_length), 0],
+                            size=[x[1] + self._memory_length, dmodel],
+                        ),
                         [[0, (length + self._memory_length - x[1] - self._memory_length)], [0, 0]],
                     ),
                     x[1],
@@ -137,7 +141,11 @@ class RelativeSinusoidalPositionalEncoding(SinusoidalPositionalEncoding):
             pe, _ = tf.map_fn(
                 fn=lambda x: (
                     tf.pad(  # [B, 2 * length + self._memory_length - 1, dmodel]
-                        tf.slice(x[0], [(length + self._memory_length - x[1] - self._memory_length), 0], [(2 * x[1] + self._memory_length - 1), -1]),
+                        tf.slice(
+                            x[0],
+                            begin=[(length + self._memory_length - x[1] - self._memory_length), 0],
+                            size=[(2 * x[1] + self._memory_length - 1), dmodel],
+                        ),
                         [[0, (2 * length + self._memory_length - 1 - (2 * x[1] + self._memory_length - 1))], [0, 0]],
                     ),
                     x[1],
