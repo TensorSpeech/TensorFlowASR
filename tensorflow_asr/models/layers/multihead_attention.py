@@ -21,6 +21,7 @@ from keras.layers import EinsumDense
 from keras.layers import MultiHeadAttention as KerasMultiHeadAttention
 
 from tensorflow_asr.models.layers.memory import Memory
+from tensorflow_asr.utils import shape_util
 from tensorflow_asr.utils.env_util import KERAS_SRC
 
 mha_module = importlib.import_module(f"{KERAS_SRC}.layers.attention.multi_head_attention")
@@ -48,20 +49,22 @@ def rel_left_shift(x, causal=False):
     Returns:
         x: left shifted, shape BNTR
     """
-    b, n, t, r = tf.shape(x)
+    b, n, t, r = shape_util.shape_list(x)
 
+    # fmt: off
     if causal:
-        x = tf.pad(x, [[0, 0], [0, 0], [0, 0], [1, 0]])
+        x = tf.pad(x, [[0, 0], [0, 0], [0, 0], [1, 0]]) # [B, N, T, Th + T]
         x = tf.reshape(x, [b, n, -1])
         x = tf.pad(x, [[0, 0], [0, 0], [r - t, 0]])
         x = tf.reshape(x, [b, n, 1 + t, r])
-        x = tf.slice(x, begin=[0, 0, 1, 0], size=[-1, -1, -1, -1])
+        x = tf.slice(x, begin=[0, 0, 1, 0], size=[-1, -1, -1, -1]) # [B, N, T, Th + T]
     else:
-        x = tf.pad(x, [[0, 0], [0, 0], [0, 0], [0, 1]])
-        x = tf.reshape(x, [b, n, -1])
-        x = tf.pad(x, [[0, 0], [0, 0], [0, r - t]])
-        x = tf.reshape(x, [b, n, 1 + t, r])
-        x = tf.slice(x, begin=[0, 0, 0, (t - 1)], size=[-1, -1, t, -1])
+        x = tf.pad(x, [[0, 0], [0, 0], [0, 0], [0, 1]])  # [B, N, T, Th + 2*T] where R = Th + 2*T - 1, S = Th + T
+        x = tf.reshape(x, [b, n, -1])  # [B, N, TTh + 2*TT]
+        x = tf.pad(x, [[0, 0], [0, 0], [0, r - t]])  # [B, N, TTh + 2*TT + Th + 2*T - 1 - T] = [B, N, TTh + 2*TT + Th + T - 1]
+        x = tf.reshape(x, [b, n, 1 + t, r])  # TTh + 2*TT + Th + T - 1 = TTh + 2*TT + Th + 2*T - T - 1 = Th(T + 1) + 2*T(T + 1) - (T + 1) = (T + 1)(Th + 2*T - 1) = (T + 1)R # pylint: disable=line-too-long
+        x = tf.slice(x, begin=[0, 0, 0, (t - 1)], size=[-1, -1, t, -1]) # [B, N, T, Th + T]
+    # fmt: on
 
     # x = tf.transpose(x, perm=[2, 3, 0, 1])  # BNTR -> TRBN
     # x_shape = tf.shape(x)

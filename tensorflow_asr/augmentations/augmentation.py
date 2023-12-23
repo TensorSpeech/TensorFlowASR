@@ -57,7 +57,14 @@ class Augmentation:
         tf.Tensor, shape [B, None]
             Augmented audio signals
         """
-        return tf.vectorized_map(lambda x: self._augment(x, self.signal_augmentations), (inputs, inputs_length), warn=False)
+        return tf.map_fn(
+            fn=lambda x: self._augment(x, self.signal_augmentations),
+            elems=(inputs, inputs_length),
+            fn_output_signature=(
+                tf.TensorSpec.from_tensor(inputs[0]),
+                tf.TensorSpec.from_tensor(inputs_length[0]),
+            ),
+        )
 
     def feature_augment(self, inputs, inputs_length):
         """
@@ -75,7 +82,14 @@ class Augmentation:
         tf.Tensor, shape [B, T, F]
             Augmented audio features
         """
-        return tf.vectorized_map(lambda x: self._augment(x, self.feature_augmentations), (inputs, inputs_length), warn=False)
+        return tf.map_fn(
+            fn=lambda x: self._augment(x, self.feature_augmentations),
+            elems=(inputs, inputs_length),
+            fn_output_signature=(
+                tf.TensorSpec.from_tensor(inputs[0]),
+                tf.TensorSpec.from_tensor(inputs_length[0]),
+            ),
+        )
 
     @staticmethod
     def parse(config: dict) -> list:

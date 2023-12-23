@@ -260,7 +260,7 @@ class FeatureExtraction(Layer):
 
         features = self.normalize_audio_features(features)
         features = tf.expand_dims(features, axis=-1)
-        features_length = tf.vectorized_map(self.get_nframes, signals_length, warn=False)
+        features_length = tf.map_fn(fn=self.get_nframes, elems=signals_length, fn_output_signature=tf.TensorSpec(shape=(), dtype=tf.int32))
 
         if training:
             features, features_length = self.augmentations.feature_augment(features, features_length)
@@ -281,7 +281,7 @@ class FeatureExtraction(Layer):
         signals, signals_length = inputs
         mask = tf.sequence_mask(signals_length, maxlen=(tf.shape(signals)[1] + self.padding), dtype=tf.bool)
         nsamples = tf.reduce_sum(tf.cast(mask, tf.int32), axis=1)
-        nframes = tf.vectorized_map(self.get_nframes, nsamples, warn=False)
+        nframes = tf.map_fn(fn=self.get_nframes, elems=nsamples, fn_output_signature=tf.TensorSpec(shape=(), dtype=tf.int32))
         padded_nframes = self.get_nframes(tf.shape(signals, tf.int32)[1])
         return tf.sequence_mask(nframes, maxlen=padded_nframes, dtype=tf.bool), None
 

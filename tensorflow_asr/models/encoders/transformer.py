@@ -17,7 +17,7 @@ import tensorflow as tf
 
 from tensorflow_asr.models.base_layer import Layer
 from tensorflow_asr.models.layers.multihead_attention import MultiHeadAttention, MultiHeadRelativeAttention
-from tensorflow_asr.models.layers.positional_encoding import PositionalEncoding, RelativePositionalEncoding
+from tensorflow_asr.models.layers.positional_encoding import RelativeSinusoidalPositionalEncoding, SinusoidalPositionalEncoding
 from tensorflow_asr.models.layers.residual import Residual
 from tensorflow_asr.models.layers.subsampling import Conv1dSubsampling, Conv2dSubsampling, VggSubsampling
 
@@ -63,6 +63,7 @@ class TransformerBlock(Layer):
         num_heads,
         head_size,
         mha_type="mha",
+        relmha_causal=False,
         norm_position="post",
         residual_factor=1.0,
         pwffn_activation="relu",
@@ -98,6 +99,7 @@ class TransformerBlock(Layer):
             )
             if mha_type == "mha"
             else MultiHeadRelativeAttention(
+                causal=relmha_causal,
                 num_heads=num_heads,
                 key_dim=head_size,
                 output_shape=dmodel,
@@ -173,6 +175,7 @@ class TransformerEncoder(Layer):
         head_size=128,
         dropout=0.1,
         mha_type="mha",
+        relmha_causal=False,
         norm_position="post",
         residual_factor=1.0,
         interleave_relpe=True,
@@ -220,14 +223,15 @@ class TransformerEncoder(Layer):
         self.do = tf.keras.layers.Dropout(dropout, name="dropout", dtype=self.dtype)
 
         if mha_type == "relmha":
-            self.relpe = RelativePositionalEncoding(
+            self.relpe = RelativeSinusoidalPositionalEncoding(
                 interleave=interleave_relpe,
                 memory_length=memory_length,
+                causal=relmha_causal,
                 name="relpe",
                 dtype=self.dtype,
             )
         else:
-            self.relpe = PositionalEncoding(interleave=interleave_relpe, name="pe", dtype=self.dtype)
+            self.relpe = SinusoidalPositionalEncoding(interleave=interleave_relpe, name="pe", dtype=self.dtype)
 
         self.blocks = [
             TransformerBlock(
@@ -236,6 +240,7 @@ class TransformerEncoder(Layer):
                 num_heads=num_heads,
                 head_size=head_size,
                 mha_type=mha_type,
+                relmha_causal=relmha_causal,
                 norm_position=norm_position,
                 residual_factor=residual_factor,
                 pwffn_activation=pwffn_activation,
@@ -284,7 +289,7 @@ class TransformerEncoder(Layer):
         outputs, outputs_length, caching = inputs
         outputs, outputs_length = self.subsampling([outputs, outputs_length], training=training)
         outputs = self.linear(outputs, training=training)
-        outputs, relative_position_encoding = self.relpe(outputs, training=training)
+        outputs, relative_position_encoding = self.relpe([outputs, outputs_length], training=training)
         outputs = self.do(outputs, training=training)
         new_caching = None if self._memory_length is None else []
         for i, block in enumerate(self.blocks):
@@ -330,7 +335,7 @@ class TransformerEncoder(Layer):
         output_shape, output_length_shape, caching_shape = input_shape
         output_shape, output_length_shape = self.subsampling.compute_output_shape((output_shape, output_length_shape))
         output_shape = self.linear.compute_output_shape(output_shape)
-        output_shape, relative_position_encoding_shape = self.relpe.compute_output_shape(output_shape)
+        output_shape, relative_position_encoding_shape = self.relpe.compute_output_shape((output_shape, output_length_shape))
         output_shape = self.do.compute_output_shape(output_shape)
         for block in self.blocks:
             output_shape, caching_shape = block.compute_output_shape((output_shape, caching_shape, relative_position_encoding_shape, None, None))

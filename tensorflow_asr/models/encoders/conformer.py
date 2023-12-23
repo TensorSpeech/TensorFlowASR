@@ -22,7 +22,7 @@ from tensorflow_asr.models.base_layer import Identity, Layer
 # from tensorflow_asr.models.base_model import BaseModelLayer as Layer
 from tensorflow_asr.models.layers.convolution import Conv1D, DepthwiseConv1D
 from tensorflow_asr.models.layers.multihead_attention import MultiHeadAttention, MultiHeadRelativeAttention
-from tensorflow_asr.models.layers.positional_encoding import PositionalEncoding, RelativePositionalEncoding
+from tensorflow_asr.models.layers.positional_encoding import RelativeSinusoidalPositionalEncoding, SinusoidalPositionalEncoding
 from tensorflow_asr.models.layers.residual import Residual
 from tensorflow_asr.models.layers.subsampling import Conv1dSubsampling, Conv2dSubsampling, VggSubsampling
 
@@ -126,6 +126,7 @@ class MHSAModule(Layer):
         residual_factor=1.0,
         dropout=0.0,
         mha_type="relmha",
+        relmha_causal=False,
         norm_position="pre",
         memory_length=None,
         use_attention_bias=False,
@@ -144,6 +145,7 @@ class MHSAModule(Layer):
         )
         if mha_type == "relmha":
             self.mha = MultiHeadRelativeAttention(
+                causal=relmha_causal,
                 num_heads=num_heads,
                 key_dim=head_size,
                 output_shape=dmodel,
@@ -336,6 +338,7 @@ class ConformerBlock(Layer):
         mha_type="relmha",
         mhsam_residual_factor=1.0,
         mhsam_use_attention_bias=False,
+        mhsam_causal=False,
         kernel_size=32,
         padding="causal",
         convm_scale_factor=2,
@@ -375,6 +378,7 @@ class ConformerBlock(Layer):
             use_attention_bias=mhsam_use_attention_bias,
             dropout=dropout,
             mha_type=mha_type,
+            relmha_causal=mhsam_causal,
             norm_position=module_norm_position,
             memory_length=memory_length,
             kernel_regularizer=kernel_regularizer,
@@ -459,6 +463,7 @@ class ConformerEncoder(Layer):
         ffm_residual_factor=0.5,
         mhsam_residual_factor=1.0,
         mhsam_use_attention_bias=False,
+        mhsam_causal=False,
         convm_scale_factor=2,
         convm_residual_factor=1.0,
         convm_use_group_conv=False,
@@ -510,14 +515,15 @@ class ConformerEncoder(Layer):
         self._use_attention_auto_mask = use_attention_auto_mask
 
         if self._mha_type == "relmha":
-            self.relpe = RelativePositionalEncoding(
+            self.relpe = RelativeSinusoidalPositionalEncoding(
                 interleave=interleave_relpe,
                 memory_length=memory_length,
+                causal=mhsam_causal,
                 name="relpe",
                 dtype=self.dtype,
             )
         else:
-            self.relpe = PositionalEncoding(interleave=interleave_relpe, name="pe", dtype=self.dtype)
+            self.relpe = SinusoidalPositionalEncoding(interleave=interleave_relpe, name="pe", dtype=self.dtype)
 
         self.conformer_blocks = [
             ConformerBlock(
@@ -530,6 +536,7 @@ class ConformerEncoder(Layer):
                 mha_type=mha_type,
                 mhsam_residual_factor=mhsam_residual_factor,
                 mhsam_use_attention_bias=mhsam_use_attention_bias,
+                mhsam_causal=mhsam_causal,
                 kernel_size=kernel_size,
                 padding=padding,
                 convm_scale_factor=convm_scale_factor,
@@ -580,7 +587,7 @@ class ConformerEncoder(Layer):
         outputs, outputs_length, caching = inputs
         outputs, outputs_length = self.conv_subsampling([outputs, outputs_length], training=training)
         outputs = self.linear(outputs, training=training)
-        outputs, relative_position_encoding = self.relpe(outputs, training=training)
+        outputs, relative_position_encoding = self.relpe([outputs, outputs_length], training=training)
         outputs = self.do(outputs, training=training)
         new_caching = None if self._memory_length is None else []
         for i, cblock in enumerate(self.conformer_blocks):
@@ -626,7 +633,7 @@ class ConformerEncoder(Layer):
         output_shape, output_length_shape, caching_shape = input_shape
         output_shape, output_length_shape = self.conv_subsampling.compute_output_shape((output_shape, output_length_shape))
         output_shape = self.linear.compute_output_shape(output_shape)
-        output_shape, relative_position_encoding_shape = self.relpe.compute_output_shape(output_shape)
+        output_shape, relative_position_encoding_shape = self.relpe.compute_output_shape((output_shape, output_length_shape))
         output_shape = self.do.compute_output_shape(output_shape)
         for cblock in self.conformer_blocks:
             output_shape, caching_shape = cblock.compute_output_shape((output_shape, caching_shape, relative_position_encoding_shape, None, None))

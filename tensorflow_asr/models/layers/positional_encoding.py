@@ -53,10 +53,10 @@ def compute_sinusoid_position_encoding(
     return pe
 
 
-class PositionalEncoding(Layer):
+class SinusoidalPositionalEncoding(Layer):
     def __init__(
         self,
-        dropout=0.0,
+        dropout=0,
         scale=None,
         interleave=False,
         **kwargs,
@@ -88,7 +88,7 @@ class PositionalEncoding(Layer):
         return output_shape, output_shape
 
 
-class RelativePositionalEncoding(PositionalEncoding):
+class RelativeSinusoidalPositionalEncoding(SinusoidalPositionalEncoding):
     def __init__(
         self,
         dropout=0,
@@ -99,23 +99,17 @@ class RelativePositionalEncoding(PositionalEncoding):
         **kwargs,
     ):
         super().__init__(dropout, scale, interleave, **kwargs)
-        self._memory_length = memory_length
+        self._memory_length = memory_length or 0
         self._causal = causal
 
     def call(self, inputs, training=False):
-        outputs = inputs
+        outputs, outputs_length = inputs
         if self._scale is not None:
             outputs *= self._scale
         batch_size, length, dmodel = shape_util.shape_list(outputs)
-        if self._memory_length is not None:
-            length = length + self._memory_length
-        position = compute_position(start=0, end=-length, step=-1, dtype=outputs.dtype)
-        if self._causal:
-            position_left = compute_position(start=length - 1, end=0, step=-1, dtype=outputs.dtype)
-            position = tf.concat([position_left, position], axis=0)
-        if self._memory_length is not None:
-            memory_position = compute_position(start=self._memory_length, end=0, step=-1, dtype=outputs.dtype)
-            position = tf.concat([memory_position, position], axis=0)
+        position_left = compute_position(start=length + self._memory_length - 1, end=0, step=-1, dtype=outputs.dtype)
+        position_right = compute_position(start=0, end=-length, step=-1, dtype=outputs.dtype)
+        position = tf.concat([position_left, position_right], axis=0)  # 2 * length + self._memory_length - 1
         pe = compute_sinusoid_position_encoding(
             position=position,
             batch_size=batch_size,
@@ -123,13 +117,45 @@ class RelativePositionalEncoding(PositionalEncoding):
             interleave=self._interleave,
             dtype=outputs.dtype,
         )
+        if self._causal:
+            pe, _ = tf.map_fn(
+                fn=lambda x: (
+                    tf.pad(  # [B, length + self._memory_length, dmodel]
+                        tf.slice(x[0], [(length + self._memory_length - x[1] - self._memory_length), 0], [x[1] + self._memory_length, -1]),
+                        [[0, (length + self._memory_length - x[1] - self._memory_length)], [0, 0]],
+                    ),
+                    x[1],
+                ),
+                elems=(pe, outputs_length),
+                fn_output_signature=(
+                    tf.TensorSpec(shape=(length + self._memory_length, dmodel), dtype=pe.dtype),
+                    tf.TensorSpec(shape=(), dtype=outputs_length.dtype),
+                ),
+            )
+            # pe = tf.slice(pe, [0, 0, 0], [-1, max_length, -1])
+        else:
+            pe, _ = tf.map_fn(
+                fn=lambda x: (
+                    tf.pad(  # [B, 2 * length + self._memory_length - 1, dmodel]
+                        tf.slice(x[0], [(length + self._memory_length - x[1] - self._memory_length), 0], [(2 * x[1] + self._memory_length - 1), -1]),
+                        [[0, (2 * length + self._memory_length - 1 - (2 * x[1] + self._memory_length - 1))], [0, 0]],
+                    ),
+                    x[1],
+                ),
+                elems=(pe, outputs_length),
+                fn_output_signature=(
+                    tf.TensorSpec(shape=(2 * length + self._memory_length - 1, dmodel), dtype=pe.dtype),
+                    tf.TensorSpec(shape=(), dtype=outputs_length.dtype),
+                ),
+            )
+            # pe = tf.slice(pe, [0, (max_length - length - self._memory_length), 0], [-1, max_length - 1 + length, -1])
         pe = self.do(pe, training=training)
         return outputs, pe
 
     def compute_output_shape(self, input_shape):
-        output_shape = input_shape
+        output_shape, _ = input_shape
         B, T, V = output_shape
-        pT = T
-        if self._memory_length is not None and T is not None:
+        pT = 2 * T - 1 if T is not None else None
+        if self._memory_length > 0 and T is not None:
             pT += self._memory_length
         return output_shape, (B, pT, V)
