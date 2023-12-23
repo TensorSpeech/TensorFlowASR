@@ -108,7 +108,7 @@ class RelativeSinusoidalPositionalEncoding(SinusoidalPositionalEncoding):
             outputs *= self._scale
         batch_size, length, dmodel = shape_util.shape_list(outputs)
         position_left = compute_position(start=length + self._memory_length - 1, end=0, step=-1, dtype=outputs.dtype)
-        position_right = compute_position(start=0, end=-length, step=-1, dtype=outputs.dtype)
+        position_right = compute_position(start=0, end=-(length + self._memory_length), step=-1, dtype=outputs.dtype)
         position = tf.concat([position_left, position_right], axis=0)  # 2 * length + self._memory_length - 1
         pe = compute_sinusoid_position_encoding(
             position=position,
