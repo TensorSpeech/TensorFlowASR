@@ -97,6 +97,13 @@ class RelativeSinusoidalPositionalEncoding(SinusoidalPositionalEncoding):
         causal=False,
         **kwargs,
     ):
+        """
+        http://arxiv.org/abs/1901.02860
+        Transformer-XL: Attentive Language Models Beyond a Fixed-Length Context
+        Relative Sinusoidal Positional Encoding
+        Will be computed with weights as the Q in paper
+        ==> Define in reversed order
+        """
         super().__init__(dropout, scale, interleave, **kwargs)
         self._memory_length = memory_length or 0
         self._causal = causal
