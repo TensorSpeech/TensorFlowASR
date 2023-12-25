@@ -119,15 +119,19 @@ class RelativeSinusoidalPositionalEncoding(SinusoidalPositionalEncoding):
         if self._causal:
             pe, _ = tf.map_fn(
                 fn=lambda x: (  # [B, length + self._memory_length, dmodel]
-                    tf.RaggedTensor.from_tensor(
-                        tf.slice(
-                            x[0],
-                            begin=[(length + self._memory_length - x[1] - self._memory_length), 0],
-                            size=[x[1] + self._memory_length, dmodel],
-                        ),
-                    ).to_tensor(
-                        default_value=0,
-                        shape=[length + self._memory_length, dmodel],
+                    tf.concat(
+                        [
+                            tf.slice(
+                                x[0],
+                                begin=[(length + self._memory_length - x[1] - self._memory_length), 0],
+                                size=[x[1] + self._memory_length, dmodel],
+                            ),
+                            tf.zeros(
+                                shape=[(length + self._memory_length) - (x[1] + self._memory_length), dmodel],
+                                dtype=x[0].dtype,
+                            ),
+                        ],
+                        axis=0,
                     ),
                     x[1],
                 ),
@@ -137,19 +141,22 @@ class RelativeSinusoidalPositionalEncoding(SinusoidalPositionalEncoding):
                     tf.TensorSpec(shape=(), dtype=outputs_length.dtype),
                 ),
             )
-            # pe = tf.slice(pe, [0, 0, 0], [-1, max_length, -1])
         else:
             pe, _ = tf.map_fn(
                 fn=lambda x: (  # [B, 2 * length + self._memory_length - 1, dmodel]
-                    tf.RaggedTensor.from_tensor(
-                        tf.slice(
-                            x[0],
-                            begin=[(length + self._memory_length - x[1] - self._memory_length), 0],
-                            size=[(2 * x[1] + self._memory_length - 1), dmodel],
-                        )
-                    ).to_tensor(
-                        default_value=0,
-                        shape=[(2 * length + self._memory_length - 1), dmodel],
+                    tf.concat(
+                        [
+                            tf.slice(
+                                x[0],
+                                begin=[(length + self._memory_length - x[1] - self._memory_length), 0],
+                                size=[(2 * x[1] + self._memory_length - 1), dmodel],
+                            ),
+                            tf.zeros(
+                                shape=[(2 * length + self._memory_length - 1) - (2 * x[1] + self._memory_length - 1), dmodel],
+                                dtype=x[0].dtype,
+                            ),
+                        ],
+                        axis=0,
                     ),
                     x[1],
                 ),
@@ -159,7 +166,6 @@ class RelativeSinusoidalPositionalEncoding(SinusoidalPositionalEncoding):
                     tf.TensorSpec(shape=(), dtype=outputs_length.dtype),
                 ),
             )
-            # pe = tf.slice(pe, [0, (max_length - length - self._memory_length), 0], [-1, max_length - 1 + length, -1])
         pe = self.do(pe, training=training)
         return outputs, pe
 
