@@ -133,9 +133,13 @@ class RelativeSinusoidalPositionalEncoding(SinusoidalPositionalEncoding):
                                 begin=[(length + self._memory_length - x[1] - self._memory_length), 0],
                                 size=[x[1] + self._memory_length, dmodel],
                             ),
-                            tf.zeros(
-                                shape=[(length + self._memory_length) - (x[1] + self._memory_length), dmodel],
-                                dtype=x[0].dtype,
+                            tf.multiply(
+                                tf.slice(
+                                    x[0],
+                                    begin=[0, 0],
+                                    size=[(length + self._memory_length) - (x[1] + self._memory_length), dmodel],
+                                ),
+                                0,
                             ),
                         ],
                         axis=0,
@@ -158,9 +162,13 @@ class RelativeSinusoidalPositionalEncoding(SinusoidalPositionalEncoding):
                                 begin=[(length + self._memory_length - x[1] - self._memory_length), 0],
                                 size=[(2 * x[1] + self._memory_length - 1), dmodel],
                             ),
-                            tf.zeros(
-                                shape=[(2 * length + self._memory_length - 1) - (2 * x[1] + self._memory_length - 1), dmodel],
-                                dtype=x[0].dtype,
+                            tf.multiply(
+                                tf.slice(
+                                    x[0],
+                                    begin=[0, 0],
+                                    size=[(2 * length + self._memory_length - 1) - (2 * x[1] + self._memory_length - 1), dmodel],
+                                ),
+                                0,
                             ),
                         ],
                         axis=0,
