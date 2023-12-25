@@ -66,7 +66,7 @@ class SinusoidalPositionalEncoding(Layer):
         self._interleave = interleave
 
     def call(self, inputs, training=False):
-        outputs = inputs
+        outputs, outputs_length = inputs
         if self._scale is not None:
             outputs *= self._scale
         batch_size, length, dmodel = shape_util.shape_list(outputs)
@@ -78,12 +78,13 @@ class SinusoidalPositionalEncoding(Layer):
             interleave=self._interleave,
             dtype=outputs.dtype,
         )
+        pe *= tf.sequence_mask(outputs_length, maxlen=length, dtype=pe.dtype)
         pe = self.do(pe, training=training)
         outputs += pe
         return outputs, pe
 
     def compute_output_shape(self, input_shape):
-        output_shape = input_shape
+        output_shape, _ = input_shape
         return output_shape, output_shape
 
 
@@ -114,7 +115,7 @@ class RelativeSinusoidalPositionalEncoding(SinusoidalPositionalEncoding):
             outputs *= self._scale
         batch_size, length, dmodel = shape_util.shape_list(outputs)
         position_left = compute_position(start=length + self._memory_length - 1, end=0, step=-1, dtype=outputs.dtype)
-        position_right = compute_position(start=0, end=-(length + self._memory_length), step=-1, dtype=outputs.dtype)
+        position_right = compute_position(start=0, end=-length, step=-1, dtype=outputs.dtype)
         position = tf.concat([position_left, position_right], axis=0)  # 2 * length + self._memory_length - 1
         pe = compute_sinusoid_position_encoding(
             position=position,
@@ -126,59 +127,45 @@ class RelativeSinusoidalPositionalEncoding(SinusoidalPositionalEncoding):
         if self._causal:
             pe, _ = tf.map_fn(
                 fn=lambda x: (  # [B, length + self._memory_length, dmodel]
-                    tf.concat(
-                        [
-                            tf.slice(
-                                x[0],
-                                begin=[(length + self._memory_length - x[1] - self._memory_length), 0],
-                                size=[x[1] + self._memory_length, dmodel],
-                            ),
-                            tf.multiply(
-                                tf.slice(
-                                    x[0],
-                                    begin=[0, 0],
-                                    size=[(length + self._memory_length) - (x[1] + self._memory_length), dmodel],
-                                ),
-                                0,
-                            ),
-                        ],
-                        axis=0,
+                    tf.multiply(
+                        tf.slice(
+                            tf.roll(input=x[0], shift=-(length - x[1]), axis=0),
+                            begin=[0, 0],
+                            size=[(length + self._memory_length), dmodel],
+                        ),
+                        tf.expand_dims(
+                            tf.sequence_mask((x[1] + self._memory_length), maxlen=(length + self._memory_length), dtype=x[0].dtype),
+                            axis=-1,
+                        ),
                     ),
                     x[1],
                 ),
                 elems=(pe, outputs_length),
                 fn_output_signature=(
-                    tf.TensorSpec(shape=(length + self._memory_length, dmodel), dtype=pe.dtype),
-                    tf.TensorSpec(shape=(), dtype=outputs_length.dtype),
+                    tf.TensorSpec(shape=[(length + self._memory_length), dmodel], dtype=pe.dtype),
+                    tf.TensorSpec(shape=[], dtype=outputs_length.dtype),
                 ),
             )
         else:
             pe, _ = tf.map_fn(
                 fn=lambda x: (  # [B, 2 * length + self._memory_length - 1, dmodel]
-                    tf.concat(
-                        [
-                            tf.slice(
-                                x[0],
-                                begin=[(length + self._memory_length - x[1] - self._memory_length), 0],
-                                size=[(2 * x[1] + self._memory_length - 1), dmodel],
-                            ),
-                            tf.multiply(
-                                tf.slice(
-                                    x[0],
-                                    begin=[0, 0],
-                                    size=[(2 * length + self._memory_length - 1) - (2 * x[1] + self._memory_length - 1), dmodel],
-                                ),
-                                0,
-                            ),
-                        ],
-                        axis=0,
+                    tf.multiply(
+                        tf.slice(
+                            tf.roll(input=x[0], shift=-(length - x[1]), axis=0),
+                            begin=[0, 0],
+                            size=[(2 * length + self._memory_length - 1), dmodel],
+                        ),
+                        tf.expand_dims(
+                            tf.sequence_mask((2 * x[1] + self._memory_length - 1), maxlen=(2 * length + self._memory_length - 1), dtype=x[0].dtype),
+                            axis=-1,
+                        ),
                     ),
                     x[1],
                 ),
                 elems=(pe, outputs_length),
                 fn_output_signature=(
-                    tf.TensorSpec(shape=(2 * length + self._memory_length - 1, dmodel), dtype=pe.dtype),
-                    tf.TensorSpec(shape=(), dtype=outputs_length.dtype),
+                    tf.TensorSpec(shape=[(2 * length + self._memory_length - 1), dmodel], dtype=pe.dtype),
+                    tf.TensorSpec(shape=[], dtype=outputs_length.dtype),
                 ),
             )
         pe = self.do(pe, training=training)
