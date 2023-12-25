@@ -49,7 +49,6 @@ def compute_sinusoid_position_encoding(
         angles = tf.einsum("i,d->id", position, timescales)
         pe = tf.concat([tf.sin(angles), tf.cos(angles)], -1)
     pe = tf.repeat(pe[None, :, :], repeats=batch_size, axis=0)
-    pe = tf.stop_gradient(pe)
     return pe
 
 
@@ -119,14 +118,16 @@ class RelativeSinusoidalPositionalEncoding(SinusoidalPositionalEncoding):
         )
         if self._causal:
             pe, _ = tf.map_fn(
-                fn=lambda x: (
-                    tf.pad(  # [B, length + self._memory_length, dmodel]
+                fn=lambda x: (  # [B, length + self._memory_length, dmodel]
+                    tf.RaggedTensor.from_tensor(
                         tf.slice(
                             x[0],
                             begin=[(length + self._memory_length - x[1] - self._memory_length), 0],
                             size=[x[1] + self._memory_length, dmodel],
                         ),
-                        [[0, (length + self._memory_length - x[1] - self._memory_length)], [0, 0]],
+                    ).to_tensor(
+                        default_value=0,
+                        shape=[length + self._memory_length, dmodel],
                     ),
                     x[1],
                 ),
@@ -139,14 +140,16 @@ class RelativeSinusoidalPositionalEncoding(SinusoidalPositionalEncoding):
             # pe = tf.slice(pe, [0, 0, 0], [-1, max_length, -1])
         else:
             pe, _ = tf.map_fn(
-                fn=lambda x: (
-                    tf.pad(  # [B, 2 * length + self._memory_length - 1, dmodel]
+                fn=lambda x: (  # [B, 2 * length + self._memory_length - 1, dmodel]
+                    tf.RaggedTensor.from_tensor(
                         tf.slice(
                             x[0],
                             begin=[(length + self._memory_length - x[1] - self._memory_length), 0],
                             size=[(2 * x[1] + self._memory_length - 1), dmodel],
-                        ),
-                        [[0, (2 * length + self._memory_length - 1 - (2 * x[1] + self._memory_length - 1))], [0, 0]],
+                        )
+                    ).to_tensor(
+                        default_value=0,
+                        shape=[(2 * length + self._memory_length - 1), dmodel],
                     ),
                     x[1],
                 ),
