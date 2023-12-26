@@ -64,13 +64,12 @@ learning_config:
     class_name: Custom>Adam
     config:
       learning_rate:
-        class_name: tensorflow_asr.optimizers.schedules>TransformerSchedule
+        class_name: tensorflow_asr.optimizers.schedules>CyclicTransformerSchedule
         config:
           dmodel: 176
           warmup_steps: 10000
           max_lr: 0.02/(176**0.5)
-          min_lr: 1e-6
-          scale: 2.0
+          step_size: 4000
       beta_1: 0.9
       beta_2: 0.98
       epsilon: 1e-9
