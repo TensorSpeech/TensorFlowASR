@@ -587,8 +587,8 @@ class ConformerEncoder(Layer):
         outputs, outputs_length, caching = inputs
         outputs, outputs_length = self.conv_subsampling([outputs, outputs_length], training=training)
         outputs = self.linear(outputs, training=training)
-        outputs, relative_position_encoding = self.relpe([outputs, outputs_length], training=training)
         outputs = self.do(outputs, training=training)
+        outputs, relative_position_encoding = self.relpe([outputs, outputs_length], training=training)
         new_caching = None if self._memory_length is None else []
         for i, cblock in enumerate(self.conformer_blocks):
             outputs, new_cache = cblock(
