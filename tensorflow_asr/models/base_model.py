@@ -205,6 +205,8 @@ class BaseModel(tf.keras.Model):
             tape.watch(self.trainable_variables)
             original_weights = self.apply_gwn()
             outputs = self(x, training=True)
+            tape.watch(outputs["outputs"])
+            tape.watch(outputs["outputs_length"])
             y_pred, caching = outputs["logits"], outputs.get("caching")
             y_pred, _ = data_util.attach_length_to_data(y_pred, outputs["logits_length"])
             self.remove_gwn(original_weights)
