@@ -1,4 +1,4 @@
-{% import "examples/configs/librispeech/characters/char.yml.j2" as decoder_config with context %}
+{% import "examples/configs/librispeech/sentencepiece/sp.256.yml.j2" as decoder_config with context %}
 {{decoder_config}}
 
 model_config:
@@ -14,13 +14,13 @@ model_config:
       augmentation_config:
         feature_augment:
           time_masking:
-            prob: 1.0
+            prob: 0.5
             num_masks: 5
             mask_factor: -1 # whole utterance
             p_upperbound: 0.05
             mask_value: 0
           freq_masking:
-            prob: 1.0
+            prob: 0.5
             num_masks: 1
             mask_factor: 27
             mask_value: 0
@@ -64,12 +64,13 @@ learning_config:
     class_name: Custom>Adam
     config:
       learning_rate:
-        class_name: tensorflow_asr.optimizers.schedules>CyclicTransformerSchedule
+        class_name: tensorflow_asr.optimizers.schedules>TransformerSchedule
         config:
           dmodel: 176
           warmup_steps: 10000
           max_lr: 0.02/(176**0.5)
-          step_size: 4000
+          min_lr: 1e-6
+          scale: 2.0
       beta_1: 0.9
       beta_2: 0.98
       epsilon: 1e-9
