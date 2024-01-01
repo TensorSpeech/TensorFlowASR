@@ -212,6 +212,9 @@ class BaseModel(tf.keras.Model):
             tape.watch(y_pred)
             loss = self.compute_loss(x, y, y_pred, sample_weight)
 
+            if self.use_ga:  # sum of gradients so the loss must be divided
+                loss = loss / self.ga.total_steps
+
         if self.use_loss_scale:
             loss = self.optimizer.get_scaled_loss(loss)
             gradients = tape.gradient(loss, self.trainable_variables)

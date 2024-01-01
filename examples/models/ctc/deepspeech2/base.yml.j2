@@ -1,4 +1,4 @@
-{% import "examples/configs/librispeech/characters/char.yml.j2" as decoder_config with context %}
+{% import "examples/configs/librispeech/sentencepiece/sp.256.yml.j2" as decoder_config with context %}
 {{decoder_config}}
 
 model_config:
@@ -9,8 +9,8 @@ model_config:
       sample_rate: 16000
       frame_ms: 25
       stride_ms: 10
-      num_feature_bins: 160
-      feature_type: spectrogram
+      num_feature_bins: 128
+      feature_type: log_mel_spectrogram
     conv_type: conv2d
     conv_kernels: [ [ 11, 41 ], [ 11, 21 ] ]
     conv_strides: [ [ 3, 2 ], [ 1, 2 ] ]
@@ -40,30 +40,42 @@ model_config:
 
 learning_config:
   optimizer_config:
-    class_name: Adam
+    class_name: Custom>Adam
     config:
-      learning_rate: 0.0005
+      learning_rate: 0.001
       beta_1: 0.9
       beta_2: 0.98
       epsilon: 1e-9
 
-  running_config:
-    batch_size: 16
-    num_epochs: 300
-    checkpoint:
-      filepath: {{modeldir}}/checkpoints/{epoch:02d}.h5
-      save_best_only: False
-      save_weights_only: True
-      save_freq: epoch
-    backup_and_restore:
-      backup_dir: {{modeldir}}/states
-      save_freq: epoch
-      delete_checkpoint: False
-    tensorboard:
-      log_dir: {{modeldir}}/tensorboard
-      histogram_freq: 1
-      write_graph: False
-      write_images: False
-      update_freq: epoch
-      profile_batch: 100
+  gwn_config: null
+
+  gradn_config: null
+
+  batch_size: 16
+  ga_steps: 4
+  num_epochs: 450
+
+  callbacks:
+    - class_name: tensorflow_asr.callbacks>TerminateOnNaN
+      config: {}
+    - class_name: tensorflow_asr.callbacks>ModelCheckpoint
+      config:
+        filepath: {{modeldir}}/checkpoints/{epoch:02d}.h5
+        save_best_only: False
+        save_weights_only: True
+        save_freq: epoch
+    - class_name: tensorflow_asr.callbacks>BackupAndRestore
+      config:
+        backup_dir: {{modeldir}}/states
+        save_freq: epoch
+        delete_checkpoint: False
+    - class_name: tensorflow_asr.callbacks>TensorBoard
+      config:
+        log_dir: {{modeldir}}/tensorboard
+        histogram_freq: 0
+        write_graph: False
+        write_images: False
+        write_steps_per_second: False
+        update_freq: batch
+        profile_batch: 0
 
