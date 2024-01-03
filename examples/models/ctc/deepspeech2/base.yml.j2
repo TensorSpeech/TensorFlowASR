@@ -11,6 +11,19 @@ model_config:
       stride_ms: 10
       num_feature_bins: 128
       feature_type: log_mel_spectrogram
+      augmentation_config:
+        feature_augment:
+          time_masking:
+            prob: 0.5
+            num_masks: 5
+            mask_factor: -1 # whole utterance
+            p_upperbound: 0.05
+            mask_value: 0
+          freq_masking:
+            prob: 0.5
+            num_masks: 1
+            mask_factor: 27
+            mask_value: 0
     conv_type: conv2d
     conv_kernels: [ [ 11, 41 ], [ 11, 21 ] ]
     conv_strides: [ [ 3, 2 ], [ 1, 2 ] ]
