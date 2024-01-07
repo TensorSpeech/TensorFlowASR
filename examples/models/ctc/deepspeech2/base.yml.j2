@@ -11,6 +11,7 @@ model_config:
       stride_ms: 10
       num_feature_bins: 128
       feature_type: log_mel_spectrogram
+      normalize_zscore: True
       augmentation_config:
         feature_augment:
           time_masking:
@@ -25,21 +26,24 @@ model_config:
             mask_factor: 27
             mask_value: 0
     conv_type: conv2d
-    conv_kernels: [ [ 11, 41 ], [ 11, 21 ] ]
-    conv_strides: [ [ 3, 2 ], [ 1, 2 ] ]
-    conv_filters: [ 32, 32 ]
-    conv_dropout: 0.1
+    conv_kernels: [ [ 11, 41 ], [ 11, 21 ], [ 11, 21 ] ]
+    conv_strides: [ [ 3, 2 ], [ 1, 2 ], [ 1, 2 ] ]
+    conv_filters: [ 32, 32, 96 ]
+    conv_activation: relu
+    conv_dropout: 0.2
     conv_padding: same
-    rnn_nlayers: 5
-    rnn_type: lstm
-    rnn_units: 512
+    rnn_nlayers: 4
+    rnn_type: gru
+    rnn_units: 1024
     rnn_bidirectional: True
     rnn_unroll: False
     rnn_rowconv: 0
-    rnn_dropout: 0.1
+    rnn_rowconv_activation: relu
+    rnn_dropout: 0.3
     fc_nlayers: 1
     fc_units: 1024
-    fc_dropout: 0.1
+    fc_activation: relu
+    fc_dropout: 0.3
     blank: 0
     vocab_size: {{decoder_config.vocabsize}}
     kernel_regularizer:
@@ -55,10 +59,11 @@ learning_config:
   optimizer_config:
     class_name: Custom>Adam
     config:
-      learning_rate: 0.001
+      learning_rate: 0.1
       beta_1: 0.9
       beta_2: 0.98
       epsilon: 1e-9
+      clipnorm: 1.0
 
   gwn_config: null
 

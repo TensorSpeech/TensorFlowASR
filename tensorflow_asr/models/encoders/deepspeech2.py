@@ -69,6 +69,7 @@ class ConvBlock(Layer):
         strides: list = [2, 2],
         filters: int = 32,
         padding: str = "causal",
+        activation: str = "relu",
         dropout: float = 0.1,
         kernel_regularizer=None,
         bias_regularizer=None,
@@ -88,7 +89,7 @@ class ConvBlock(Layer):
         self.bn = tf.keras.layers.BatchNormalization(
             name="bn", gamma_regularizer=kernel_regularizer, beta_regularizer=bias_regularizer, dtype=self.dtype
         )
-        self.relu = tf.keras.layers.ReLU(name="relu", dtype=self.dtype)
+        self.act = tf.keras.layers.Activation(activation=activation, dtype=self.dtype)
         self.do = tf.keras.layers.Dropout(dropout, name="dropout", dtype=self.dtype)
         self.time_reduction_factor = self.conv.strides[0]
 
@@ -96,7 +97,7 @@ class ConvBlock(Layer):
         outputs, outputs_length = inputs
         outputs = self.conv(outputs, training=training)
         outputs = self.bn(outputs, training=training)
-        outputs = self.relu(outputs, training=training)
+        outputs = self.act(outputs, training=training)
         outputs = self.do(outputs, training=training)
         outputs_length = math_util.conv_output_length(
             outputs_length, filter_size=self.conv.kernel_size[0], padding=self.conv.padding, stride=self.conv.strides[0]
@@ -116,6 +117,9 @@ class ConvBlock(Layer):
     def compute_output_shape(self, input_shape):
         output_shape, output_length_shape = input_shape
         output_shape = self.conv.compute_output_shape(output_shape)
+        output_shape = self.bn.compute_output_shape(output_shape)
+        output_shape = self.act.compute_output_shape(output_shape)
+        output_shape = self.do.compute_output_shape(output_shape)
         return output_shape, output_length_shape
 
 
@@ -127,6 +131,7 @@ class ConvModule(Layer):
         strides: list = [[2, 2], [1, 2], [1, 2]],
         filters: list = [32, 32, 96],
         padding: str = "causal",
+        activation: str = "relu",
         dropout: float = 0.1,
         kernel_regularizer=None,
         bias_regularizer=None,
@@ -149,6 +154,7 @@ class ConvModule(Layer):
                 filters=filters[i],
                 dropout=dropout,
                 padding=padding,
+                activation=activation,
                 name=f"block_{i}",
                 kernel_regularizer=kernel_regularizer,
                 bias_regularizer=bias_regularizer,
@@ -197,6 +203,7 @@ class RnnBlock(Layer):
         bidirectional: bool = True,
         unroll: bool = False,
         rowconv: int = 0,
+        rowconv_activation: str = "relu",
         dropout: float = 0.1,
         kernel_regularizer=None,
         bias_regularizer=None,
@@ -217,13 +224,23 @@ class RnnBlock(Layer):
         )
         if bidirectional:
             self.rnn = tf.keras.layers.Bidirectional(self.rnn, name=f"b{rnn_type}", dtype=self.dtype)
+        self.bn = tf.keras.layers.BatchNormalization(
+            name="bn", gamma_regularizer=kernel_regularizer, beta_regularizer=bias_regularizer, dtype=self.dtype
+        )
         self.rowconv = None
         if not bidirectional and rowconv > 0:
-            self.rowconv = RowConv1D(future_width=rowconv, name="rowconv", regularizer=kernel_regularizer, activation="relu", dtype=self.dtype)
+            self.rowconv = RowConv1D(
+                future_width=rowconv,
+                name="rowconv",
+                regularizer=kernel_regularizer,
+                activation=rowconv_activation,
+                dtype=self.dtype,
+            )
 
     def call(self, inputs, training=False):
         outputs, outputs_length = inputs
         outputs = self.rnn(outputs, training=training)  # mask auto populate
+        outputs = self.bn(outputs, training=training)
         if self.rowconv is not None:
             outputs = self.rowconv(outputs, training=training)
         return outputs, outputs_length
@@ -231,6 +248,9 @@ class RnnBlock(Layer):
     def compute_output_shape(self, input_shape):
         output_shape, output_length_shape = input_shape
         output_shape = self.rnn.compute_output_shape(output_shape)
+        output_shape = self.bn.compute_output_shape(output_shape)
+        if self.rowconv is not None:
+            output_shape = self.rowconv.compute_output_shape(output_shape)
         return output_shape, output_length_shape
 
 
@@ -243,6 +263,7 @@ class RnnModule(Layer):
         bidirectional: bool = True,
         unroll: bool = False,
         rowconv: int = 0,
+        rowconv_activation: str = "relu",
         dropout: float = 0.1,
         kernel_regularizer=None,
         bias_regularizer=None,
@@ -256,6 +277,7 @@ class RnnModule(Layer):
                 bidirectional=bidirectional,
                 unroll=unroll,
                 rowconv=rowconv,
+                rowconv_activation=rowconv_activation,
                 dropout=dropout,
                 kernel_regularizer=kernel_regularizer,
                 bias_regularizer=bias_regularizer,
@@ -285,6 +307,7 @@ class FcBlock(Layer):
     def __init__(
         self,
         units: int = 1024,
+        activation: str = "relu",
         dropout: float = 0.1,
         kernel_regularizer=None,
         bias_regularizer=None,
@@ -292,13 +315,17 @@ class FcBlock(Layer):
     ):
         super().__init__(**kwargs)
         self.fc = tf.keras.layers.Dense(units, kernel_regularizer=kernel_regularizer, bias_regularizer=bias_regularizer, name="fc", dtype=self.dtype)
-        self.relu = tf.keras.layers.ReLU(name="relu", dtype=self.dtype)
+        self.bn = tf.keras.layers.BatchNormalization(
+            name="bn", gamma_regularizer=kernel_regularizer, beta_regularizer=bias_regularizer, dtype=self.dtype
+        )
+        self.act = tf.keras.layers.Activation(activation=activation, dtype=self.dtype)
         self.do = tf.keras.layers.Dropout(dropout, name="dropout", dtype=self.dtype)
 
     def call(self, inputs, training=False):
         outputs, outputs_length = inputs
         outputs = self.fc(outputs, training=training)
-        outputs = self.relu(outputs, training=training)
+        outputs = self.bn(outputs, training=training)
+        outputs = self.act(outputs, training=training)
         outputs = self.do(outputs, training=training)
         return outputs, outputs_length
 
@@ -313,6 +340,7 @@ class FcModule(Layer):
         self,
         nlayers: int = 0,
         units: int = 1024,
+        activation: str = "relu",
         dropout: float = 0.1,
         kernel_regularizer=None,
         bias_regularizer=None,
@@ -322,6 +350,7 @@ class FcModule(Layer):
         self.blocks = [
             FcBlock(
                 units=units,
+                activation=activation,
                 dropout=dropout,
                 kernel_regularizer=kernel_regularizer,
                 bias_regularizer=bias_regularizer,
@@ -352,6 +381,7 @@ class DeepSpeech2Encoder(Layer):
         conv_strides: list = [[2, 2], [1, 2], [1, 2]],
         conv_filters: list = [32, 32, 96],
         conv_padding: str = "same",
+        conv_activation: str = "relu",
         conv_dropout: float = 0.1,
         rnn_nlayers: int = 5,
         rnn_type: str = "lstm",
@@ -359,9 +389,11 @@ class DeepSpeech2Encoder(Layer):
         rnn_bidirectional: bool = True,
         rnn_unroll: bool = False,
         rnn_rowconv: int = 0,
+        rnn_rowconv_activation: str = "relu",
         rnn_dropout: float = 0.1,
         fc_nlayers: int = 0,
         fc_units: int = 1024,
+        fc_activation: str = "relu",
         fc_dropout: float = 0.1,
         kernel_regularizer=None,
         bias_regularizer=None,
@@ -374,6 +406,7 @@ class DeepSpeech2Encoder(Layer):
             strides=conv_strides,
             filters=conv_filters,
             padding=conv_padding,
+            activation=conv_activation,
             dropout=conv_dropout,
             kernel_regularizer=kernel_regularizer,
             bias_regularizer=bias_regularizer,
@@ -387,6 +420,7 @@ class DeepSpeech2Encoder(Layer):
             bidirectional=rnn_bidirectional,
             unroll=rnn_unroll,
             rowconv=rnn_rowconv,
+            rowconv_activation=rnn_rowconv_activation,
             dropout=rnn_dropout,
             kernel_regularizer=kernel_regularizer,
             bias_regularizer=bias_regularizer,
@@ -396,6 +430,7 @@ class DeepSpeech2Encoder(Layer):
         self.fc_module = FcModule(
             nlayers=fc_nlayers,
             units=fc_units,
+            activation=fc_activation,
             dropout=fc_dropout,
             kernel_regularizer=kernel_regularizer,
             bias_regularizer=bias_regularizer,
