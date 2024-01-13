@@ -141,10 +141,10 @@ class RelativeSinusoidalPositionalEncoding(SinusoidalPositionalEncoding):
                     x[1],
                 ),
                 elems=(pe, outputs_length),
-                fn_output_signature=(
-                    tf.TensorSpec(shape=[(length + self._memory_length), dmodel], dtype=pe.dtype),
-                    tf.TensorSpec(shape=[], dtype=outputs_length.dtype),
-                ),
+                # fn_output_signature=(
+                #     tf.TensorSpec(shape=[(length + self._memory_length), dmodel], dtype=pe.dtype),
+                #     tf.TensorSpec(shape=[], dtype=outputs_length.dtype),
+                # ),
             )
         else:
             pe, _ = tf.map_fn(
@@ -163,10 +163,10 @@ class RelativeSinusoidalPositionalEncoding(SinusoidalPositionalEncoding):
                     x[1],
                 ),
                 elems=(pe, outputs_length),
-                fn_output_signature=(
-                    tf.TensorSpec(shape=[(2 * length + self._memory_length - 1), dmodel], dtype=pe.dtype),
-                    tf.TensorSpec(shape=[], dtype=outputs_length.dtype),
-                ),
+                # fn_output_signature=(
+                #     tf.TensorSpec(shape=[(2 * length + self._memory_length - 1), dmodel], dtype=pe.dtype),
+                #     tf.TensorSpec(shape=[], dtype=outputs_length.dtype),
+                # ),
             )
         pe = self.do(pe, training=training)
         return outputs, pe

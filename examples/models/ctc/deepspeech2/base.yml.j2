@@ -41,11 +41,7 @@ model_config:
     rnn_rowconv: 0
     rnn_rowconv_activation: relu
     rnn_dropout: 0.3
-    rnn_initializer:
-      class_name: RandomUniform
-      config:
-        minval: -0.03125 # -1/32
-        maxval: 0.03125 # 1/32
+    rnn_initializer: glorot_uniform
     fc_nlayers: 1
     fc_units: 1024
     fc_activation: relu

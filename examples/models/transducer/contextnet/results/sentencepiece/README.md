@@ -18,7 +18,7 @@
 
 ### Training Loss
 
-![Epoch Loss](./figs/sp1k-contextnet-small-epoch_loss.svg)
+![Epoch Loss](./figs/sp1k-contextnet-small-epoch-loss.svg)
 
 ### Training Learning Rate
 
