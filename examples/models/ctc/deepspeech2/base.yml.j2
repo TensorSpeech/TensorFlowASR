@@ -60,7 +60,7 @@ learning_config:
     class_name: Custom>SGD
     config:
       learning_rate:
-        class_name: Custom>PolynomialDecay
+        class_name: PolynomialDecay
         config:
           initial_learning_rate: 0.001
           decay_steps: 10000 # around 5 epochs with batch size 16 and 8 tpus
