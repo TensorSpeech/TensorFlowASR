@@ -10,7 +10,7 @@ model_config:
       frame_ms: 25
       stride_ms: 10
       num_feature_bins: 128
-      feature_type: log_mel_spectrogram
+      feature_type: spectrogram
       normalize_zscore: True
       augmentation_config:
         feature_augment:
@@ -32,18 +32,25 @@ model_config:
     conv_activation: relu
     conv_dropout: 0.2
     conv_padding: same
+    conv_initializer: he_uniform
     rnn_nlayers: 5
-    rnn_type: gru
-    rnn_units: 800
+    rnn_type: lstm
+    rnn_units: 512
     rnn_bidirectional: True
     rnn_unroll: False
     rnn_rowconv: 0
     rnn_rowconv_activation: relu
     rnn_dropout: 0.3
+    rnn_initializer:
+      class_name: RandomUniform
+      config:
+        minval: -0.03125 # -1/32
+        maxval: 0.03125 # 1/32
     fc_nlayers: 1
-    fc_units: 1600
+    fc_units: 1024
     fc_activation: relu
     fc_dropout: 0.3
+    fc_initializer: he_uniform
     blank: 0
     vocab_size: {{decoder_config.vocabsize}}
     kernel_regularizer:
@@ -54,6 +61,7 @@ model_config:
       class_name: l2
       config:
         l2: 0.0005
+    initializer: glorot_uniform
 
 learning_config:
   optimizer_config:

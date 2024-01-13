@@ -27,6 +27,7 @@ class RowConv1D(Layer):
         future_width=2,
         activation="relu",
         regularizer=None,
+        initializer=None,
         **kwargs,
     ):
         assert future_width >= 0, "Future context must be positive"
@@ -37,7 +38,9 @@ class RowConv1D(Layer):
             padding="causal",
             use_bias=False,
             depthwise_regularizer=regularizer,
+            depthwise_initializer=initializer,
             bias_regularizer=regularizer,
+            bias_initializer=initializer,
             name="conv",
             dtype=self.dtype,
         )
@@ -73,6 +76,7 @@ class ConvBlock(Layer):
         dropout: float = 0.1,
         kernel_regularizer=None,
         bias_regularizer=None,
+        initializer=None,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -83,7 +87,9 @@ class ConvBlock(Layer):
             padding=padding,
             name=conv_type,
             kernel_regularizer=kernel_regularizer,
+            kernel_initializer=initializer,
             bias_regularizer=bias_regularizer,
+            bias_initializer=initializer,
             dtype=self.dtype,
         )
         self.bn = tf.keras.layers.BatchNormalization(
@@ -135,6 +141,7 @@ class ConvModule(Layer):
         dropout: float = 0.1,
         kernel_regularizer=None,
         bias_regularizer=None,
+        initializer=None,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -158,6 +165,7 @@ class ConvModule(Layer):
                 name=f"block_{i}",
                 kernel_regularizer=kernel_regularizer,
                 bias_regularizer=bias_regularizer,
+                initializer=initializer,
                 dtype=self.dtype,
             )
             self.convs.append(conv_block)
@@ -207,6 +215,7 @@ class RnnBlock(Layer):
         dropout: float = 0.1,
         kernel_regularizer=None,
         bias_regularizer=None,
+        initializer=None,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -219,7 +228,9 @@ class RnnBlock(Layer):
             name=rnn_type,
             zero_output_for_mask=True,
             kernel_regularizer=kernel_regularizer,
+            kernel_initializer=initializer,
             bias_regularizer=bias_regularizer,
+            bias_initializer=initializer,
             dtype=self.dtype,
         )
         if bidirectional:
@@ -233,6 +244,7 @@ class RnnBlock(Layer):
                 future_width=rowconv,
                 name="rowconv",
                 regularizer=kernel_regularizer,
+                initializer=initializer,
                 activation=rowconv_activation,
                 dtype=self.dtype,
             )
@@ -267,6 +279,7 @@ class RnnModule(Layer):
         dropout: float = 0.1,
         kernel_regularizer=None,
         bias_regularizer=None,
+        initializer=None,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -281,6 +294,7 @@ class RnnModule(Layer):
                 dropout=dropout,
                 kernel_regularizer=kernel_regularizer,
                 bias_regularizer=bias_regularizer,
+                initializer=initializer,
                 name=f"block_{i}",
                 dtype=self.dtype,
             )
@@ -311,10 +325,19 @@ class FcBlock(Layer):
         dropout: float = 0.1,
         kernel_regularizer=None,
         bias_regularizer=None,
+        initializer=None,
         **kwargs,
     ):
         super().__init__(**kwargs)
-        self.fc = tf.keras.layers.Dense(units, kernel_regularizer=kernel_regularizer, bias_regularizer=bias_regularizer, name="fc", dtype=self.dtype)
+        self.fc = tf.keras.layers.Dense(
+            units,
+            kernel_regularizer=kernel_regularizer,
+            kernel_initializer=initializer,
+            bias_regularizer=bias_regularizer,
+            bias_initializer=initializer,
+            name="fc",
+            dtype=self.dtype,
+        )
         self.bn = tf.keras.layers.BatchNormalization(
             name="bn", gamma_regularizer=kernel_regularizer, beta_regularizer=bias_regularizer, dtype=self.dtype
         )
@@ -344,6 +367,7 @@ class FcModule(Layer):
         dropout: float = 0.1,
         kernel_regularizer=None,
         bias_regularizer=None,
+        initializer=None,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -354,6 +378,7 @@ class FcModule(Layer):
                 dropout=dropout,
                 kernel_regularizer=kernel_regularizer,
                 bias_regularizer=bias_regularizer,
+                initializer=initializer,
                 name=f"block_{i}",
                 dtype=self.dtype,
             )
@@ -383,6 +408,7 @@ class DeepSpeech2Encoder(Layer):
         conv_padding: str = "same",
         conv_activation: str = "relu",
         conv_dropout: float = 0.1,
+        conv_initializer: str = None,
         rnn_nlayers: int = 5,
         rnn_type: str = "lstm",
         rnn_units: int = 1024,
@@ -391,12 +417,15 @@ class DeepSpeech2Encoder(Layer):
         rnn_rowconv: int = 0,
         rnn_rowconv_activation: str = "relu",
         rnn_dropout: float = 0.1,
+        rnn_initializer: str = None,
         fc_nlayers: int = 0,
         fc_units: int = 1024,
         fc_activation: str = "relu",
         fc_dropout: float = 0.1,
+        fc_initializer: str = None,
         kernel_regularizer=None,
         bias_regularizer=None,
+        initializer=None,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -410,6 +439,7 @@ class DeepSpeech2Encoder(Layer):
             dropout=conv_dropout,
             kernel_regularizer=kernel_regularizer,
             bias_regularizer=bias_regularizer,
+            initializer=conv_initializer or initializer,
             name="conv_module",
             dtype=self.dtype,
         )
@@ -424,6 +454,7 @@ class DeepSpeech2Encoder(Layer):
             dropout=rnn_dropout,
             kernel_regularizer=kernel_regularizer,
             bias_regularizer=bias_regularizer,
+            initializer=rnn_initializer or initializer,
             name="rnn_module",
             dtype=self.dtype,
         )
@@ -434,6 +465,7 @@ class DeepSpeech2Encoder(Layer):
             dropout=fc_dropout,
             kernel_regularizer=kernel_regularizer,
             bias_regularizer=bias_regularizer,
+            initializer=fc_initializer or initializer,
             name="fc_module",
             dtype=self.dtype,
         )
