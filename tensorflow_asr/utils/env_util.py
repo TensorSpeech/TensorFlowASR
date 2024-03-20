@@ -45,14 +45,15 @@ def setup_devices(
         cpus = tf.config.list_physical_devices("CPU")
         tf.config.set_visible_devices(cpus, "CPU")
         tf.config.set_visible_devices([], "GPU")
-        logger.info(f"Run on {len(cpus)} Physical CPUs")
-    else:
-        gpus = tf.config.list_physical_devices("GPU")
-        if gpus:
-            if devices is not None:
-                gpus = [gpus[i] for i in devices]
-                tf.config.set_visible_devices(gpus, "GPU")
-        logger.info(f"Run on {len(gpus)} Physical GPUs")
+        logger.info(f"Run on {cpus}")
+        return tf.config.list_logical_devices("CPU")
+    gpus = tf.config.list_physical_devices("GPU")
+    if gpus:
+        if devices is not None:
+            gpus = [gpus[i] for i in devices]
+            tf.config.set_visible_devices(gpus, "GPU")
+    logger.info(f"Run on {gpus}")
+    return tf.config.list_logical_devices("GPU")
 
 
 def setup_tpu(
@@ -90,8 +91,10 @@ def setup_strategy(
         return setup_tpu(tpu_address)
     except (ValueError, tf.errors.NotFoundError) as e:
         logger.warning(e)
-    setup_devices(devices)
-    return tf.distribute.MirroredStrategy()
+    available_devices = setup_devices(devices)
+    if len(available_devices) == 1:
+        return tf.distribute.get_strategy()
+    return tf.distribute.MirroredStrategy(devices=[d.name for d in available_devices])
 
 
 def has_devices(
@@ -124,7 +127,6 @@ def setup_mxp(
     if mxp == "strict":
         policy = "mixed_bfloat16" if has_devices("TPU") else "mixed_float16"
         tf.keras.mixed_precision.set_global_policy(policy)
-        tf.config.optimizer.set_experimental_options({"auto_mixed_precision": True})
         logger.info(f"USING mixed precision policy {policy}")
     elif mxp == "auto":
         tf.config.optimizer.set_experimental_options({"auto_mixed_precision": True})

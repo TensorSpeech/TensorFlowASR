@@ -142,7 +142,7 @@ def get_global_shape(
 
 BUFFER_SIZE = 100
 TFRECORD_SHARDS = 16
-AUTOTUNE = tf.data.experimental.AUTOTUNE
+AUTOTUNE = int(os.environ.get("AUTOTUNE") or tf.data.experimental.AUTOTUNE)
 
 
 class BaseDataset:

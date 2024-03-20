@@ -10,12 +10,14 @@
 # SentencePiece 1k + Small + LibriSpeech
 
 
-| Category      | Description                        |
-| :------------ | :--------------------------------- |
-| Config        | [small.yml.j2](../../small.yml.j2) |
-| Tensorflow    | **2.13.x**                         |
-| Device        | Google Colab TPUs                  |
-| Training time |                                    |
+| Category          | Description                        |
+| :---------------- | :--------------------------------- |
+| Config            | [small.yml.j2](../../small.yml.j2) |
+| Tensorflow        | **2.13.x**                         |
+| Device            | Google Colab TPUs                  |
+| Global Batch Size | 2 * 16 * 8 = 256 (as 8 TPUs)       |
+| Max Epochs        | 300                                |
+| Training time     |                                    |
 
 
 ### Training Loss

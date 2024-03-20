@@ -33,11 +33,11 @@ tensorflow-text @ https://github.com/sun1638650145/Libraries-and-Extensions-for-
 
 # extra=tf2-13
 tensorflow>=2.13.0,<2.14.0
-tensorflow-text>=2.13.0,<2.14.0
+tensorflow-text>=2.13.0rc0,<2.14.0
 
 # extra=tf2-13-gpu
 tensorflow[and-cuda]>=2.13.0,<2.14.0
-tensorflow-text>=2.13.0,<2.14.0
+tensorflow-text>=2.13.0rc0,<2.14.0
 
 # extra=tf2-13-apple
 tensorflow>=2.13.0,<2.14.0 # https://blog.tensorflow.org/2023/07/whats-new-in-tensorflow-213-and-keras-213.html

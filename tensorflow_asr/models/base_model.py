@@ -202,7 +202,7 @@ class BaseModel(tf.keras.Model):
         sample_weight = None
 
         with tf.GradientTape() as tape:
-            tape.watch(self.trainable_variables)
+            tape.watch(x["inputs"])
             original_weights = self.apply_gwn()
             outputs = self(x, training=True)
             tape.watch(outputs["logits"])
@@ -302,8 +302,7 @@ class BaseModel(tf.keras.Model):
                     model._train_counter.assign_add(1)
                 return outputs, caching
 
-            if self.jit_compile:
-                run_step = tf.function(run_step, jit_compile=True, reduce_retracing=True)
+            run_step = tf.function(run_step, jit_compile=self.jit_compile, reduce_retracing=True)
 
             data = next(iterator)
             outputs, caching = model.distribute_strategy.run(run_step, args=(data, caching))
@@ -363,6 +362,75 @@ class BaseModel(tf.keras.Model):
             self.train_function = train_function
 
         return self.train_function
+
+    def make_test_function(self, force=False):
+        if self.test_function is not None and not force:
+            return self.test_function
+
+        def step_function(model, iterator):
+            """Runs a single evaluation step."""
+
+            def run_step(data):
+                outputs = model.test_step(data)
+                # Ensure counter is updated only if `test_step` succeeds.
+                with tf.control_dependencies(_minimum_control_deps(outputs)):
+                    model._test_counter.assign_add(1)
+                return outputs
+
+            run_step = tf.function(run_step, jit_compile=self.jit_compile, reduce_retracing=True)
+
+            data = next(iterator)
+            outputs = model.distribute_strategy.run(run_step, args=(data,))
+            outputs = reduce_per_replica(
+                outputs,
+                self.distribute_strategy,
+                reduction=self.distribute_reduction_method,
+            )
+            return outputs
+
+        # Special case if steps_per_execution is one.
+        if self._steps_per_execution is None or self._steps_per_execution.numpy().item() == 1:
+
+            def test_function(iterator):
+                """Runs a test execution with a single step."""
+                return step_function(self, iterator)
+
+            if not self.run_eagerly:
+                test_function = tf.function(test_function, reduce_retracing=True)
+
+            if self._cluster_coordinator:
+                self.test_function = lambda it: self._cluster_coordinator.schedule(test_function, args=(it,))
+            else:
+                self.test_function = test_function
+
+        # If we're using a coordinator, use the value of
+        # self._steps_per_execution at the time the function is
+        # called/scheduled, and not when it is actually executed.
+        elif self._cluster_coordinator:
+
+            def test_function(iterator, steps_per_execution):
+                """Runs a test execution with multiple steps."""
+                for _ in tf.range(steps_per_execution):
+                    outputs = step_function(self, iterator)
+                return outputs
+
+            if not self.run_eagerly:
+                test_function = tf.function(test_function, reduce_retracing=True)
+
+            self.test_function = lambda it: self._cluster_coordinator.schedule(test_function, args=(it, self._steps_per_execution.value()))
+        else:
+
+            def test_function(iterator):
+                """Runs a test execution with multiple steps."""
+                for _ in tf.range(self._steps_per_execution):
+                    outputs = step_function(self, iterator)
+                return outputs
+
+            if not self.run_eagerly:
+                test_function = tf.function(test_function, reduce_retracing=True)
+            self.test_function = test_function
+
+        return self.test_function
 
     def fit(
         self,
