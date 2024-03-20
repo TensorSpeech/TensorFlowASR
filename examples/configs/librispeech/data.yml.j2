@@ -10,8 +10,8 @@ data_config:
     tfrecords_dir: {{datadir}}/tfrecords
     shuffle: True
     cache: False
-    buffer_size: null
-    drop_remainder: True
+    buffer_size: 100
+    drop_remainder: False
     stage: train
     metadata: {{metadata}}
     indefinite: True
@@ -25,8 +25,8 @@ data_config:
     tfrecords_dir: {{datadir}}/tfrecords
     shuffle: True
     cache: False
-    buffer_size: null
-    drop_remainder: True
+    buffer_size: 100
+    drop_remainder: False
     stage: eval
     metadata: {{metadata}}
     indefinite: True
@@ -40,7 +40,7 @@ data_config:
     tfrecords_dir: {{datadir}}/tfrecords
     shuffle: False
     cache: False
-    buffer_size: null
+    buffer_size: 100
     drop_remainder: False
     stage: test
     indefinite: False
