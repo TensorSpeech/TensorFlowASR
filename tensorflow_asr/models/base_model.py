@@ -204,13 +204,14 @@ class BaseModel(tf.keras.Model):
         with tf.GradientTape() as tape:
             tape.watch(self.trainable_variables)
             tape.watch(x["inputs"])
+            tape.watch(x["inputs_length"])
             original_weights = self.apply_gwn()
             outputs = self(x, training=True)
             tape.watch(outputs["logits"])
+            tape.watch(outputs["logits_length"])
             y_pred, caching = outputs["logits"], outputs.get("caching")
             y_pred, _ = data_util.attach_length_to_data(y_pred, outputs["logits_length"])
             self.remove_gwn(original_weights)
-            tape.watch(y_pred)
             loss = self.compute_loss(x, y, y_pred, sample_weight)
 
             if self.use_ga:  # sum of gradients so the loss must be divided
