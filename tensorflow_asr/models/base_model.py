@@ -45,7 +45,7 @@ logger = tf.get_logger()
 class BaseModel(tf.keras.Model):
     def __init__(self, speech_config: dict, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.feature_extraction = FeatureExtraction(**speech_config, dtype=self.dtype)
+        self.feature_extraction = FeatureExtraction(**speech_config, dtype=tf.float32)
 
     @property
     def tokenizer(self):
