@@ -125,6 +125,7 @@ class Conformer(CtcModel):
                 bias_regularizer=bias_regularizer,
                 trainable=decoder_trainable,
                 name="decoder",
+                dtype=tf.float32 if tf.keras.mixed_precision.global_policy() == "mixed_float16" else self.dtype,
             ),
             name=name,
             **kwargs,
