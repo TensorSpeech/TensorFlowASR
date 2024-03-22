@@ -46,7 +46,6 @@ class BaseModel(tf.keras.Model):
     def __init__(self, speech_config: dict, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.feature_extraction = FeatureExtraction(**speech_config, dtype=self.dtype)
-        self.final = tf.keras.layers.Activation("linear", dtype=tf.float32)
 
     @property
     def tokenizer(self):
@@ -160,7 +159,7 @@ class BaseModel(tf.keras.Model):
         if env_util.has_devices("TPU"):
             self.use_loss_scale = False
         else:
-            self.use_loss_scale = mxp != "none"
+            self.use_loss_scale = False
             if self.use_loss_scale:
                 optimizer = tf.keras.mixed_precision.LossScaleOptimizer(optimizer)
                 logger.info("Using loss scale")
@@ -206,7 +205,6 @@ class BaseModel(tf.keras.Model):
             tape.watch(x["inputs"])
             original_weights = self.apply_gwn()
             outputs = self(x, training=True)
-            outputs["logits"] = self.final(outputs["logits"])
             tape.watch(outputs["logits"])
             y_pred, caching = outputs["logits"], outputs.get("caching")
             y_pred, _ = data_util.attach_length_to_data(y_pred, outputs["logits_length"])
