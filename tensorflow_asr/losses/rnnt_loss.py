@@ -104,9 +104,14 @@ def rnnt_loss_warprnnt(
     use_cpu=False,
     **kwargs,
 ):
+    orig_dtype = logits.dtype
+    if orig_dtype in (tf.float16, tf.bfloat16):
+        logits = tf.cast(logits, tf.float32)
     if use_cpu:
         logits = tf.nn.log_softmax(logits)
     loss = warp_rnnt_loss(acts=logits, label_lengths=label_length, labels=labels, input_lengths=logit_length, blank_label=blank)
+    if orig_dtype in (tf.float16, tf.bfloat16):
+        loss = tf.cast(loss, orig_dtype)
     return loss
 
 
