@@ -161,7 +161,7 @@ class BaseModel(tf.keras.Model):
         else:
             self.use_loss_scale = mxp != "none"
             if self.use_loss_scale:
-                optimizer = tf.keras.mixed_precision.LossScaleOptimizer(optimizer, initial_scale=1024)
+                optimizer = tf.keras.mixed_precision.LossScaleOptimizer(optimizer)
                 logger.info("Using loss scale")
         if isinstance(ga_steps, int) and ga_steps > 1:
             self.use_ga = True
