@@ -110,7 +110,8 @@ def rnnt_loss_warprnnt(
     if use_cpu:
         logits = tf.nn.log_softmax(logits)
     loss = warp_rnnt_loss(acts=logits, label_lengths=label_length, labels=labels, input_lengths=logit_length, blank_label=blank)
-    loss = tf.cast(loss, tf.float32)
+    if orig_dtype in (tf.float16, tf.bfloat16):
+        loss = tf.cast(loss, orig_dtype)
     return loss
 
 
@@ -373,5 +374,6 @@ def rnnt_loss_tf(
             return result[0], grad
 
         loss = compute_rnnt_loss_and_grad(*args)
-        loss = tf.cast(loss, tf.float32)
+        if orig_dtype in (tf.float16, tf.bfloat16):
+            loss = tf.cast(loss, orig_dtype)
         return loss
