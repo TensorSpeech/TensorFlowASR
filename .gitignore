@@ -7,8 +7,10 @@ externals
 .session.vim
 Session.vim
 .idea
-.vscode
 __pycache__
 .pytest*
 venv
 my_train
+.DS_Store
+models/*
+!models/README.md

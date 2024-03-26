@@ -1,4 +1,4 @@
-# Copyright 2020 Huy Le Nguyen (@usimarit)
+# Copyright 2020 Huy Le Nguyen (@nglehuy)
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,38 +14,27 @@
 
 # tf.data.Dataset does not work well for namedtuple so we are using dict
 
+import os
+
+import librosa
 import tensorflow as tf
 
 
-def create_inputs(
-    inputs: tf.Tensor,
-    inputs_length: tf.Tensor,
-    predictions: tf.Tensor = None,
-    predictions_length: tf.Tensor = None,
-) -> dict:
-    data = {
-        "inputs": inputs,
-        "inputs_length": inputs_length,
-    }
-    if predictions is not None:
-        data["predictions"] = predictions
-    if predictions_length is not None:
-        data["predictions_length"] = predictions_length
-    return data
+def load_and_convert_to_wav(
+    path: str,
+    sample_rate: int = None,
+):
+    wave, rate = librosa.load(os.path.realpath(os.path.expanduser(path)), sr=sample_rate, mono=True)
+    return tf.audio.encode_wav(tf.expand_dims(wave, axis=-1), sample_rate=rate)
 
 
-def create_logits(
-    logits: tf.Tensor,
-    logits_length: tf.Tensor,
-) -> dict:
-    return {"logits": logits, "logits_length": logits_length}
+def read_raw_audio(audio: tf.Tensor):
+    wave, _ = tf.audio.decode_wav(audio, desired_channels=1, desired_samples=-1)
+    return tf.reshape(wave, shape=[-1])  # reshape for using tf.signal
 
 
-def create_labels(
-    labels: tf.Tensor,
-    labels_length: tf.Tensor,
-) -> dict:
-    return {
-        "labels": labels,
-        "labels_length": labels_length,
-    }
+def attach_length_to_data(inputs, inputs_length):
+    setattr(inputs, "_keras_length", inputs_length)
+    if hasattr(inputs, "_keras_mask"):
+        delattr(inputs, "_keras_mask")
+    return inputs, inputs_length

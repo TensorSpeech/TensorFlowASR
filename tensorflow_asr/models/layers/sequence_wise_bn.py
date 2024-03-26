@@ -1,4 +1,5 @@
-# Copyright 2020 Huy Le Nguyen (@usimarit)
+# pylint:disable=attribute-defined-outside-init
+# Copyright 2020 Huy Le Nguyen (@nglehuy)
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -16,9 +17,11 @@ import tensorflow as tf
 
 # https://arxiv.org/abs/1510.01378
 class SequenceBatchNorm(tf.keras.layers.Layer):
-    def __init__(self, name, time_major=False, **kwargs):
-        super(SequenceBatchNorm, self).__init__(name=name, **kwargs)
+    def __init__(self, name, time_major=False, gamma_regularizer=None, beta_regularizer=None, **kwargs):
+        super().__init__(name=name, **kwargs)
         self.time_major = time_major
+        self.gamma_regularizer = tf.keras.regularizers.get(gamma_regularizer)
+        self.beta_regularizer = tf.keras.regularizers.get(beta_regularizer)
 
     def build(
         self,
@@ -28,17 +31,19 @@ class SequenceBatchNorm(tf.keras.layers.Layer):
             shape=[input_shape[-1]],
             name="beta",
             initializer="zeros",
-            regularizer=None,
+            regularizer=self.beta_regularizer,
             constraint=None,
             trainable=True,
+            dtype=self.variable_dtype,
         )
         self.gamma = self.add_weight(
             shape=[input_shape[-1]],
             name="gamma",
             initializer="ones",
-            regularizer=None,
+            regularizer=self.gamma_regularizer,
             constraint=None,
             trainable=True,
+            dtype=self.variable_dtype,
         )
 
     def call(
@@ -53,9 +58,7 @@ class SequenceBatchNorm(tf.keras.layers.Layer):
         else:
             total_padded_frames = tf.cast(tf.shape(inputs)[1], tf.keras.backend.dtype(mean))
             batch_size = tf.cast(tf.shape(inputs)[0], tf.keras.backend.dtype(mean))
-        total_unpadded_frames_batch = tf.math.count_nonzero(
-            inputs, axis=[0, 1], keepdims=False, dtype=tf.keras.backend.dtype(mean)
-        )
+        total_unpadded_frames_batch = tf.math.count_nonzero(inputs, axis=[0, 1], keepdims=False, dtype=tf.keras.backend.dtype(mean))
         mean = (mean * total_padded_frames * batch_size) / total_unpadded_frames_batch
         variance = (variance * total_padded_frames * batch_size) / total_unpadded_frames_batch
         return tf.nn.batch_normalization(
@@ -66,11 +69,3 @@ class SequenceBatchNorm(tf.keras.layers.Layer):
             scale=self.gamma,
             variance_epsilon=tf.keras.backend.epsilon(),
         )
-
-    def get_config(self):
-        config = super(SequenceBatchNorm, self).get_config()
-        config.update({"time_major": self.time_major})
-        return config
-
-    def from_config(self, config):
-        return self(**config)

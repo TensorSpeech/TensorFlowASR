@@ -1,4 +1,4 @@
-# Copyright 2020 Huy Le Nguyen (@usimarit)
+# Copyright 2020 Huy Le Nguyen (@nglehuy)
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,79 +13,40 @@
 # limitations under the License.
 
 import tensorflow as tf
-from tensorflow.keras.optimizers.schedules import ExponentialDecay
 
 
+@tf.keras.utils.register_keras_serializable("tensorflow_asr.optimizers.schedules")
 class TransformerSchedule(tf.keras.optimizers.schedules.LearningRateSchedule):
-    def __init__(self, d_model, warmup_steps=4000, max_lr=None):
-        super(TransformerSchedule, self).__init__()
+    def __init__(self, dmodel, scale=1.0, warmup_steps=4000, max_lr=None, min_lr=None):
+        super().__init__()
+        self.dmodel = tf.convert_to_tensor(dmodel, dtype=tf.float32)
+        self.scale = tf.convert_to_tensor(scale, dtype=tf.float32)
+        self.warmup_steps = tf.convert_to_tensor(warmup_steps, dtype=tf.float32)
+        self.max_lr = eval(max_lr) if isinstance(max_lr, str) else max_lr
+        self.min_lr = eval(min_lr) if isinstance(min_lr, str) else min_lr
 
-        self.d_model = d_model
-        self.d_model = tf.cast(self.d_model, tf.float32)
-        self.max_lr = max_lr
-        self.warmup_steps = warmup_steps
-
-    def __call__(self, step):
+    def __call__(self, current_step):
         # lr = (d_model^-0.5) * min(step^-0.5, step*(warm_up^-1.5))
-        step = tf.cast(step, dtype=tf.float32)
-        arg1 = tf.math.rsqrt(step)
-        arg2 = step * (self.warmup_steps ** -1.5)
-        lr = tf.math.rsqrt(self.d_model) * tf.math.minimum(arg1, arg2)
+        step = tf.cast(current_step, dtype=tf.float32)
+        lr = (self.dmodel**-0.5) * tf.math.minimum(step**-0.5, step * (self.warmup_steps**-1.5))
+        lr = self.scale * lr
         if self.max_lr is not None:
-            return tf.math.minimum(self.max_lr, lr)
+            lr = tf.math.minimum(self.max_lr, lr)
+        if self.min_lr is not None:
+            lr = tf.math.maximum(self.min_lr, lr)
         return lr
 
     def get_config(self):
         return {
-            "d_model": self.d_model,
+            "dmodel": self.dmodel,
+            "scale": self.scale,
             "warmup_steps": self.warmup_steps,
             "max_lr": self.max_lr,
+            "min_lr": self.min_lr,
         }
 
 
-class SANSchedule(tf.keras.optimizers.schedules.LearningRateSchedule):
-    def __init__(self, lamb, d_model, warmup_steps=4000):
-        super(SANSchedule, self).__init__()
-
-        self.lamb = tf.cast(lamb, tf.float32)
-        self.d_model = tf.cast(d_model, tf.float32)
-
-        self.warmup_steps = tf.cast(warmup_steps, tf.float32)
-
-    def __call__(self, step):
-        step = tf.cast(step, dtype=tf.float32)
-        arg1 = step / (self.warmup_steps ** 1.5)
-        arg2 = 1 / tf.math.sqrt(step)
-        return (self.lamb / tf.math.sqrt(self.d_model)) * tf.math.minimum(arg1, arg2)
-
-    def get_config(self):
-        return {
-            "lamb": self.lamb,
-            "d_model": self.d_model,
-            "warmup_steps": self.warmup_steps,
-        }
-
-
-class BoundExponentialDecay(ExponentialDecay):
-    def __init__(self, min_lr=0.0, **kwargs):
-        super().__init__(**kwargs)
-        self.min_lr = min_lr
-
-    def __call__(self, step):
-        with tf.name_scope(self.name or "ExponentialDecay") as name:
-            initial_learning_rate = tf.convert_to_tensor(self.initial_learning_rate, name="initial_learning_rate")
-            dtype = initial_learning_rate.dtype
-            decay_steps = tf.cast(self.decay_steps, dtype)
-            decay_rate = tf.cast(self.decay_rate, dtype)
-
-            global_step_recomp = tf.cast(step, dtype)
-            p = global_step_recomp / decay_steps
-            if self.staircase:
-                p = tf.math.floor(p)
-            new_lr = tf.multiply(initial_learning_rate, tf.pow(decay_rate, p), name=name)
-            return tf.maximum(self.min_lr, new_lr)
-
-
+@tf.keras.utils.register_keras_serializable("tensorflow_asr.optimizers.schedules")
 class CyclicTransformerSchedule(tf.keras.optimizers.schedules.LearningRateSchedule):
     """This callback implements a cyclical learning rate policy (CLR) to the square
     root decay generally used to train transformers.
@@ -102,11 +63,11 @@ class CyclicTransformerSchedule(tf.keras.optimizers.schedules.LearningRateSchedu
 
     It is inspired from the paper:
     # References
-      - [Cyclical Learning Rates for Training Neural Networks](
-      https://arxiv.org/abs/1506.01186)
+    - [Cyclical Learning Rates for Training Neural Networks](
+    https://arxiv.org/abs/1506.01186)
     """
 
-    def __init__(self, d_model, warmup_steps=4000, max_lr=None, step_size=None):
+    def __init__(self, dmodel, step_size, max_lr, warmup_steps=4000):
         """Applies triangular cyclic to the square root decay learning rate.
         Args:
         d_model: Model dimension
@@ -115,17 +76,17 @@ class CyclicTransformerSchedule(tf.keras.optimizers.schedules.LearningRateSchedu
         step_size: The size of the cyclic triangular half cycle.
         """
         super().__init__()
+        self.dmodel = tf.convert_to_tensor(dmodel, tf.float32)
+        self.warmup_steps = tf.convert_to_tensor(warmup_steps, tf.float32)
+        self.max_lr = eval(max_lr) if isinstance(max_lr, str) else max_lr
+        self.max_lr = tf.convert_to_tensor(self.max_lr, tf.float32)
+        self.step_size = tf.convert_to_tensor(step_size, tf.float32)
 
-        self.d_model = tf.cast(d_model, tf.float32)
-        self.warmup_steps = tf.cast(warmup_steps, tf.float32)
-        self.max_lr = tf.cast(max_lr, tf.float32)
-        self.step_size = tf.cast(step_size, tf.float32)
-
-    def __call__(self, step):
-        step = tf.cast(step, tf.float32)
-        warmup = step * (self.warmup_steps ** -1.5)
+    def __call__(self, current_step):
+        step = tf.cast(current_step, tf.float32)
+        warmup = step * (self.warmup_steps**-1.5)
         lr = 2 * tf.math.rsqrt(step)
-        lr = tf.math.rsqrt(self.d_model) * tf.math.minimum(lr, warmup)
+        lr = tf.math.rsqrt(self.dmodel) * tf.math.minimum(lr, warmup)
         lr = tf.math.minimum(self.max_lr, lr)
         cycle = tf.math.floor(1 + step / (2 * self.step_size))
         x = tf.math.abs(step / self.step_size - 2 * cycle + 1)
@@ -135,7 +96,7 @@ class CyclicTransformerSchedule(tf.keras.optimizers.schedules.LearningRateSchedu
 
     def get_config(self):
         return {
-            "d_model": self.d_model,
+            "dmodel": self.dmodel,
             "warmup_steps": self.warmup_steps,
             "max_lr": self.max_lr,
             "step_size": self.step_size,

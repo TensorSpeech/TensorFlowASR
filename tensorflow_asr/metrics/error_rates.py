@@ -1,4 +1,4 @@
-# Copyright 2020 Huy Le Nguyen (@usimarit)
+# Copyright 2020 Huy Le Nguyen (@nglehuy)
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -18,25 +18,15 @@ import tensorflow as tf
 class ErrorRate(tf.keras.metrics.Metric):
     """Metric for WER or CER"""
 
-    def __init__(
-        self,
-        func,
-        name="error_rate",
-        **kwargs,
-    ):
-        super(ErrorRate, self).__init__(name=name, **kwargs)
-        self.numerator = self.add_weight(name=f"{name}_numerator", initializer="zeros")
-        self.denominator = self.add_weight(name=f"{name}_denominator", initializer="zeros")
-        self.func = func
+    def __init__(self, name="error_rate", **kwargs):
+        super().__init__(name=name, **kwargs)
+        self.numerator = self.add_weight(name="numerator", initializer="zeros")
+        self.denominator = self.add_weight(name="denominator", initializer="zeros")
 
-    def update_state(
-        self,
-        decode: tf.Tensor,
-        target: tf.Tensor,
-    ):
-        n, d = self.func(decode, target)
-        self.numerator.assign_add(n)
-        self.denominator.assign_add(d)
+    def update_state(self, data):
+        numer, denom = data
+        self.numerator.assign_add(tf.reduce_sum(numer))
+        self.denominator.assign_add(tf.reduce_sum(denom))
 
     def result(self):
-        return tf.math.divide_no_nan(self.numerator, self.denominator)
+        return tf.math.divide(self.numerator, self.denominator)

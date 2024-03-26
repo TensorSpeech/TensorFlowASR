@@ -1,0 +1,34 @@
+{% set vocabsize = 1000 %}
+{% set vocabprefix = repodir ~ "/examples/configs/librispeech/sentencepiece/train_bpe_" ~ vocabsize %}
+{% set metadata = vocabprefix ~ ".metadata.json" %}
+
+decoder_config:
+  type: sentencepiece
+  blank_index: 0
+  unknown_token: "<unk>"
+  unknown_index: 0
+  pad_token: "<pad>"
+  pad_index: -1
+  bos_token: "<s>"
+  bos_index: -1
+  eos_token: "</s>"
+  eos_index: -1
+  beam_width: 0
+  norm_score: True
+  lm_config: null
+  model_type: bpe
+  vocabulary: {{vocabprefix}}.model
+  vocab_size: {{vocabsize}}
+  reserved_tokens: null
+  normalization_form: NFKC
+  max_sentencepiece_length: 16
+  max_sentence_length: 1048576
+  character_coverage: 1.0
+  keep_whitespace: False
+  train_files:
+    - {{datadir}}/train-clean-100/transcripts.tsv
+    - {{datadir}}/train-clean-360/transcripts.tsv
+    - {{datadir}}/train-other-500/transcripts.tsv
+
+{% import "examples/configs/librispeech/data.yml.j2" as data_config with context %}
+{{data_config}}

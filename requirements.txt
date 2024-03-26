@@ -1,53 +1,68 @@
-SoundFile==0.10.3.post1
-tensorflow_datasets==4.4.0
-nltk==3.6.6
-numpy>=1.19.5
-sentencepiece==0.1.96
-tqdm==4.62.1
-librosa==0.8.1
-PyYAML==5.4.1
-Pillow==9.0.1
-black==21.7b0
-flake8==3.9.2
-sounddevice==0.4.3
-fire==0.4.0
+SoundFile==0.12.1
+nltk==3.8.1
+sentencepiece==0.1.99
+tqdm==4.66.1
+librosa==0.10.1
+PyYAML==6.0.1
+sounddevice==0.4.6
+jinja2==3.1.2
+fire==0.5.0
+jiwer==3.0.3
+chardet==5.1.0
+charset-normalizer==2.1.1
 
-# extra=tf2.5
-tensorflow~=2.5
-tensorflow-text~=2.5
-tensorflow-io~=0.18
+# extra=dev
+pytest==7.4.1
+black==23.7.0
+pylint==2.17.5
+matplotlib==3.7.2
+pydot==1.4.2
+graphviz==0.20.1
 
-# extra=tf2.5-gpu
-tensorflow-gpu~=2.5
-tensorflow-text~=2.5
-tensorflow-io~=0.18
+# extra=tf2-12
+tensorflow>=2.12.0,<2.13.0
+tensorflow-text>=2.12.0,<2.13.0
 
-# extra=tf2.6
-tensorflow~=2.6
-tensorflow-text~=2.6
-tensorflow-io~=0.20
+# extra=tf2-12-gpu
+tensorflow[and-cuda]>=2.12.0,<2.13.0
+tensorflow-text>=2.12.0,<2.13.0
 
-# extra=tf2.6-gpu
-tensorflow-gpu~=2.6
-tensorflow-text~=2.6
-tensorflow-io~=0.20
+# extra=tf2-12-apple
+tensorflow-macos>=2.12.0,<2.13.0
+tensorflow-text @ https://github.com/sun1638650145/Libraries-and-Extensions-for-TensorFlow-for-Apple-Silicon/releases/download/v2.12/tensorflow_text-2.12.0-cp310-cp310-macosx_11_0_arm64.whl
 
-# extra=tf2.7
-tensorflow~=2.7
-tensorflow-text~=2.7
-tensorflow-io~=0.23
+# extra=tf2-13
+tensorflow>=2.13.0,<2.14.0
+tensorflow-text>=2.13.0rc0,<2.14.0
 
-# extra=tf2.7-gpu
-tensorflow-gpu~=2.7
-tensorflow-text~=2.7
-tensorflow-io~=0.23
+# extra=tf2-13-gpu
+tensorflow[and-cuda]>=2.13.0,<2.14.0
+tensorflow-text>=2.13.0rc0,<2.14.0
 
-# extra=tf2.8
-tensorflow~=2.8
-tensorflow-text~=2.8
-tensorflow-io~=0.24
+# extra=tf2-13-apple
+tensorflow>=2.13.0,<2.14.0 # https://blog.tensorflow.org/2023/07/whats-new-in-tensorflow-213-and-keras-213.html
+tensorflow-text @ https://github.com/sun1638650145/Libraries-and-Extensions-for-TensorFlow-for-Apple-Silicon/releases/download/v2.13/tensorflow_text-2.13.0-cp310-cp310-macosx_11_0_arm64.whl
 
-# extra=tf2.8-gpu
-tensorflow-gpu~=2.8
-tensorflow-text~=2.8
-tensorflow-io~=0.24
+# extra=tf2-14
+tensorflow>=2.14.0,<2.15.0
+tensorflow-text>=2.14.0,<2.15.0
+
+# extra=tf2-14-gpu
+tensorflow[and-cuda]>=2.14.0,<2.15.0
+tensorflow-text>=2.14.0,<2.15.0
+
+# extra=tf2-14-apple
+tensorflow>=2.14.0,<2.15.0
+tensorflow-text @ https://github.com/sun1638650145/Libraries-and-Extensions-for-TensorFlow-for-Apple-Silicon/releases/download/v2.14/tensorflow_text-2.14.0-cp310-cp310-macosx_11_0_arm64.whl
+
+# extra=tf2-15
+tensorflow>=2.15.0,<2.16.0
+tensorflow-text>=2.15.0,<2.16.0
+
+# extra=tf2-15-gpu
+tensorflow[and-cuda]>=2.15.0,<2.16.0
+tensorflow-text>=2.15.0,<2.16.0
+
+# extra=tf2-15-apple
+tensorflow>=2.15.0,<2.16.0
+tensorflow-text @ https://github.com/sun1638650145/Libraries-and-Extensions-for-TensorFlow-for-Apple-Silicon/releases/download/v2.15/tensorflow_text-2.15.0-cp310-cp310-macosx_11_0_arm64.whl

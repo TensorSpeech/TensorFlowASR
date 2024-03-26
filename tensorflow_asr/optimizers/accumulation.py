@@ -1,35 +1,62 @@
-# Copyright 2020 Huy Le Nguyen (@usimarit)
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
+"""
+Gradient Accummulation for training TF2 custom training loop.
+Copy and modified from https://github.com/OpenNMT/OpenNMT-tf/blob/master/opennmt/optimizers/utils.py.
+"""
 
 import tensorflow as tf
 
 
-class GradientAccumulation:
-    def __init__(self, trainable_variables):
-        self.gradients = [
-            tf.Variable(
-                tf.zeros_like(g),
-                trainable=False,
-                synchronization=tf.VariableSynchronization.ON_READ,
-            ) for g in trainable_variables
-        ]
+class GradientAccumulator:
+    # We use the ON_READ synchronization policy so that no synchronization is
+    # performed on assignment. To get the value, we call .value() which returns the
+    # value on the current replica without synchronization.
+
+    def __init__(
+        self,
+        ga_steps,
+        model: tf.keras.Model,
+        name="ga",
+    ):
+        self.name = name
+        if ga_steps is None:
+            raise ValueError("ga_steps must be defined")
+        if model.trainable_variables is None:
+            raise ValueError("trainable_variables must be defined")
+        self._ga_steps = ga_steps
+        self._gradients = [None for _ in model.trainable_variables]
+        self._gradient_inited = False
+
+    @property
+    def total_steps(self):
+        return self._ga_steps
+
+    @property
+    def gradients(self):
+        """The accumulated gradients on the current replica."""
+        if not self._gradient_inited:
+            raise ValueError("gradients are not initialized")
+        return list(gradient.value() if gradient is not None else gradient for gradient in self._gradients)
+
+    def accumulate(self, gradients):
+        """Accumulates :obj:`gradients` on the current replica."""
+        if not self._gradient_inited:
+            for i, gradient in enumerate(gradients):
+                if gradient is None:
+                    continue
+                self._gradients[i] = tf.Variable(
+                    tf.zeros_like(gradient),
+                    trainable=False,
+                    synchronization=tf.VariableSynchronization.ON_READ,
+                    aggregation=tf.VariableAggregation.NONE,
+                    name=f"{self.name}_{i}",
+                )
+            self._gradient_inited = True
+        for accum_gradient, gradient in zip(self._gradients, gradients):
+            if gradient is not None and accum_gradient is not None:
+                accum_gradient.assign_add(gradient, read_value=False)
 
     def reset(self):
-        for i, g in enumerate(self.gradients):
-            self.gradients[i].assign(tf.zeros_like(g), read_value=False)
-
-    def accumulate(self, step_gradients):
-        for i, g in enumerate(step_gradients):
-            if g is None: continue
-            self.gradients[i].assign_add(g, read_value=False)
+        """Resets the accumulated gradients on the current replica."""
+        for gradient in self._gradients:
+            if gradient is not None:
+                gradient.assign(tf.zeros_like(gradient), read_value=False)

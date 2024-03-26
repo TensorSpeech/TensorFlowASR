@@ -1,4 +1,4 @@
-# Copyright 2020 Huy Le Nguyen (@usimarit)
+# Copyright 2020 Huy Le Nguyen (@nglehuy)
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -11,51 +11,29 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+
 import tensorflow as tf
+
+from tensorflow_asr.utils import env_util, math_util
+
+logger = tf.get_logger()
 
 
 class CtcLoss(tf.keras.losses.Loss):
-    def __init__(
-        self,
-        blank=0,
-        global_batch_size=None,
-        name=None,
-    ):
-        super(CtcLoss, self).__init__(reduction=tf.keras.losses.Reduction.NONE, name=name)
+    def __init__(self, blank=0, reduction=tf.keras.losses.Reduction.AUTO, name=None):
+        super().__init__(reduction=reduction, name=name)
         self.blank = blank
-        self.global_batch_size = global_batch_size
+        self.use_tpu = env_util.has_devices("TPU")
+        logger.info("Use CTC loss")
 
-    def call(
-        self,
-        y_true,
-        y_pred,
-    ):
-        loss = ctc_loss(
-            y_pred=y_pred["logits"],
-            input_length=y_pred["logits_length"],
-            y_true=y_true["labels"],
-            label_length=y_true["labels_length"],
-            blank=self.blank,
+    def call(self, y_true, y_pred):
+        return tf.nn.ctc_loss(
+            logits=y_pred,
+            logit_length=math_util.compute_time_length(y_pred) if env_util.LENGTH_AS_OUTPUT else y_pred._keras_length,
+            labels=y_true if self.use_tpu else tf.sparse.from_dense(y_true),
+            label_length=math_util.compute_time_length(y_true) if env_util.LENGTH_AS_OUTPUT else y_true._keras_length,
+            logits_time_major=False,
+            unique=tf.nn.ctc_unique_labels(y_true),  # enable a faster, memory efficient implementation on TPU.
+            blank_index=self.blank,
             name=self.name,
         )
-        return tf.nn.compute_average_loss(loss, global_batch_size=self.global_batch_size)
-
-
-@tf.function
-def ctc_loss(
-    y_true,
-    y_pred,
-    input_length,
-    label_length,
-    blank,
-    name=None,
-):
-    return tf.nn.ctc_loss(
-        labels=tf.cast(y_true, tf.int32),
-        logit_length=tf.cast(input_length, tf.int32),
-        logits=tf.cast(y_pred, tf.float32),
-        label_length=tf.cast(label_length, tf.int32),
-        logits_time_major=False,
-        blank_index=blank,
-        name=name,
-    )

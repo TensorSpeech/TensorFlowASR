@@ -16,8 +16,8 @@ import argparse
 import os
 
 import librosa
-import tqdm
 import tensorflow as tf
+import tqdm
 
 # example usage: python create_mls_trans.py -dataset-home /mnt/datasets/mls --language polish --opus
 

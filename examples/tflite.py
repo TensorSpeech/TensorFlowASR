@@ -1,0 +1,49 @@
+# Copyright 2023 Huy Le Nguyen (@nglehuy)
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+import os
+
+from tensorflow_asr import tf  # import to aid logging messages
+from tensorflow_asr import tokenizers
+from tensorflow_asr.configs import Config
+from tensorflow_asr.models.base_model import BaseModel
+from tensorflow_asr.utils import app_util, cli_util, env_util, file_util
+
+
+def main(
+    config_path: str,
+    h5: str,
+    output: str,
+    bs: int = 1,
+    repodir: str = os.path.realpath(os.path.join(os.path.dirname(__file__), "..")),
+):
+    assert h5 and output
+    tf.keras.backend.clear_session()
+    env_util.setup_seed()
+    tf.compat.v1.enable_control_flow_v2()
+
+    config = Config(config_path, training=False, repodir=repodir)
+    tokenizer = tokenizers.get(config)
+
+    model: BaseModel = tf.keras.models.model_from_config(config.model_config)
+    model.tokenizer = tokenizer
+    model.make()
+    model.load_weights(h5, by_name=file_util.is_hdf5_filepath(h5))
+    model.summary()
+
+    app_util.convert_tflite(model=model, output=output, batch_size=bs)
+
+
+if __name__ == "__main__":
+    cli_util.run(main)
