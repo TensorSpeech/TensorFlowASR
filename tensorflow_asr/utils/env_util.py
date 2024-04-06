@@ -121,13 +121,18 @@ def setup_mxp(
     ValueError
         Wrong value for mxp
     """
-    options = ["strict", "auto", "none"]
+    options = ["strict", "strict_auto", "auto", "none"]
     if mxp not in options:
         raise ValueError(f"mxp must be in {options}")
     if mxp == "strict":
         policy = "mixed_bfloat16" if has_devices("TPU") else "mixed_float16"
         tf.keras.mixed_precision.set_global_policy(policy)
         logger.info(f"USING mixed precision policy {policy}")
+    elif mxp == "strict_auto":
+        policy = "mixed_bfloat16" if has_devices("TPU") else "mixed_float16"
+        tf.keras.mixed_precision.set_global_policy(policy)
+        tf.config.optimizer.set_experimental_options({"auto_mixed_precision": True})
+        logger.info(f"USING auto mixed precision policy {policy}")
     elif mxp == "auto":
         tf.config.optimizer.set_experimental_options({"auto_mixed_precision": True})
         logger.info("USING auto mixed precision policy")

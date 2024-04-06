@@ -215,12 +215,12 @@ class BaseModel(tf.keras.Model):
             if self.use_ga:  # sum of gradients so the loss must be divided
                 loss = loss / self.ga.total_steps
 
-        if self.use_loss_scale:
-            loss = self.optimizer.get_scaled_loss(loss)
-            gradients = tape.gradient(loss, self.trainable_variables)
-            gradients = self.optimizer.get_unscaled_gradients(gradients)
-        else:
-            gradients = tape.gradient(loss, self.trainable_variables)
+            if self.use_loss_scale:
+                loss = self.optimizer.get_scaled_loss(loss)
+                gradients = tape.gradient(loss, self.trainable_variables)
+                gradients = self.optimizer.get_unscaled_gradients(gradients)
+            else:
+                gradients = tape.gradient(loss, self.trainable_variables)
 
         return gradients, caching
 
