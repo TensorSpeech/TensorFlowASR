@@ -8,7 +8,7 @@ data_config:
       - {{datadir}}/train-other-500/transcripts.tsv
     tfrecords_dir: {{datadir}}/tfrecords
     shuffle: True
-    cache: True
+    cache: False
     buffer_size: null
     drop_remainder: True
     stage: train
@@ -23,7 +23,7 @@ data_config:
       - {{datadir}}/dev-other/transcripts.tsv
     tfrecords_dir: {{datadir}}/tfrecords
     shuffle: True
-    cache: True
+    cache: False
     buffer_size: null
     drop_remainder: True
     stage: eval
