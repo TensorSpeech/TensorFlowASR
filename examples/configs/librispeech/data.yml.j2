@@ -9,7 +9,7 @@ data_config:
     tfrecords_dir: {{datadir}}/tfrecords
     shuffle: True
     cache: False
-    buffer_size: null
+    buffer_size: 1000
     drop_remainder: True
     stage: train
     metadata: {{metadata}}
@@ -24,7 +24,7 @@ data_config:
     tfrecords_dir: {{datadir}}/tfrecords
     shuffle: True
     cache: False
-    buffer_size: null
+    buffer_size: 1000
     drop_remainder: True
     stage: eval
     metadata: {{metadata}}
