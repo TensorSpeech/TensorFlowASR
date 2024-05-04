@@ -13,7 +13,7 @@ charset-normalizer==2.1.1
 
 # extra=dev
 pytest==7.4.1
-black==23.7.0
+black==24.3.0
 pylint==2.17.5
 matplotlib==3.7.2
 pydot==1.4.2
