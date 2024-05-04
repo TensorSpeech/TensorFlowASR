@@ -160,6 +160,7 @@ class BaseDataset:
         metadata: str = None,
         sample_rate: int = 16000,
         stage: str = "train",
+        name: str = "",
         **kwargs,
     ):
         self.data_paths = data_paths or []
@@ -175,6 +176,7 @@ class BaseDataset:
         self.total_steps = None  # for better training visualization
         self.metadata = metadata
         self.sample_rate = sample_rate
+        self.name = name
 
     def parse(self, *args, **kwargs):
         raise NotImplementedError()
@@ -199,6 +201,7 @@ class ASRDataset(BaseDataset):
         metadata: str = None,
         buffer_size: int = BUFFER_SIZE,
         sample_rate: int = 16000,
+        name: str = "",
         **kwargs,
     ):
         super().__init__(
@@ -212,6 +215,8 @@ class ASRDataset(BaseDataset):
             metadata=metadata,
             indefinite=indefinite,
             sample_rate=sample_rate,
+            name=name,
+            **kwargs,
         )
         self.entries = []
         self.tokenizer = tokenizer
@@ -413,6 +418,7 @@ class ASRTFRecordDataset(ASRDataset):
         buffer_size: int = BUFFER_SIZE,
         compression_type: str = "GZIP",
         sample_rate: int = 16000,
+        name: str = "",
         **kwargs,
     ):
         super().__init__(
@@ -427,6 +433,7 @@ class ASRTFRecordDataset(ASRDataset):
             metadata=metadata,
             indefinite=indefinite,
             sample_rate=sample_rate,
+            name=name,
             **kwargs,
         )
         if not self.stage:

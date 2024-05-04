@@ -66,6 +66,7 @@ class DatasetConfig:
     def __init__(self, config: dict = None):
         if not config:
             config = {}
+        self.name: str = config.pop("name", "")
         self.enabled: bool = config.pop("enabled", True)
         self.stage: str = config.pop("stage", None)
         self.data_paths = config.pop("data_paths", None)
@@ -87,7 +88,10 @@ class DataConfig:
             config = {}
         self.train_dataset_config = DatasetConfig(config.pop("train_dataset_config", {}))
         self.eval_dataset_config = DatasetConfig(config.pop("eval_dataset_config", {}))
-        self.test_dataset_config = DatasetConfig(config.pop("test_dataset_config", {}))
+        self.test_dataset_configs = [DatasetConfig(conf) for conf in config.pop("test_dataset_configs", [])]
+        _test_dataset_config = config.pop("test_dataset_config", None)
+        if _test_dataset_config:
+            self.test_dataset_configs.append(_test_dataset_config)
 
 
 class LearningConfig:
@@ -114,8 +118,7 @@ class Config:
         self.decoder_config = DecoderConfig(config.pop("decoder_config", {}))
         self.model_config: dict = config.pop("model_config", {})
         self.data_config = DataConfig(config.pop("data_config", {}))
-        _learning_config_dict = config.pop("learning_config", {})
-        self.learning_config = LearningConfig(_learning_config_dict) if training else None
+        self.learning_config = LearningConfig(config.pop("learning_config", {})) if training else None
         for k, v in config.items():
             setattr(self, k, v)
         logger.info(str(self))

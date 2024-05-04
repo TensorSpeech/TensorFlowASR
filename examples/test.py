@@ -29,17 +29,17 @@ def main(
     config_path: str,
     dataset_type: str,
     datadir: str,
+    outputdir: str,
     h5: str = None,
     mxp: str = "none",
     bs: int = 1,
     device: int = 0,
     cpu: bool = False,
     jit_compile: bool = False,
-    output: str = "test.tsv",
     repodir: str = os.path.realpath(os.path.join(os.path.dirname(__file__), "..")),
 ):
-    assert h5 and output
-    output = file_util.preprocess_paths(output)
+    outputdir = file_util.preprocess_paths(outputdir, isdir=True)
+    checkpoint_name = os.path.splitext(os.path.basename(h5))[0]
 
     env_util.setup_seed()
     env_util.setup_devices([device], cpu=cpu)
@@ -50,9 +50,6 @@ def main(
 
     tokenizer = tokenizers.get(config)
 
-    test_dataset = datasets.get(tokenizer=tokenizer, dataset_config=config.data_config.test_dataset_config, dataset_type=dataset_type)
-    test_data_loader = test_dataset.create(batch_size)
-
     model: BaseModel = tf.keras.models.model_from_config(config.model_config)
     model.tokenizer = tokenizer
     model.make(batch_size=batch_size)
@@ -60,24 +57,34 @@ def main(
     model.jit_compile = jit_compile
     model.summary()
 
-    overwrite = True
-    if tf.io.gfile.exists(output):
-        while overwrite not in ["yes", "no"]:
-            overwrite = input(f"File {output} exists, overwrite? (yes/no): ").lower()
-        overwrite = overwrite == "yes"
+    for test_data_config in config.data_config.test_dataset_configs:
+        if not test_data_config.name:
+            raise ValueError("Test dataset name must be provided")
+        logger.info(f"Testing dataset: {test_data_config.name}")
 
-    if overwrite:
-        with file_util.save_file(output) as output_file_path:
-            model.predict(
-                test_data_loader,
-                verbose=1,
-                callbacks=[
-                    PredictLogger(test_dataset=test_dataset, output_file_path=output_file_path),
-                ],
-            )
+        output = os.path.join(outputdir, f"{test_data_config.name}-{checkpoint_name}.tsv")
 
-    evaluation_outputs = app_util.evaluate_hypotheses(output)
-    logger.info(json.dumps(evaluation_outputs, indent=2))
+        test_dataset = datasets.get(tokenizer=tokenizer, dataset_config=test_data_config, dataset_type=dataset_type)
+        test_data_loader = test_dataset.create(batch_size)
+
+        overwrite = True
+        if tf.io.gfile.exists(output):
+            while overwrite not in ["yes", "no"]:
+                overwrite = input(f"File {output} exists, overwrite? (yes/no): ").lower()
+            overwrite = overwrite == "yes"
+
+        if overwrite:
+            with file_util.save_file(output) as output_file_path:
+                model.predict(
+                    test_data_loader,
+                    verbose=1,
+                    callbacks=[
+                        PredictLogger(test_dataset=test_dataset, output_file_path=output_file_path),
+                    ],
+                )
+
+        evaluation_outputs = app_util.evaluate_hypotheses(output)
+        logger.info(json.dumps(evaluation_outputs, indent=2))
 
 
 if __name__ == "__main__":
