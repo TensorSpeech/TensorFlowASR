@@ -34,6 +34,7 @@ TensorFlowASR implements some automatic speech recognition architectures such as
   - [Installing from source (recommended)](#installing-from-source-recommended)
   - [Installing via PyPi](#installing-via-pypi)
   - [Installing for development](#installing-for-development)
+  - [Install for Apple Sillicon](#install-for-apple-sillicon)
   - [Running in a container](#running-in-a-container)
 - [Training \& Testing Tutorial](#training--testing-tutorial)
 - [Features Extraction](#features-extraction)
@@ -108,6 +109,19 @@ git clone https://github.com/TensorSpeech/TensorFlowASR.git
 cd TensorFlowASR
 pip3 install -e ".[dev]"
 pip3 install -e ".[tf2.x]" # or ".[tf2.x-gpu]" or ".[tf2.x-apple]" for apple m1 machine
+```
+
+### Install for Apple Sillicon
+
+Due to tensorflow-text is not built for Apple Sillicon, we need to install it with the prebuilt wheel file from [sun1638650145/Libraries-and-Extensions-for-TensorFlow-for-Apple-Silicon](https://github.com/sun1638650145/Libraries-and-Extensions-for-TensorFlow-for-Apple-Silicon)
+
+Do this after installing TensorFlowASR with tensorflow above
+
+```bash
+TF_VERSION="$(python3 -c 'import tensorflow; print(tensorflow.__version__)')" && \
+TF_VERSION_MAJOR="$(echo $TF_VERSION | cut -d'.' -f1,2)" && \
+URL="https://github.com/sun1638650145/Libraries-and-Extensions-for-TensorFlow-for-Apple-Silicon" && \
+pip3 install "${URL}/releases/download/v${TF_VERSION_MAJOR}/tensorflow_text-${TF_VERSION_MAJOR}.0-cp310-cp310-macosx_11_0_arm64.whl"
 ```
 
 ### Running in a container
