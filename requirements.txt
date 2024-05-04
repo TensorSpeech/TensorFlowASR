@@ -1,7 +1,7 @@
 SoundFile==0.12.1
 nltk==3.8.1
 sentencepiece==0.1.99
-tqdm==4.66.1
+tqdm==4.66.3
 librosa==0.10.1
 PyYAML==6.0.1
 sounddevice==0.4.6
