@@ -21,8 +21,6 @@ TensorFlowASR implements some automatic speech recognition architectures such as
 
 ## What's New?
 
-- (9/4/2022) Breaking changes release v1.1.x
-
 ## Table of Contents
 
 <!-- TOC -->
