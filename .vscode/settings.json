@@ -1,0 +1,19 @@
+{
+    "editor.formatOnSave": true,
+    "python.analysis.fixAll": [
+        "source.unusedImports",
+    ],
+    "editor.codeActionsOnSave": {
+        "source.organizeImports": "explicit"
+    },
+    "isort.args": [
+        "--profile",
+        "black",
+        "--line-length",
+        "130"
+    ],
+    "autoDocstring.docstringFormat": "numpy",
+    "[python]": {
+        "editor.defaultFormatter": "ms-python.black-formatter",
+    }
+}

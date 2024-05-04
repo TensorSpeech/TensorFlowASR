@@ -5,7 +5,7 @@
   <img alt="GitHub" src="https://img.shields.io/github/license/TensorSpeech/TensorFlowASR?logo=apache&logoColor=green">
 </a>
 <img alt="python" src="https://img.shields.io/badge/python-%3E%3D3.6-blue?logo=python">
-<img alt="tensorflow" src="https://img.shields.io/badge/tensorflow-%3E%3D2.5.1-orange?logo=tensorflow">
+<img alt="tensorflow" src="https://img.shields.io/badge/tensorflow-%3E%3D2.12.0-orange?logo=tensorflow">
 <a href="https://pypi.org/project/TensorFlowASR/">
   <img alt="PyPI" src="https://img.shields.io/pypi/v/TensorFlowASR?color=%234285F4&label=release&logo=pypi&logoColor=%234285F4">
 </a>
@@ -21,13 +21,6 @@ TensorFlowASR implements some automatic speech recognition architectures such as
 
 ## What's New?
 
-- (04/17/2021) Refactor repository with new version 1.x
-- (02/16/2021) Supported for TPU training
-- (12/27/2020) Supported _naive_ token level timestamp, see [demo](./examples/demonstration/conformer.py) with flag `--timestamp`
-- (12/17/2020) Supported ContextNet [http://arxiv.org/abs/2005.03191](http://arxiv.org/abs/2005.03191)
-- (12/12/2020) Add support for using masking
-- (11/14/2020) Supported Gradient Accumulation for Training in Larger Batch Size
-
 ## Table of Contents
 
 <!-- TOC -->
@@ -40,17 +33,18 @@ TensorFlowASR implements some automatic speech recognition architectures such as
 - [Installation](#installation)
   - [Installing from source (recommended)](#installing-from-source-recommended)
   - [Installing via PyPi](#installing-via-pypi)
+  - [Installing for development](#installing-for-development)
   - [Running in a container](#running-in-a-container)
-- [Setup training and testing](#setup-training-and-testing)
-- [TFLite Convertion](#tflite-convertion)
+- [Training \& Testing Tutorial](#training--testing-tutorial)
 - [Features Extraction](#features-extraction)
 - [Augmentations](#augmentations)
-- [Training & Testing Tutorial](#training--testing-tutorial)
-- [Corpus Sources and Pretrained Models](#corpus-sources-and-pretrained-models)
+- [TFLite Convertion](#tflite-convertion)
+- [Pretrained Models](#pretrained-models)
+- [Corpus Sources](#corpus-sources)
   - [English](#english)
   - [Vietnamese](#vietnamese)
-  - [German](#german)
-- [References & Credits](#references--credits)
+- [How to contribute](#how-to-contribute)
+- [References \& Credits](#references--credits)
 - [Contact](#contact)
 
 <!-- /TOC -->
@@ -66,10 +60,10 @@ TensorFlowASR implements some automatic speech recognition architectures such as
 
 - **Conformer Transducer** (Reference: [https://arxiv.org/abs/2005.08100](https://arxiv.org/abs/2005.08100))
   See [examples/conformer](./examples/conformer)
-- **Streaming Transducer** (Reference: [https://arxiv.org/abs/1811.06621](https://arxiv.org/abs/1811.06621))
-  See [examples/streaming_transducer](./examples/streaming_transducer)
 - **ContextNet** (Reference: [http://arxiv.org/abs/2005.03191](http://arxiv.org/abs/2005.03191))
   See [examples/contextnet](./examples/contextnet)
+- **RNN Transducer** (Reference: [https://arxiv.org/abs/1811.06621](https://arxiv.org/abs/1811.06621))
+  See [examples/rnn_transducer](./examples/rnn_transducer)
 - **Deep Speech 2** (Reference: [https://arxiv.org/abs/1512.02595](https://arxiv.org/abs/1512.02595))
   See [examples/deepspeech2](./examples/deepspeech2)
 - **Jasper** (Reference: [https://arxiv.org/abs/1904.03288](https://arxiv.org/abs/1904.03288))
@@ -85,7 +79,7 @@ For training and testing, you should use `git clone` for installing necessary pa
 git clone https://github.com/TensorSpeech/TensorFlowASR.git
 cd TensorFlowASR
 # Tensorflow 2.x (with 2.x.x >= 2.5.1)
-pip3 install -e ".[tf2.x]" # or ".[tf2.x-gpu]"
+pip3 install ".[tf2.x]" # or ".[tf2.x-gpu]"
 ```
 
 For anaconda3:
@@ -97,16 +91,24 @@ pip install -U tensorflow-gpu # upgrade to latest version of tensorflow
 git clone https://github.com/TensorSpeech/TensorFlowASR.git
 cd TensorFlowASR
 # Tensorflow 2.x (with 2.x.x >= 2.5.1)
-pip3 install -e ".[tf2.x]" # or ".[tf2.x-gpu]"
+pip3 install ".[tf2.x]" # or ".[tf2.x-gpu]"
 ```
 
 ### Installing via PyPi
 
 ```bash
 # Tensorflow 2.x (with 2.x >= 2.3)
-pip3 install -U "TensorFlowASR[tf2.x]" # or pip3 install -U "TensorFlowASR[tf2.x-gpu]"
+pip3 install "TensorFlowASR[tf2.x]" # or pip3 install "TensorFlowASR[tf2.x-gpu]"
 ```
 
+### Installing for development
+
+```bash
+git clone https://github.com/TensorSpeech/TensorFlowASR.git
+cd TensorFlowASR
+pip3 install -e ".[dev]"
+pip3 install -e ".[tf2.x]" # or ".[tf2.x-gpu]" or ".[tf2.x-apple]" for apple m1 machine
+```
 
 ### Running in a container
 
@@ -114,21 +116,24 @@ pip3 install -U "TensorFlowASR[tf2.x]" # or pip3 install -U "TensorFlowASR[tf2.x
 docker-compose up -d
 ```
 
-## Setup training and testing
 
-- For datasets, see [datasets](./tensorflow_asr/datasets/README.md)
 
-- For _training, testing and using_ **CTC Models**, run `./scripts/install_ctc_decoders.sh`
+## Training & Testing Tutorial
 
-- For _training_ **Transducer Models** with RNNT Loss in TF, make sure that [warp-transducer](https://github.com/HawkAaron/warp-transducer) **is not installed** (by simply run `pip3 uninstall warprnnt-tensorflow`) (**Recommended**)
+- For training, please read [tutorial_training](./docs/1_tutorial_training.md)
+- For testing, please read [tutorial_testing](./docs/2_tutorial_testing.md)
 
-- For _training_ **Transducer Models** with RNNT Loss from [warp-transducer](https://github.com/HawkAaron/warp-transducer), run `export CUDA_HOME=/usr/local/cuda && ./scripts/install_rnnt_loss.sh` (**Note**: only `export CUDA_HOME` when you have CUDA)
+**FYI**: Keras builtin training uses **infinite dataset**, which avoids the potential last partial batch.
 
-- For _mixed precision training_, use flag `--mxp` when running python scripts from [examples](./examples)
+See [examples](./examples/) for some predefined ASR models and results
 
-- For _enabling XLA_, run `TF_XLA_FLAGS=--tf_xla_auto_jit=2 python3 $path_to_py_script`)
+## Features Extraction
 
-- For _hiding warnings_, run `export TF_CPP_MIN_LOG_LEVEL=2` before running any examples
+See [features_extraction](./tensorflow_asr/featurizers/README.md)
+
+## Augmentations
+
+See [augmentations](./tensorflow_asr/augmentations/README.md)
 
 ## TFLite Convertion
 
@@ -161,52 +166,33 @@ with open(tflite_path, "wb") as tflite_out:
 
 5. Then the `.tflite` model is ready to be deployed
 
-## Features Extraction
+## Pretrained Models
 
-See [features_extraction](./tensorflow_asr/featurizers/README.md)
+Go to [drive](https://drive.google.com/drive/folders/1BD0AK30n8hc-yR28C5FW3LqzZxtLOQfl?usp=sharing)
 
-## Augmentations
-
-See [augmentations](./tensorflow_asr/augmentations/README.md)
-
-## Training & Testing Tutorial
-
-1. Define config YAML file, see the `config.yml` files in the [example folder](./examples) for reference (you can copy and modify values such as parameters, paths, etc.. to match your local machine configuration)
-2. Download your corpus (a.k.a datasets) and create a script to generate `transcripts.tsv` files from your corpus (this is general format used in this project because each dataset has different format). For more detail, see [datasets](./tensorflow_asr/datasets/README.md). **Note:** Make sure your data contain only characters in your language, for example, english has `a` to `z` and `'`. **Do not use `cache` if your dataset size is not fit in the RAM**.
-3. [Optional] Generate TFRecords to use `tf.data.TFRecordDataset` for better performance by using the script [create_tfrecords.py](./scripts/create_tfrecords.py)
-4. Create vocabulary file (characters or subwords/wordpieces) by defining `language.characters`, using the scripts [generate_vocab_subwords.py](./scripts/generate_vocab_subwords.py) or [generate_vocab_sentencepiece.py](./scripts/generate_vocab_sentencepiece.py). There're predefined ones in [vocabularies](./vocabularies)
-5. [Optional] Generate metadata file for your dataset by using script [generate_metadata.py](./scripts/generate_metadata.py). This metadata file contains maximum lengths calculated with your `config.yml` and total number of elements in each dataset, for static shape training and precalculated steps per epoch.
-6. For training, see `train.py` files in the [example folder](./examples) to see the options
-7. For testing, see `test.py` files in the [example folder](./examples) to see the options. **Note:** Testing is currently not supported for TPUs. It will print nothing other than the progress bar in the console, but it will store the predicted transcripts to the file `output.tsv` and then calculate the metrics from that file.
-
-**FYI**: Keras builtin training uses **infinite dataset**, which avoids the potential last partial batch.
-
-See [examples](./examples/) for some predefined ASR models and results
-
-## Corpus Sources and Pretrained Models
-
-For pretrained models, go to [drive](https://drive.google.com/drive/folders/1BD0AK30n8hc-yR28C5FW3LqzZxtLOQfl?usp=sharing)
+## Corpus Sources
 
 ### English
 
-|   **Name**   |                             **Source**                             | **Hours** |
-| :----------: | :----------------------------------------------------------------: | :-------: |
-| LibriSpeech  |              [LibriSpeech](http://www.openslr.org/12)              |   970h    |
-| Common Voice | [https://commonvoice.mozilla.org](https://commonvoice.mozilla.org) |   1932h   |
+| **Name**     | **Source**                                                         | **Hours** |
+| :----------- | :----------------------------------------------------------------- | :-------- |
+| LibriSpeech  | [LibriSpeech](http://www.openslr.org/12)                           | 970h      |
+| Common Voice | [https://commonvoice.mozilla.org](https://commonvoice.mozilla.org) | 1932h     |
 
 ### Vietnamese
 
-|                **Name**                |                                       **Source**                                       | **Hours** |
-| :------------------------------------: | :------------------------------------------------------------------------------------: | :-------: |
-|                 Vivos                  |          [https://ailab.hcmus.edu.vn/vivos](https://ailab.hcmus.edu.vn/vivos)          |    15h    |
-|          InfoRe Technology 1           |  [InfoRe1 (passwd: BroughtToYouByInfoRe)](https://files.huylenguyen.com/25hours.zip)   |    25h    |
-| InfoRe Technology 2 (used in VLSP2019) | [InfoRe2 (passwd: BroughtToYouByInfoRe)](https://files.huylenguyen.com/audiobooks.zip) |   415h    |
+| **Name**                               | **Source**                                                                             | **Hours** |
+| :------------------------------------- | :------------------------------------------------------------------------------------- | :-------- |
+| Vivos                                  | [https://ailab.hcmus.edu.vn/vivos](https://ailab.hcmus.edu.vn/vivos)                   | 15h       |
+| InfoRe Technology 1                    | [InfoRe1 (passwd: BroughtToYouByInfoRe)](https://files.huylenguyen.com/25hours.zip)    | 25h       |
+| InfoRe Technology 2 (used in VLSP2019) | [InfoRe2 (passwd: BroughtToYouByInfoRe)](https://files.huylenguyen.com/audiobooks.zip) | 415h      |
 
-### German
+## How to contribute
 
-|   **Name**   |                             **Source**                              | **Hours** |
-| :----------: | :-----------------------------------------------------------------: | :-------: |
-| Common Voice | [https://commonvoice.mozilla.org/](https://commonvoice.mozilla.org) |   750h    |
+1. Fork the project
+2. [Install for development](#installing-for-development)
+3. Create a branch
+4. Make a pull request to this repo
 
 ## References & Credits
 

@@ -1,0 +1,34 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Test RNNT Loss",
+            "type": "python",
+            "request": "launch",
+            "module": "pytest",
+            "justMyCode": true,
+            "args": [
+                "-s",
+                "./tests/test_rnnt_loss.py"
+            ]
+        },
+        {
+            "name": "Test Prediction",
+            "type": "python",
+            "request": "launch",
+            "justMyCode": true,
+            "program": "./examples/inferences/main.py",
+            "args": [
+                "--file-path",
+                "/Users/nglehuy/Data/Persona/MachineLearning/Datasets/LibriSpeech/test-clean/61/70970/61-70970-0030.flac",
+                "--config-path",
+                "~/Data/Persona/Projects/TensorFlowASR/examples/models/transducer/contextnet/small.yml.j2",
+                "--h5",
+                "~/Data/Persona/MachineLearning/Models/transducer/sp1k-contextnet/small/28.h5"
+            ]
+        }
+    ]
+}

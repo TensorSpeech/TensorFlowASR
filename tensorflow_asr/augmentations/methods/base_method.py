@@ -1,4 +1,4 @@
-# Copyright 2020 Huy Le Nguyen (@usimarit)
+# Copyright 2020 Huy Le Nguyen (@nglehuy)
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,10 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import tensorflow as tf
-
 
 class AugmentationMethod:
-    @tf.function
+    def __init__(self, prob: float = 0.5):
+        self.prob = prob
+
     def augment(self, *args, **kwargs):
         raise NotImplementedError()

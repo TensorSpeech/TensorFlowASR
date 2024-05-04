@@ -1,4 +1,4 @@
-# Copyright 2020 Huy Le Nguyen (@usimarit)
+# Copyright 2020 Huy Le Nguyen (@nglehuy)
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,45 +12,44 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import os
 import glob
-import argparse
-import librosa
-from tqdm.auto import tqdm
+import os
 import unicodedata
 
-from tensorflow_asr.utils.file_util import preprocess_paths
+import librosa
+from tqdm.auto import tqdm
 
-parser = argparse.ArgumentParser(prog="Setup LibriSpeech Transcripts")
+from tensorflow_asr.utils import cli_util, file_util
 
-parser.add_argument("--dir", "-d", type=str, default=None, help="Directory of dataset")
 
-parser.add_argument("output", type=str, default=None, help="The output .tsv transcript file path")
+def main(
+    directory: str,
+    output: str,
+):
+    directory = file_util.preprocess_paths(directory, isdir=True)
+    output = file_util.preprocess_paths(output)
 
-args = parser.parse_args()
+    transcripts = []
 
-assert args.dir and args.output
+    text_files = glob.glob(os.path.join(directory, "**", "*.txt"), recursive=True)
 
-args.dir = preprocess_paths(args.dir, isdir=True)
-args.output = preprocess_paths(args.output)
+    for text_file in tqdm(text_files, desc="[Loading]"):
+        current_dir = os.path.dirname(text_file)
+        with open(text_file, "r", encoding="utf-8") as txt:
+            lines = txt.read().splitlines()
+        for line in lines:
+            line = line.split(" ", maxsplit=1)
+            audio_file = os.path.join(current_dir, line[0] + ".flac")
+            y, sr = librosa.load(audio_file, sr=None)
+            duration = librosa.get_duration(y=y, sr=sr)
+            text = unicodedata.normalize("NFKC", line[1])
+            transcripts.append(f"{audio_file}\t{duration}\t{text.lower()}\n")
 
-transcripts = []
+    with open(output, "w", encoding="utf-8") as out:
+        out.write("PATH\tDURATION\tTRANSCRIPT\n")
+        for line in tqdm(transcripts, desc="[Writing]"):
+            out.write(line)
 
-text_files = glob.glob(os.path.join(args.dir, "**", "*.txt"), recursive=True)
 
-for text_file in tqdm(text_files, desc="[Loading]"):
-    current_dir = os.path.dirname(text_file)
-    with open(text_file, "r", encoding="utf-8") as txt:
-        lines = txt.read().splitlines()
-    for line in lines:
-        line = line.split(" ", maxsplit=1)
-        audio_file = os.path.join(current_dir, line[0] + ".flac")
-        y, sr = librosa.load(audio_file, sr=None)
-        duration = librosa.get_duration(y, sr)
-        text = unicodedata.normalize("NFC", line[1].lower())
-        transcripts.append(f"{audio_file}\t{duration}\t{text}\n")
-
-with open(args.output, "w", encoding="utf-8") as out:
-    out.write("PATH\tDURATION\tTRANSCRIPT\n")
-    for line in tqdm(transcripts, desc="[Writing]"):
-        out.write(line)
+if __name__ == "__main__":
+    cli_util.run(main)
