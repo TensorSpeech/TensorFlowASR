@@ -4,7 +4,7 @@
 <a href="https://github.com/TensorSpeech/TensorFlowASR/blob/main/LICENSE">
   <img alt="GitHub" src="https://img.shields.io/github/license/TensorSpeech/TensorFlowASR?logo=apache&logoColor=green">
 </a>
-<img alt="python" src="https://img.shields.io/badge/python-%3E%3D3.6-blue?logo=python">
+<img alt="python" src="https://img.shields.io/badge/python-%3E%3D3.8-blue?logo=python">
 <img alt="tensorflow" src="https://img.shields.io/badge/tensorflow-%3E%3D2.12.0-orange?logo=tensorflow">
 <a href="https://pypi.org/project/TensorFlowASR/">
   <img alt="PyPI" src="https://img.shields.io/pypi/v/TensorFlowASR?color=%234285F4&label=release&logo=pypi&logoColor=%234285F4">
@@ -60,15 +60,15 @@ TensorFlowASR implements some automatic speech recognition architectures such as
 ### Publications
 
 - **Conformer Transducer** (Reference: [https://arxiv.org/abs/2005.08100](https://arxiv.org/abs/2005.08100))
-  See [examples/conformer](./examples/conformer)
+  See [examples/models/transducer/conformer](./examples/models/transducer/conformer)
 - **ContextNet** (Reference: [http://arxiv.org/abs/2005.03191](http://arxiv.org/abs/2005.03191))
-  See [examples/contextnet](./examples/contextnet)
+  See [examples/models/transducer/contextnet](./examples/models/transducer/contextnet)
 - **RNN Transducer** (Reference: [https://arxiv.org/abs/1811.06621](https://arxiv.org/abs/1811.06621))
-  See [examples/rnn_transducer](./examples/rnn_transducer)
+  See [examples/models/transducer/rnnt](./examples/models/transducer/rnnt)
 - **Deep Speech 2** (Reference: [https://arxiv.org/abs/1512.02595](https://arxiv.org/abs/1512.02595))
-  See [examples/deepspeech2](./examples/deepspeech2)
+  See [examples/models/ctc/deepspeech2](./examples/models/ctc/deepspeech2)
 - **Jasper** (Reference: [https://arxiv.org/abs/1904.03288](https://arxiv.org/abs/1904.03288))
-  See [examples/jasper](./examples/jasper)
+  See [examples/models/ctc/jasper](./examples/models/ctc/jasper)
 
 ## Installation
 
