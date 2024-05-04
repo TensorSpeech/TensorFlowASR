@@ -2,7 +2,7 @@
 
 These commands are example for librispeech dataset, but we can apply similar to other datasets
 
-## 1. Install packages (tf>=2.8)
+## 1. Install packages
 
 If you use google colab, it's recommended to use the tensorflow version pre-installed on the colab itself
 

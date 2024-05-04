@@ -134,8 +134,8 @@ docker-compose up -d
 
 ## Training & Testing Tutorial
 
-- For training, please read [tutorial_training](./docs/1_tutorial_training.md)
-- For testing, please read [tutorial_testing](./docs/2_tutorial_testing.md)
+- For training, please read [tutorial_training](./docs/tutorials/training.md)
+- For testing, please read [tutorial_testing](./docs/tutorials//testing.md)
 
 **FYI**: Keras builtin training uses **infinite dataset**, which avoids the potential last partial batch.
 

@@ -2,7 +2,7 @@
 
 These commands are example for librispeech dataset, but we can apply similar to other datasets
 
-## 1. Install packages (tf>=2.8)
+## 1. Install packages
 
 If you use google colab, it's recommended to use the tensorflow version pre-installed on the colab itself
 
@@ -48,11 +48,12 @@ The inputs, outputs and other options of vocabulary are defined in the config fi
 ## 5. Run testing
 
 ```bash
-python examples/conformer/test.py \
-    --config-path=/path/to/config.j2 \
-    --saved=/path/to/saved_weights.h5 \
-    --bs=1 \
-    --output=/path/to/test.tsv
+python examples/test.py \
+--config-path /path/to/config.yml.j2 \
+--dataset_type slice \
+--datadir /path/to/datadir \
+--outputdir /path/to/modeldir/tests \
+--h5 /path/to/modeldir/weights.h5
+## See others params
+python examples/test.py --help
 ```
-
-See other options for each example
