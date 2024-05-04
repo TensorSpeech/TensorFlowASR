@@ -15,5 +15,23 @@
     "autoDocstring.docstringFormat": "numpy",
     "[python]": {
         "editor.defaultFormatter": "ms-python.black-formatter",
-    }
+    },
+    "pylint.path": [
+        "${interpreter}",
+        "-m",
+        "pylint"
+    ],
+    "pylint.args": [
+        "--rcfile=${workspaceFolder}/.pylintrc"
+    ],
+    "black-formatter.path": [
+        "${interpreter}",
+        "-m",
+        "black"
+    ],
+    "isort.path": [
+        "${interpreter}",
+        "-m",
+        "isort"
+    ]
 }
