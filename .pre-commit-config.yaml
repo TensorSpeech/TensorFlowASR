@@ -1,0 +1,20 @@
+repos:
+  - repo: local
+    hooks:
+      - id: black-formatter-check
+        name: black-formatter-check
+        entry: black --check
+        language: system
+        types: [python]
+        stages: [pre-commit]
+        fail_fast: true
+        verbose: true
+      - id: pylint-check
+        name: pylint-check
+        entry: pylint --rcfile=.pylintrc -rn -sn
+        language: system
+        types: [python]
+        stages: [pre-commit]
+        fail_fast: true
+        require_serial: true
+        verbose: true

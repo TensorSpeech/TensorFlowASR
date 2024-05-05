@@ -9,7 +9,8 @@ Session.vim
 .idea
 __pycache__
 .pytest*
-venv
+venv*
+.venv*
 my_train
 .DS_Store
 models/*

@@ -18,6 +18,7 @@ pylint~=3.1.0
 matplotlib~=3.7.2
 pydot~=1.4.2
 graphviz~=0.20.1
+pre-commit~=3.7.0
 
 # extra=tf2-12
 tensorflow~=2.12.0
