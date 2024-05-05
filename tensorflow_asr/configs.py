@@ -72,6 +72,7 @@ class DatasetConfig:
         self.data_paths = config.pop("data_paths", None)
         self.tfrecords_dir: str = config.pop("tfrecords_dir", None)
         self.tfrecords_shards: int = config.pop("tfrecords_shards", 16)
+        self.tfrecords_buffer_size: int = config.pop("tfrecords_buffer_size", 32 * 1024 * 1024)
         self.shuffle: bool = config.pop("shuffle", False)
         self.cache: bool = config.pop("cache", False)
         self.drop_remainder: bool = config.pop("drop_remainder", True)
