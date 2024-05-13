@@ -7,22 +7,13 @@ concurrency:
   cancel-in-progress: true
 permissions:
   contents: write
-env:
-  GIT_AUTHOR_NAME: Actionbot
-  GIT_AUTHOR_EMAIL: actions@github.com
 jobs:
-  publish:
+  publish-wiki:
     runs-on: ubuntu-latest
     steps:
-    - name: Checkout
-      uses: actions/checkout@main
-    - name: Publish Wiki
-      uses: docker://decathlon/wiki-page-creator-action:latest
-      env:
-        ACTION_MAIL: ${{ env.GIT_AUTHOR_EMAIL }}
-        ACTION_NAME: ${{ env.GIT_AUTHOR_NAME }}
-        GH_PAT: ${{ secrets.TOKEN }}
-        # MD_FOLDER: temp_release_notes
-        OWNER: TensorSpeech
-        REPO_NAME: TensorFlowASR
-        # SKIP_MD: README.md
+      - uses: actions/checkout@v4.1.4
+      - uses: Andrew-Chen-Wang/github-wiki-action@master
+        with:
+          token: ${{ secrets.TOKEN }}
+          path: .
+          preprocess: true
