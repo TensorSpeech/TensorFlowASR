@@ -2,6 +2,8 @@ name: Publish Wiki Pages
 on:
   push:
     branches: [main]
+    paths:
+      - docs/**
 concurrency:
   group: publish-wiki
   cancel-in-progress: true
@@ -11,8 +13,8 @@ jobs:
   publish-wiki:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
-      - uses: Andrew-Chen-Wang/github-wiki-action@v4
+      - uses: actions/checkout@v4.1.4
+      - uses: Andrew-Chen-Wang/github-wiki-action@v4.4.0
         with:
           token: ${{ secrets.TOKEN }}
           path: docs/
