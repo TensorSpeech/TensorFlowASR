@@ -21,6 +21,7 @@ jobs:
         with:
           source: docs
           destination: wiki
+          branch: main
           token: ${{ secrets.TOKEN }}
           gitAuthorName: ${{ env.GIT_AUTHOR_NAME }}
           gitAuthorEmail: ${{ env.GIT_AUTHOR_EMAIL }}
