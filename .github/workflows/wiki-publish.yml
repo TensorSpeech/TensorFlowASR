@@ -11,17 +11,18 @@ env:
   GIT_AUTHOR_NAME: Actionbot
   GIT_AUTHOR_EMAIL: actions@github.com
 jobs:
-  job-sync-docs-to-wiki:
+  publish:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout Repo
-        uses: actions/checkout@v4.1.4
-      - name: Sync docs to wiki
-        uses: newrelic/wiki-sync-action@main
-        with:
-          source: docs
-          destination: wiki
-          branch: main
-          token: ${{ secrets.TOKEN }}
-          gitAuthorName: ${{ env.GIT_AUTHOR_NAME }}
-          gitAuthorEmail: ${{ env.GIT_AUTHOR_EMAIL }}
+    - name: Checkout
+      uses: actions/checkout@main
+    - name: Publish Wiki
+      uses: docker://decathlon/wiki-page-creator-action:latest
+      env:
+        ACTION_MAIL: ${{ env.GIT_AUTHOR_EMAIL }}
+        ACTION_NAME: ${{ env.GIT_AUTHOR_NAME }}
+        GH_PAT: ${{ secrets.TOKEN }}
+        # MD_FOLDER: temp_release_notes
+        OWNER: TensorSpeech
+        REPO_NAME: TensorFlowASR
+        # SKIP_MD: README.md
