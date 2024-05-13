@@ -21,7 +21,7 @@ jobs:
           # The default branch name (master, main, etc)
           defaultBranch: main
           # A directory within the repository where the docs are located
-          # rootDocsFolder: # optional
+          rootDocsFolder: docs # optional
           # If true, renames the README.md file to Home.md in the wiki (the wiki homepage)
           convertRootReadmeToHomePage: true
           # If true, names wiki pages according to the top header of the source file (using `#`)
