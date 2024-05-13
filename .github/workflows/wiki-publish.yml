@@ -1,38 +1,19 @@
 name: Publish Wiki Pages
-
 on:
   push:
-    branches:
-      - main
-
+    branches: [main]
+concurrency:
+  group: publish-wiki
+  cancel-in-progress: true
+permissions:
+  contents: write
 jobs:
-  publish:
-
+  publish-wiki:
     runs-on: ubuntu-latest
-
     steps:
-      - name: github-docs-to-wiki
-        # You may pin to the exact commit or the version.
-        # uses: cmbrose/github-docs-to-wiki@11bb98c77ac3ef07f29ba9ef0c7b4c9360da2fd4
-        uses: cmbrose/github-docs-to-wiki@v0.24
+      - uses: actions/checkout@v3
+      - uses: Andrew-Chen-Wang/github-wiki-action@v4
         with:
-          # The GitHub PAT, used to clone the wiki repo
-          githubToken: ${{ secrets.TOKEN }}
-          # The default branch name (master, main, etc)
-          defaultBranch: main
-          # A directory within the repository where the docs are located
-          rootDocsFolder: docs # optional
-          # If true, renames the README.md file to Home.md in the wiki (the wiki homepage)
-          convertRootReadmeToHomePage: true
-          # If true, names wiki pages according to the top header of the source file (using `#`)
-          useHeaderForWikiName: false
-          # If set, inserts a header at the top of each wiki file with the given format
-          # Supports the following format subsitutions:
-          # - {sourceFileLink}: the absolute url to the source file in the repo
-          customWikiFileHeaderFormat: false
-          # If set, uses the given format for the commit message to the wiki. Useful to correlate changes to the source.
-          # Supports the following format subsitutions:
-          # - {commitMessage}: the latest commit message for HEAD
-          # - {shaFull}: the full SHA of HEAD
-          # - {shaShort}: the short SHA of HEAD
-          # customCommitMessageFormat: # optional
+          token: ${{ secrets.TOKEN }}
+          path: docs/
+          preprocess: true
