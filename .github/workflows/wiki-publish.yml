@@ -7,13 +7,20 @@ concurrency:
   cancel-in-progress: true
 permissions:
   contents: write
+env:
+  GIT_AUTHOR_NAME: Actionbot
+  GIT_AUTHOR_EMAIL: actions@github.com
 jobs:
-  publish-wiki:
+  job-sync-docs-to-wiki:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4.1.4
-      - uses: Andrew-Chen-Wang/github-wiki-action@v4.4.0
+      - name: Checkout Repo
+        uses: actions/checkout@v4.1.4
+      - name: Sync docs to wiki
+        uses: newrelic/wiki-sync-action@main
         with:
+          source: docs
+          destination: wiki
           token: ${{ secrets.TOKEN }}
-          path: docs/
-          preprocess: true
+          gitAuthorName: ${{ env.GIT_AUTHOR_NAME }}
+          gitAuthorEmail: ${{ env.GIT_AUTHOR_EMAIL }}
