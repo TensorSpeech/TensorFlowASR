@@ -12,8 +12,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4.1.4
-      - uses: Andrew-Chen-Wang/github-wiki-action@master
+      - uses: cmbrose/github-docs-to-wiki@v0.20
         with:
-          token: ${{ secrets.TOKEN }}
-          path: .
-          preprocess: true
+          githubToken: ${{ secrets.TOKEN }}
+          rootDocsFolder: .
+          convertRootReadmeToHomePage: true
