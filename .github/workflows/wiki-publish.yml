@@ -12,7 +12,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4.1.4
-      - uses: Andrew-Chen-Wang/github-wiki-action@master
+      - uses: nglehuy/github-wiki-action@master
         with:
           strategy: init
           token: ${{ secrets.TOKEN }}
