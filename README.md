@@ -143,7 +143,7 @@ docker-compose up -d
 ## Training & Testing Tutorial
 
 - For training, please read [tutorial_training](./docs/tutorials/training.md)
-- For testing, please read [tutorial_testing](./docs/tutorials//testing.md)
+- For testing, please read [tutorial_testing](./docs/tutorials/testing.md)
 
 **FYI**: Keras builtin training uses **infinite dataset**, which avoids the potential last partial batch.
 
@@ -162,8 +162,6 @@ See [augmentations](./tensorflow_asr/augmentations/README.md)
 After converting to tflite, the tflite model is like a function that transforms directly from an **audio signal** to **unicode code points**, then we can convert unicode points to string.
 
 See [tflite_convertion](./docs/tutorials/tflite.md)
-
-1. Then the `.tflite` model is ready to be deployed
 
 ## Pretrained Models
 
