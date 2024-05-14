@@ -14,7 +14,6 @@ jobs:
       - uses: actions/checkout@v4.1.4
       - uses: nglehuy/github-wiki-action@master
         with:
-          strategy: clone
           token: ${{ secrets.TOKEN }}
-          path: ./
+          path: docs
           preprocess: true
