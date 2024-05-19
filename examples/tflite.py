@@ -23,26 +23,27 @@ from tensorflow_asr.utils import app_util, cli_util, env_util, file_util
 
 def main(
     config_path: str,
-    h5: str,
     output: str,
+    h5: str = None,
     bs: int = 1,
+    beam_width: int = 0,
     repodir: str = os.path.realpath(os.path.join(os.path.dirname(__file__), "..")),
 ):
-    assert h5 and output
+    assert output
     tf.keras.backend.clear_session()
     env_util.setup_seed()
-    tf.compat.v1.enable_control_flow_v2()
 
     config = Config(config_path, training=False, repodir=repodir)
     tokenizer = tokenizers.get(config)
 
     model: BaseModel = tf.keras.models.model_from_config(config.model_config)
     model.tokenizer = tokenizer
-    model.make()
-    model.load_weights(h5, by_name=file_util.is_hdf5_filepath(h5))
+    model.make(batch_size=bs)
+    if h5 and tf.io.gfile.exists(h5):
+        model.load_weights(h5, by_name=file_util.is_hdf5_filepath(h5))
     model.summary()
 
-    app_util.convert_tflite(model=model, output=output, batch_size=bs)
+    app_util.convert_tflite(model=model, output=output, batch_size=bs, beam_width=beam_width)
 
 
 if __name__ == "__main__":

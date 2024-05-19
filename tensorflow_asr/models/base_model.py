@@ -129,6 +129,7 @@ class BaseModel(tf.keras.Model):
         predictions = tf.keras.Input(shape=prediction_shape, batch_size=batch_size, dtype=tf.int32)
         predictions_length = tf.keras.Input(shape=[], batch_size=batch_size, dtype=tf.int32)
         self._per_replica_batch_size = int(batch_size / self.distribute_strategy.num_replicas_in_sync)
+        self._batch_size = batch_size
         outputs = self(
             schemas.TrainInput(
                 inputs=signals,
@@ -277,7 +278,13 @@ class BaseModel(tf.keras.Model):
 
     def predict_step(self, data):
         x, y_true = data
-        inputs = schemas.PredictInput(x["inputs"], x["inputs_length"])
+        inputs = schemas.PredictInput(
+            inputs=x["inputs"],
+            inputs_length=x["inputs_length"],
+            previous_tokens=self.get_initial_tokens(),
+            previous_encoder_states=self.get_initial_encoder_states(),
+            previous_decoder_states=self.get_initial_decoder_states(),
+        )
         _tokens = self.recognize(inputs=inputs).tokens
         _beam_tokens = self.recognize_beam(inputs=inputs).tokens
         return {
@@ -619,41 +626,52 @@ class BaseModel(tf.keras.Model):
 
     # -------------------------------- INFERENCE FUNCTIONS -------------------------------------
 
+    def get_initial_tokens(self, batch_size=1):
+        return tf.ones([batch_size, 1], dtype=tf.int32) * self.blank
+
+    def get_initial_encoder_states(self, batch_size=1):
+        return tf.zeros([], dtype=self.dtype)
+
+    def get_initial_decoder_states(self, batch_size=1):
+        return tf.zeros([], dtype=self.dtype)
+
     def recognize(self, inputs: schemas.PredictInput, **kwargs) -> schemas.PredictOutput:
         """Greedy decoding function that used in self.predict_step"""
         raise NotImplementedError()
 
-    def recognize_beam(self, inputs: schemas.PredictInput, **kwargs) -> schemas.PredictOutput:
+    def recognize_beam(self, inputs: schemas.PredictInput, beam_width: int = 10, **kwargs) -> schemas.PredictOutput:
         """Beam search decoding function that used in self.predict_step"""
         raise NotImplementedError()
 
     # ---------------------------------- TFLITE ---------------------------------- #
 
-    def make_tflite_function(self, batch_size=1):
-        @tf.function(
-            input_signature=[
-                tf.TensorSpec([batch_size, None], dtype=tf.float32),
-                tf.TensorSpec([batch_size], dtype=tf.int32),
-                tf.TensorSpec([batch_size, 1], dtype=tf.int32),
-                tf.TensorSpec(self.encoder.get_initial_state(batch_size), dtype=tf.float32) if hasattr(self.encoder, "get_initial_state") else None,
-                tf.TensorSpec(self.predict_net.get_initial_state(batch_size).get_shape(), dtype=tf.float32),
-            ],
-        )
-        def tflite_func(inputs, inputs_length, previous_tokens, previous_encoder_states, previous_decoder_states):
-            outputs = self.recognize(
-                schemas.PredictInput(
-                    inputs=inputs,
-                    inputs_length=inputs_length,
-                    previous_tokens=previous_tokens,
-                    previous_encoder_states=previous_encoder_states,
-                    previous_decoder_states=previous_decoder_states,
-                )
-            )
-            return schemas.PredictOutput(
-                tokens=self.tokenizer.detokenize_unicode_points(outputs.tokens),
-                scores=outputs.scores,
-                encoder_states=outputs.encoder_states,
-                decoder_states=outputs.decoder_states,
+    def make_tflite_function(self, batch_size: int = 1, beam_width: int = 0):
+
+        def tflite_func(inputs: schemas.PredictInput):
+            if beam_width > 0:
+                outputs = self.recognize_beam(inputs, beam_width=beam_width)
+            else:
+                outputs = self.recognize(inputs)
+            return schemas.PredictOutputWithTranscript(
+                transcript=self.tokenizer.detokenize(outputs.tokens),
+                tokens=outputs.tokens,
+                next_tokens=outputs.next_tokens,
+                next_encoder_states=outputs.next_encoder_states,
+                next_decoder_states=outputs.next_decoder_states,
             )
 
-        return tflite_func
+        input_signature = schemas.PredictInput(
+            inputs=tf.TensorSpec([batch_size, None], dtype=tf.float32),
+            inputs_length=tf.TensorSpec([batch_size], dtype=tf.int32),
+            previous_tokens=tf.TensorSpec.from_tensor(self.get_initial_tokens(batch_size)),
+            previous_encoder_states=tf.TensorSpec.from_tensor(self.get_initial_encoder_states(batch_size)),
+            previous_decoder_states=tf.TensorSpec.from_tensor(self.get_initial_decoder_states(batch_size)),
+        )
+
+        return tf.function(
+            tflite_func,
+            input_signature=[input_signature],
+            jit_compile=True,
+            reduce_retracing=True,
+            autograph=True,
+        )

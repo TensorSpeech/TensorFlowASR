@@ -13,6 +13,8 @@
 # limitations under the License.
 
 import tensorflow as tf
+import tensorflow_text as tft
+from tensorflow.lite.python import interpreter
 
 from tensorflow_asr.utils import cli_util, data_util
 
@@ -20,34 +22,48 @@ logger = tf.get_logger()
 
 
 def main(
-    file_path: str,
-    tflite_path: str,
-    previous_encoder_states_shape: list = None,
-    previous_decoder_states_shape: list = None,
-    blank_index: int = 0,
+    audio_file_path: str,
+    tflite: str,
+    sample_rate: int = 16000,
+    blank: int = 0,
 ):
-    tflitemodel = tf.lite.Interpreter(model_path=tflite_path)
-    signal = data_util.read_raw_audio(file_path)
+    wav = data_util.load_and_convert_to_wav(audio_file_path, sample_rate=sample_rate)
+    signal = data_util.read_raw_audio(wav)
     signal = tf.reshape(signal, [1, -1])
     signal_length = tf.reshape(tf.shape(signal)[1], [1])
 
+    tflitemodel = interpreter.InterpreterWithCustomOps(model_path=tflite, custom_op_registerers=tft.tflite_registrar.SELECT_TFTEXT_OPS)
     input_details = tflitemodel.get_input_details()
     output_details = tflitemodel.get_output_details()
-    tflitemodel.resize_tensor_input(input_details[0]["index"], signal.shape)
+
+    tflitemodel.resize_tensor_input(input_details[0]["index"], signal.shape, strict=True)
     tflitemodel.allocate_tensors()
     tflitemodel.set_tensor(input_details[0]["index"], signal)
     tflitemodel.set_tensor(input_details[1]["index"], signal_length)
-    tflitemodel.set_tensor(input_details[2]["index"], tf.constant(blank_index, dtype=tf.int32))
-    if previous_encoder_states_shape:
-        tflitemodel.set_tensor(input_details[4]["index"], tf.zeros(previous_encoder_states_shape, dtype=tf.float32))
-    if previous_decoder_states_shape:
-        tflitemodel.set_tensor(input_details[5]["index"], tf.zeros(previous_decoder_states_shape, dtype=tf.float32))
-    tflitemodel.invoke()
-    hyp = tflitemodel.get_tensor(output_details[0]["index"])
+    tflitemodel.set_tensor(input_details[2]["index"], tf.ones(input_details[2]["shape"], dtype=input_details[2]["dtype"]) * blank)
+    tflitemodel.set_tensor(input_details[3]["index"], tf.zeros(input_details[3]["shape"], dtype=input_details[3]["dtype"]))
+    tflitemodel.set_tensor(input_details[4]["index"], tf.zeros(input_details[4]["shape"], dtype=input_details[4]["dtype"]))
 
-    transcript = "".join([chr(u) for u in hyp])
+    tflitemodel.invoke()
+
+    transcript = tflitemodel.get_tensor(output_details[0]["index"])
+    tokens = tflitemodel.get_tensor(output_details[1]["index"])
+    next_tokens = tflitemodel.get_tensor(output_details[2]["index"])
+    if len(output_details) > 4:
+        next_encoder_states = tflitemodel.get_tensor(output_details[3]["index"])
+        next_decoder_states = tflitemodel.get_tensor(output_details[4]["index"])
+    elif len(output_details) > 3:
+        next_encoder_states = None
+        next_decoder_states = tflitemodel.get_tensor(output_details[3]["index"])
+    else:
+        next_encoder_states = None
+        next_decoder_states = None
+
     logger.info(f"Transcript: {transcript}")
-    return transcript
+    logger.info(f"Tokens: {tokens}")
+    logger.info(f"Next tokens: {next_tokens}")
+    logger.info(f"Next encoder states: {None if next_encoder_states is None else next_encoder_states.shape}")
+    logger.info(f"Next decoder states: {None if next_decoder_states is None else next_decoder_states.shape}")
 
 
 if __name__ == "__main__":

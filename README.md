@@ -159,7 +159,7 @@ See [augmentations](./tensorflow_asr/augmentations/README.md)
 
 ## TFLite Convertion
 
-After converting to tflite, the tflite model is like a function that transforms directly from an **audio signal** to **unicode code points**, then we can convert unicode points to string.
+After converting to tflite, the tflite model is like a function that transforms directly from an **audio signal** to **text and tokens**
 
 See [tflite_convertion](./docs/tutorials/tflite.md)
 

@@ -94,6 +94,15 @@ class CtcModel(BaseModel):
         outputs, outputs_length, next_decoder_states = self.decoder.call_next(outputs, outputs_length, previous_decoder_states)
         return outputs, outputs_length, next_encoder_states, next_decoder_states
 
+    def get_initial_tokens(self, batch_size=1):
+        return super().get_initial_tokens(batch_size)
+
+    def get_initial_encoder_states(self, batch_size=1):
+        return tf.zeros([], dtype=self.dtype)
+
+    def get_initial_decoder_states(self, batch_size=1):
+        return tf.zeros([], dtype=self.dtype)
+
     # -------------------------------- GREEDY -------------------------------------
 
     def recognize(self, inputs: schemas.PredictInput, **kwargs):

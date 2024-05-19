@@ -54,3 +54,8 @@ PredictOutput = collections.namedtuple(
     ("tokens", "next_tokens", "next_encoder_states", "next_decoder_states"),
     defaults=(None, None),
 )
+PredictOutputWithTranscript = collections.namedtuple(
+    "PredictOutputWithTranscript",
+    ("transcript", "tokens", "next_tokens", "next_encoder_states", "next_decoder_states"),
+    defaults=(None, None),
+)

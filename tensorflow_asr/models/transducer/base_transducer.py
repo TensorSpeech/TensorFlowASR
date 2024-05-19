@@ -444,6 +444,15 @@ class Transducer(BaseModel):
             ytu = tf.nn.log_softmax(ytu)
             return ytu, new_states
 
+    def get_initial_tokens(self, batch_size=1):
+        return super().get_initial_tokens(batch_size)
+
+    def get_initial_encoder_states(self, batch_size=1):
+        return tf.zeros([], dtype=self.dtype)
+
+    def get_initial_decoder_states(self, batch_size=1):
+        return self.predict_net.get_initial_state(batch_size)
+
     # -------------------------------- GREEDY -------------------------------------
 
     def recognize(self, inputs: schemas.PredictInput, max_tokens_per_frame: int = 3, **kwargs):
@@ -464,11 +473,9 @@ class Transducer(BaseModel):
                 next_decoder_states, next states of predict_net, will be used to predict next chunk of audio,
             )
         """
-        return tf.cond(
-            tf.equal(tf.shape(inputs.inputs_length)[0], 1),
-            lambda: self.recognize_single(inputs, max_tokens_per_frame=max_tokens_per_frame, **kwargs),
-            lambda: self.recognize_batch(inputs, **kwargs),
-        )
+        if self._batch_size == 1:
+            return self.recognize_single(inputs, max_tokens_per_frame=max_tokens_per_frame, **kwargs)
+        return self.recognize_batch(inputs, **kwargs)
 
     def recognize_batch(self, inputs: schemas.PredictInput, **kwargs):
         """
@@ -485,9 +492,9 @@ class Transducer(BaseModel):
             # The current indices of the output of encoder, shape [B, 1]
             frame_indices = tf.zeros([batch_size, 1], dtype=tf.int32, name="frame_indices")
             # Previous predicted tokens, initially are blanks, shape [B, 1]
-            previous_tokens = inputs.previous_tokens or tf.ones([batch_size, 1], dtype=tf.int32, name="previous_tokens") * self.blank
+            previous_tokens = inputs.previous_tokens
             # Previous states of the prediction network, initially are zeros, shape [B, num_rnns, nstates, rnn_units]
-            previous_decoder_states = inputs.previous_decoder_states or self.predict_net.get_initial_state(batch_size)
+            previous_decoder_states = inputs.previous_decoder_states
             # Assumption that number of tokens can not exceed (2 * the size of output of encoder + 1), this is for static runs like TPU or TFLite
             max_tokens = max_frames * 2 + 1
             # All of the tokens that are getting recognized, initially are blanks, shape [B, nframes * 2 + 1]
@@ -564,7 +571,7 @@ class Transducer(BaseModel):
             frame = tf.zeros([1, 1], dtype=tf.int32)
             nframes = encoded_length
 
-            previous_tokens = inputs.previous_tokens or tf.ones([1, 1], dtype=tf.int32) * self.blank
+            previous_tokens = inputs.previous_tokens
             token_index = tf.ones([], dtype=tf.int32) * -1
             tokens = tf.TensorArray(
                 dtype=tf.int32,
@@ -581,7 +588,7 @@ class Transducer(BaseModel):
                 element_shape=tf.TensorShape([]),
             )
 
-            previous_decoder_states = inputs.previous_decoder_states or self.predict_net.get_initial_state(1)
+            previous_decoder_states = inputs.previous_decoder_states
 
             def condition(
                 _frame,
@@ -815,8 +822,8 @@ class Transducer(BaseModel):
 
     # -------------------------------- BEAM SEARCH -------------------------------------
 
-    def recognize_beam(self, inputs: schemas.PredictInput, **kwargs):
-        return self.recognize(inputs=inputs, **kwargs)
+    def recognize_beam(self, inputs: schemas.PredictInput, beam_width: int = 10, **kwargs):
+        return self.recognize(inputs=inputs, **kwargs)  # TODO: Implement beam search
 
     # def _perform_beam_search_batch(
     #     self,

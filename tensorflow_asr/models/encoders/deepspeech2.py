@@ -224,6 +224,7 @@ class RnnBlock(Layer):
             dropout=dropout,
             unroll=unroll,
             return_sequences=True,
+            return_state=True,
             use_bias=True,
             name=rnn_type,
             zero_output_for_mask=True,
@@ -233,6 +234,7 @@ class RnnBlock(Layer):
             bias_initializer=initializer,
             dtype=self.dtype,
         )
+        self._bidirectional = bidirectional
         if bidirectional:
             self.rnn = tf.keras.layers.Bidirectional(self.rnn, name=f"b{rnn_type}", dtype=self.dtype)
         self.bn = tf.keras.layers.BatchNormalization(
@@ -249,17 +251,34 @@ class RnnBlock(Layer):
                 dtype=self.dtype,
             )
 
+    def get_initial_state(self, batch_size: int):
+        if self._bidirectional:
+            states = self.rnn.forward_layer.get_initial_state(tf.zeros([batch_size, 1, 1], dtype=self.dtype))
+            states += self.rnn.backward_layer.get_initial_state(tf.zeros([batch_size, 1, 1], dtype=self.dtype))
+        else:
+            states = self.rnn.get_initial_state(tf.zeros([batch_size, 1, 1], dtype=self.dtype))
+        return states
+
     def call(self, inputs, training=False):
         outputs, outputs_length = inputs
-        outputs = self.rnn(outputs, training=training)  # mask auto populate
+        outputs, *_ = self.rnn(outputs, training=training)  # mask auto populate
         outputs = self.bn(outputs, training=training)
         if self.rowconv is not None:
             outputs = self.rowconv(outputs, training=training)
         return outputs, outputs_length
 
+    def call_next(self, inputs, previous_encoder_states):
+        with tf.name_scope(f"{self.name}_call_next"):
+            outputs, outputs_length = inputs
+            outputs, *_states = self.rnn(outputs, training=False, initial_state=tf.unstack(previous_encoder_states, axis=0))
+            outputs = self.bn(outputs, training=False)
+            if self.rowconv is not None:
+                outputs = self.rowconv(outputs, training=False)
+            return outputs, outputs_length, tf.stack(_states)
+
     def compute_output_shape(self, input_shape):
         output_shape, output_length_shape = input_shape
-        output_shape = self.rnn.compute_output_shape(output_shape)
+        output_shape, *_ = self.rnn.compute_output_shape(output_shape)
         output_shape = self.bn.compute_output_shape(output_shape)
         if self.rowconv is not None:
             output_shape = self.rowconv.compute_output_shape(output_shape)
@@ -301,11 +320,34 @@ class RnnModule(Layer):
             for i in range(nlayers)
         ]
 
+    def get_initial_state(self, batch_size: int):
+        """
+        Get zeros states
+
+        Returns
+        -------
+        tf.Tensor, shape [B, num_rnns, nstates, state_size]
+            Zero initialized states
+        """
+        states = []
+        for block in self.blocks:
+            states.append(tf.stack(block.get_initial_state(batch_size=batch_size), axis=0))
+        return tf.transpose(tf.stack(states, axis=0), perm=[2, 0, 1, 3])
+
     def call(self, inputs, training=False):
         outputs = inputs
         for block in self.blocks:
             outputs = block(outputs, training=training)
         return outputs
+
+    def call_next(self, inputs, previous_encoder_states):
+        outputs = inputs
+        previous_encoder_states = tf.transpose(previous_encoder_states, perm=[1, 2, 0, 3])
+        new_states = []
+        for i, block in enumerate(self.blocks):
+            *outputs, _states = block.call_next(outputs, previous_encoder_states=previous_encoder_states[i])
+            new_states.append(_states)
+        return outputs, tf.transpose(tf.stack(new_states, axis=0), perm=[2, 0, 1, 3])
 
     def compute_output_shape(self, input_shape):
         output_shape = input_shape
@@ -471,12 +513,44 @@ class DeepSpeech2Encoder(Layer):
         )
         self.time_reduction_factor = self.conv_module.time_reduction_factor
 
+    def get_initial_state(self, batch_size: int):
+        """
+        Get zeros states
+
+        Returns
+        -------
+        tf.Tensor, shape [B, num_rnns, nstates, state_size]
+            Zero initialized states
+        """
+        return self.rnn_module.get_initial_state(batch_size=batch_size)
+
     def call(self, inputs, training=False):
         *outputs, caching = inputs
         outputs = self.conv_module(outputs, training=training)
         outputs = self.rnn_module(outputs, training=training)
         outputs = self.fc_module(outputs, training=training)
         return *outputs, caching
+
+    def call_next(self, features, features_length, previous_encoder_states, *args, **kwargs):
+        """
+        Recognize function for encoder network from previous encoder states
+
+        Parameters
+        ----------
+        features : tf.Tensor, shape [B, T, F, C]
+        features_length : tf.Tensor, shape [B]
+        previous_encoder_states : tf.Tensor, shape [B, nlayers, nstates, rnn_units] -> [nlayers, nstates, B, rnn_units]
+
+        Returns
+        -------
+        Tuple[tf.Tensor, tf.Tensor, tf.Tensor], shape ([B, T, dmodel], [B], [nlayers, nstates, B, rnn_units] -> [B, nlayers, nstates, rnn_units])
+        """
+        with tf.name_scope(f"{self.name}_call_next"):
+            outputs = (features, features_length)
+            outputs = self.conv_module(outputs, training=False)
+            outputs, new_encoder_states = self.rnn_module.call_next(outputs, previous_encoder_states=previous_encoder_states)
+            outputs, outputs_length = self.fc_module(outputs, training=False)
+            return outputs, outputs_length, new_encoder_states
 
     def compute_mask(self, inputs, mask=None):
         *outputs, caching = inputs

@@ -114,7 +114,7 @@ class Tokenizer:
                 temp_lines = f.read().splitlines()
                 for line in temp_lines[1:]:  # Skip the header of tsv file
                     data = line.split("\t", 2)[-1]  # get only transcript
-                    data = cls.normalize_text(data, decoder_config.normalization_form).numpy()
+                    data = cls.normalize_text(data, decoder_config).numpy()
                     yield data
 
     @property
@@ -135,9 +135,12 @@ class Tokenizer:
         self.max_length = 0
 
     @classmethod
-    def normalize_text(cls, text: tf.Tensor, normalization_form: str = "NFKC"):
-        text = tft.normalize_utf8(text, normalization_form)
+    def normalize_text(cls, text: tf.Tensor, decoder_config: DecoderConfig):
+        text = tf.strings.regex_replace(text, b"\xe2\x81\x87".decode("utf-8"), "")
+        text = tft.normalize_utf8(text, decoder_config.normalization_form)
         text = tf.strings.regex_replace(text, r"\p{Cc}|\p{Cf}", " ")
+        text = tf.strings.regex_replace(text, decoder_config.unknown_token, "")
+        text = tf.strings.regex_replace(text, decoder_config.pad_token, "")
         text = tf.strings.regex_replace(text, r" +", " ")
         text = tf.strings.lower(text, encoding="utf-8")
         text = tf.strings.strip(text)  # remove trailing whitespace
@@ -159,7 +162,7 @@ class Tokenizer:
         with tf.name_scope("normalize_indices"):
             minus_one = -1 * tf.ones_like(indices, dtype=tf.int32)
             blank_like = self.blank * tf.ones_like(indices, dtype=tf.int32)
-            return tf.where(indices == minus_one, blank_like, indices)
+            return tf.where(tf.equal(indices, minus_one), blank_like, indices)
 
     def prepand_blank(self, text: tf.Tensor) -> tf.Tensor:
         """Prepand blank index for transducer models"""
@@ -230,7 +233,7 @@ class CharTokenizer(Tokenizer):
         return cls(decoder_config)
 
     def tokenize(self, text):
-        text = self.normalize_text(text, self.decoder_config.normalization_form)
+        text = self.normalize_text(text, self.decoder_config)
         text = tf.strings.unicode_split(text, "UTF-8")
         return self.tokenizer.lookup(text)
 
@@ -244,9 +247,10 @@ class CharTokenizer(Tokenizer):
             transcripts: tf.Tensor of dtype tf.string with dim [B]
         """
         indices = self.normalize_indices(indices)
-        indices = tf.ragged.boolean_mask(indices, tf.not_equal(indices, self.blank))
+        # indices = tf.ragged.boolean_mask(indices, tf.not_equal(indices, self.blank))
         tokens = self.detokenizer.lookup(indices)
         tokens = tf.strings.reduce_join(tokens, axis=-1)
+        tokens = self.normalize_text(tokens, self.decoder_config)
         return tokens
 
     @tf.function(input_signature=[tf.TensorSpec([None], dtype=tf.int32)])
@@ -307,7 +311,7 @@ class SentencePieceTokenizer(Tokenizer):
         return cls(decoder_config)
 
     def tokenize(self, text: tf.Tensor) -> tf.Tensor:
-        text = self.normalize_text(text, self.decoder_config.normalization_form)
+        text = self.normalize_text(text, self.decoder_config)
         indices = self.tokenizer.tokenize(text)
         indices = tf.cast(indices, tf.int32)
         return indices
@@ -321,12 +325,13 @@ class SentencePieceTokenizer(Tokenizer):
         Returns:
             transcripts: tf.Tensor of dtype tf.string with dim [B]
         """
-        indices = tf.ragged.boolean_mask(indices, tf.not_equal(indices, self.blank))
-        indices = tf.ragged.boolean_mask(indices, tf.not_equal(indices, self.decoder_config.unknown_index))
-        indices = tf.ragged.boolean_mask(indices, tf.not_equal(indices, self.decoder_config.bos_index))
-        indices = tf.ragged.boolean_mask(indices, tf.not_equal(indices, self.decoder_config.eos_index))
+        # indices = tf.ragged.boolean_mask(indices, tf.not_equal(indices, self.blank))
+        # indices = tf.ragged.boolean_mask(indices, tf.not_equal(indices, self.decoder_config.unknown_index))
+        # indices = tf.ragged.boolean_mask(indices, tf.not_equal(indices, self.decoder_config.bos_index))
+        # indices = tf.ragged.boolean_mask(indices, tf.not_equal(indices, self.decoder_config.eos_index))
         transcripts = self.tokenizer.detokenize(indices)
-        transcripts = tf.strings.regex_replace(transcripts, r" +", " ")
+        transcripts = self.normalize_text(transcripts, self.decoder_config)
+        # transcripts = tf.strings.regex_replace(transcripts, r" +", " ")
         return transcripts
 
     @tf.function(input_signature=[tf.TensorSpec([None], dtype=tf.int32)])
@@ -399,7 +404,7 @@ class WordPieceTokenizer(Tokenizer):
         return cls(decoder_config)
 
     def tokenize(self, text: tf.Tensor) -> tf.Tensor:
-        text = self.normalize_text(text, self.decoder_config.normalization_form)
+        text = self.normalize_text(text, self.decoder_config)
         if self.decoder_config.keep_whitespace:
             text = tf.strings.regex_replace(text, " ", "| |")
             text = tf.strings.split(text, sep="|")
@@ -417,10 +422,11 @@ class WordPieceTokenizer(Tokenizer):
         Returns:
             transcripts: tf.Tensor of dtype tf.string with dim [B]
         """
-        indices = tf.ragged.boolean_mask(indices, tf.not_equal(indices, self.blank))
-        indices = tf.ragged.boolean_mask(indices, tf.not_equal(indices, self.decoder_config.unknown_index))
+        # indices = tf.ragged.boolean_mask(indices, tf.not_equal(indices, self.blank))
+        # indices = tf.ragged.boolean_mask(indices, tf.not_equal(indices, self.decoder_config.unknown_index))
         transcripts = self.tokenizer.detokenize(indices)
-        transcripts = tf.strings.regex_replace(transcripts, r" +", " ")
+        transcripts = self.normalize_text(transcripts, self.decoder_config)
+        # transcripts = tf.strings.regex_replace(transcripts, r" +", " ")
         return transcripts
 
     @tf.function(input_signature=[tf.TensorSpec([None], dtype=tf.int32)])

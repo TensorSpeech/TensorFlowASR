@@ -200,7 +200,7 @@ def masked_fill(
     value=0,
 ):
     shape = shape_util.shape_list(tensor)
-    mask = tf.broadcast_to(mask, shape)
+    mask = tf.cast(tf.broadcast_to(mask, shape), dtype=tf.bool)
     values = tf.cast(tf.fill(shape, value), tensor.dtype)
     return tf.where(mask, tensor, values)
 
@@ -278,3 +278,15 @@ def compute_time_length(
     with tf.name_scope("compute_time_length"):
         batch_size, time_length, *_ = shape_util.shape_list(tensor)
         return tf.cast(tf.repeat(time_length, batch_size, axis=0), dtype=dtype)
+
+
+def is_power_of_two(
+    x: int,
+):
+    return x != 0 and (x & (x - 1)) == 0
+
+
+def next_power_of_two(
+    x: int,
+):
+    return 1 if x == 0 else 2 ** math.ceil(math.log2(x))

@@ -15,11 +15,12 @@
 
 import jiwer
 import tensorflow as tf
+import tensorflow_text as tf_text
 from tqdm import tqdm
 
 from tensorflow_asr.models.base_model import BaseModel
 from tensorflow_asr.tokenizers import Tokenizer
-from tensorflow_asr.utils import file_util
+from tensorflow_asr.utils import file_util, math_util
 
 logger = tf.get_logger()
 
@@ -83,13 +84,24 @@ def convert_tflite(
     model: BaseModel,
     output: str,
     batch_size: int = 1,
+    beam_width: int = 0,
 ):
-    concrete_func = model.make_tflite_function(batch_size=batch_size).get_concrete_function()
-    converter = tf.lite.TFLiteConverter.from_concrete_functions([concrete_func])
+    if not math_util.is_power_of_two(model.feature_extraction.nfft):
+        logger.error("NFFT must be power of 2 for TFLite conversion")
+        overwrite_nfft = input("Do you want to overwrite nfft to the nearest power of 2? (y/n): ")
+        if overwrite_nfft.lower() == "y":
+            model.feature_extraction.nfft = math_util.next_power_of_two(model.feature_extraction.nfft)
+            logger.info(f"Overwritten nfft to {model.feature_extraction.nfft}")
+        else:
+            raise ValueError("NFFT must be power of 2 for TFLite conversion")
+
+    concrete_func = model.make_tflite_function(batch_size=batch_size, beam_width=beam_width).get_concrete_function()
+    converter = tf.lite.TFLiteConverter.from_concrete_functions([concrete_func], trackable_obj=model)
     converter.target_spec.supported_ops = [
         tf.lite.OpsSet.TFLITE_BUILTINS,  # enable TensorFlow Lite ops.
         tf.lite.OpsSet.SELECT_TF_OPS,  # enable TensorFlow ops.
     ]
+    converter.allow_custom_ops = True
     tflite_model = converter.convert()
 
     output = file_util.preprocess_paths(output)
