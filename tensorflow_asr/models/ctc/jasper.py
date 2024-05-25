@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import tensorflow as tf
+import keras
 
 from tensorflow_asr.models.base_layer import Layer
 from tensorflow_asr.models.ctc.base_ctc import CtcModel
@@ -57,7 +57,7 @@ class JasperDecoder(Layer):
         return tuple(outputs_shape), tuple(logits_length_shape)
 
 
-@tf.keras.utils.register_keras_serializable("tensorflow_asr.models.ctc")
+@keras.utils.register_keras_serializable("tensorflow_asr.models.ctc")
 class Jasper(CtcModel):
     def __init__(
         self,

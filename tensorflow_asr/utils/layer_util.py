@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import tensorflow as tf
+import keras
 
 from tensorflow_asr.models.layers import convolution
 
@@ -22,10 +23,10 @@ def get_rnn(
 ):
     assert rnn_type in ["lstm", "gru", "rnn"]
     if rnn_type == "lstm":
-        return tf.keras.layers.LSTM
+        return keras.layers.LSTM
     if rnn_type == "gru":
-        return tf.keras.layers.GRU
-    return tf.keras.layers.SimpleRNN
+        return keras.layers.GRU
+    return keras.layers.SimpleRNN
 
 
 def get_conv(

@@ -14,6 +14,7 @@
 
 
 import tensorflow as tf
+import keras
 
 from tensorflow_asr import schemas
 from tensorflow_asr.losses.ctc_loss import CtcLoss
@@ -26,8 +27,8 @@ class CtcModel(BaseModel):
         self,
         blank: int,
         speech_config: dict,
-        encoder: tf.keras.layers.Layer,
-        decoder: tf.keras.layers.Layer,
+        encoder: keras.layers.Layer,
+        decoder: keras.layers.Layer,
         **kwargs,
     ):
         super().__init__(speech_config=speech_config, **kwargs)
@@ -93,9 +94,6 @@ class CtcModel(BaseModel):
         outputs, outputs_length, next_encoder_states = self.encoder.call_next(features, features_length, previous_encoder_states)
         outputs, outputs_length, next_decoder_states = self.decoder.call_next(outputs, outputs_length, previous_decoder_states)
         return outputs, outputs_length, next_encoder_states, next_decoder_states
-
-    def get_initial_tokens(self, batch_size=1):
-        return super().get_initial_tokens(batch_size)
 
     def get_initial_encoder_states(self, batch_size=1):
         return tf.zeros([], dtype=self.dtype)

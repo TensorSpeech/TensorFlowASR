@@ -13,14 +13,15 @@
 # limitations under the License.
 
 import tensorflow as tf
+import keras
 
 from tensorflow_asr.utils import env_util, math_util
 
 logger = tf.get_logger()
 
 
-class CtcLoss(tf.keras.losses.Loss):
-    def __init__(self, blank=0, reduction=tf.keras.losses.Reduction.AUTO, name=None):
+class CtcLoss(keras.losses.Loss):
+    def __init__(self, blank=0, reduction=keras.losses.Reduction.AUTO, name=None):
         super().__init__(reduction=reduction, name=name)
         self.blank = blank
         self.use_tpu = env_util.has_devices("TPU")

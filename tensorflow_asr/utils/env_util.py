@@ -18,6 +18,7 @@ from typing import List, Union
 
 import numpy as np
 import tensorflow as tf
+import keras
 from packaging import version
 
 logger = tf.get_logger()
@@ -126,11 +127,11 @@ def setup_mxp(
         raise ValueError(f"mxp must be in {options}")
     if mxp == "strict":
         policy = "mixed_bfloat16" if has_devices("TPU") else "mixed_float16"
-        tf.keras.mixed_precision.set_global_policy(policy)
+        keras.mixed_precision.set_global_policy(policy)
         logger.info(f"USING mixed precision policy {policy}")
     elif mxp == "strict_auto":
         policy = "mixed_bfloat16" if has_devices("TPU") else "mixed_float16"
-        tf.keras.mixed_precision.set_global_policy(policy)
+        keras.mixed_precision.set_global_policy(policy)
         tf.config.optimizer.set_experimental_options({"auto_mixed_precision": True})
         logger.info(f"USING auto mixed precision policy {policy}")
     elif mxp == "auto":
@@ -156,5 +157,5 @@ def setup_seed(
     random.seed(seed)
     np.random.seed(seed)
     tf.random.set_seed(seed)
-    tf.keras.backend.experimental.enable_tf_random_generator()
-    tf.keras.utils.set_random_seed(seed)
+    keras.backend.experimental.enable_tf_random_generator()
+    keras.utils.set_random_seed(seed)

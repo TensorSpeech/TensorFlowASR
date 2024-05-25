@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import tensorflow as tf
+import keras
 
 from tensorflow_asr.models.base_layer import Layer
 from tensorflow_asr.models.ctc.base_ctc import CtcModel
@@ -29,7 +30,7 @@ class ConformerDecoder(Layer):
     ):
         super().__init__(**kwargs)
         self._vocab_size = vocab_size
-        self.vocab = tf.keras.layers.Dense(
+        self.vocab = keras.layers.Dense(
             units=vocab_size,
             kernel_regularizer=kernel_regularizer,
             bias_regularizer=bias_regularizer,
@@ -51,8 +52,19 @@ class ConformerDecoder(Layer):
         outputs_shape = logits_shape[:-1] + (self._vocab_size,)
         return tuple(outputs_shape), tuple(logits_length_shape)
 
+    def get_config(self):
+        config = super().get_config()
+        config.update(
+            {
+                "vocab_size": self._vocab_size,
+                "kernel_regularizer": self.vocab.kernel_regularizer,
+                "bias_regularizer": self.vocab.bias_regularizer,
+            }
+        )
+        return config
 
-@tf.keras.utils.register_keras_serializable("tensorflow_asr.models.ctc")
+
+@keras.utils.register_keras_serializable("tensorflow_asr.models.ctc")
 class Conformer(CtcModel):
     def __init__(
         self,
@@ -141,7 +153,7 @@ class Conformer(CtcModel):
             None
             if self.encoder._memory_length is None
             else [
-                tf.keras.Input(shape=[self.encoder._memory_length, self.encoder._dmodel], batch_size=batch_size, dtype=tf.float32)
+                keras.Input(shape=[self.encoder._memory_length, self.encoder._dmodel], batch_size=batch_size, dtype=tf.float32)
                 for _ in range(self.encoder._num_blocks)
             ]
         )

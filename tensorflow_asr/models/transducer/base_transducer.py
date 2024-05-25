@@ -17,6 +17,7 @@
 import collections
 
 import tensorflow as tf
+import keras
 
 from tensorflow_asr import schemas
 from tensorflow_asr.losses.rnnt_loss import RnntLoss
@@ -53,6 +54,21 @@ class TransducerPrediction(Layer):
     ):
         super().__init__(name=name, **kwargs)
         assert label_encoder_mode in ("one_hot", "embedding"), "label_encode_mode must be either 'one_hot' or 'embedding'"
+        self._config = {
+            "blank": blank,
+            "vocab_size": vocab_size,
+            "label_encoder_mode": label_encoder_mode,
+            "embed_dim": embed_dim,
+            "num_rnns": num_rnns,
+            "rnn_units": rnn_units,
+            "rnn_type": rnn_type,
+            "rnn_implementation": rnn_implementation,
+            "rnn_unroll": rnn_unroll,
+            "layer_norm": layer_norm,
+            "projection_units": projection_units,
+            "kernel_regularizer": kernel_regularizer,
+            "bias_regularizer": bias_regularizer,
+        }
         self.label_encoder = (
             Embedding(vocab_size, embed_dim, regularizer=kernel_regularizer, name=label_encoder_mode, dtype=self.dtype)
             if label_encoder_mode == "embedding"
@@ -77,14 +93,14 @@ class TransducerPrediction(Layer):
                 dtype=self.dtype,
             )
             ln = (
-                tf.keras.layers.LayerNormalization(
+                keras.layers.LayerNormalization(
                     name=f"ln_{i}", gamma_regularizer=kernel_regularizer, beta_regularizer=bias_regularizer, dtype=self.dtype
                 )
                 if layer_norm
                 else None
             )
             projection = (
-                tf.keras.layers.Dense(
+                keras.layers.Dense(
                     projection_units,
                     name=f"projection_{i}",
                     kernel_regularizer=kernel_regularizer,
@@ -164,6 +180,11 @@ class TransducerPrediction(Layer):
             )
         return tuple(output_shape), tuple(output_length_shape)
 
+    def get_config(self):
+        config = super().get_config()
+        config.update(self._config)
+        return config
+
 
 class TransducerJointMerge(Layer):
     def __init__(self, joint_mode: str = "add", name="transducer_joint_merge", **kwargs):
@@ -201,6 +222,11 @@ class TransducerJointMerge(Layer):
         enc_shape, pred_shape = input_shape
         return enc_shape[0], enc_shape[1], pred_shape[1], enc_shape[-1]
 
+    def get_config(self):
+        config = super().get_config()
+        config.update({"joint_mode": self.joint_mode})
+        return config
+
 
 class TransducerJoint(Layer):
     def __init__(
@@ -219,12 +245,24 @@ class TransducerJoint(Layer):
     ):
         super().__init__(name=name, **kwargs)
 
+        self._config = {
+            "vocab_size": vocab_size,
+            "joint_dim": joint_dim,
+            "activation": activation,
+            "prejoint_encoder_linear": prejoint_encoder_linear,
+            "prejoint_prediction_linear": prejoint_prediction_linear,
+            "postjoint_linear": postjoint_linear,
+            "joint_mode": joint_mode,
+            "kernel_regularizer": kernel_regularizer,
+            "bias_regularizer": bias_regularizer,
+        }
+
         self.prejoint_encoder_linear = prejoint_encoder_linear
         self.prejoint_prediction_linear = prejoint_prediction_linear
         self.postjoint_linear = postjoint_linear
 
         if self.prejoint_encoder_linear:
-            self.ffn_enc = tf.keras.layers.Dense(
+            self.ffn_enc = keras.layers.Dense(
                 joint_dim,
                 name="enc",
                 kernel_regularizer=kernel_regularizer,
@@ -232,7 +270,7 @@ class TransducerJoint(Layer):
                 dtype=self.dtype,
             )
         if self.prejoint_prediction_linear:
-            self.ffn_pred = tf.keras.layers.Dense(
+            self.ffn_pred = keras.layers.Dense(
                 joint_dim,
                 use_bias=False,
                 name="pred",
@@ -243,10 +281,10 @@ class TransducerJoint(Layer):
         self.joint = TransducerJointMerge(joint_mode=joint_mode, name="merge", dtype=self.dtype)
 
         activation = activation.lower()
-        self.activation = tf.keras.layers.Activation(activation, name=activation, dtype=self.dtype)
+        self.activation = keras.layers.Activation(activation, name=activation, dtype=self.dtype)
 
         if self.postjoint_linear:
-            self.ffn = tf.keras.layers.Dense(
+            self.ffn = keras.layers.Dense(
                 joint_dim,
                 name="ffn",
                 kernel_regularizer=kernel_regularizer,
@@ -254,7 +292,7 @@ class TransducerJoint(Layer):
                 dtype=self.dtype,
             )
 
-        self.ffn_out = tf.keras.layers.Dense(
+        self.ffn_out = keras.layers.Dense(
             vocab_size,
             name="vocab",
             kernel_regularizer=kernel_regularizer,
@@ -286,6 +324,11 @@ class TransducerJoint(Layer):
         encoder_time_shape, prediction_time_shape = encoder_shape[1], prediction_shape[1]
         return batch_shape, encoder_time_shape, prediction_time_shape, self.ffn_out.units
 
+    def get_config(self):
+        config = super().get_config()
+        config.update(self._config)
+        return config
+
 
 class Transducer(BaseModel):
     """Transducer Model Warper"""
@@ -295,7 +338,7 @@ class Transducer(BaseModel):
         blank: int,
         vocab_size: int,
         speech_config: dict,
-        encoder: tf.keras.layers.Layer,
+        encoder: keras.layers.Layer,
         prediction_label_encoder_mode: str = "embedding",
         prediction_embed_dim: int = 512,
         prediction_num_rnns: int = 1,
@@ -443,9 +486,6 @@ class Transducer(BaseModel):
             ytu = self.joint_net([current_frames, y], training=False)
             ytu = tf.nn.log_softmax(ytu)
             return ytu, new_states
-
-    def get_initial_tokens(self, batch_size=1):
-        return super().get_initial_tokens(batch_size)
 
     def get_initial_encoder_states(self, batch_size=1):
         return tf.zeros([], dtype=self.dtype)

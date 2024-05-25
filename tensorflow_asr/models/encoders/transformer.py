@@ -14,6 +14,7 @@
 # limitations under the License.
 
 import tensorflow as tf
+import keras
 
 from tensorflow_asr.models.base_layer import Layer
 from tensorflow_asr.models.layers.multihead_attention import MultiHeadAttention, MultiHeadRelativeAttention
@@ -33,7 +34,7 @@ class Pointwiseffn(Layer):
         **kwargs,
     ):
         super().__init__(**kwargs)
-        self.ffn1 = tf.keras.layers.Dense(
+        self.ffn1 = keras.layers.Dense(
             units=dff,
             activation=activation,
             kernel_regularizer=kernel_regularizer,
@@ -41,7 +42,7 @@ class Pointwiseffn(Layer):
             name="ffn_1",
             dtype=self.dtype,
         )
-        self.ffn2 = tf.keras.layers.Dense(
+        self.ffn2 = keras.layers.Dense(
             units=dmodel,
             kernel_regularizer=kernel_regularizer,
             bias_regularizer=bias_regularizer,
@@ -82,7 +83,7 @@ class TransformerBlock(Layer):
         self.norm1 = (
             None
             if self._norm_position == "none"
-            else tf.keras.layers.LayerNormalization(
+            else keras.layers.LayerNormalization(
                 beta_regularizer=kernel_regularizer, gamma_regularizer=bias_regularizer, name="ln_1", dtype=self.dtype
             )
         )
@@ -111,12 +112,12 @@ class TransformerBlock(Layer):
                 dtype=self.dtype,
             )
         )
-        self.do1 = tf.keras.layers.Dropout(dropout, name="do_1", dtype=self.dtype)
+        self.do1 = keras.layers.Dropout(dropout, name="do_1", dtype=self.dtype)
         self.residual1 = Residual(factor=residual_factor, regularizer=bias_regularizer, name="residual_1", dtype=self.dtype)
         self.norm2 = (
             None
             if self._norm_position == "none"
-            else tf.keras.layers.LayerNormalization(
+            else keras.layers.LayerNormalization(
                 beta_regularizer=kernel_regularizer, gamma_regularizer=bias_regularizer, name="ln_2", dtype=self.dtype
             )
         )
@@ -129,7 +130,7 @@ class TransformerBlock(Layer):
             name="pwffn",
             dtype=self.dtype,
         )
-        self.do2 = tf.keras.layers.Dropout(dropout, name="do_2", dtype=self.dtype)
+        self.do2 = keras.layers.Dropout(dropout, name="do_2", dtype=self.dtype)
         self.residual2 = Residual(factor=residual_factor, regularizer=bias_regularizer, name="residual_2", dtype=self.dtype)
 
     def call(
@@ -213,14 +214,14 @@ class TransformerEncoder(Layer):
             dtype=self.dtype,
         )
         self.time_reduction_factor = self.subsampling.time_reduction_factor
-        self.linear = tf.keras.layers.Dense(
+        self.linear = keras.layers.Dense(
             units=dmodel,
             kernel_regularizer=kernel_regularizer,
             bias_regularizer=bias_regularizer,
             name="linear",
             dtype=self.dtype,
         )
-        self.do = tf.keras.layers.Dropout(dropout, name="dropout", dtype=self.dtype)
+        self.do = keras.layers.Dropout(dropout, name="dropout", dtype=self.dtype)
 
         if mha_type == "relmha":
             self.relpe = RelativeSinusoidalPositionalEncoding(

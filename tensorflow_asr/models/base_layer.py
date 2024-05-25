@@ -12,12 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import tensorflow as tf
+import keras
 
 from tensorflow_asr.utils import math_util
 
 
-class Layer(tf.keras.layers.Layer):
+class Layer(keras.layers.Layer):
     def __init__(
         self,
         trainable=True,

@@ -16,7 +16,7 @@
 import json
 import os
 
-from tensorflow_asr import datasets, tf, tokenizers  # import to aid logging messages
+from tensorflow_asr import datasets, tf, keras, tokenizers  # import to aid logging messages
 from tensorflow_asr.callbacks import PredictLogger
 from tensorflow_asr.configs import Config
 from tensorflow_asr.models.base_model import BaseModel
@@ -50,7 +50,7 @@ def main(
 
     tokenizer = tokenizers.get(config)
 
-    model: BaseModel = tf.keras.models.model_from_config(config.model_config)
+    model: BaseModel = keras.models.model_from_config(config.model_config)
     model.tokenizer = tokenizer
     model.make(batch_size=batch_size)
     model.load_weights(h5, by_name=file_util.is_hdf5_filepath(h5), skip_mismatch=False)

@@ -19,6 +19,7 @@ import os
 
 import numpy as np
 import tensorflow as tf
+import keras
 
 from tensorflow_asr.utils import env_util, math_util, shape_util
 
@@ -29,11 +30,11 @@ USE_CPU_LOSS = os.getenv("USE_CPU_LOSS", "False") == "True"
 logger = tf.get_logger()
 
 
-class RnntLoss(tf.keras.losses.Loss):
+class RnntLoss(keras.losses.Loss):
     def __init__(
         self,
         blank,
-        reduction=tf.keras.losses.Reduction.AUTO,
+        reduction=keras.losses.Reduction.AUTO,
         output_shapes=None,
         name=None,
     ):

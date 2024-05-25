@@ -30,3 +30,8 @@ class GLU(Layer):
     def compute_output_shape(self, input_shape):
         B, T, V = input_shape
         return (B, T, V // 2)
+
+    def get_config(self):
+        config = super().get_config()
+        config.update({"axis": self.axis})
+        return config

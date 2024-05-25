@@ -13,12 +13,13 @@
 # limitations under the License.
 
 import tensorflow as tf
+import keras
 
 from tensorflow_asr.models.encoders.transformer import TransformerEncoder
 from tensorflow_asr.models.transducer.base_transducer import Transducer
 
 
-@tf.keras.utils.register_keras_serializable("tensorflow_asr.models.transducer")
+@keras.utils.register_keras_serializable("tensorflow_asr.models.transducer")
 class Transformer(Transducer):
     def __init__(
         self,
@@ -121,7 +122,7 @@ class Transformer(Transducer):
             None
             if self.encoder._memory_length is None
             else [
-                tf.keras.Input(shape=[self.encoder._memory_length, self.encoder._dmodel], batch_size=batch_size, dtype=tf.float32)
+                keras.Input(shape=[self.encoder._memory_length, self.encoder._dmodel], batch_size=batch_size, dtype=tf.float32)
                 for _ in range(self.encoder._num_blocks)
             ]
         )

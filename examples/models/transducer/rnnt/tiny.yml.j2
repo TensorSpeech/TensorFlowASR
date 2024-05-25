@@ -22,6 +22,7 @@ model_config:
             prob: 1.0
             num_masks: 1
             mask_factor: 27
+    encoder_reduction_positions: [ pre, pre, pre, pre ]
     encoder_reduction_factors: [ 3, 0, 2, 0 ] # downsampled to 30ms and add 2 reduction after second layer
     encoder_dmodel: 128
     encoder_rnn_type: lstm

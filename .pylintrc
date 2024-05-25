@@ -114,7 +114,11 @@ disable=too-few-public-methods,
         consider-using-enumerate,
         too-many-statements,
         assignment-from-none,
-        eval-used
+        eval-used,
+        duplicate-code,
+        redefined-outer-name,
+        consider-using-f-string,
+        fixme,
         
 # Enable the message, report, category or checker with the given id(s). You can
 # either give multiple identifier separated by comma (,) or put this option

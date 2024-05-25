@@ -14,13 +14,13 @@
 
 from typing import List
 
-import tensorflow as tf
+import keras
 
 from tensorflow_asr.models.encoders.contextnet import L2, ContextNetEncoder
 from tensorflow_asr.models.transducer.base_transducer import Transducer
 
 
-@tf.keras.utils.register_keras_serializable("tensorflow_asr.models.transducer")
+@keras.utils.register_keras_serializable("tensorflow_asr.models.transducer")
 class ContextNet(Transducer):
     def __init__(
         self,

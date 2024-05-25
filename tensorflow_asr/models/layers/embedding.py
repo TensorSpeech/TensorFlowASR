@@ -13,11 +13,12 @@
 # limitations under the License.
 
 import tensorflow as tf
+import keras
 
 from tensorflow_asr.models.base_layer import Layer
 
 
-class Embedding(tf.keras.layers.Embedding):
+class Embedding(keras.layers.Embedding):
     def __init__(
         self,
         vocab_size,

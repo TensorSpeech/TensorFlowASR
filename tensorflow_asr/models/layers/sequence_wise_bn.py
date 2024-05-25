@@ -12,16 +12,18 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+
 import tensorflow as tf
+import keras
 
 
 # https://arxiv.org/abs/1510.01378
-class SequenceBatchNorm(tf.keras.layers.Layer):
+class SequenceBatchNorm(keras.layers.Layer):
     def __init__(self, name, time_major=False, gamma_regularizer=None, beta_regularizer=None, **kwargs):
         super().__init__(name=name, **kwargs)
         self.time_major = time_major
-        self.gamma_regularizer = tf.keras.regularizers.get(gamma_regularizer)
-        self.beta_regularizer = tf.keras.regularizers.get(beta_regularizer)
+        self.gamma_regularizer = keras.regularizers.get(gamma_regularizer)
+        self.beta_regularizer = keras.regularizers.get(beta_regularizer)
 
     def build(
         self,
@@ -53,12 +55,12 @@ class SequenceBatchNorm(tf.keras.layers.Layer):
     ):
         mean, variance = tf.nn.moments(inputs, axes=[0, 1], keepdims=False)
         if self.time_major:
-            total_padded_frames = tf.cast(tf.shape(inputs)[0], tf.keras.backend.dtype(mean))
-            batch_size = tf.cast(tf.shape(inputs)[1], tf.keras.backend.dtype(mean))
+            total_padded_frames = tf.cast(tf.shape(inputs)[0], keras.backend.dtype(mean))
+            batch_size = tf.cast(tf.shape(inputs)[1], keras.backend.dtype(mean))
         else:
-            total_padded_frames = tf.cast(tf.shape(inputs)[1], tf.keras.backend.dtype(mean))
-            batch_size = tf.cast(tf.shape(inputs)[0], tf.keras.backend.dtype(mean))
-        total_unpadded_frames_batch = tf.math.count_nonzero(inputs, axis=[0, 1], keepdims=False, dtype=tf.keras.backend.dtype(mean))
+            total_padded_frames = tf.cast(tf.shape(inputs)[1], keras.backend.dtype(mean))
+            batch_size = tf.cast(tf.shape(inputs)[0], keras.backend.dtype(mean))
+        total_unpadded_frames_batch = tf.math.count_nonzero(inputs, axis=[0, 1], keepdims=False, dtype=keras.backend.dtype(mean))
         mean = (mean * total_padded_frames * batch_size) / total_unpadded_frames_batch
         variance = (variance * total_padded_frames * batch_size) / total_unpadded_frames_batch
         return tf.nn.batch_normalization(
@@ -67,5 +69,5 @@ class SequenceBatchNorm(tf.keras.layers.Layer):
             variance=variance,
             offset=self.beta,
             scale=self.gamma,
-            variance_epsilon=tf.keras.backend.epsilon(),
+            variance_epsilon=keras.backend.epsilon(),
         )

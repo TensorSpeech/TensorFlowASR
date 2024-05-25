@@ -16,11 +16,12 @@
 from typing import List
 
 import tensorflow as tf
+import keras
 
 from tensorflow_asr.models.base_layer import Layer, Reshape
 from tensorflow_asr.utils import math_util
 
-L2 = tf.keras.regularizers.l2(1e-6)
+L2 = keras.regularizers.l2(1e-6)
 
 
 def get_activation(
@@ -32,7 +33,7 @@ def get_activation(
     if activation == "relu":
         return tf.nn.relu
     if activation == "linear":
-        return tf.keras.activations.linear
+        return keras.activations.linear
     raise ValueError("activation must be either 'silu', 'swish', 'relu' or 'linear'")
 
 
@@ -50,7 +51,7 @@ class ConvModule(Layer):
     ):
         super().__init__(**kwargs)
         self.strides = strides
-        self.conv = tf.keras.layers.SeparableConv1D(
+        self.conv = keras.layers.SeparableConv1D(
             filters=filters,
             kernel_size=kernel_size,
             strides=strides,
@@ -61,7 +62,7 @@ class ConvModule(Layer):
             name="conv",
             dtype=self.dtype,
         )
-        self.bn = tf.keras.layers.BatchNormalization(
+        self.bn = keras.layers.BatchNormalization(
             name="bn", gamma_regularizer=kernel_regularizer, beta_regularizer=bias_regularizer, dtype=self.dtype
         )
         self.activation = get_activation(activation)
@@ -116,16 +117,16 @@ class SEModule(Layer):
             name="conv_module",
             dtype=self.dtype,
         )
-        self.global_avg_pool = tf.keras.layers.GlobalAveragePooling1D(keepdims=True, name="global_avg_pool", dtype=self.dtype)
+        self.global_avg_pool = keras.layers.GlobalAveragePooling1D(keepdims=True, name="global_avg_pool", dtype=self.dtype)
         self.activation = get_activation(activation)
-        self.fc1 = tf.keras.layers.Dense(
+        self.fc1 = keras.layers.Dense(
             filters // 8,
             kernel_regularizer=kernel_regularizer,
             bias_regularizer=bias_regularizer,
             name="fc1",
             dtype=self.dtype,
         )
-        self.fc2 = tf.keras.layers.Dense(
+        self.fc2 = keras.layers.Dense(
             filters,
             kernel_regularizer=kernel_regularizer,
             bias_regularizer=bias_regularizer,

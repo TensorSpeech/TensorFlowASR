@@ -15,8 +15,10 @@
 import os
 
 import tensorflow as tf
+import keras
 
 from tensorflow_asr import schemas, tokenizers
+from tensorflow_asr.models import base_model
 from tensorflow_asr.configs import Config
 from tensorflow_asr.utils import cli_util, data_util, env_util, file_util
 
@@ -35,7 +37,7 @@ def main(
     config = Config(config_path, training=False, repodir=repodir)
     tokenizer = tokenizers.get(config)
 
-    model: tf.keras.Model = tf.keras.models.model_from_config(config.model_config)
+    model: base_model.BaseModel = keras.models.model_from_config(config.model_config)
     model.make(batch_size=1)
     model.load_weights(h5, by_name=file_util.is_hdf5_filepath(h5), skip_mismatch=False)
     model.summary()
@@ -44,7 +46,15 @@ def main(
     signal = tf.reshape(signal, [1, -1])
     signal_length = tf.reshape(tf.shape(signal)[1], [1])
 
-    outputs = model.recognize(schemas.PredictInput(signal, signal_length))
+    outputs = model.recognize(
+        schemas.PredictInput(
+            inputs=signal,
+            inputs_length=signal_length,
+            previous_tokens=model.get_initial_tokens(),
+            previous_encoder_states=model.get_initial_encoder_states(),
+            previous_decoder_states=model.get_initial_decoder_states(),
+        )
+    )
     print(outputs.tokens)
     transcript = tokenizer.detokenize(outputs.tokens)[0].numpy().decode("utf-8")
 

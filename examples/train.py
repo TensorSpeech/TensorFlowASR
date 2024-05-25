@@ -15,7 +15,7 @@
 import json
 import os
 
-from tensorflow_asr import callbacks, datasets, tf, tokenizers  # import to aid logging messages
+from tensorflow_asr import callbacks, datasets, tf, keras, tokenizers  # import to aid logging messages
 from tensorflow_asr.configs import Config
 from tensorflow_asr.models.base_model import BaseModel
 from tensorflow_asr.utils import cli_util, env_util, file_util
@@ -36,7 +36,7 @@ def main(
     ga_steps: int = None,
     repodir: str = os.path.realpath(os.path.join(os.path.dirname(__file__), "..")),
 ):
-    tf.keras.backend.clear_session()
+    keras.backend.clear_session()
     env_util.setup_seed()
     strategy = env_util.setup_strategy(devices)
     env_util.setup_mxp(mxp=mxp)
@@ -73,7 +73,7 @@ def main(
         logger.info(f"eval_data_loader.element_spec = {json.dumps(eval_data_loader.element_spec, indent=2, default=str)}")
 
     with strategy.scope():
-        model: BaseModel = tf.keras.models.model_from_config(config.model_config)
+        model: BaseModel = keras.models.model_from_config(config.model_config)
         model.tokenizer = tokenizer
         output_shapes = model.make(**shapes)
         if config.learning_config.pretrained:
@@ -83,7 +83,7 @@ def main(
                 skip_mismatch=True,
             )
         model.compile(
-            optimizer=tf.keras.optimizers.get(config.learning_config.optimizer_config),
+            optimizer=keras.optimizers.get(config.learning_config.optimizer_config),
             output_shapes=output_shapes,
             steps_per_execution=spx,
             jit_compile=jit_compile,

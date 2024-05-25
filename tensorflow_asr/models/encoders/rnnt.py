@@ -14,6 +14,7 @@
 """ http://arxiv.org/abs/1811.06621 """
 
 import tensorflow as tf
+import keras
 
 from tensorflow_asr.models.base_layer import Layer, Reshape
 from tensorflow_asr.models.layers.subsampling import TimeReduction
@@ -23,6 +24,7 @@ from tensorflow_asr.utils import layer_util, math_util
 class RnnTransducerBlock(Layer):
     def __init__(
         self,
+        reduction_position: str = "pre",
         reduction_factor: int = 0,
         dmodel: int = 640,
         rnn_type: str = "lstm",
@@ -34,6 +36,8 @@ class RnnTransducerBlock(Layer):
         **kwargs,
     ):
         super().__init__(**kwargs)
+        assert reduction_position in ["post", "pre"], "reduction_position must be 'post' or 'pre'"
+        self._reduction_position = reduction_position
         self.reduction = TimeReduction(reduction_factor, name="reduction", dtype=self.dtype) if reduction_factor > 0 else None
         self.rnn = layer_util.get_rnn(rnn_type)(
             units=rnn_units,
@@ -47,11 +51,11 @@ class RnnTransducerBlock(Layer):
             dtype=self.dtype,
         )
         self.ln = (
-            tf.keras.layers.LayerNormalization(name="ln", gamma_regularizer=kernel_regularizer, beta_regularizer=bias_regularizer, dtype=self.dtype)
+            keras.layers.LayerNormalization(name="ln", gamma_regularizer=kernel_regularizer, beta_regularizer=bias_regularizer, dtype=self.dtype)
             if layer_norm
             else None
         )
-        self.projection = tf.keras.layers.Dense(
+        self.projection = keras.layers.Dense(
             dmodel,
             name="projection",
             kernel_regularizer=kernel_regularizer,
@@ -61,12 +65,16 @@ class RnnTransducerBlock(Layer):
 
     def call(self, inputs, training=False):
         outputs, outputs_length = inputs
-        if self.reduction is not None:
-            outputs, outputs_length = self.reduction((outputs, outputs_length))
+        if self._reduction_position == "pre":
+            if self.reduction is not None:
+                outputs, outputs_length = self.reduction((outputs, outputs_length))
         outputs, *_ = self.rnn(outputs, training=training)
         if self.ln is not None:
             outputs = self.ln(outputs, training=training)
         outputs = self.projection(outputs, training=training)
+        if self._reduction_position == "post":
+            if self.reduction is not None:
+                outputs, outputs_length = self.reduction((outputs, outputs_length))
         return outputs, outputs_length
 
     def compute_mask(self, inputs, mask=None):
@@ -89,6 +97,9 @@ class RnnTransducerBlock(Layer):
         """
         with tf.name_scope(f"{self.name}_call_next"):
             outputs, outputs_length = inputs, inputs_length
+            if self._reduction_position == "pre":
+                if self.reduction is not None:
+                    outputs, outputs_length = self.reduction([outputs, outputs_length])
             outputs, *_states = self.rnn(
                 outputs,
                 training=False,
@@ -98,9 +109,10 @@ class RnnTransducerBlock(Layer):
             new_states = tf.stack(_states, axis=0)
             if self.ln is not None:
                 outputs = self.ln(outputs, training=False)
-            if self.reduction is not None:
-                outputs, outputs_length = self.reduction([outputs, outputs_length])
             outputs = self.projection(outputs, training=False)
+            if self._reduction_position == "post":
+                if self.reduction is not None:
+                    outputs, outputs_length = self.reduction([outputs, outputs_length])
             return outputs, outputs_length, new_states
 
     def compute_output_shape(self, input_shape):
@@ -114,6 +126,7 @@ class RnnTransducerBlock(Layer):
 class RnnTransducerEncoder(Layer):
     def __init__(
         self,
+        reduction_positions: list = ["pre", "pre", "pre", "pre", "pre", "pre", "pre", "pre"],
         reduction_factors: list = [6, 0, 0, 0, 0, 0, 0, 0],
         dmodel: int = 640,
         nlayers: int = 8,
@@ -126,6 +139,7 @@ class RnnTransducerEncoder(Layer):
         **kwargs,
     ):
         super().__init__(**kwargs)
+        assert len(reduction_positions) == nlayers, "reduction_positions length must be equal to nlayers"
         assert len(reduction_factors) == nlayers, "reduction_factors length must be equal to nlayers"
         self.reshape = Reshape(name="reshape", dtype=self.dtype)
 
@@ -133,6 +147,7 @@ class RnnTransducerEncoder(Layer):
         self.blocks = []
         for i in range(nlayers):
             block = RnnTransducerBlock(
+                reduction_position=reduction_positions[i],
                 reduction_factor=reduction_factors[i],
                 dmodel=dmodel,
                 rnn_type=rnn_type,
@@ -151,12 +166,13 @@ class RnnTransducerEncoder(Layer):
         """Get zeros states
 
         Returns:
-            tf.Tensor: states having shape [num_rnns, 1 or 2, 1, P]
+        tf.Tensor, shape [B, num_rnns, nstates, state_size]
+            Zero initialized states
         """
         states = []
         for block in self.blocks:
             states.append(tf.stack(block.rnn.get_initial_state(tf.zeros([batch_size, 1, 1], dtype=self.dtype)), axis=0))
-        return tf.stack(states, axis=0)
+        return tf.transpose(tf.stack(states, axis=0), perm=[2, 0, 1, 3])
 
     def call(self, inputs, training=False):
         outputs, outputs_length, caching = inputs

@@ -13,9 +13,10 @@
 # limitations under the License.
 
 import tensorflow as tf
+import keras
 
 
-class ErrorRate(tf.keras.metrics.Metric):
+class ErrorRate(keras.metrics.Metric):
     """Metric for WER or CER"""
 
     def __init__(self, name="error_rate", **kwargs):

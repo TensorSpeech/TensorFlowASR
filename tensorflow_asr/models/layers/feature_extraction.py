@@ -131,7 +131,8 @@ class FeatureExtraction(Layer):
         self.padding = padding
         self.nfft = self.frame_length if nfft is None else nfft
 
-        self.augmentations = Augmentation(augmentation_config)
+        self._augmentation_config = augmentation_config
+        self.augmentations = Augmentation(self._augmentation_config)
 
     # ---------------------------------- signals --------------------------------- #
 
@@ -293,3 +294,29 @@ class FeatureExtraction(Layer):
         else:
             output_shape = [B, self.get_nframes(nsamples + self.padding), self.num_feature_bins, 1]
         return tf.TensorShape(output_shape), tf.TensorShape(signal_length_shape)
+
+    def get_config(self):
+        config = super().get_config()
+        config.update(
+            {
+                "sample_rate": self.sample_rate,
+                "frame_ms": self.frame_ms,
+                "stride_ms": self.stride_ms,
+                "num_feature_bins": self.num_feature_bins,
+                "feature_type": self.feature_type,
+                "preemphasis": self.preemphasis,
+                "pad_end": self.pad_end,
+                "use_librosa_like_stft": self.use_librosa_like_stft,
+                "output_floor": self.output_floor,
+                "lower_edge_hertz": self.lower_edge_hertz,
+                "upper_edge_hertz": self.upper_edge_hertz,
+                "log_base": self.log_base,
+                "nfft": self.nfft,
+                "normalize_signal": self._normalize_signal,
+                "normalize_zscore": self._normalize_zscore,
+                "normalize_min_max": self._normalize_min_max,
+                "padding": self.padding,
+                "augmentation_config": self._augmentations.config,
+            }
+        )
+        return config

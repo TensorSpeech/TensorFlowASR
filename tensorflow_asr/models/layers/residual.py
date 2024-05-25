@@ -15,6 +15,7 @@
 from typing import Optional
 
 import tensorflow as tf
+import keras
 
 from tensorflow_asr.models.base_layer import Layer
 
@@ -30,8 +31,8 @@ class Residual(Layer):
     def __init__(
         self,
         factor="rezero",
-        initializer: tf.keras.initializers.Initializer = "zeros",
-        regularizer: Optional[tf.keras.regularizers.Regularizer] = None,
+        initializer: keras.initializers.Initializer = "zeros",
+        regularizer: Optional[keras.regularizers.Regularizer] = None,
         name="residual",
         **kwargs,
     ):

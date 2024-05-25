@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import tensorflow as tf
+import keras
 
 from tensorflow_asr.models.base_layer import Layer
 from tensorflow_asr.models.ctc.base_ctc import CtcModel
@@ -29,7 +30,7 @@ class DeepSpeech2Decoder(Layer):
         **kwargs,
     ):
         super().__init__(**kwargs)
-        self.vocab = tf.keras.layers.Dense(
+        self.vocab = keras.layers.Dense(
             vocab_size,
             name="logits",
             kernel_regularizer=kernel_regularizer,
@@ -53,8 +54,20 @@ class DeepSpeech2Decoder(Layer):
         output_shape = self.vocab.compute_output_shape(output_shape)
         return output_shape, output_length_shape
 
+    def get_config(self):
+        config = super().get_config()
+        config.update(
+            {
+                "vocab_size": self.vocab.units,
+                "kernel_regularizer": self.vocab.kernel_regularizer,
+                "bias_regularizer": self.vocab.bias_regularizer,
+                "initializer": self.vocab.kernel_initializer,
+            }
+        )
+        return config
 
-@tf.keras.utils.register_keras_serializable("tensorflow_asr.models.ctc")
+
+@keras.utils.register_keras_serializable("tensorflow_asr.models.ctc")
 class DeepSpeech2(CtcModel):
     def __init__(
         self,

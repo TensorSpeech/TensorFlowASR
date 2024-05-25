@@ -14,12 +14,13 @@
 
 
 import tensorflow as tf
+import keras
 
 from tensorflow_asr.models.encoders.conformer import L2, ConformerEncoder
 from tensorflow_asr.models.transducer.base_transducer import Transducer
 
 
-@tf.keras.utils.register_keras_serializable("tensorflow_asr.models.transducer")
+@keras.utils.register_keras_serializable("tensorflow_asr.models.transducer")
 class Conformer(Transducer):
     def __init__(
         self,
@@ -71,6 +72,53 @@ class Conformer(Transducer):
         name: str = "conformer",
         **kwargs,
     ):
+        self._config = {
+            "blank": blank,
+            "vocab_size": vocab_size,
+            "speech_config": speech_config,
+            "encoder_subsampling": encoder_subsampling,
+            "encoder_dmodel": encoder_dmodel,
+            "encoder_num_blocks": encoder_num_blocks,
+            "encoder_head_size": encoder_head_size,
+            "encoder_num_heads": encoder_num_heads,
+            "encoder_mha_type": encoder_mha_type,
+            "encoder_interleave_relpe": encoder_interleave_relpe,
+            "encoder_use_attention_causal_mask": encoder_use_attention_causal_mask,
+            "encoder_use_attention_auto_mask": encoder_use_attention_auto_mask,
+            "encoder_kernel_size": encoder_kernel_size,
+            "encoder_padding": encoder_padding,
+            "encoder_ffm_scale_factor": encoder_ffm_scale_factor,
+            "encoder_ffm_residual_factor": encoder_ffm_residual_factor,
+            "encoder_mhsam_residual_factor": encoder_mhsam_residual_factor,
+            "encoder_mhsam_use_attention_bias": encoder_mhsam_use_attention_bias,
+            "encoder_convm_scale_factor": encoder_convm_scale_factor,
+            "encoder_convm_residual_factor": encoder_convm_residual_factor,
+            "encoder_convm_use_group_conv": encoder_convm_use_group_conv,
+            "encoder_dropout": encoder_dropout,
+            "encoder_module_norm_position": encoder_module_norm_position,
+            "encoder_block_norm_position": encoder_block_norm_position,
+            "encoder_memory_length": encoder_memory_length,
+            "encoder_trainable": encoder_trainable,
+            "prediction_label_encode_mode": prediction_label_encode_mode,
+            "prediction_embed_dim": prediction_embed_dim,
+            "prediction_num_rnns": prediction_num_rnns,
+            "prediction_rnn_units": prediction_rnn_units,
+            "prediction_rnn_type": prediction_rnn_type,
+            "prediction_rnn_implementation": prediction_rnn_implementation,
+            "prediction_rnn_unroll": prediction_rnn_unroll,
+            "prediction_layer_norm": prediction_layer_norm,
+            "prediction_projection_units": prediction_projection_units,
+            "prediction_trainable": prediction_trainable,
+            "joint_dim": joint_dim,
+            "joint_activation": joint_activation,
+            "prejoint_encoder_linear": prejoint_encoder_linear,
+            "prejoint_prediction_linear": prejoint_prediction_linear,
+            "postjoint_linear": postjoint_linear,
+            "joint_mode": joint_mode,
+            "joint_trainable": joint_trainable,
+            "kernel_regularizer": kernel_regularizer,
+            "bias_regularizer": bias_regularizer,
+        }
         super().__init__(
             speech_config=speech_config,
             encoder=ConformerEncoder(
@@ -136,8 +184,13 @@ class Conformer(Transducer):
             None
             if self.encoder._memory_length is None
             else [
-                tf.keras.Input(shape=[self.encoder._memory_length, self.encoder._dmodel], batch_size=batch_size, dtype=tf.float32)
+                keras.Input(shape=[self.encoder._memory_length, self.encoder._dmodel], batch_size=batch_size, dtype=tf.float32)
                 for _ in range(self.encoder._num_blocks)
             ]
         )
         return super().make(input_shape, prediction_shape, batch_size, caching, **kwargs)
+
+    def get_config(self):
+        config = super().get_config()
+        config.update(self._config)
+        return config

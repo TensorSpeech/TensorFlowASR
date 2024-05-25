@@ -13,13 +13,14 @@
 # limitations under the License.
 
 import tensorflow as tf
+import keras
 
 from tensorflow_asr.models.base_layer import Layer, Reshape
 from tensorflow_asr.models.layers.convolution import Conv1D
 from tensorflow_asr.utils import math_util
 
 
-class JasperSubBlock(tf.keras.layers.Layer):
+class JasperSubBlock(keras.layers.Layer):
     def __init__(
         self,
         channels: int = 256,
@@ -44,11 +45,11 @@ class JasperSubBlock(tf.keras.layers.Layer):
             name="conv1d",
             dtype=self.dtype,
         )
-        self.bn = tf.keras.layers.BatchNormalization(
+        self.bn = keras.layers.BatchNormalization(
             name="bn", gamma_regularizer=kernel_regularizer, beta_regularizer=bias_regularizer, dtype=self.dtype
         )
-        self.relu = tf.keras.layers.ReLU(name="relu", dtype=self.dtype)
-        self.do = tf.keras.layers.Dropout(dropout, name="dropout", dtype=self.dtype)
+        self.relu = keras.layers.ReLU(name="relu", dtype=self.dtype)
+        self.do = keras.layers.Dropout(dropout, name="dropout", dtype=self.dtype)
         self.reduction_factor = strides
 
     def call(self, inputs, training=False):
@@ -60,7 +61,7 @@ class JasperSubBlock(tf.keras.layers.Layer):
         return outputs
 
 
-class JasperResidual(tf.keras.layers.Layer):
+class JasperResidual(keras.layers.Layer):
     def __init__(
         self,
         channels: int = 256,
@@ -80,7 +81,7 @@ class JasperResidual(tf.keras.layers.Layer):
             name="pointwise_conv1d",
             dtype=self.dtype,
         )
-        self.bn = tf.keras.layers.BatchNormalization(
+        self.bn = keras.layers.BatchNormalization(
             name="bn", gamma_regularizer=kernel_regularizer, beta_regularizer=bias_regularizer, dtype=self.dtype
         )
 
@@ -128,7 +129,7 @@ class JasperSubBlockResidual(JasperSubBlock):
             for i in range(nresiduals)
         ]
 
-        self.add = tf.keras.layers.Add(name="add")
+        self.add = keras.layers.Add(name="add")
 
     def call(self, inputs, training=False):
         outputs, residuals = inputs
@@ -142,7 +143,7 @@ class JasperSubBlockResidual(JasperSubBlock):
         return outputs
 
 
-class JasperBlock(tf.keras.layers.Layer):
+class JasperBlock(keras.layers.Layer):
     def __init__(
         self,
         nsubblocks: int = 3,

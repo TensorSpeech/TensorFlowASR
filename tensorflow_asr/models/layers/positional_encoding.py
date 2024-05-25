@@ -14,6 +14,7 @@
 # limitations under the License.
 
 import tensorflow as tf
+import keras
 
 from tensorflow_asr.models.base_layer import Layer
 from tensorflow_asr.utils import shape_util
@@ -61,7 +62,7 @@ class SinusoidalPositionalEncoding(Layer):
         **kwargs,
     ):
         super().__init__(trainable=False, **kwargs)
-        self.do = tf.keras.layers.Dropout(dropout, dtype=self.dtype, name="dropout")
+        self.do = keras.layers.Dropout(dropout, dtype=self.dtype, name="dropout")
         self._scale = scale
         self._interleave = interleave
 

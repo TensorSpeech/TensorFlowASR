@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import tensorflow as tf
+import keras
 
 from tensorflow_asr.models.base_layer import Identity, Layer, Reshape
 from tensorflow_asr.models.layers.convolution import DepthwiseConv1D
@@ -44,13 +45,13 @@ class RowConv1D(Layer):
             name="conv",
             dtype=self.dtype,
         )
-        self.bn = tf.keras.layers.BatchNormalization(
+        self.bn = keras.layers.BatchNormalization(
             name="bn",
             gamma_regularizer=regularizer,
             beta_regularizer=regularizer,
             dtype=self.dtype,
         )
-        self.activation = tf.keras.activations.get(activation)
+        self.activation = keras.activations.get(activation)
 
     def call(self, inputs, training=False):
         outputs = self.conv(inputs, training=training)
@@ -92,11 +93,11 @@ class ConvBlock(Layer):
             bias_initializer=initializer,
             dtype=self.dtype,
         )
-        self.bn = tf.keras.layers.BatchNormalization(
+        self.bn = keras.layers.BatchNormalization(
             name="bn", gamma_regularizer=kernel_regularizer, beta_regularizer=bias_regularizer, dtype=self.dtype
         )
-        self.act = tf.keras.layers.Activation(activation=activation, dtype=self.dtype)
-        self.do = tf.keras.layers.Dropout(dropout, name="dropout", dtype=self.dtype)
+        self.act = keras.layers.Activation(activation=activation, dtype=self.dtype)
+        self.do = keras.layers.Dropout(dropout, name="dropout", dtype=self.dtype)
         self.time_reduction_factor = self.conv.strides[0]
 
     def call(self, inputs, training=False):
@@ -236,8 +237,8 @@ class RnnBlock(Layer):
         )
         self._bidirectional = bidirectional
         if bidirectional:
-            self.rnn = tf.keras.layers.Bidirectional(self.rnn, name=f"b{rnn_type}", dtype=self.dtype)
-        self.bn = tf.keras.layers.BatchNormalization(
+            self.rnn = keras.layers.Bidirectional(self.rnn, name=f"b{rnn_type}", dtype=self.dtype)
+        self.bn = keras.layers.BatchNormalization(
             name="bn", gamma_regularizer=kernel_regularizer, beta_regularizer=bias_regularizer, dtype=self.dtype
         )
         self.rowconv = None
@@ -371,7 +372,7 @@ class FcBlock(Layer):
         **kwargs,
     ):
         super().__init__(**kwargs)
-        self.fc = tf.keras.layers.Dense(
+        self.fc = keras.layers.Dense(
             units,
             kernel_regularizer=kernel_regularizer,
             kernel_initializer=initializer,
@@ -380,11 +381,11 @@ class FcBlock(Layer):
             name="fc",
             dtype=self.dtype,
         )
-        self.bn = tf.keras.layers.BatchNormalization(
+        self.bn = keras.layers.BatchNormalization(
             name="bn", gamma_regularizer=kernel_regularizer, beta_regularizer=bias_regularizer, dtype=self.dtype
         )
-        self.act = tf.keras.layers.Activation(activation=activation, dtype=self.dtype)
-        self.do = tf.keras.layers.Dropout(dropout, name="dropout", dtype=self.dtype)
+        self.act = keras.layers.Activation(activation=activation, dtype=self.dtype)
+        self.do = keras.layers.Dropout(dropout, name="dropout", dtype=self.dtype)
 
     def call(self, inputs, training=False):
         outputs, outputs_length = inputs

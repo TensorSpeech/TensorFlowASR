@@ -17,6 +17,7 @@ import copy
 import importlib
 
 import tensorflow as tf
+import keras
 from keras import callbacks as callbacks_module
 from keras.optimizers import Optimizer
 from tensorflow.python.eager import context  # pylint: disable=no-name-in-module
@@ -42,7 +43,7 @@ reduce_per_replica = importlib.import_module(f"{env_util.KERAS_SRC}.engine.train
 logger = tf.get_logger()
 
 
-class BaseModel(tf.keras.Model):
+class BaseModel(keras.Model):
     def __init__(self, speech_config: dict, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.feature_extraction = FeatureExtraction(**speech_config, dtype=self.dtype)
@@ -68,22 +69,11 @@ class BaseModel(tf.keras.Model):
         self,
         filepath,
         overwrite=True,
-        include_optimizer=True,
         save_format=None,
-        signatures=None,
-        options=None,
-        save_traces=True,
+        **kwargs,
     ):
         with file_util.save_file(filepath) as path:
-            super().save(
-                filepath=path,
-                overwrite=overwrite,
-                include_optimizer=include_optimizer,
-                save_format=save_format,
-                signatures=signatures,
-                options=options,
-                save_traces=save_traces,
-            )
+            super().save(filepath=path, overwrite=overwrite, save_format=save_format, **kwargs)
 
     def save_weights(
         self,
@@ -105,7 +95,7 @@ class BaseModel(tf.keras.Model):
         with file_util.read_file(filepath) as path:
             super().load_weights(filepath=path, by_name=by_name, skip_mismatch=skip_mismatch, options=options)
 
-    def add_custom_metric(self, metric: tf.keras.metrics.Metric):
+    def add_custom_metric(self, metric: keras.metrics.Metric):
         if not hasattr(self, "_tfasr_metrics"):
             self._tfasr_metrics = {}
         self._tfasr_metrics[metric.name] = metric
@@ -124,10 +114,10 @@ class BaseModel(tf.keras.Model):
             Batch size, by default None
         """
         assert batch_size is not None and batch_size > 0
-        signals = tf.keras.Input(shape=input_shape, batch_size=batch_size, dtype=tf.float32)
-        signals_length = tf.keras.Input(shape=[], batch_size=batch_size, dtype=tf.int32)
-        predictions = tf.keras.Input(shape=prediction_shape, batch_size=batch_size, dtype=tf.int32)
-        predictions_length = tf.keras.Input(shape=[], batch_size=batch_size, dtype=tf.int32)
+        signals = keras.Input(shape=input_shape, batch_size=batch_size, dtype=tf.float32)
+        signals_length = keras.Input(shape=[], batch_size=batch_size, dtype=tf.int32)
+        predictions = keras.Input(shape=prediction_shape, batch_size=batch_size, dtype=tf.int32)
+        predictions_length = keras.Input(shape=[], batch_size=batch_size, dtype=tf.int32)
         self._per_replica_batch_size = int(batch_size / self.distribute_strategy.num_replicas_in_sync)
         self._batch_size = batch_size
         outputs = self(
@@ -156,13 +146,13 @@ class BaseModel(tf.keras.Model):
         gradn_config=None,
         **kwargs,
     ):
-        optimizer = tf.keras.optimizers.get(optimizer)
+        optimizer = keras.optimizers.get(optimizer)
         if env_util.has_devices("TPU"):
             self.use_loss_scale = False
         else:
             self.use_loss_scale = mxp != "none"
             if self.use_loss_scale:
-                optimizer = tf.keras.mixed_precision.LossScaleOptimizer(optimizer)
+                optimizer = keras.mixed_precision.LossScaleOptimizer(optimizer)
                 logger.info("Using loss scale")
         if isinstance(ga_steps, int) and ga_steps > 1:
             self.use_ga = True
@@ -171,7 +161,7 @@ class BaseModel(tf.keras.Model):
         else:
             self.use_ga = False
         self.gwn_config = gwn_config
-        self.gradn = tf.keras.regularizers.get(gradn_config) if gradn_config else None
+        self.gradn = keras.regularizers.get(gradn_config) if gradn_config else None
         self.distribute_reduction_method = "sum"
         super().compile(optimizer=optimizer, loss=loss, run_eagerly=run_eagerly, **kwargs)
 
@@ -278,12 +268,13 @@ class BaseModel(tf.keras.Model):
 
     def predict_step(self, data):
         x, y_true = data
+        batch_size, *_ = shape_util.shape_list(x["inputs"])
         inputs = schemas.PredictInput(
             inputs=x["inputs"],
             inputs_length=x["inputs_length"],
-            previous_tokens=self.get_initial_tokens(),
-            previous_encoder_states=self.get_initial_encoder_states(),
-            previous_decoder_states=self.get_initial_decoder_states(),
+            previous_tokens=self.get_initial_tokens(batch_size=batch_size),
+            previous_encoder_states=self.get_initial_encoder_states(batch_size=batch_size),
+            previous_decoder_states=self.get_initial_decoder_states(batch_size=batch_size),
         )
         _tokens = self.recognize(inputs=inputs).tokens
         _beam_tokens = self.recognize_beam(inputs=inputs).tokens
@@ -508,7 +499,7 @@ class BaseModel(tf.keras.Model):
                 steps_per_execution=self._steps_per_execution,
             )
 
-            # Container that configures and calls `tf.keras.Callback`s.
+            # Container that configures and calls `keras.Callback`s.
             if not isinstance(callbacks, callbacks_module.CallbackList):
                 callbacks = callbacks_module.CallbackList(
                     callbacks,
@@ -570,45 +561,46 @@ class BaseModel(tf.keras.Model):
                         "`Model.compile(..., run_eagerly=True)`, or "
                         "`tf.config.run_functions_eagerly(True)` for more "
                         "information of where went wrong, or file a "
-                        "issue/bug to `tf.keras`."
+                        "issue/bug to `keras`."
                     )
                 # Override with model metrics instead of last step logs
                 logs = self._validate_and_get_metrics_result(logs)
                 epoch_logs = copy.copy(logs)
 
                 # Run validation.
-                if validation_data and self._should_eval(epoch, validation_freq):
-                    # Create data_handler for evaluation and cache it.
-                    if getattr(self, "_eval_data_handler", None) is None:
-                        self._eval_data_handler = data_adapter.get_data_handler(
+                if validation_data:
+                    if self._should_eval(epoch, validation_freq):
+                        # Create data_handler for evaluation and cache it.
+                        if getattr(self, "_eval_data_handler", None) is None:
+                            self._eval_data_handler = data_adapter.get_data_handler(
+                                x=val_x,
+                                y=val_y,
+                                sample_weight=val_sample_weight,
+                                batch_size=validation_batch_size or batch_size,
+                                steps_per_epoch=validation_steps,
+                                initial_epoch=0,
+                                epochs=1,
+                                max_queue_size=max_queue_size,
+                                workers=workers,
+                                use_multiprocessing=use_multiprocessing,
+                                model=self,
+                                steps_per_execution=self._steps_per_execution,
+                            )
+                        val_logs = self.evaluate(
                             x=val_x,
                             y=val_y,
                             sample_weight=val_sample_weight,
                             batch_size=validation_batch_size or batch_size,
-                            steps_per_epoch=validation_steps,
-                            initial_epoch=0,
-                            epochs=1,
+                            steps=validation_steps,
+                            callbacks=callbacks,
                             max_queue_size=max_queue_size,
                             workers=workers,
                             use_multiprocessing=use_multiprocessing,
-                            model=self,
-                            steps_per_execution=self._steps_per_execution,
+                            return_dict=True,
+                            _use_cached_eval_dataset=True,
                         )
-                    val_logs = self.evaluate(
-                        x=val_x,
-                        y=val_y,
-                        sample_weight=val_sample_weight,
-                        batch_size=validation_batch_size or batch_size,
-                        steps=validation_steps,
-                        callbacks=callbacks,
-                        max_queue_size=max_queue_size,
-                        workers=workers,
-                        use_multiprocessing=use_multiprocessing,
-                        return_dict=True,
-                        _use_cached_eval_dataset=True,
-                    )
-                    val_logs = {"val_" + name: val for name, val in val_logs.items()}
-                    epoch_logs.update(val_logs)
+                        val_logs = {"val_" + name: val for name, val in val_logs.items()}
+                        epoch_logs.update(val_logs)
 
                 callbacks.on_epoch_end(epoch, epoch_logs)
                 training_logs = epoch_logs

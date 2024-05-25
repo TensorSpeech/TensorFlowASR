@@ -13,10 +13,11 @@
 # limitations under the License.
 
 import tensorflow as tf
+import keras
 
 
-@tf.keras.utils.register_keras_serializable("tensorflow_asr.optimizers.schedules")
-class TransformerSchedule(tf.keras.optimizers.schedules.LearningRateSchedule):
+@keras.utils.register_keras_serializable("tensorflow_asr.optimizers.schedules")
+class TransformerSchedule(keras.optimizers.schedules.LearningRateSchedule):
     def __init__(self, dmodel, scale=1.0, warmup_steps=4000, max_lr=None, min_lr=None):
         super().__init__()
         self.dmodel = tf.convert_to_tensor(dmodel, dtype=tf.float32)
@@ -46,8 +47,8 @@ class TransformerSchedule(tf.keras.optimizers.schedules.LearningRateSchedule):
         }
 
 
-@tf.keras.utils.register_keras_serializable("tensorflow_asr.optimizers.schedules")
-class CyclicTransformerSchedule(tf.keras.optimizers.schedules.LearningRateSchedule):
+@keras.utils.register_keras_serializable("tensorflow_asr.optimizers.schedules")
+class CyclicTransformerSchedule(keras.optimizers.schedules.LearningRateSchedule):
     """This callback implements a cyclical learning rate policy (CLR) to the square
     root decay generally used to train transformers.
     The method cycles the learning rate around the square root decay LR with an amplitude

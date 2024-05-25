@@ -1,10 +1,11 @@
 from typing import List
 
 import tensorflow as tf
+import keras
 
 
-@tf.keras.utils.register_keras_serializable("tensorflow_asr.optimizers.regularizers")
-class TimeDependentGaussianGradientNoise(tf.keras.regularizers.Regularizer):
+@keras.utils.register_keras_serializable("tensorflow_asr.optimizers.regularizers")
+class TimeDependentGaussianGradientNoise(keras.regularizers.Regularizer):
     """
     Reference: https://openreview.net/pdf/ZY9xxQDMMu5Pk8ELfEz4.pdf
     """

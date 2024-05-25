@@ -4,6 +4,7 @@ Copy and modified from https://github.com/OpenNMT/OpenNMT-tf/blob/master/opennmt
 """
 
 import tensorflow as tf
+import keras
 
 
 class GradientAccumulator:
@@ -14,7 +15,7 @@ class GradientAccumulator:
     def __init__(
         self,
         ga_steps,
-        model: tf.keras.Model,
+        model: keras.Model,
         name="ga",
     ):
         self.name = name

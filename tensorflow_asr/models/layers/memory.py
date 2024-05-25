@@ -121,7 +121,7 @@ class Memory(Layer):
     #         memory = tf.zeros(shape=(self.batch_size, self.memory_length, self.dmodel), dtype=self.dtype)
     #     if memory_mask is None:
     #         memory_mask = tf.zeros(shape=(self.batch_size, self.memory_length), dtype=tf.bool)
-    #     self.add_update([tf.keras.backend.update(self.memory, memory), tf.keras.backend.update(self.memory_mask, memory_mask)])
+    #     self.add_update([keras.backend.update(self.memory, memory), keras.backend.update(self.memory_mask, memory_mask)])
 
     # def call(self, inputs):
     #     inputs, inputs_mask = self._get_inputs(inputs)
@@ -147,7 +147,7 @@ class Memory(Layer):
     #         begin=[0, tf.shape(new_memory_mask)[1] - self.memory_length],
     #         size=[-1, self.memory_length],
     #     )
-    #     self.add_update([tf.keras.backend.update(self.memory, new_memory), tf.keras.backend.update(self.memory_mask, new_memory_mask)])
+    #     self.add_update([keras.backend.update(self.memory, new_memory), keras.backend.update(self.memory_mask, new_memory_mask)])
     #     new_memory._keras_mask = new_memory_mask  # pylint: disable=protected-access
     #     return new_memory
 

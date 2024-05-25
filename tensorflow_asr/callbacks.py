@@ -16,6 +16,7 @@ import importlib
 
 import numpy as np
 import tensorflow as tf
+import keras
 
 from tensorflow_asr.datasets import ASRDataset
 from tensorflow_asr.utils import file_util
@@ -24,8 +25,8 @@ from tensorflow_asr.utils.env_util import KERAS_SRC
 serialization_lib = importlib.import_module(f"{KERAS_SRC}.saving.serialization_lib")
 
 
-@tf.keras.utils.register_keras_serializable("tensorflow_asr.callbacks")
-class TestLogger(tf.keras.callbacks.Callback):
+@keras.utils.register_keras_serializable("tensorflow_asr.callbacks")
+class TestLogger(keras.callbacks.Callback):
     def __init__(self):
         super().__init__()
         self.wer = {"numer": 0, "denom": 0}
@@ -80,8 +81,8 @@ class TestLogger(tf.keras.callbacks.Callback):
         return cls(**config)
 
 
-@tf.keras.utils.register_keras_serializable("tensorflow_asr.callbacks")
-class PredictLogger(tf.keras.callbacks.Callback):
+@keras.utils.register_keras_serializable("tensorflow_asr.callbacks")
+class PredictLogger(keras.callbacks.Callback):
     def __init__(self, test_dataset: ASRDataset, output_file_path: str):
         super().__init__()
         self.test_dataset = test_dataset
@@ -123,8 +124,8 @@ class PredictLogger(tf.keras.callbacks.Callback):
         return cls(**config)
 
 
-@tf.keras.utils.register_keras_serializable("tensorflow_asr.callbacks")
-class TensorBoard(tf.keras.callbacks.TensorBoard):
+@keras.utils.register_keras_serializable("tensorflow_asr.callbacks")
+class TensorBoard(keras.callbacks.TensorBoard):
     def __init__(
         self,
         log_dir="logs",
@@ -165,8 +166,8 @@ class TensorBoard(tf.keras.callbacks.TensorBoard):
         return cls(**config)
 
 
-@tf.keras.utils.register_keras_serializable("tensorflow_asr.callbacks")
-class TerminateOnNaN(tf.keras.callbacks.TerminateOnNaN):
+@keras.utils.register_keras_serializable("tensorflow_asr.callbacks")
+class TerminateOnNaN(keras.callbacks.TerminateOnNaN):
     def get_config(self):
         return {}
 
@@ -175,8 +176,8 @@ class TerminateOnNaN(tf.keras.callbacks.TerminateOnNaN):
         return cls(**config)
 
 
-@tf.keras.utils.register_keras_serializable("tensorflow_asr.callbacks")
-class ModelCheckpoint(tf.keras.callbacks.ModelCheckpoint):
+@keras.utils.register_keras_serializable("tensorflow_asr.callbacks")
+class ModelCheckpoint(keras.callbacks.ModelCheckpoint):
     def __init__(
         self,
         filepath,
@@ -203,8 +204,8 @@ class ModelCheckpoint(tf.keras.callbacks.ModelCheckpoint):
         return cls(**config)
 
 
-@tf.keras.utils.register_keras_serializable("tensorflow_asr.callbacks")
-class BackupAndRestore(tf.keras.callbacks.BackupAndRestore):
+@keras.utils.register_keras_serializable("tensorflow_asr.callbacks")
+class BackupAndRestore(keras.callbacks.BackupAndRestore):
     def __init__(
         self,
         backup_dir,
@@ -223,8 +224,8 @@ class BackupAndRestore(tf.keras.callbacks.BackupAndRestore):
         return cls(**config)
 
 
-@tf.keras.utils.register_keras_serializable("tensorflow_asr.callbacks")
-class EarlyStopping(tf.keras.callbacks.EarlyStopping):
+@keras.utils.register_keras_serializable("tensorflow_asr.callbacks")
+class EarlyStopping(keras.callbacks.EarlyStopping):
     def get_config(self):
         return {}
 

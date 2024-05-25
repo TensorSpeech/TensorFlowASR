@@ -13,19 +13,20 @@
 # limitations under the License.
 """ http://arxiv.org/abs/1811.06621 """
 
-import tensorflow as tf
+import keras
 
 from tensorflow_asr.models.encoders.rnnt import RnnTransducerEncoder
 from tensorflow_asr.models.transducer.base_transducer import Transducer
 
 
-@tf.keras.utils.register_keras_serializable("tensorflow_asr.models.transducer")
+@keras.utils.register_keras_serializable("tensorflow_asr.models.transducer")
 class RnnTransducer(Transducer):
     def __init__(
         self,
         blank: int,
         vocab_size: int,
         speech_config: dict,
+        encoder_reduction_positions: list = ["pre", "pre", "pre", "pre", "pre", "pre", "pre", "pre"],
         encoder_reduction_factors: list = [6, 0, 0, 0, 0, 0, 0, 0],
         encoder_dmodel: int = 640,
         encoder_nlayers: int = 8,
@@ -59,6 +60,7 @@ class RnnTransducer(Transducer):
         super().__init__(
             speech_config=speech_config,
             encoder=RnnTransducerEncoder(
+                reduction_positions=encoder_reduction_positions,
                 reduction_factors=encoder_reduction_factors,
                 dmodel=encoder_dmodel,
                 nlayers=encoder_nlayers,
