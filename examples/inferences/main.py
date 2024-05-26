@@ -55,11 +55,8 @@ def main(
             previous_decoder_states=model.get_initial_decoder_states(),
         )
     )
-    print(outputs.tokens)
     transcript = tokenizer.detokenize(outputs.tokens)[0].numpy().decode("utf-8")
-
     logger.info(f"Transcript: {transcript}")
-    return transcript
 
 
 if __name__ == "__main__":

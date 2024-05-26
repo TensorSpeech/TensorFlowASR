@@ -11,7 +11,7 @@
 ## Conversion
 
 ```bash
-python3 examples/train.py \
+python3 examples/tflite.py \
     --config-path=/path/to/config.yml.j2 \
     --h5=/path/to/weight.h5 \
     --bs=1 \ # Batch size
