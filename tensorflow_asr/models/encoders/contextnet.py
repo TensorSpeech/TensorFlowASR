@@ -15,9 +15,7 @@
 
 from typing import List
 
-import tensorflow as tf
-import keras
-
+from tensorflow_asr import keras, tf
 from tensorflow_asr.models.base_layer import Layer, Reshape
 from tensorflow_asr.utils import math_util
 
@@ -37,6 +35,7 @@ def get_activation(
     raise ValueError("activation must be either 'silu', 'swish', 'relu' or 'linear'")
 
 
+@keras.utils.register_keras_serializable(package=__name__)
 class ConvModule(Layer):
     def __init__(
         self,
@@ -93,6 +92,7 @@ class ConvModule(Layer):
         return output_shape, output_length_shape
 
 
+@keras.utils.register_keras_serializable(package=__name__)
 class SEModule(Layer):
     def __init__(
         self,
@@ -155,6 +155,7 @@ class SEModule(Layer):
         return self.conv.compute_output_shape(input_shape)
 
 
+@keras.utils.register_keras_serializable(package=__name__)
 class ConvBlock(Layer):
     def __init__(
         self,
@@ -257,6 +258,7 @@ class ConvBlock(Layer):
         return output_shape
 
 
+@keras.utils.register_keras_serializable(package=__name__)
 class ContextNetEncoder(Layer):
     def __init__(
         self,

@@ -2,15 +2,17 @@
 {{decoder_config}}
 
 model_config:
-  class_name: tensorflow_asr.models.ctc>Jasper
+  class_name: tensorflow_asr.models.ctc.jasper>Jasper
   config:
     name: jasper
     speech_config:
       sample_rate: 16000
       frame_ms: 25
       stride_ms: 10
+      nfft: 512
       num_feature_bins: 80
       feature_type: log_mel_spectrogram
+      log_base: "10"
     dense: True
     first_additional_block_channels: 256
     first_additional_block_kernels: 11

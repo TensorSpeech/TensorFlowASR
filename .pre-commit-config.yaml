@@ -1,9 +1,17 @@
 repos:
   - repo: local
     hooks:
-      - id: black-formatter-check
-        name: black-formatter-check
-        entry: black --check
+      - id: black-formatter-fix
+        name: black-formatter-fix
+        entry: bash -c "for f in $@; do black --verbose $f; done"
+        language: system
+        types: [python]
+        stages: [pre-commit]
+        fail_fast: true
+        verbose: true
+      - id: isort-fix
+        name: isort-fix
+        entry: bash -c "for f in $@; do echo -e \"Organize import for file $f\" && isort $f; done"
         language: system
         types: [python]
         stages: [pre-commit]
@@ -11,7 +19,7 @@ repos:
         verbose: true
       - id: pylint-check
         name: pylint-check
-        entry: pylint --rcfile=.pylintrc -rn -sn
+        entry: bash -c "for f in $@; do pylint --rcfile=.pylintrc -rn -sn $f; done"
         language: system
         types: [python]
         stages: [pre-commit]

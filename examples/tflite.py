@@ -14,11 +14,12 @@
 
 import os
 
-from tensorflow_asr import tf, keras  # import to aid logging messages
-from tensorflow_asr import tokenizers
+from tensorflow_asr import keras, tf, tokenizers  # import to aid logging messages
 from tensorflow_asr.configs import Config
 from tensorflow_asr.models.base_model import BaseModel
 from tensorflow_asr.utils import app_util, cli_util, env_util, file_util
+
+env_util.setup_logging()
 
 
 def main(

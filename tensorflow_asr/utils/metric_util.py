@@ -14,9 +14,9 @@
 
 from typing import Tuple
 
-import tensorflow as tf
 from nltk.metrics import distance
 
+from tensorflow_asr import tf
 from tensorflow_asr.utils import math_util
 
 

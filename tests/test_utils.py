@@ -1,7 +1,6 @@
 import os
 
-import tensorflow as tf
-
+from tensorflow_asr import tf
 from tensorflow_asr.utils import file_util, math_util
 
 

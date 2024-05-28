@@ -12,14 +12,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import keras
-
+from tensorflow_asr import keras
 from tensorflow_asr.models.base_layer import Layer
 from tensorflow_asr.models.ctc.base_ctc import CtcModel
 from tensorflow_asr.models.encoders.jasper import JasperEncoder
-from tensorflow_asr.models.layers.convolution import Conv1D
 
 
+@keras.utils.register_keras_serializable(package=__name__)
 class JasperDecoder(Layer):
     def __init__(
         self,
@@ -30,7 +29,7 @@ class JasperDecoder(Layer):
         **kwargs,
     ):
         super().__init__(**kwargs)
-        self.vocab = Conv1D(
+        self.vocab = keras.layers.Conv1D(
             filters=vocab_size,
             kernel_size=1,
             strides=1,
@@ -57,7 +56,7 @@ class JasperDecoder(Layer):
         return tuple(outputs_shape), tuple(logits_length_shape)
 
 
-@keras.utils.register_keras_serializable("tensorflow_asr.models.ctc")
+@keras.utils.register_keras_serializable(package=__name__)
 class Jasper(CtcModel):
     def __init__(
         self,

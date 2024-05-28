@@ -14,8 +14,7 @@
 
 from dataclasses import asdict, dataclass
 
-import tensorflow as tf
-
+from tensorflow_asr import keras, tf
 from tensorflow_asr.augmentations.augmentation import Augmentation
 from tensorflow_asr.features import gammatone
 from tensorflow_asr.models.base_layer import Layer
@@ -30,6 +29,7 @@ class FEATURE_TYPES:
     LOG_GAMMATONE_SPECTROGRAM: str = "log_gammatone_spectrogram"
 
 
+@keras.utils.register_keras_serializable(package=__name__)
 class FeatureExtraction(Layer):
     def __init__(
         self,
@@ -50,7 +50,7 @@ class FeatureExtraction(Layer):
         normalize_zscore=False,
         normalize_min_max=False,
         padding=0,
-        augmentation_config=None,
+        augmentation_config={},
         **kwargs,
     ):
         """
@@ -97,7 +97,7 @@ class FeatureExtraction(Layer):
         """
         assert feature_type in asdict(FEATURE_TYPES()).values(), f"feature_type must be in {asdict(FEATURE_TYPES()).values()}"
 
-        super().__init__(name=feature_type, trainable=False, **kwargs)
+        super().__init__(name=feature_type, **kwargs)
         self.sample_rate = sample_rate
 
         self.frame_ms = frame_ms
@@ -131,8 +131,7 @@ class FeatureExtraction(Layer):
         self.padding = padding
         self.nfft = self.frame_length if nfft is None else nfft
 
-        self._augmentation_config = augmentation_config
-        self.augmentations = Augmentation(self._augmentation_config)
+        self.augmentations = Augmentation(augmentation_config)
 
     # ---------------------------------- signals --------------------------------- #
 
@@ -192,7 +191,7 @@ class FeatureExtraction(Layer):
         S = self.stft(signal)
         linear_to_weight_matrix = tf.signal.linear_to_mel_weight_matrix(
             num_mel_bins=self.num_feature_bins,
-            num_spectrogram_bins=S.shape[-1],
+            num_spectrogram_bins=tf.shape(S)[-1],
             sample_rate=self.sample_rate,
             lower_edge_hertz=self.lower_edge_hertz,
             upper_edge_hertz=self.upper_edge_hertz,
@@ -245,7 +244,7 @@ class FeatureExtraction(Layer):
             signals, signals_length = self.augmentations.signal_augment(signals, signals_length)
 
         if self.padding > 0:
-            signals = tf.pad(signals, [[0, 0], [0, self.padding]], mode="CONSTANT", constant_values=0)
+            signals = tf.pad(signals, [[0, 0], [0, self.padding]], mode="CONSTANT", constant_values=0.0)
 
         signals = self.normalize_signal(signals)
         signals = self.preemphasis_signal(signals)
@@ -261,7 +260,11 @@ class FeatureExtraction(Layer):
 
         features = self.normalize_audio_features(features)
         features = tf.expand_dims(features, axis=-1)
-        features_length = tf.map_fn(fn=self.get_nframes, elems=signals_length, fn_output_signature=tf.TensorSpec(shape=(), dtype=tf.int32))
+        features_length = tf.map_fn(
+            fn=self.get_nframes,
+            elems=tf.cast(signals_length, tf.int32),
+            fn_output_signature=tf.TensorSpec(shape=(), dtype=tf.int32),
+        )
 
         if training:
             features, features_length = self.augmentations.feature_augment(features, features_length)
@@ -294,29 +297,3 @@ class FeatureExtraction(Layer):
         else:
             output_shape = [B, self.get_nframes(nsamples + self.padding), self.num_feature_bins, 1]
         return tf.TensorShape(output_shape), tf.TensorShape(signal_length_shape)
-
-    def get_config(self):
-        config = super().get_config()
-        config.update(
-            {
-                "sample_rate": self.sample_rate,
-                "frame_ms": self.frame_ms,
-                "stride_ms": self.stride_ms,
-                "num_feature_bins": self.num_feature_bins,
-                "feature_type": self.feature_type,
-                "preemphasis": self.preemphasis,
-                "pad_end": self.pad_end,
-                "use_librosa_like_stft": self.use_librosa_like_stft,
-                "output_floor": self.output_floor,
-                "lower_edge_hertz": self.lower_edge_hertz,
-                "upper_edge_hertz": self.upper_edge_hertz,
-                "log_base": self.log_base,
-                "nfft": self.nfft,
-                "normalize_signal": self._normalize_signal,
-                "normalize_zscore": self._normalize_zscore,
-                "normalize_min_max": self._normalize_min_max,
-                "padding": self.padding,
-                "augmentation_config": self._augmentations.config,
-            }
-        )
-        return config

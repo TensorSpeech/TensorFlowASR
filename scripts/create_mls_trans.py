@@ -16,7 +16,7 @@ import argparse
 import os
 
 import librosa
-import keras
+from tensorflow_asr import keras
 import tqdm
 
 # example usage: python create_mls_trans.py -dataset-home /mnt/datasets/mls --language polish --opus

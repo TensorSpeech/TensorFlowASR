@@ -13,9 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import tensorflow as tf
-import keras
-
+from tensorflow_asr import keras, tf
 from tensorflow_asr.models.base_layer import Layer
 from tensorflow_asr.models.layers.multihead_attention import MultiHeadAttention, MultiHeadRelativeAttention
 from tensorflow_asr.models.layers.positional_encoding import RelativeSinusoidalPositionalEncoding, SinusoidalPositionalEncoding
@@ -23,6 +21,7 @@ from tensorflow_asr.models.layers.residual import Residual
 from tensorflow_asr.models.layers.subsampling import Conv1dSubsampling, Conv2dSubsampling, VggSubsampling
 
 
+@keras.utils.register_keras_serializable(package=__name__)
 class Pointwiseffn(Layer):
     def __init__(
         self,
@@ -56,6 +55,7 @@ class Pointwiseffn(Layer):
         return outputs
 
 
+@keras.utils.register_keras_serializable(package=__name__)
 class TransformerBlock(Layer):
     def __init__(
         self,
@@ -165,6 +165,7 @@ class TransformerBlock(Layer):
         return output_shape, caching_shape
 
 
+@keras.utils.register_keras_serializable(package=__name__)
 class TransformerEncoder(Layer):
     def __init__(
         self,

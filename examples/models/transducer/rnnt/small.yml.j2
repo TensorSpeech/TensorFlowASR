@@ -2,7 +2,7 @@
 {{decoder_config}}
 
 model_config:
-  class_name: tensorflow_asr.models.transducer>RnnTransducer
+  class_name: tensorflow_asr.models.transducer.rnnt>RnnTransducer
   config:
     name: rnn_transducer
     speech_config:
@@ -10,6 +10,7 @@ model_config:
       frame_ms: 25
       stride_ms: 10
       num_feature_bins: 80
+      nfft: 512
       feature_type: log_mel_spectrogram
       augmentation_config:
         feature_augment:
@@ -99,8 +100,8 @@ learning_config:
       config:
         log_dir: {{modeldir}}/tensorboard
         histogram_freq: 0
-        write_graph: False
+        write_graph: True
         write_images: False
-        write_steps_per_second: False
+        write_steps_per_second: True
         update_freq: batch
         profile_batch: 0

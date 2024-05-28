@@ -18,19 +18,19 @@ import importlib.util
 import os
 
 import numpy as np
-import tensorflow as tf
-import keras
 
-from tensorflow_asr.utils import env_util, math_util, shape_util
+from tensorflow_asr import keras, tf
+from tensorflow_asr.losses.base_loss import BaseLoss
+from tensorflow_asr.utils import env_util, shape_util
 
 warp_rnnt_loss = importlib.import_module("warprnnt_tensorflow").rnnt_loss if importlib.util.find_spec("warprnnt_tensorflow") is not None else None
 
-USE_CPU_LOSS = os.getenv("USE_CPU_LOSS", "False") == "True"
+TFASR_USE_CPU_LOSS = os.getenv("TFASR_USE_CPU_LOSS", "False") in ("true", "True", "1")
 
 logger = tf.get_logger()
 
 
-class RnntLoss(keras.losses.Loss):
+class RnntLoss(BaseLoss):
     def __init__(
         self,
         blank,
@@ -38,11 +38,8 @@ class RnntLoss(keras.losses.Loss):
         output_shapes=None,
         name=None,
     ):
-        if blank != 0 and warp_rnnt_loss is None:  # restrict blank index
-            raise ValueError("RNNT loss in tensorflow must use blank = 0")
-        super().__init__(reduction=reduction, name=name)
-        self.blank = blank
-        self.use_cpu = USE_CPU_LOSS or (not env_util.has_devices("GPU") and not env_util.has_devices("TPU"))
+        super().__init__(blank=blank, reduction=reduction, name=name)
+        self.use_cpu = TFASR_USE_CPU_LOSS or (not env_util.has_devices("GPU") and not env_util.has_devices("TPU"))
         self.output_shapes = output_shapes
         # fmt: off
         logger.info(f"[RNNT loss] Use {'CPU' if self.use_cpu else 'GPU/TPU'} implementation in {'Tensorflow' if warp_rnnt_loss is None else 'WarpRNNT'}") # pylint: disable=line-too-long
@@ -54,16 +51,22 @@ class RnntLoss(keras.losses.Loss):
                 self.output_shapes = None
 
     def call(self, y_true, y_pred):
+        logits, logit_length, labels, label_length = super().call(y_true, y_pred)
         return rnnt_loss(
-            logits=y_pred,
-            logits_length=math_util.compute_time_length(y_pred) if env_util.LENGTH_AS_OUTPUT else y_pred._keras_length,
-            labels=y_true,
-            labels_length=math_util.compute_time_length(y_true) if env_util.LENGTH_AS_OUTPUT else y_true._keras_length,
+            logits=logits,
+            logits_length=logit_length,
+            labels=labels,
+            labels_length=label_length,
             blank=self.blank,
             name=self.name,
             use_cpu=self.use_cpu,
             output_shapes=self.output_shapes,
         )
+
+    def get_config(self):
+        conf = super().get_config()
+        conf.update({"output_shapes": self.output_shapes})
+        return conf
 
 
 def rnnt_loss(

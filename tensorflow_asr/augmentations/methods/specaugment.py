@@ -14,8 +14,7 @@
 
 from dataclasses import asdict, dataclass
 
-import tensorflow as tf
-
+from tensorflow_asr import tf
 from tensorflow_asr.augmentations.methods.base_method import AugmentationMethod
 from tensorflow_asr.utils import shape_util
 

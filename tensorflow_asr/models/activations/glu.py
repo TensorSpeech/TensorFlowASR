@@ -12,11 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import tensorflow as tf
-
+from tensorflow_asr import keras, tf
 from tensorflow_asr.models.base_layer import Layer
 
 
+@keras.utils.register_keras_serializable(package=__name__)
 class GLU(Layer):
     def __init__(self, axis=-1, name="glu", **kwargs):
         super().__init__(name=name, **kwargs)
@@ -30,8 +30,3 @@ class GLU(Layer):
     def compute_output_shape(self, input_shape):
         B, T, V = input_shape
         return (B, T, V // 2)
-
-    def get_config(self):
-        config = super().get_config()
-        config.update({"axis": self.axis})
-        return config

@@ -1,23 +1,17 @@
 # pylint: disable=protected-access
 import importlib
 import os
-import warnings
 
-os.environ["TF_CPP_MIN_LOG_LEVEL"] = os.environ.get("TF_CPP_MIN_LOG_LEVEL", "2")
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = os.environ.get("TF_CPP_MIN_LOG_LEVEL") or "3"
 os.environ["TF_FORCE_GPU_ALLOW_GROWTH"] = os.environ.get("TF_FORCE_GPU_ALLOW_GROWTH", "true")
 
-import tensorflow as tf
 import keras
+import tensorflow as tf
 from tensorflow.python.util import deprecation  # pylint: disable = no-name-in-module
 
 # might cause performance penalty if ops fallback to cpu, see https://cloud.google.com/tpu/docs/tensorflow-ops
 tf.config.set_soft_device_placement(False)
 deprecation._PRINT_DEPRECATION_WARNINGS = False  # comment this line to print deprecation warnings
-
-logger = tf.get_logger()
-logger.setLevel(os.environ.get("LOG_LEVEL", "info").upper())
-logger.propagate = False
-warnings.simplefilter("ignore")
 
 from tensorflow_asr.utils import tf_util
 from tensorflow_asr.utils.env_util import KERAS_SRC
@@ -52,6 +46,16 @@ keras.layers.Layer.build = build
 keras.layers.Layer.compute_output_shape = compute_output_shape
 compile_utils.match_dtype_and_rank = match_dtype_and_rank
 
-import tensorflow_asr.callbacks
-from tensorflow_asr.models import *
-from tensorflow_asr.optimizers import *
+import glob
+from os.path import basename, dirname, isdir, isfile, join
+
+for fd in glob.glob(join(dirname(__file__), "*")):
+    if not isfile(fd) and not isdir(fd):
+        continue
+    if isfile(fd) and not fd.endswith(".py"):
+        continue
+    fd = fd if isdir(fd) else fd[:-3]
+    fd = basename(fd)
+    if fd.startswith("__"):
+        continue
+    __import__(f"{__name__}.{fd}")

@@ -19,10 +19,10 @@ import unicodedata
 from dataclasses import asdict, dataclass
 
 import sentencepiece as sp
-import tensorflow as tf
 import tensorflow_text as tft
 from tensorflow_text.tools.wordpiece_vocab import bert_vocab_from_dataset as bert_vocab
 
+from tensorflow_asr import tf
 from tensorflow_asr.configs import Config, DecoderConfig
 from tensorflow_asr.utils import file_util
 
@@ -374,8 +374,7 @@ class WordPieceTokenizer(Tokenizer):
             return cls(decoder_config)
 
         def generator():
-            for data in cls.corpus_generator(decoder_config):
-                yield data
+            yield from cls.corpus_generator(decoder_config)
 
         def write_vocab_file(filepath, vocab):
             with tf.io.gfile.GFile(filepath, "w") as f:

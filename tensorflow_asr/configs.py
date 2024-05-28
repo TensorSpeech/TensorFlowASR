@@ -15,8 +15,7 @@
 import json
 from typing import Union
 
-import tensorflow as tf
-
+from tensorflow_asr import tf
 from tensorflow_asr.utils import file_util
 
 logger = tf.get_logger()

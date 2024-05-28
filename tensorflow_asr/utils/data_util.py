@@ -19,6 +19,8 @@ import os
 import librosa
 import tensorflow as tf
 
+TFASR_KERAS_LENGTH = os.getenv("TFASR_KERAS_LENGTH", "True") in ("true", "True", "1")
+
 
 def load_and_convert_to_wav(
     path: str,
@@ -33,8 +35,13 @@ def read_raw_audio(audio: tf.Tensor):
     return tf.reshape(wave, shape=[-1])  # reshape for using tf.signal
 
 
-def attach_length_to_data(inputs, inputs_length):
-    setattr(inputs, "_keras_length", inputs_length)
+def set_length(inputs, inputs_length):
+    if TFASR_KERAS_LENGTH:
+        setattr(inputs, "_keras_length", inputs_length)
     if hasattr(inputs, "_keras_mask"):
         delattr(inputs, "_keras_mask")
     return inputs, inputs_length
+
+
+def get_length(inputs):
+    return getattr(inputs, "_keras_length", None)

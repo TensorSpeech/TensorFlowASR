@@ -13,14 +13,13 @@
 # limitations under the License.
 
 import typing
-import tensorflow as tf
-import keras
 
+from tensorflow_asr import keras, tf
 from tensorflow_asr.models.base_layer import Layer
-from tensorflow_asr.models.layers.convolution import Conv1D, Conv2D
 from tensorflow_asr.utils import math_util, shape_util
 
 
+@keras.utils.register_keras_serializable(package=__name__)
 class TimeReduction(Layer):
     def __init__(self, factor: int, name: str = "TimeReduction", **kwargs):
         super().__init__(name=name, **kwargs)
@@ -52,6 +51,7 @@ class TimeReduction(Layer):
         return output_shape, output_length_shape
 
 
+@keras.utils.register_keras_serializable(package=__name__)
 class VggSubsampling(Layer):
     def __init__(
         self,
@@ -67,7 +67,7 @@ class VggSubsampling(Layer):
         **kwargs,
     ):
         super().__init__(name=name, **kwargs)
-        self.conv1 = Conv2D(
+        self.conv1 = keras.layers.Conv2D(
             filters=filters[0],
             kernel_size=kernel_size,
             strides=1,
@@ -78,7 +78,7 @@ class VggSubsampling(Layer):
             activation=activation,
             dtype=self.dtype,
         )
-        self.conv2 = Conv2D(
+        self.conv2 = keras.layers.Conv2D(
             filters=filters[0],
             kernel_size=kernel_size,
             strides=1,
@@ -90,7 +90,7 @@ class VggSubsampling(Layer):
             dtype=self.dtype,
         )
         self.maxpool1 = keras.layers.MaxPool2D(pool_size=pool_size, strides=strides, padding=padding, dtype=self.dtype, name="maxpool_1")
-        self.conv3 = Conv2D(
+        self.conv3 = keras.layers.Conv2D(
             filters=filters[1],
             kernel_size=kernel_size,
             strides=1,
@@ -101,7 +101,7 @@ class VggSubsampling(Layer):
             activation=activation,
             dtype=self.dtype,
         )
-        self.conv4 = Conv2D(
+        self.conv4 = keras.layers.Conv2D(
             filters=filters[1],
             kernel_size=kernel_size,
             strides=1,
@@ -152,6 +152,7 @@ class VggSubsampling(Layer):
         return outputs_shape, output_length_shape
 
 
+@keras.utils.register_keras_serializable(package=__name__)
 class Conv2dSubsampling(Layer):
     def __init__(
         self,
@@ -173,7 +174,7 @@ class Conv2dSubsampling(Layer):
         for i in range(len(filters)):
             subblock = keras.Sequential(name=f"block_{i}")
             subblock.add(
-                Conv2D(
+                keras.layers.Conv2D(
                     filters=filters[i],
                     kernel_size=kernels[i],
                     strides=strides[i],
@@ -240,6 +241,7 @@ class Conv2dSubsampling(Layer):
         return output_shape, output_length_shape
 
 
+@keras.utils.register_keras_serializable(package=__name__)
 class Conv1dSubsampling(Layer):
     def __init__(
         self,
@@ -261,7 +263,7 @@ class Conv1dSubsampling(Layer):
         for i in range(len(filters)):
             subblock = keras.Sequential(name=f"block_{i}")
             subblock.add(
-                Conv1D(
+                keras.layers.Conv1D(
                     filters=filters[i],
                     kernel_size=kernels[i],
                     strides=strides[i],

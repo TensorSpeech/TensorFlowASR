@@ -12,14 +12,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import tensorflow as tf
-import keras
-
+from tensorflow_asr import keras, tf
 from tensorflow_asr.models.base_layer import Layer
 from tensorflow_asr.models.ctc.base_ctc import CtcModel
 from tensorflow_asr.models.encoders.deepspeech2 import DeepSpeech2Encoder
 
 
+@keras.utils.register_keras_serializable(package=__name__)
 class DeepSpeech2Decoder(Layer):
     def __init__(
         self,
@@ -54,20 +53,8 @@ class DeepSpeech2Decoder(Layer):
         output_shape = self.vocab.compute_output_shape(output_shape)
         return output_shape, output_length_shape
 
-    def get_config(self):
-        config = super().get_config()
-        config.update(
-            {
-                "vocab_size": self.vocab.units,
-                "kernel_regularizer": self.vocab.kernel_regularizer,
-                "bias_regularizer": self.vocab.bias_regularizer,
-                "initializer": self.vocab.kernel_initializer,
-            }
-        )
-        return config
 
-
-@keras.utils.register_keras_serializable("tensorflow_asr.models.ctc")
+@keras.utils.register_keras_serializable(package=__name__)
 class DeepSpeech2(CtcModel):
     def __init__(
         self,

@@ -1,5 +1,4 @@
-import tensorflow as tf
-
+from tensorflow_asr import tf
 from tensorflow_asr.models.layers.multihead_attention import rel_left_shift
 from tensorflow_asr.models.layers.positional_encoding import RelativeSinusoidalPositionalEncoding
 from tensorflow_asr.utils import plot_util

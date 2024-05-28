@@ -13,10 +13,7 @@
 # limitations under the License.
 
 
-import tensorflow as tf
-import keras
-
-from tensorflow_asr import schemas
+from tensorflow_asr import keras, schemas, tf
 from tensorflow_asr.losses.ctc_loss import CtcLoss
 from tensorflow_asr.models.base_model import BaseModel
 from tensorflow_asr.utils import layer_util

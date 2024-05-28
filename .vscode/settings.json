@@ -1,37 +1,37 @@
 {
-    "editor.formatOnSave": true,
-    "python.analysis.fixAll": [
-        "source.unusedImports",
-    ],
-    "editor.codeActionsOnSave": {
-        "source.organizeImports": "explicit"
-    },
-    "isort.args": [
-        "--profile",
-        "black",
-        "--line-length",
-        "130"
-    ],
-    "autoDocstring.docstringFormat": "numpy",
     "[python]": {
-        "editor.defaultFormatter": "ms-python.black-formatter",
+        "editor.defaultFormatter": "ms-python.black-formatter"
     },
-    "pylint.path": [
-        "${interpreter}",
-        "-m",
-        "pylint"
-    ],
-    "pylint.args": [
-        "--rcfile=${workspaceFolder}/.pylintrc"
+    "autoDocstring.docstringFormat": "numpy",
+    "black-formatter.args": [
+        "--config",
+        "${workspaceFolder}/pyproject.toml"
     ],
     "black-formatter.path": [
         "${interpreter}",
         "-m",
         "black"
     ],
-    "isort.path": [
+    "editor.codeActionsOnSave": {
+        "source.fixAll": "explicit",
+        "source.organizeImports": "explicit"
+    },
+    "editor.formatOnSave": true,
+    "isort.args": [
+        "--settings-file",
+        "${workspaceFolder}/pyproject.toml"
+    ],
+    "pylint.args": [
+        "--rcfile=${workspaceFolder}/.pylintrc"
+    ],
+    "pylint.path": [
         "${interpreter}",
         "-m",
-        "isort"
-    ]
+        "pylint"
+    ],
+    "python.analysis.fixAll": [
+        "source.unusedImports",
+        "source.convertImportFormat"
+    ],
+    "python.analysis.importFormat": "absolute"
 }

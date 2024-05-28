@@ -14,8 +14,7 @@
 
 from typing import List
 
-import tensorflow as tf
-
+from tensorflow_asr import tf
 from tensorflow_asr.augmentations.methods import gaussnoise, specaugment
 from tensorflow_asr.augmentations.methods.base_method import AugmentationMethod
 
@@ -28,10 +27,9 @@ AUGMENTATIONS = {
 
 class Augmentation:
     def __init__(self, config: dict = None):
-        if not config:
-            config = {}
-        self.signal_augmentations = self.parse(config.pop("signal_augment", {}))
-        self.feature_augmentations = self.parse(config.pop("feature_augment", {}))
+        _config = config or {}
+        self.signal_augmentations = self.parse(_config.pop("signal_augment", {}))
+        self.feature_augmentations = self.parse(_config.pop("feature_augment", {}))
 
     def _augment(self, inputs, augmentations: List[AugmentationMethod]):
         outputs = inputs

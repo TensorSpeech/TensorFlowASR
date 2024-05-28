@@ -12,8 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import tensorflow as tf
-import keras
+from tensorflow_asr import keras, tf
 
 
 class ErrorRate(keras.metrics.Metric):

@@ -12,14 +12,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import tensorflow as tf
-import keras
-
+from tensorflow_asr import keras, tf
 from tensorflow_asr.models.base_layer import Layer
 from tensorflow_asr.models.ctc.base_ctc import CtcModel
 from tensorflow_asr.models.encoders.conformer import L2, ConformerEncoder
 
 
+@keras.utils.register_keras_serializable(package=__name__)
 class ConformerDecoder(Layer):
     def __init__(
         self,
@@ -52,19 +51,8 @@ class ConformerDecoder(Layer):
         outputs_shape = logits_shape[:-1] + (self._vocab_size,)
         return tuple(outputs_shape), tuple(logits_length_shape)
 
-    def get_config(self):
-        config = super().get_config()
-        config.update(
-            {
-                "vocab_size": self._vocab_size,
-                "kernel_regularizer": self.vocab.kernel_regularizer,
-                "bias_regularizer": self.vocab.bias_regularizer,
-            }
-        )
-        return config
 
-
-@keras.utils.register_keras_serializable("tensorflow_asr.models.ctc")
+@keras.utils.register_keras_serializable(package=__name__)
 class Conformer(CtcModel):
     def __init__(
         self,

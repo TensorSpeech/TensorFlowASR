@@ -12,11 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import keras
-
+from tensorflow_asr import keras
 from tensorflow_asr.utils import math_util
 
 
+@keras.utils.register_keras_serializable(package=__name__)
 class Layer(keras.layers.Layer):
     def __init__(
         self,
@@ -30,6 +30,7 @@ class Layer(keras.layers.Layer):
         self.supports_masking = True
 
 
+@keras.utils.register_keras_serializable(package=__name__)
 class Reshape(Layer):
     def call(self, inputs):
         outputs, outputs_length = inputs
@@ -42,6 +43,7 @@ class Reshape(Layer):
         return output_shape, output_length_shape
 
 
+@keras.utils.register_keras_serializable(package=__name__)
 class Identity(Layer):
     def call(self, inputs):
         return inputs

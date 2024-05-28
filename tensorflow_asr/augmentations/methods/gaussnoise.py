@@ -12,8 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import tensorflow as tf
-
+from tensorflow_asr import tf
 from tensorflow_asr.augmentations.methods.base_method import AugmentationMethod
 
 

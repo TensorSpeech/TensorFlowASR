@@ -15,11 +15,12 @@
 import json
 import os
 
-from tensorflow_asr import callbacks, datasets, tf, keras, tokenizers  # import to aid logging messages
+from tensorflow_asr import callbacks, datasets, keras, tf, tokenizers  # import to aid logging messages
 from tensorflow_asr.configs import Config
 from tensorflow_asr.models.base_model import BaseModel
 from tensorflow_asr.utils import cli_util, env_util, file_util
 
+env_util.setup_logging()
 logger = tf.get_logger()
 
 

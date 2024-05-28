@@ -19,8 +19,9 @@ import tempfile
 from typing import List, Union
 
 import jinja2
-import tensorflow as tf
 import yaml
+
+from tensorflow_asr import tf
 
 ENABLE_PATH_PREPROCESS = True
 

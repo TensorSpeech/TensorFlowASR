@@ -13,14 +13,13 @@
 # limitations under the License.
 """ http://arxiv.org/abs/1811.06621 """
 
-import tensorflow as tf
-import keras
-
+from tensorflow_asr import keras, tf
 from tensorflow_asr.models.base_layer import Layer, Reshape
 from tensorflow_asr.models.layers.subsampling import TimeReduction
 from tensorflow_asr.utils import layer_util, math_util
 
 
+@keras.utils.register_keras_serializable(package=__name__)
 class RnnTransducerBlock(Layer):
     def __init__(
         self,
@@ -123,6 +122,7 @@ class RnnTransducerBlock(Layer):
         return output_shape, output_length_shape
 
 
+@keras.utils.register_keras_serializable(package=__name__)
 class RnnTransducerEncoder(Layer):
     def __init__(
         self,

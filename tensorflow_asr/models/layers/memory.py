@@ -12,8 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import tensorflow as tf
-
+from tensorflow_asr import keras, tf
 from tensorflow_asr.models.base_layer import Layer
 from tensorflow_asr.utils import math_util
 
@@ -27,9 +26,10 @@ def _shift(tensor, shift):
     return shifted_tensor
 
 
+@keras.utils.register_keras_serializable(package=__name__)
 class Memory(Layer):
     def __init__(self, batch_size, memory_length, dmodel, **kwargs):
-        super().__init__(trainable=False, **kwargs)
+        super().__init__(**kwargs)
         assert memory_length > 0, "memory_length must be integer"
         self.batch_size = batch_size
         self.memory_length = memory_length

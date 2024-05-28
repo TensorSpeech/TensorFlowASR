@@ -12,11 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import tensorflow as tf
-import keras
+from tensorflow_asr import keras, tf
 
 
-@keras.utils.register_keras_serializable("tensorflow_asr.optimizers.schedules")
+@keras.utils.register_keras_serializable(package=__name__)
 class TransformerSchedule(keras.optimizers.schedules.LearningRateSchedule):
     def __init__(self, dmodel, scale=1.0, warmup_steps=4000, max_lr=None, min_lr=None):
         super().__init__()
@@ -39,15 +38,15 @@ class TransformerSchedule(keras.optimizers.schedules.LearningRateSchedule):
 
     def get_config(self):
         return {
-            "dmodel": self.dmodel,
-            "scale": self.scale,
-            "warmup_steps": self.warmup_steps,
+            "dmodel": int(self.dmodel.numpy()),
+            "scale": float(self.scale.numpy()),
+            "warmup_steps": int(self.warmup_steps.numpy()),
             "max_lr": self.max_lr,
             "min_lr": self.min_lr,
         }
 
 
-@keras.utils.register_keras_serializable("tensorflow_asr.optimizers.schedules")
+@keras.utils.register_keras_serializable(package=__name__)
 class CyclicTransformerSchedule(keras.optimizers.schedules.LearningRateSchedule):
     """This callback implements a cyclical learning rate policy (CLR) to the square
     root decay generally used to train transformers.
@@ -97,8 +96,8 @@ class CyclicTransformerSchedule(keras.optimizers.schedules.LearningRateSchedule)
 
     def get_config(self):
         return {
-            "dmodel": self.dmodel,
-            "warmup_steps": self.warmup_steps,
-            "max_lr": self.max_lr,
-            "step_size": self.step_size,
+            "dmodel": float(self.dmodel.numpy()),
+            "warmup_steps": int(self.warmup_steps.numpy()),
+            "max_lr": float(self.max_lr.numpy()),
+            "step_size": int(self.step_size.numpy()),
         }

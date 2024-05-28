@@ -12,14 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import tensorflow as tf
-import keras
-
+from tensorflow_asr import keras, tf
 from tensorflow_asr.models.encoders.transformer import TransformerEncoder
 from tensorflow_asr.models.transducer.base_transducer import Transducer
 
 
-@keras.utils.register_keras_serializable("tensorflow_asr.models.transducer")
+@keras.utils.register_keras_serializable(package=__name__)
 class Transformer(Transducer):
     def __init__(
         self,

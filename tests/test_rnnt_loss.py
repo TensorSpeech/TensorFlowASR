@@ -1,7 +1,6 @@
 import time
 
-import tensorflow as tf
-
+from tensorflow_asr import tf
 from tensorflow_asr.losses.rnnt_loss import compute_rnnt_loss_and_grad_helper
 
 B = 1

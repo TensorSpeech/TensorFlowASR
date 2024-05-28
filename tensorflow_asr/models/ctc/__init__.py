@@ -1,4 +1,13 @@
-import tensorflow_asr.models.ctc.conformer
-import tensorflow_asr.models.ctc.deepspeech2
-import tensorflow_asr.models.ctc.jasper
-import tensorflow_asr.models.ctc.transformer
+import glob
+from os.path import basename, dirname, isdir, isfile, join
+
+for fd in glob.glob(join(dirname(__file__), "*")):
+    if not isfile(fd) and not isdir(fd):
+        continue
+    if isfile(fd) and not fd.endswith(".py"):
+        continue
+    fd = fd if isdir(fd) else fd[:-3]
+    fd = basename(fd)
+    if fd.startswith("__"):
+        continue
+    __import__(f"{__name__}.{fd}")

@@ -14,12 +14,11 @@
 
 from typing import Optional
 
-import tensorflow as tf
-import keras
-
+from tensorflow_asr import keras, tf
 from tensorflow_asr.models.base_layer import Layer
 
 
+@keras.utils.register_keras_serializable(package=__name__)
 class Residual(Layer):
     """Applying residual addition to layers
     - Normal addition with constant factor
@@ -61,15 +60,6 @@ class Residual(Layer):
         alpha = tf.cast(self._alpha, residual_x.dtype)
         x = x + alpha * residual_x
         return x
-
-    def get_config(self):
-        config = {
-            "factor": self._factor,
-            "initializer": self._initializer,
-            "regularizer": self._regularizer,
-        }
-        base_config = super().get_config()
-        return dict(list(base_config.items()) + list(config.items()))
 
     def compute_output_shape(self, input_shape):
         return input_shape[0]

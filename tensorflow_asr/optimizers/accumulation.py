@@ -3,8 +3,7 @@ Gradient Accummulation for training TF2 custom training loop.
 Copy and modified from https://github.com/OpenNMT/OpenNMT-tf/blob/master/opennmt/optimizers/utils.py.
 """
 
-import tensorflow as tf
-import keras
+from tensorflow_asr import keras, tf
 
 
 class GradientAccumulator:

@@ -1,8 +1,7 @@
 # pylint: disable=line-too-long
 import os
 
-import tensorflow as tf
-
+from tensorflow_asr import tf
 from tensorflow_asr.configs import DecoderConfig
 from tensorflow_asr.tokenizers import CharTokenizer, SentencePieceTokenizer, WordPieceTokenizer
 from tensorflow_asr.utils import file_util

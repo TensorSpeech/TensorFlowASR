@@ -14,8 +14,8 @@
 """ This code is inspired from https://github.com/detly/gammatone """
 
 import numpy as np
-import tensorflow as tf
 
+from tensorflow_asr import tf
 from tensorflow_asr.utils.shape_util import shape_list
 
 pi = tf.constant(np.pi, dtype=tf.complex64)

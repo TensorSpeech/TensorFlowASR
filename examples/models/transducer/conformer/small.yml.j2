@@ -2,7 +2,7 @@
 {{decoder_config}}
 
 model_config:
-  class_name: tensorflow_asr.models.transducer>Conformer
+  class_name: tensorflow_asr.models.transducer.conformer>Conformer
   config:
     name: conformer
     speech_config:
@@ -25,13 +25,14 @@ model_config:
             mask_factor: 27
             mask_value: 0
     encoder_subsampling:
-      type: conv2d
-      filters: [144, 144]
-      kernels: [3, 3]
-      strides: [2, 2]
-      paddings: ["causal", "causal"]
-      norms: ["batch", "batch"]
-      activations: ["swish", "swish"]
+      class_name: tensorflow_asr.models.layers.subsampling>Conv2dSubsampling
+      config:
+        filters: [144, 144]
+        kernels: [3, 3]
+        strides: [2, 2]
+        paddings: ["causal", "causal"]
+        norms: ["batch", "batch"]
+        activations: ["swish", "swish"]
     encoder_ffm_residual_factor: 0.5
     encoder_mhsam_residual_factor: 1.0
     encoder_convm_residual_factor: 1.0

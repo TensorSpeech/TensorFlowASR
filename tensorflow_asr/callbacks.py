@@ -15,9 +15,8 @@
 import importlib
 
 import numpy as np
-import tensorflow as tf
-import keras
 
+from tensorflow_asr import keras, tf
 from tensorflow_asr.datasets import ASRDataset
 from tensorflow_asr.utils import file_util
 from tensorflow_asr.utils.env_util import KERAS_SRC
@@ -25,7 +24,7 @@ from tensorflow_asr.utils.env_util import KERAS_SRC
 serialization_lib = importlib.import_module(f"{KERAS_SRC}.saving.serialization_lib")
 
 
-@keras.utils.register_keras_serializable("tensorflow_asr.callbacks")
+@keras.utils.register_keras_serializable(package=__name__)
 class TestLogger(keras.callbacks.Callback):
     def __init__(self):
         super().__init__()
@@ -81,7 +80,7 @@ class TestLogger(keras.callbacks.Callback):
         return cls(**config)
 
 
-@keras.utils.register_keras_serializable("tensorflow_asr.callbacks")
+@keras.utils.register_keras_serializable(package=__name__)
 class PredictLogger(keras.callbacks.Callback):
     def __init__(self, test_dataset: ASRDataset, output_file_path: str):
         super().__init__()
@@ -124,7 +123,7 @@ class PredictLogger(keras.callbacks.Callback):
         return cls(**config)
 
 
-@keras.utils.register_keras_serializable("tensorflow_asr.callbacks")
+@keras.utils.register_keras_serializable(package=__name__)
 class TensorBoard(keras.callbacks.TensorBoard):
     def __init__(
         self,
@@ -152,6 +151,7 @@ class TensorBoard(keras.callbacks.TensorBoard):
             embeddings_metadata,
             **kwargs,
         )
+        self._profile_batch = profile_batch
 
     def on_train_batch_end(self, batch, logs=None):
         train_logs = dict((logs or {}).items())
@@ -159,14 +159,24 @@ class TensorBoard(keras.callbacks.TensorBoard):
         return super().on_train_batch_end(batch, train_logs)
 
     def get_config(self):
-        return {}
+        return {
+            "log_dir": self.log_dir,
+            "histogram_freq": self.histogram_freq,
+            "write_graph": self.write_graph,
+            "write_images": self.write_images,
+            "write_steps_per_second": self.write_steps_per_second,
+            "update_freq": self.update_freq,
+            "profile_batch": self._profile_batch,
+            "embeddings_freq": self.embeddings_freq,
+            "embeddings_metadata": self.embeddings_metadata,
+        }
 
     @classmethod
     def from_config(cls, config):
         return cls(**config)
 
 
-@keras.utils.register_keras_serializable("tensorflow_asr.callbacks")
+@keras.utils.register_keras_serializable(package=__name__)
 class TerminateOnNaN(keras.callbacks.TerminateOnNaN):
     def get_config(self):
         return {}
@@ -176,7 +186,7 @@ class TerminateOnNaN(keras.callbacks.TerminateOnNaN):
         return cls(**config)
 
 
-@keras.utils.register_keras_serializable("tensorflow_asr.callbacks")
+@keras.utils.register_keras_serializable(package=__name__)
 class ModelCheckpoint(keras.callbacks.ModelCheckpoint):
     def __init__(
         self,
@@ -192,19 +202,31 @@ class ModelCheckpoint(keras.callbacks.ModelCheckpoint):
         **kwargs,
     ):
         filepath = file_util.preprocess_paths(filepath)
+        self._org_options = options
         if options is not None:
             options = tf.train.CheckpointOptions(**options)
         super().__init__(filepath, monitor, verbose, save_best_only, save_weights_only, mode, save_freq, options, initial_value_threshold, **kwargs)
+        self._mode = mode
 
     def get_config(self):
-        return {}
+        return {
+            "filepath": self.filepath,
+            "monitor": self.monitor,
+            "verbose": self.verbose,
+            "save_best_only": self.save_best_only,
+            "save_weights_only": self.save_weights_only,
+            "mode": self._mode,
+            "save_freq": self.save_freq,
+            "options": self._org_options,
+            "initial_value_threshold": self.best,
+        }
 
     @classmethod
     def from_config(cls, config):
         return cls(**config)
 
 
-@keras.utils.register_keras_serializable("tensorflow_asr.callbacks")
+@keras.utils.register_keras_serializable(package=__name__)
 class BackupAndRestore(keras.callbacks.BackupAndRestore):
     def __init__(
         self,
@@ -217,17 +239,45 @@ class BackupAndRestore(keras.callbacks.BackupAndRestore):
         super().__init__(backup_dir, save_freq, delete_checkpoint, save_before_preemption)
 
     def get_config(self):
-        return {}
+        return {
+            "backup_dir": self.backup_dir,
+            "save_freq": self.save_freq,
+            "delete_checkpoint": self.delete_checkpoint,
+            "save_before_preemption": self.save_before_preemption,
+        }
 
     @classmethod
     def from_config(cls, config):
         return cls(**config)
 
 
-@keras.utils.register_keras_serializable("tensorflow_asr.callbacks")
+@keras.utils.register_keras_serializable(package=__name__)
 class EarlyStopping(keras.callbacks.EarlyStopping):
+    def __init__(
+        self,
+        monitor="val_loss",
+        min_delta=0,
+        patience=0,
+        verbose=0,
+        mode="auto",
+        baseline=None,
+        restore_best_weights=False,
+        start_from_epoch=0,
+    ):
+        super().__init__(monitor, min_delta, patience, verbose, mode, baseline, restore_best_weights, start_from_epoch)
+        self._mode = mode
+
     def get_config(self):
-        return {}
+        return {
+            "monitor": self.monitor,
+            "min_delta": self.min_delta,
+            "patience": self.patience,
+            "verbose": self.verbose,
+            "mode": self._mode,
+            "baseline": self.baseline,
+            "restore_best_weights": self.restore_best_weights,
+            "start_from_epoch": self.start_from_epoch,
+        }
 
     @classmethod
     def from_config(cls, config):

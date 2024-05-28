@@ -16,8 +16,8 @@ import math
 from typing import Union
 
 import numpy as np
-import tensorflow as tf
 
+from tensorflow_asr import tf
 from tensorflow_asr.utils import shape_util
 
 
@@ -75,18 +75,25 @@ def legacy_get_reduced_length(
 
 def count_non_blank(
     tensor: tf.Tensor,
-    blank: int or tf.Tensor = 0,
+    blank: Union[int, tf.Tensor] = 0,
     axis=None,
+    dtype=tf.int32,
+    keepdims=False,
 ):
     return tf.reduce_sum(
-        tf.where(tf.not_equal(tensor, blank), x=tf.ones_like(tensor), y=tf.zeros_like(tensor)),
+        tf.where(
+            tf.not_equal(tf.cast(tensor, dtype), blank),
+            x=tf.ones_like(tensor, dtype=dtype),
+            y=tf.zeros_like(tensor, dtype=dtype),
+        ),
         axis=axis,
+        keepdims=keepdims,
     )
 
 
 def count(
     tensor: tf.Tensor,
-    value: float or int or tf.Tensor = 0,
+    value: Union[float, int, tf.Tensor] = 0,
     axis=None,
 ):
     return tf.reduce_sum(
@@ -249,6 +256,8 @@ def conv_output_length(input_length, filter_size, padding, stride, dilation=1):
         output_length = input_length - dilated_filter_size + 1
     elif padding == "full":
         output_length = input_length + dilated_filter_size - 1
+    else:
+        raise ValueError(f"Invalid padding: {padding}")
     return (output_length + stride - 1) // stride
 
 

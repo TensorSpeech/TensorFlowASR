@@ -14,11 +14,12 @@
 
 import os
 
-from tensorflow_asr import tf, keras
-from tensorflow_asr import tokenizers
+from tensorflow_asr import keras, tf, tokenizers
 from tensorflow_asr.configs import Config
 from tensorflow_asr.models.base_model import BaseModel
 from tensorflow_asr.utils import cli_util, env_util, file_util
+
+env_util.setup_logging()
 
 
 def main(
@@ -26,6 +27,7 @@ def main(
     output: str,
     h5: str = None,
     bs: int = 2,
+    save_format: str = "h5",
     repodir: str = os.path.realpath(os.path.join(os.path.dirname(__file__), "..")),
 ):
     assert output
@@ -42,9 +44,10 @@ def main(
         model.load_weights(h5, by_name=file_util.is_hdf5_filepath(h5))
     model.summary()
 
-    model.save(output)
-    print(model.to_json())
-    keras.utils.plot_model(model, to_file=f"{output}.png", show_shapes=True, show_dtype=True, expand_nested=True, show_layer_activations=True)
+    model.save(output, save_format=save_format)
+    loaded_model: BaseModel = keras.models.load_model(output)
+    print(loaded_model.to_json())
+    loaded_model.summary()
 
 
 if __name__ == "__main__":

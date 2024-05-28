@@ -65,10 +65,9 @@ import os
 from dataclasses import asdict, dataclass
 
 import numpy as np
-import tensorflow as tf
 import tqdm
 
-from tensorflow_asr import schemas
+from tensorflow_asr import schemas, tf
 from tensorflow_asr.configs import Config, DatasetConfig
 from tensorflow_asr.tokenizers import Tokenizer
 from tensorflow_asr.utils import data_util, feature_util, file_util, math_util

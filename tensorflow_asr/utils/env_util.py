@@ -12,20 +12,37 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import os
+import logging
+import logging.handlers
 import random
+import sys
+import warnings
+from datetime import datetime, timezone
 from typing import List, Union
 
+import keras
 import numpy as np
 import tensorflow as tf
-import keras
 from packaging import version
-
-logger = tf.get_logger()
 
 KERAS_SRC = "keras.src" if version.parse(tf.version.VERSION) >= version.parse("2.13.0") else "keras"
 
-LENGTH_AS_OUTPUT = os.environ.get("LENGTH_AS_OUTPUT", "False").lower() == "true"
+
+def _logging_format_time(self, record, datefmt=None):
+    return datetime.fromtimestamp(record.created, timezone.utc).astimezone().isoformat(sep="T", timespec="milliseconds")
+
+
+def setup_logging():
+    logging.basicConfig(level=logging.INFO, format=logging.BASIC_FORMAT, stream=sys.stdout, force=True)
+    logging.Formatter.formatTime = _logging_format_time
+    logging.captureWarnings(True)
+    if not getattr(sys, "ps1", sys.flags.interactive):  # disable propagate in command line
+        logging.getLogger().propagate = False
+        tf.get_logger().propagate = False
+    else:
+        logging.getLogger().propagate = True
+        tf.get_logger().propagate = True
+    warnings.filterwarnings("ignore")
 
 
 def setup_devices(
@@ -46,14 +63,14 @@ def setup_devices(
         cpus = tf.config.list_physical_devices("CPU")
         tf.config.set_visible_devices(cpus, "CPU")
         tf.config.set_visible_devices([], "GPU")
-        logger.info(f"Run on {cpus}")
+        tf.get_logger().info(f"Run on {cpus}")
         return tf.config.list_logical_devices("CPU")
     gpus = tf.config.list_physical_devices("GPU")
     if gpus:
         if devices is not None:
             gpus = [gpus[i] for i in devices]
             tf.config.set_visible_devices(gpus, "GPU")
-    logger.info(f"Run on {gpus}")
+    tf.get_logger().info(f"Run on {gpus}")
     return tf.config.list_logical_devices("GPU")
 
 
@@ -91,7 +108,7 @@ def setup_strategy(
     try:
         return setup_tpu(tpu_address)
     except (ValueError, tf.errors.NotFoundError) as e:
-        logger.warning(e)
+        tf.get_logger().warning(e)
     available_devices = setup_devices(devices)
     if len(available_devices) == 1:
         return tf.distribute.get_strategy()
@@ -128,15 +145,15 @@ def setup_mxp(
     if mxp == "strict":
         policy = "mixed_bfloat16" if has_devices("TPU") else "mixed_float16"
         keras.mixed_precision.set_global_policy(policy)
-        logger.info(f"USING mixed precision policy {policy}")
+        tf.get_logger().info(f"USING mixed precision policy {policy}")
     elif mxp == "strict_auto":
         policy = "mixed_bfloat16" if has_devices("TPU") else "mixed_float16"
         keras.mixed_precision.set_global_policy(policy)
         tf.config.optimizer.set_experimental_options({"auto_mixed_precision": True})
-        logger.info(f"USING auto mixed precision policy {policy}")
+        tf.get_logger().info(f"USING auto mixed precision policy {policy}")
     elif mxp == "auto":
         tf.config.optimizer.set_experimental_options({"auto_mixed_precision": True})
-        logger.info("USING auto mixed precision policy")
+        tf.get_logger().info("USING auto mixed precision policy")
 
 
 def setup_seed(

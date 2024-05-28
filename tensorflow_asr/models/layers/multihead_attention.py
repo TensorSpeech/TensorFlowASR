@@ -16,11 +16,10 @@
 import importlib
 import math
 
-import tensorflow as tf
-import keras
 from keras.layers import EinsumDense
 from keras.layers import MultiHeadAttention as KerasMultiHeadAttention
 
+from tensorflow_asr import keras, tf
 from tensorflow_asr.models.layers.memory import Memory
 from tensorflow_asr.utils import shape_util
 from tensorflow_asr.utils.env_util import KERAS_SRC
@@ -163,6 +162,7 @@ def compute_attention_mask(query, value, key=None, attention_mask=None, use_caus
     return attention_mask
 
 
+@keras.utils.register_keras_serializable(package=__name__)
 class MultiHeadAttention(KerasMultiHeadAttention):
     def __init__(
         self,
@@ -328,6 +328,7 @@ class MultiHeadAttention(KerasMultiHeadAttention):
         return query_shape, caching_shape
 
 
+@keras.utils.register_keras_serializable(package=__name__)
 class MultiHeadRelativeAttention(MultiHeadAttention):
     def __init__(
         self,

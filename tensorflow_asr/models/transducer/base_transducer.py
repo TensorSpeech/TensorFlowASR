@@ -16,10 +16,7 @@
 
 import collections
 
-import tensorflow as tf
-import keras
-
-from tensorflow_asr import schemas
+from tensorflow_asr import keras, schemas, tf
 from tensorflow_asr.losses.rnnt_loss import RnntLoss
 from tensorflow_asr.models.base_layer import Layer
 from tensorflow_asr.models.base_model import BaseModel
@@ -33,6 +30,7 @@ BeamHypothesis = collections.namedtuple("BeamHypothesis", ("score", "indices", "
 JOINT_MODES = ["add", "mul"]
 
 
+@keras.utils.register_keras_serializable(package=__name__)
 class TransducerPrediction(Layer):
     def __init__(
         self,
@@ -54,21 +52,6 @@ class TransducerPrediction(Layer):
     ):
         super().__init__(name=name, **kwargs)
         assert label_encoder_mode in ("one_hot", "embedding"), "label_encode_mode must be either 'one_hot' or 'embedding'"
-        self._config = {
-            "blank": blank,
-            "vocab_size": vocab_size,
-            "label_encoder_mode": label_encoder_mode,
-            "embed_dim": embed_dim,
-            "num_rnns": num_rnns,
-            "rnn_units": rnn_units,
-            "rnn_type": rnn_type,
-            "rnn_implementation": rnn_implementation,
-            "rnn_unroll": rnn_unroll,
-            "layer_norm": layer_norm,
-            "projection_units": projection_units,
-            "kernel_regularizer": kernel_regularizer,
-            "bias_regularizer": bias_regularizer,
-        }
         self.label_encoder = (
             Embedding(vocab_size, embed_dim, regularizer=kernel_regularizer, name=label_encoder_mode, dtype=self.dtype)
             if label_encoder_mode == "embedding"
@@ -180,12 +163,8 @@ class TransducerPrediction(Layer):
             )
         return tuple(output_shape), tuple(output_length_shape)
 
-    def get_config(self):
-        config = super().get_config()
-        config.update(self._config)
-        return config
 
-
+@keras.utils.register_keras_serializable(package=__name__)
 class TransducerJointMerge(Layer):
     def __init__(self, joint_mode: str = "add", name="transducer_joint_merge", **kwargs):
         super().__init__(name=name, **kwargs)
@@ -222,12 +201,8 @@ class TransducerJointMerge(Layer):
         enc_shape, pred_shape = input_shape
         return enc_shape[0], enc_shape[1], pred_shape[1], enc_shape[-1]
 
-    def get_config(self):
-        config = super().get_config()
-        config.update({"joint_mode": self.joint_mode})
-        return config
 
-
+@keras.utils.register_keras_serializable(package=__name__)
 class TransducerJoint(Layer):
     def __init__(
         self,
@@ -244,18 +219,6 @@ class TransducerJoint(Layer):
         **kwargs,
     ):
         super().__init__(name=name, **kwargs)
-
-        self._config = {
-            "vocab_size": vocab_size,
-            "joint_dim": joint_dim,
-            "activation": activation,
-            "prejoint_encoder_linear": prejoint_encoder_linear,
-            "prejoint_prediction_linear": prejoint_prediction_linear,
-            "postjoint_linear": postjoint_linear,
-            "joint_mode": joint_mode,
-            "kernel_regularizer": kernel_regularizer,
-            "bias_regularizer": bias_regularizer,
-        }
 
         self.prejoint_encoder_linear = prejoint_encoder_linear
         self.prejoint_prediction_linear = prejoint_prediction_linear
@@ -324,11 +287,6 @@ class TransducerJoint(Layer):
         encoder_time_shape, prediction_time_shape = encoder_shape[1], prediction_shape[1]
         return batch_shape, encoder_time_shape, prediction_time_shape, self.ffn_out.units
 
-    def get_config(self):
-        config = super().get_config()
-        config.update(self._config)
-        return config
-
 
 class Transducer(BaseModel):
     """Transducer Model Warper"""
@@ -338,7 +296,7 @@ class Transducer(BaseModel):
         blank: int,
         vocab_size: int,
         speech_config: dict,
-        encoder: keras.layers.Layer,
+        encoder: Layer,
         prediction_label_encoder_mode: str = "embedding",
         prediction_embed_dim: int = 512,
         prediction_num_rnns: int = 1,

@@ -19,8 +19,7 @@ Causal padding supported Conv1D, Conv2D, DepthwiseConv1D, DepthwiseConv2D
 
 import importlib
 
-import tensorflow as tf
-
+from tensorflow_asr import keras, tf
 from tensorflow_asr.utils.env_util import KERAS_SRC
 
 Conv = importlib.import_module(f"{KERAS_SRC}.layers.convolutional.base_conv").Conv
@@ -57,11 +56,11 @@ def _compute_causal_padding(self, inputs):
 Conv._validate_init = _validate_init
 Conv._compute_causal_padding = _compute_causal_padding
 
-from keras.layers import Conv1D, Conv2D  # pylint: disable=unused-import
 from keras.layers import DepthwiseConv1D as KerasDepthwiseConv1D
 from keras.layers import DepthwiseConv2D as KerasDepthwiseConv2D
 
 
+@keras.utils.register_keras_serializable(package=__name__)
 class DepthwiseConv1D(KerasDepthwiseConv1D):
     def __init__(
         self,
@@ -130,6 +129,7 @@ class DepthwiseConv1D(KerasDepthwiseConv1D):
         raise ValueError("Invalid data_format")
 
 
+@keras.utils.register_keras_serializable(package=__name__)
 class DepthwiseConv2D(KerasDepthwiseConv2D):
     def __init__(
         self,

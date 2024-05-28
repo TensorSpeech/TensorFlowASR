@@ -12,9 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import tensorflow as tf
-import keras
-
+from tensorflow_asr import keras, tf
 from tensorflow_asr.models.base_layer import Identity, Layer, Reshape
 from tensorflow_asr.models.layers.convolution import DepthwiseConv1D
 from tensorflow_asr.utils import layer_util, math_util
@@ -22,6 +20,7 @@ from tensorflow_asr.utils import layer_util, math_util
 # ----------------------------------- CONV ----------------------------------- #
 
 
+@keras.utils.register_keras_serializable(package=__name__)
 class RowConv1D(Layer):
     def __init__(
         self,
@@ -65,6 +64,7 @@ class RowConv1D(Layer):
         return output_shape
 
 
+@keras.utils.register_keras_serializable(package=__name__)
 class ConvBlock(Layer):
     def __init__(
         self,
@@ -130,6 +130,7 @@ class ConvBlock(Layer):
         return output_shape, output_length_shape
 
 
+@keras.utils.register_keras_serializable(package=__name__)
 class ConvModule(Layer):
     def __init__(
         self,
@@ -204,6 +205,7 @@ class ConvModule(Layer):
 # ------------------------------------ RNN ----------------------------------- #
 
 
+@keras.utils.register_keras_serializable(package=__name__)
 class RnnBlock(Layer):
     def __init__(
         self,
@@ -286,6 +288,7 @@ class RnnBlock(Layer):
         return output_shape, output_length_shape
 
 
+@keras.utils.register_keras_serializable(package=__name__)
 class RnnModule(Layer):
     def __init__(
         self,
@@ -360,6 +363,7 @@ class RnnModule(Layer):
 # ------------------------------ FULLY CONNECTED ----------------------------- #
 
 
+@keras.utils.register_keras_serializable(package=__name__)
 class FcBlock(Layer):
     def __init__(
         self,
@@ -401,6 +405,7 @@ class FcBlock(Layer):
         return output_shape, output_length_shape
 
 
+@keras.utils.register_keras_serializable(package=__name__)
 class FcModule(Layer):
     def __init__(
         self,
@@ -441,6 +446,7 @@ class FcModule(Layer):
         return output_shape
 
 
+@keras.utils.register_keras_serializable(package=__name__)
 class DeepSpeech2Encoder(Layer):
     def __init__(
         self,

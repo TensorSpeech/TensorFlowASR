@@ -14,12 +14,10 @@
 # limitations under the License.
 
 import jiwer
-import tensorflow as tf
-import tensorflow_text as tf_text
 from tqdm import tqdm
 
+from tensorflow_asr import tf
 from tensorflow_asr.models.base_model import BaseModel
-from tensorflow_asr.tokenizers import Tokenizer
 from tensorflow_asr.utils import file_util, math_util
 
 logger = tf.get_logger()

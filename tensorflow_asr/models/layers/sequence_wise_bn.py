@@ -13,8 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import tensorflow as tf
-import keras
+from tensorflow_asr import keras, tf
 
 
 # https://arxiv.org/abs/1510.01378

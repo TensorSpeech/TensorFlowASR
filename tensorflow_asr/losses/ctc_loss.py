@@ -12,29 +12,28 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import tensorflow as tf
-import keras
-
-from tensorflow_asr.utils import env_util, math_util
+from tensorflow_asr import keras, tf
+from tensorflow_asr.losses.base_loss import BaseLoss
 
 logger = tf.get_logger()
 
 
-class CtcLoss(keras.losses.Loss):
+class CtcLoss(BaseLoss):
     def __init__(self, blank=0, reduction=keras.losses.Reduction.AUTO, name=None):
-        super().__init__(reduction=reduction, name=name)
-        self.blank = blank
-        self.use_tpu = env_util.has_devices("TPU")
+        super().__init__(blank=blank, reduction=reduction, name=name)
         logger.info("Use CTC loss")
 
     def call(self, y_true, y_pred):
+        logits, logit_length, labels, label_length = super().call(y_true, y_pred)
+        labels = labels if self.use_tpu else tf.sparse.from_dense(labels)
+        unique = tf.nn.ctc_unique_labels(labels) if self.use_tpu else None
         return tf.nn.ctc_loss(
-            logits=y_pred,
-            logit_length=math_util.compute_time_length(y_pred) if env_util.LENGTH_AS_OUTPUT else y_pred._keras_length,
-            labels=y_true if self.use_tpu else tf.sparse.from_dense(y_true),
-            label_length=math_util.compute_time_length(y_true) if env_util.LENGTH_AS_OUTPUT else y_true._keras_length,
+            logits=logits,
+            logit_length=logit_length,
+            labels=labels,
+            label_length=label_length,
             logits_time_major=False,
-            unique=tf.nn.ctc_unique_labels(y_true),  # enable a faster, memory efficient implementation on TPU.
+            unique=unique,  # enable a faster, memory efficient implementation on TPU.
             blank_index=self.blank,
             name=self.name,
         )

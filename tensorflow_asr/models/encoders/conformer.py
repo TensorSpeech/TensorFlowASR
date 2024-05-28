@@ -14,22 +14,18 @@
 # limitations under the License.
 """ http://arxiv.org/abs/2005.08100 """
 
-import tensorflow as tf
-import keras
-
+from tensorflow_asr import keras, tf
 from tensorflow_asr.models.activations.glu import GLU
 from tensorflow_asr.models.base_layer import Identity, Layer
-
-# from tensorflow_asr.models.base_model import BaseModelLayer as Layer
-from tensorflow_asr.models.layers.convolution import Conv1D, DepthwiseConv1D
+from tensorflow_asr.models.layers.convolution import DepthwiseConv1D
 from tensorflow_asr.models.layers.multihead_attention import MultiHeadAttention, MultiHeadRelativeAttention
 from tensorflow_asr.models.layers.positional_encoding import RelativeSinusoidalPositionalEncoding, SinusoidalPositionalEncoding
 from tensorflow_asr.models.layers.residual import Residual
-from tensorflow_asr.models.layers.subsampling import Conv1dSubsampling, Conv2dSubsampling, VggSubsampling
 
 L2 = keras.regularizers.l2(1e-6)
 
 
+@keras.utils.register_keras_serializable(package=__name__)
 class FFModule(Layer):
     r"""
     architecture::
@@ -62,15 +58,6 @@ class FFModule(Layer):
     ):
         super().__init__(name=name, **kwargs)
         assert norm_position in ("pre", "post", "none")
-        self._config = {
-            "input_dim": input_dim,
-            "dropout": dropout,
-            "scale_factor": scale_factor,
-            "residual_factor": residual_factor,
-            "norm_position": norm_position,
-            "kernel_regularizer": kernel_regularizer,
-            "bias_regularizer": bias_regularizer,
-        }
         self.pre_norm = (
             keras.layers.LayerNormalization(name="ln", gamma_regularizer=kernel_regularizer, beta_regularizer=kernel_regularizer, dtype=self.dtype)
             if norm_position == "pre"
@@ -113,12 +100,8 @@ class FFModule(Layer):
     def compute_output_shape(self, input_shape):
         return input_shape
 
-    def get_config(self):
-        config = super().get_config()
-        config.update(self._config)
-        return config
 
-
+@keras.utils.register_keras_serializable(package=__name__)
 class MHSAModule(Layer):
     r"""
     architecture::
@@ -153,20 +136,6 @@ class MHSAModule(Layer):
         super().__init__(name=name, **kwargs)
         assert norm_position in ("pre", "post", "none")
         assert mha_type in ("relmha", "mha")
-        self._config = {
-            "dmodel": dmodel,
-            "head_size": head_size,
-            "num_heads": num_heads,
-            "residual_factor": residual_factor,
-            "dropout": dropout,
-            "mha_type": mha_type,
-            "relmha_causal": relmha_causal,
-            "norm_position": norm_position,
-            "memory_length": memory_length,
-            "use_attention_bias": use_attention_bias,
-            "kernel_regularizer": kernel_regularizer,
-            "bias_regularizer": bias_regularizer,
-        }
         self.pre_norm = (
             keras.layers.LayerNormalization(name="ln", gamma_regularizer=kernel_regularizer, beta_regularizer=kernel_regularizer, dtype=self.dtype)
             if norm_position == "pre"
@@ -230,12 +199,8 @@ class MHSAModule(Layer):
         output_shape, caching_shape, *_ = input_shape
         return output_shape, caching_shape
 
-    def get_config(self):
-        config = super().get_config()
-        config.update(self._config)
-        return config
 
-
+@keras.utils.register_keras_serializable(package=__name__)
 class ConvModule(Layer):
     r"""
     architecture::
@@ -274,24 +239,12 @@ class ConvModule(Layer):
     ):
         super().__init__(name=name, **kwargs)
         assert norm_position in ("pre", "post", "none")
-        self._config = {
-            "input_dim": input_dim,
-            "kernel_size": kernel_size,
-            "dropout": dropout,
-            "padding": padding,
-            "scale_factor": scale_factor,
-            "residual_factor": residual_factor,
-            "norm_position": norm_position,
-            "use_group_conv": use_group_conv,
-            "kernel_regularizer": kernel_regularizer,
-            "bias_regularizer": bias_regularizer,
-        }
         self.pre_norm = (
             keras.layers.LayerNormalization(name="ln", gamma_regularizer=kernel_regularizer, beta_regularizer=kernel_regularizer, dtype=self.dtype)
             if norm_position == "pre"
             else Identity(name="preiden" if norm_position == "none" else "iden", dtype=self.dtype)
         )
-        self.pw_conv_1 = Conv1D(
+        self.pw_conv_1 = keras.layers.Conv1D(
             filters=scale_factor * input_dim,
             kernel_size=1,
             strides=1,
@@ -303,7 +256,7 @@ class ConvModule(Layer):
         )
         self.glu = GLU(axis=-1, name="glu", dtype=self.dtype)
         if use_group_conv:
-            self.dw_conv = Conv1D(
+            self.dw_conv = keras.layers.Conv1D(
                 filters=input_dim,
                 kernel_size=kernel_size,
                 strides=1,
@@ -328,7 +281,7 @@ class ConvModule(Layer):
             name="bn", gamma_regularizer=kernel_regularizer, beta_regularizer=bias_regularizer, dtype=self.dtype
         )
         self.swish = keras.layers.Activation(tf.nn.swish, name="swish", dtype=self.dtype)
-        self.pw_conv_2 = Conv1D(
+        self.pw_conv_2 = keras.layers.Conv1D(
             filters=input_dim,
             kernel_size=1,
             strides=1,
@@ -362,12 +315,8 @@ class ConvModule(Layer):
     def compute_output_shape(self, input_shape):
         return input_shape
 
-    def get_config(self):
-        config = super().get_config()
-        config.update(self._config)
-        return config
 
-
+@keras.utils.register_keras_serializable(package=__name__)
 class ConformerBlock(Layer):
     r"""
     architecture::
@@ -405,28 +354,6 @@ class ConformerBlock(Layer):
     ):
         super().__init__(name=name, **kwargs)
         assert block_norm_position in ("pre", "post", "none")
-        self._config = {
-            "input_dim": input_dim,
-            "dropout": dropout,
-            "ffm_scale_factor": ffm_scale_factor,
-            "ffm_residual_factor": ffm_residual_factor,
-            "head_size": head_size,
-            "num_heads": num_heads,
-            "mha_type": mha_type,
-            "mhsam_residual_factor": mhsam_residual_factor,
-            "mhsam_use_attention_bias": mhsam_use_attention_bias,
-            "mhsam_causal": mhsam_causal,
-            "kernel_size": kernel_size,
-            "padding": padding,
-            "convm_scale_factor": convm_scale_factor,
-            "convm_residual_factor": convm_residual_factor,
-            "convm_use_group_conv": convm_use_group_conv,
-            "module_norm_position": module_norm_position,
-            "block_norm_position": block_norm_position,
-            "memory_length": memory_length,
-            "kernel_regularizer": kernel_regularizer,
-            "bias_regularizer": bias_regularizer,
-        }
         self.pre_norm = (
             keras.layers.LayerNormalization(name="ln", gamma_regularizer=kernel_regularizer, beta_regularizer=kernel_regularizer, dtype=self.dtype)
             if block_norm_position == "pre"
@@ -517,12 +444,8 @@ class ConformerBlock(Layer):
         output_shape, caching_shape, *_ = input_shape
         return output_shape, caching_shape
 
-    def get_config(self):
-        config = super().get_config()
-        config.update(self._config)
-        return config
 
-
+@keras.utils.register_keras_serializable(package=__name__)
 class ConformerEncoder(Layer):
     def __init__(
         self,
@@ -556,50 +479,13 @@ class ConformerEncoder(Layer):
     ):
         super().__init__(name=name, **kwargs)
         assert mha_type in ("relmha", "mha")
-        self._config = {
-            "subsampling": subsampling,
-            "dmodel": dmodel,
-            "num_blocks": num_blocks,
-            "mha_type": mha_type,
-            "head_size": head_size,
-            "num_heads": num_heads,
-            "kernel_size": kernel_size,
-            "padding": padding,
-            "interleave_relpe": interleave_relpe,
-            "use_attention_causal_mask": use_attention_causal_mask,
-            "use_attention_auto_mask": use_attention_auto_mask,
-            "ffm_scale_factor": ffm_scale_factor,
-            "ffm_residual_factor": ffm_residual_factor,
-            "mhsam_residual_factor": mhsam_residual_factor,
-            "mhsam_use_attention_bias": mhsam_use_attention_bias,
-            "mhsam_causal": mhsam_causal,
-            "convm_scale_factor": convm_scale_factor,
-            "convm_residual_factor": convm_residual_factor,
-            "convm_use_group_conv": convm_use_group_conv,
-            "dropout": dropout,
-            "module_norm_position": module_norm_position,
-            "block_norm_position": block_norm_position,
-            "memory_length": memory_length,
-            "kernel_regularizer": kernel_regularizer,
-            "bias_regularizer": bias_regularizer,
-        }
         self._dmodel = dmodel
         self._kernel_regularizer = kernel_regularizer
         self._bias_regularizer = bias_regularizer
         self._num_blocks = num_blocks
 
-        subsampling_name = subsampling.pop("type", None)
-        if subsampling_name == "vgg":
-            subsampling_class = VggSubsampling
-        elif subsampling_name == "conv2d":
-            subsampling_class = Conv2dSubsampling
-        elif subsampling_name == "conv1d":
-            subsampling_class = Conv1dSubsampling
-        else:
-            raise ValueError("subsampling must be either 'vgg', 'conv2d', 'conv1d'")
-
-        self.conv_subsampling = subsampling_class(
-            **subsampling,
+        self.conv_subsampling = keras.utils.get_registered_object(name=subsampling["class_name"])(
+            **subsampling["config"],
             name="subsampling",
             kernel_regularizer=kernel_regularizer,
             bias_regularizer=bias_regularizer,
@@ -743,8 +629,3 @@ class ConformerEncoder(Layer):
         for cblock in self.conformer_blocks:
             output_shape, caching_shape = cblock.compute_output_shape((output_shape, caching_shape, relative_position_encoding_shape, None, None))
         return output_shape, output_length_shape, caching_shape
-
-    def get_config(self):
-        config = super().get_config()
-        config.update(self._config)
-        return config

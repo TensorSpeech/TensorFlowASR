@@ -13,13 +13,12 @@
 # limitations under the License.
 """ http://arxiv.org/abs/1811.06621 """
 
-import keras
-
+from tensorflow_asr import keras
 from tensorflow_asr.models.encoders.rnnt import RnnTransducerEncoder
 from tensorflow_asr.models.transducer.base_transducer import Transducer
 
 
-@keras.utils.register_keras_serializable("tensorflow_asr.models.transducer")
+@keras.utils.register_keras_serializable(package=__name__)
 class RnnTransducer(Transducer):
     def __init__(
         self,

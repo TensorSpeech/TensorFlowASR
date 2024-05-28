@@ -16,13 +16,11 @@
 import copy
 import importlib
 
-import tensorflow as tf
-import keras
 from keras import callbacks as callbacks_module
 from keras.optimizers import Optimizer
 from tensorflow.python.eager import context  # pylint: disable=no-name-in-module
 
-from tensorflow_asr import schemas
+from tensorflow_asr import keras, schemas, tf
 from tensorflow_asr.models.layers.feature_extraction import FeatureExtraction
 from tensorflow_asr.optimizers.accumulation import GradientAccumulator
 from tensorflow_asr.tokenizers import Tokenizer
@@ -189,7 +187,7 @@ class BaseModel(keras.Model):
         x = data[0]
         if caching is not None:
             x["caching"] = caching
-        y, _ = data_util.attach_length_to_data(data[1]["labels"], data[1]["labels_length"])
+        y, _ = data_util.set_length(data[1]["labels"], data[1]["labels_length"])
         sample_weight = None
 
         with tf.GradientTape() as tape:
@@ -198,7 +196,7 @@ class BaseModel(keras.Model):
             outputs = self(x, training=True)
             tape.watch(outputs["logits"])
             y_pred, caching = outputs["logits"], outputs.get("caching")
-            y_pred, _ = data_util.attach_length_to_data(y_pred, outputs["logits_length"])
+            y_pred, _ = data_util.set_length(y_pred, outputs["logits_length"])
             self.remove_gwn(original_weights)
             tape.watch(y_pred)
             loss = self.compute_loss(x, y, y_pred, sample_weight)
@@ -245,11 +243,11 @@ class BaseModel(keras.Model):
 
     def _test_step(self, data):
         x = data[0]
-        y, _ = data_util.attach_length_to_data(data[1]["labels"], data[1]["labels_length"])
+        y, _ = data_util.set_length(data[1]["labels"], data[1]["labels_length"])
         sample_weight = None
 
         outputs = self(x, training=False)
-        y_pred, _ = data_util.attach_length_to_data(outputs["logits"], outputs["logits_length"])
+        y_pred, _ = data_util.set_length(outputs["logits"], outputs["logits_length"])
 
         self.compute_loss(x, y, y_pred, sample_weight)
 

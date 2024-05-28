@@ -13,9 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import tensorflow as tf
-import keras
-
+from tensorflow_asr import keras, tf
 from tensorflow_asr.models.base_layer import Layer
 from tensorflow_asr.utils import shape_util
 
@@ -53,6 +51,7 @@ def compute_sinusoid_position_encoding(
     return pe
 
 
+@keras.utils.register_keras_serializable(package=__name__)
 class SinusoidalPositionalEncoding(Layer):
     def __init__(
         self,
@@ -61,7 +60,7 @@ class SinusoidalPositionalEncoding(Layer):
         interleave=False,
         **kwargs,
     ):
-        super().__init__(trainable=False, **kwargs)
+        super().__init__(**kwargs)
         self.do = keras.layers.Dropout(dropout, dtype=self.dtype, name="dropout")
         self._scale = scale
         self._interleave = interleave
@@ -89,6 +88,7 @@ class SinusoidalPositionalEncoding(Layer):
         return output_shape, output_shape
 
 
+@keras.utils.register_keras_serializable(package=__name__)
 class RelativeSinusoidalPositionalEncoding(SinusoidalPositionalEncoding):
     def __init__(
         self,

@@ -12,14 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import tensorflow as tf
-import keras
-
+from tensorflow_asr import keras
 from tensorflow_asr.models.base_layer import Layer, Reshape
-from tensorflow_asr.models.layers.convolution import Conv1D
 from tensorflow_asr.utils import math_util
 
 
+@keras.utils.register_keras_serializable(package=__name__)
 class JasperSubBlock(keras.layers.Layer):
     def __init__(
         self,
@@ -34,7 +32,7 @@ class JasperSubBlock(keras.layers.Layer):
         **kwargs,
     ):
         super().__init__(**kwargs)
-        self.conv1d = Conv1D(
+        self.conv1d = keras.layers.Conv1D(
             filters=channels,
             kernel_size=kernels,
             strides=strides,
@@ -61,6 +59,7 @@ class JasperSubBlock(keras.layers.Layer):
         return outputs
 
 
+@keras.utils.register_keras_serializable(package=__name__)
 class JasperResidual(keras.layers.Layer):
     def __init__(
         self,
@@ -71,7 +70,7 @@ class JasperResidual(keras.layers.Layer):
         **kwargs,
     ):
         super().__init__(**kwargs)
-        self.pointwise_conv1d = Conv1D(
+        self.pointwise_conv1d = keras.layers.Conv1D(
             filters=channels,
             kernel_size=1,
             strides=1,
@@ -91,6 +90,7 @@ class JasperResidual(keras.layers.Layer):
         return outputs
 
 
+@keras.utils.register_keras_serializable(package=__name__)
 class JasperSubBlockResidual(JasperSubBlock):
     def __init__(
         self,
@@ -143,6 +143,7 @@ class JasperSubBlockResidual(JasperSubBlock):
         return outputs
 
 
+@keras.utils.register_keras_serializable(package=__name__)
 class JasperBlock(keras.layers.Layer):
     def __init__(
         self,
@@ -201,6 +202,7 @@ class JasperBlock(keras.layers.Layer):
         return outputs, residuals
 
 
+@keras.utils.register_keras_serializable(package=__name__)
 class JasperEncoder(Layer):
     def __init__(
         self,
@@ -305,7 +307,6 @@ class JasperEncoder(Layer):
         outputs = self.second_additional_block(outputs, training=training)
         outputs = self.third_additional_block(outputs, training=training)
         outputs_length = math_util.get_reduced_length(outputs_length, self.time_reduction_factor)
-        outputs = math_util.apply_mask(outputs, mask=tf.sequence_mask(outputs_length, maxlen=tf.shape(outputs)[1], dtype=tf.bool))
         return outputs, outputs_length, caching
 
     def compute_output_shape(self, input_shape):

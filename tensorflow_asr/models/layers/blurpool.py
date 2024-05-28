@@ -14,11 +14,12 @@
 # limitations under the License.
 
 import numpy as np
-import tensorflow as tf
 
+from tensorflow_asr import keras, tf
 from tensorflow_asr.models.base_layer import Layer
 
 
+@keras.utils.register_keras_serializable(package=__name__)
 class BlurPool2D(Layer):
     def __init__(
         self,
@@ -61,6 +62,8 @@ class BlurPool2D(Layer):
             a = np.array([1.0, 5.0, 10.0, 10.0, 5.0, 1.0])
         elif self.kernel_size == 7:
             a = np.array([1.0, 6.0, 15.0, 20.0, 15.0, 6.0, 1.0])
+        else:
+            raise ValueError("Kernel size must be in [1, 2, 3, 4, 5, 6, 7]")
 
         self.kernel = tf.constant(a[:, None] * a[None, :], dtype=self.compute_dtype)
         self.kernel = tf.divide(self.kernel, tf.reduce_sum(self.kernel))
@@ -74,6 +77,7 @@ class BlurPool2D(Layer):
         return tf.nn.conv2d(inputs, filters=kernel, strides=self.strides, padding="VALID")
 
 
+@keras.utils.register_keras_serializable(package=__name__)
 class BlurPool1D(Layer):
     def __init__(
         self,
@@ -115,6 +119,8 @@ class BlurPool1D(Layer):
             a = np.array([1.0, 5.0, 10.0, 10.0, 5.0, 1.0])
         elif self.kernel_size == 7:
             a = np.array([1.0, 6.0, 15.0, 20.0, 15.0, 6.0, 1.0])
+        else:
+            raise ValueError("Kernel size must be in [1, 2, 3, 4, 5, 6, 7]")
 
         self.kernel = tf.constant(a, dtype=self.compute_dtype)
         self.kernel = tf.divide(self.kernel, tf.reduce_sum(self.kernel))

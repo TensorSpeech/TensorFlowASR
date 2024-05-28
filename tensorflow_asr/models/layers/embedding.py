@@ -12,12 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import tensorflow as tf
-import keras
-
+from tensorflow_asr import keras, tf
 from tensorflow_asr.models.base_layer import Layer
 
 
+@keras.utils.register_keras_serializable(package=__name__)
 class Embedding(keras.layers.Embedding):
     def __init__(
         self,
@@ -59,6 +58,7 @@ class Embedding(keras.layers.Embedding):
         return output_shape, output_length_shape
 
 
+@keras.utils.register_keras_serializable(package=__name__)
 class OneHotBlank(Layer):
     """
     https://arxiv.org/pdf/1211.3711.pdf

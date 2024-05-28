@@ -14,14 +14,12 @@
 
 import os
 
-import tensorflow as tf
-import keras
-
-from tensorflow_asr import schemas, tokenizers
-from tensorflow_asr.models import base_model
+from tensorflow_asr import keras, schemas, tf, tokenizers
 from tensorflow_asr.configs import Config
+from tensorflow_asr.models import base_model
 from tensorflow_asr.utils import cli_util, data_util, env_util, file_util
 
+env_util.setup_logging()
 logger = tf.get_logger()
 
 
