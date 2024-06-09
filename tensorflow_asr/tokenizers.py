@@ -199,6 +199,8 @@ class CharTokenizer(Tokenizer):
             line = unicodedata.normalize(self.decoder_config.normalization_form, line.lower()).strip("\n")
             if line.startswith("#") or not line:
                 continue
+            if line == "<blank>":
+                line = ""
             self.tokens.append(line)
         if self.blank is None:
             self.blank = len(self.tokens)  # blank not at zero
