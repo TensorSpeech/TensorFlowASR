@@ -270,37 +270,42 @@ class MultiHeadAttention(KerasMultiHeadAttention):
             else:
                 self._memory = None
 
-    def reset_caching(self):
+    def get_initial_state(self, batch_size: int):
         if self._memory is None:
             return None
-        return self._memory.reset_caching()
+        return {
+            "key": self._memory.get_initial_state(batch_size),
+            "value": self._memory.get_initial_state(batch_size),
+        }
 
-    def _update_with_memory(self, query, key, value, caching=None):
-        if self._memory is None:
-            return query, key, value, caching
+    def _with_memory(self, query, key, value, initial_state=None, training=False):
+        if self._memory is None or initial_state is None:
+            return query, key, value, initial_state
 
-        key = self._memory.attach_memory(key, memories=caching)
-        value = self._memory.attach_memory(value, memories=caching)
+        new_key, new_key_memory = self._memory(key, memories=initial_state.get("key"), training=training)
+        new_value, new_value_memory = self._memory(value, memories=initial_state.get("value"), training=training)
 
-        caching = self._memory(query, memories=caching)  # update memory
+        new_states = {
+            "key": new_key_memory,
+            "value": new_value_memory,
+        }
 
-        return query, key, value, caching
+        return query, new_key, new_value, new_states
 
     def call(
         self,
         inputs,
+        initial_state=None,
         attention_mask=None,
         return_attention_scores=False,
-        training=None,
+        training=False,
         use_causal_mask=False,
         use_auto_mask=True,
     ):
-        query, key, value, caching, *_ = inputs
+        query, key, value, *_ = inputs
 
         if not self._built_from_signature:
             self._build_from_signature(query=query, value=value, key=key)
-
-        query, key, value, caching = self._update_with_memory(query, key, value, caching=caching)
 
         if use_auto_mask:
             attention_mask = self._compute_attention_mask(query, value, key=key, attention_mask=attention_mask, use_causal_mask=use_causal_mask)
@@ -316,16 +321,18 @@ class MultiHeadAttention(KerasMultiHeadAttention):
         # `value` = [B, S, N, H]
         value = self._value_dense(value)
 
+        query, key, value, states = self._with_memory(query, key, value, initial_state, training)
+
         attention_output, attention_scores = self._compute_attention(query, key, value, attention_mask, training)
         attention_output = self._output_dense(attention_output)
 
         if return_attention_scores:
-            return attention_output, caching, attention_scores
-        return attention_output, caching
+            return attention_output, states, attention_scores
+        return attention_output, states
 
     def compute_output_shape(self, input_shape):
-        query_shape, _, _, caching_shape, *_ = input_shape
-        return query_shape, caching_shape
+        query_shape, *_ = input_shape
+        return query_shape
 
 
 @keras.utils.register_keras_serializable(package=__name__)
@@ -419,7 +426,7 @@ class MultiHeadRelativeAttention(MultiHeadAttention):
         content_attention_bias=None,
         positional_attention_bias=None,
         attention_mask=None,
-        training=None,
+        training=False,
     ):
         cbias = self.content_attention_bias if content_attention_bias is None else content_attention_bias
         pbias = self.positional_attention_bias if positional_attention_bias is None else positional_attention_bias
@@ -445,18 +452,17 @@ class MultiHeadRelativeAttention(MultiHeadAttention):
     def call(
         self,
         inputs,
+        initial_state=None,
         attention_mask=None,
-        training=None,
+        training=False,
         use_causal_mask=False,
         use_auto_mask=True,
         return_attention_scores=False,
     ):
-        query, key, value, caching, relative_position_encoding, content_attention_bias, positional_attention_bias, *_ = inputs
+        query, key, value, relative_position_encoding, content_attention_bias, positional_attention_bias, *_ = inputs
 
         if not self._built_from_signature:
             self._build_from_signature(query, value, relative_position_encoding, key=key)
-
-        query, key, value, caching = self._update_with_memory(query, key, value, caching=caching)
 
         if use_auto_mask:
             attention_mask = self._compute_attention_mask(query, value, key=key, attention_mask=attention_mask, use_causal_mask=use_causal_mask)
@@ -475,6 +481,8 @@ class MultiHeadRelativeAttention(MultiHeadAttention):
         # `position` = [B, R, N, H]
         position = self._encoding_dense(relative_position_encoding)
 
+        query, key, value, states = self._with_memory(query, key, value, initial_state, training)
+
         attention_output, attention_scores = self._compute_attention(
             query=query,
             key=key,
@@ -490,5 +498,5 @@ class MultiHeadRelativeAttention(MultiHeadAttention):
         attention_output = self._output_dense(attention_output)
 
         if return_attention_scores:
-            return attention_output, caching, attention_scores
-        return attention_output, caching
+            return attention_output, states, attention_scores
+        return attention_output, states

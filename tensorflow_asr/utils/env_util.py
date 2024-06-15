@@ -47,7 +47,6 @@ def setup_logging():
 
 def setup_devices(
     devices: List[int] = None,
-    cpu: bool = False,
 ):
     """
     Setting visible devices
@@ -59,19 +58,22 @@ def setup_devices(
     cpu : bool, optional
         Use cpu or not, by default False
     """
-    if cpu:
-        cpus = tf.config.list_physical_devices("CPU")
-        tf.config.set_visible_devices(cpus, "CPU")
-        tf.config.set_visible_devices([], "GPU")
-        tf.get_logger().info(f"Run on {cpus}")
-        return tf.config.list_logical_devices("CPU")
     gpus = tf.config.list_physical_devices("GPU")
     if gpus:
         if devices is not None:
             gpus = [gpus[i] for i in devices]
-            tf.config.set_visible_devices(gpus, "GPU")
-    tf.get_logger().info(f"Run on {gpus}")
-    return tf.config.list_logical_devices("GPU")
+        tf.config.set_visible_devices(gpus, "GPU")
+        tf.get_logger().info(f"Run on {gpus}")
+        return tf.config.list_logical_devices("GPU")
+    # fallback to cpu
+    cpus = tf.config.list_physical_devices("CPU")
+    if cpus:
+        if devices is not None:
+            cpus = [cpus[i] for i in devices]
+        tf.config.set_visible_devices(cpus, "CPU")
+        return tf.config.list_logical_devices("CPU")
+    # worst case
+    raise RuntimeError("Failed to set visible devices, no devices found!")
 
 
 def setup_tpu(
@@ -109,9 +111,7 @@ def setup_strategy(
         return setup_tpu(tpu_address)
     except (ValueError, tf.errors.NotFoundError) as e:
         tf.get_logger().warning(e)
-    available_devices = setup_devices(devices)
-    if len(available_devices) == 1:
-        return tf.distribute.get_strategy()
+    setup_devices(devices)
     return tf.distribute.MultiWorkerMirroredStrategy()
 
 

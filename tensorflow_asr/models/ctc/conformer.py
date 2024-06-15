@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from tensorflow_asr import keras, tf
+from tensorflow_asr import keras
 from tensorflow_asr.models.base_layer import Layer
 from tensorflow_asr.models.ctc.base_ctc import CtcModel
 from tensorflow_asr.models.encoders.conformer import L2, ConformerEncoder
@@ -38,9 +38,9 @@ class ConformerDecoder(Layer):
         )
 
     def call(self, inputs, training=False):
-        logits, logits_length = inputs
+        logits, logits_length, *_ = inputs
         logits = self.vocab(logits, training=training)
-        return logits, logits_length
+        return logits, logits_length, None
 
     def call_next(self, logits, logits_length, *args, **kwargs):
         outputs, outputs_length = self((logits, logits_length), training=False)
@@ -131,18 +131,3 @@ class Conformer(CtcModel):
         )
         self.dmodel = encoder_dmodel
         self.time_reduction_factor = self.encoder.conv_subsampling.time_reduction_factor
-
-    def reset_caching(self):
-        return self.encoder.reset_caching(self._batch_size)
-
-    def make(self, input_shape=[None], prediction_shape=[None], batch_size=None, **kwargs):
-        self._batch_size = int(batch_size / self.distribute_strategy.num_replicas_in_sync)
-        caching = (
-            None
-            if self.encoder._memory_length is None
-            else [
-                keras.Input(shape=[self.encoder._memory_length, self.encoder._dmodel], batch_size=batch_size, dtype=tf.float32)
-                for _ in range(self.encoder._num_blocks)
-            ]
-        )
-        return super().make(input_shape, prediction_shape, batch_size, caching, **kwargs)

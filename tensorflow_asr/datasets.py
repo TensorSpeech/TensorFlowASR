@@ -118,14 +118,14 @@ def get_global_shape(
     input_shape = [max_input_length]
     prediction_shape = [max_label_length + 1] if max_label_length else [None]
     label_shape = [max_label_length]
-    padded_shapes = (
-        schemas.TrainInput(
+    padded_shapes = schemas.TrainData(
+        inputs=schemas.TrainInput(
             inputs=tf.TensorShape(input_shape),
             inputs_length=tf.TensorShape([]),
             predictions=tf.TensorShape(prediction_shape),
             predictions_length=tf.TensorShape([]),
         ),
-        schemas.TrainLabel(
+        labels=schemas.TrainLabel(
             labels=tf.TensorShape(label_shape),
             labels_length=tf.TensorShape([]),
         ),
@@ -324,11 +324,7 @@ class ASRDataset(BaseDataset):
 
         return path, inputs, inputs_length, labels, labels_length, predictions, predictions_length
 
-    def parse(self, path: tf.Tensor, audio: tf.Tensor, transcript: tf.Tensor):
-        """
-        Returns:
-            path, features, input_lengths, labels, label_lengths, pred_inp
-        """
+    def parse(self, path: tf.Tensor, audio: tf.Tensor, transcript: tf.Tensor) -> schemas.TrainData:
         (
             _,
             inputs,
@@ -338,9 +334,9 @@ class ASRDataset(BaseDataset):
             predictions,
             predictions_length,
         ) = self._process_item(path=path, audio=audio, transcript=transcript)
-        return (
-            schemas.TrainInput(inputs=inputs, inputs_length=inputs_length, predictions=predictions, predictions_length=predictions_length),
-            schemas.TrainLabel(labels=labels, labels_length=labels_length),
+        return schemas.TrainData(
+            inputs=schemas.TrainInput(inputs=inputs, inputs_length=inputs_length, predictions=predictions, predictions_length=predictions_length),
+            labels=schemas.TrainLabel(labels=labels, labels_length=labels_length),
         )
 
     # -------------------------------- CREATION -------------------------------------
@@ -359,14 +355,14 @@ class ASRDataset(BaseDataset):
             dataset = dataset.repeat()
 
         if padded_shapes is None:
-            padded_shapes = (
-                schemas.TrainInput(
+            padded_shapes = schemas.TrainData(
+                inputs=schemas.TrainInput(
                     inputs=tf.TensorShape([self.max_input_length]),
                     inputs_length=tf.TensorShape([]),
                     predictions=tf.TensorShape([self.max_label_length + 1 if self.max_label_length else None]),
                     predictions_length=tf.TensorShape([]),
                 ),
-                schemas.TrainLabel(
+                labels=schemas.TrainLabel(
                     labels=tf.TensorShape([self.max_label_length]),
                     labels_length=tf.TensorShape([]),
                 ),
@@ -376,9 +372,9 @@ class ASRDataset(BaseDataset):
         dataset = dataset.padded_batch(
             batch_size=batch_size,
             padded_shapes=padded_shapes,
-            padding_values=(
-                schemas.TrainInput(inputs=0.0, inputs_length=0, predictions=self.tokenizer.blank, predictions_length=0),
-                schemas.TrainLabel(labels=self.tokenizer.blank, labels_length=0),
+            padding_values=schemas.TrainData(
+                inputs=schemas.TrainInput(inputs=0.0, inputs_length=0, predictions=self.tokenizer.blank, predictions_length=0),
+                labels=schemas.TrainLabel(labels=self.tokenizer.blank, labels_length=0),
             ),
             drop_remainder=self.drop_remainder,
         )

@@ -19,7 +19,7 @@ import os
 
 import numpy as np
 
-from tensorflow_asr import keras, tf
+from tensorflow_asr import keras, schemas, tf
 from tensorflow_asr.losses.base_loss import BaseLoss
 from tensorflow_asr.utils import env_util, shape_util
 
@@ -245,7 +245,7 @@ def compute_rnnt_loss_and_grad_helper(
     label_length,
     logit_length,
     use_cpu=False,
-    output_shapes=None,
+    output_shapes: schemas.TrainOutput = None,
 ):
     if output_shapes is None:  # dynamic shape
         batch_size = shape_util.get_dim(logits, 0)
@@ -253,10 +253,10 @@ def compute_rnnt_loss_and_grad_helper(
         target_max_len = shape_util.get_dim(logits, 2)
         vocab_size = shape_util.get_dim(logits, 3)
     else:
-        batch_size = output_shapes["logits"][0]
-        input_max_len = output_shapes["logits"][1]
-        target_max_len = output_shapes["logits"][2]
-        vocab_size = output_shapes["logits"][3]
+        batch_size = output_shapes.logits[0]
+        input_max_len = output_shapes.logits[1]
+        target_max_len = output_shapes.logits[2]
+        vocab_size = output_shapes.logits[3]
 
     one_hot_labels = tf.one_hot(tf.tile(tf.expand_dims(labels, axis=1), multiples=[1, input_max_len, 1]), depth=vocab_size)
 

@@ -12,6 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import tensorflow as tf
+
 from tensorflow_asr import keras
 from tensorflow_asr.models.base_layer import Layer, Reshape
 from tensorflow_asr.utils import math_util
@@ -296,7 +298,7 @@ class JasperEncoder(Layer):
         self.time_reduction_factor *= self.third_additional_block.reduction_factor
 
     def call(self, inputs, training=False):
-        outputs, outputs_length, caching = inputs
+        outputs, outputs_length = inputs
         outputs, outputs_length = self.reshape((outputs, outputs_length))
         outputs = self.first_additional_block(outputs, training=training)
 
@@ -307,12 +309,29 @@ class JasperEncoder(Layer):
         outputs = self.second_additional_block(outputs, training=training)
         outputs = self.third_additional_block(outputs, training=training)
         outputs_length = math_util.get_reduced_length(outputs_length, self.time_reduction_factor)
-        return outputs, outputs_length, caching
+        return outputs, outputs_length, None
+
+    def call_next(self, features, features_length, previous_encoder_states, *args, **kwargs):
+        """
+        Recognize function for encoder network from previous encoder states
+
+        Parameters
+        ----------
+        features : tf.Tensor, shape [B, T, F, C]
+        features_length : tf.Tensor, shape [B]
+        previous_encoder_states : tf.Tensor, shape [B, nlayers, nstates, rnn_units] -> [nlayers, nstates, B, rnn_units]
+
+        Returns
+        -------
+        Tuple[tf.Tensor, tf.Tensor, tf.Tensor], shape ([B, T, dmodel], [B], [nlayers, nstates, B, rnn_units] -> [B, nlayers, nstates, rnn_units])
+        """
+        with tf.name_scope(f"{self.name}_call_next"):
+            return self.call((features, features_length), training=False)
 
     def compute_output_shape(self, input_shape):
-        inputs_shape, inputs_length_shape, caching_shape = input_shape
+        inputs_shape, inputs_length_shape = input_shape
         outputs_time = None if inputs_shape[1] is None else math_util.legacy_get_reduced_length(inputs_shape[1], self.time_reduction_factor)
         outputs_batch = inputs_shape[0]
         outputs_size = self.third_additional_block.conv1d.filters
         outputs_shape = [outputs_batch, outputs_time, outputs_size]
-        return tuple(outputs_shape), tuple(inputs_length_shape), caching_shape
+        return tuple(outputs_shape), tuple(inputs_length_shape)

@@ -13,7 +13,7 @@
 # limitations under the License.
 
 
-from tensorflow_asr import keras, tf
+from tensorflow_asr import keras
 from tensorflow_asr.models.encoders.conformer import L2, ConformerEncoder
 from tensorflow_asr.models.transducer.base_transducer import Transducer
 
@@ -126,17 +126,3 @@ class Conformer(Transducer):
         )
         self.dmodel = encoder_dmodel
         self.time_reduction_factor = self.encoder.conv_subsampling.time_reduction_factor
-
-    def reset_caching(self):
-        return self.encoder.reset_caching(self._per_replica_batch_size)
-
-    def make(self, input_shape=[None], prediction_shape=[None], batch_size=None, **kwargs):
-        caching = (
-            None
-            if self.encoder._memory_length is None
-            else [
-                keras.Input(shape=[self.encoder._memory_length, self.encoder._dmodel], batch_size=batch_size, dtype=tf.float32)
-                for _ in range(self.encoder._num_blocks)
-            ]
-        )
-        return super().make(input_shape, prediction_shape, batch_size, caching, **kwargs)

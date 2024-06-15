@@ -12,50 +12,51 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import collections
+import typing
+
+import tensorflow as tf
 
 
-def TrainInput(inputs, inputs_length, predictions, predictions_length, caching=None):
-    outputs = {
-        "inputs": inputs,
-        "inputs_length": inputs_length,
-        "predictions": predictions,
-        "predictions_length": predictions_length,
-    }
-    if caching is not None:
-        outputs["caching"] = caching
-    return outputs
+class TrainInput(typing.NamedTuple):
+    inputs: tf.Tensor
+    inputs_length: tf.Tensor
+    predictions: tf.Tensor
+    predictions_length: tf.Tensor
 
 
-def TrainOutput(logits, logits_length, caching=None):
-    outputs = {
-        "logits": logits,
-        "logits_length": logits_length,
-    }
-    if caching is not None:
-        outputs["caching"] = caching
-    return outputs
+class TrainOutput(typing.NamedTuple):
+    logits: tf.Tensor
+    logits_length: tf.Tensor
 
 
-def TrainLabel(labels, labels_length):
-    return {
-        "labels": labels,
-        "labels_length": labels_length,
-    }
+class TrainLabel(typing.NamedTuple):
+    labels: tf.Tensor
+    labels_length: tf.Tensor
 
 
-PredictInput = collections.namedtuple(
-    "PredictInput",
-    ("inputs", "inputs_length", "previous_tokens", "previous_encoder_states", "previous_decoder_states"),
-    defaults=(None, None, None),
-)
-PredictOutput = collections.namedtuple(
-    "PredictOutput",
-    ("tokens", "next_tokens", "next_encoder_states", "next_decoder_states"),
-    defaults=(None, None),
-)
-PredictOutputWithTranscript = collections.namedtuple(
-    "PredictOutputWithTranscript",
-    ("transcript", "tokens", "next_tokens", "next_encoder_states", "next_decoder_states"),
-    defaults=(None, None),
-)
+class TrainData(typing.NamedTuple):
+    inputs: TrainInput
+    labels: TrainLabel
+
+
+class PredictInput(typing.NamedTuple):
+    inputs: tf.Tensor
+    inputs_length: tf.Tensor
+    previous_tokens: typing.Optional[tf.Tensor] = None
+    previous_encoder_states: typing.Optional[tf.Tensor] = None
+    previous_decoder_states: typing.Optional[tf.Tensor] = None
+
+
+class PredictOutput(typing.NamedTuple):
+    tokens: tf.Tensor
+    next_tokens: tf.Tensor
+    next_encoder_states: typing.Optional[tf.Tensor] = None
+    next_decoder_states: typing.Optional[tf.Tensor] = None
+
+
+class PredictOutputWithTranscript(typing.NamedTuple):
+    transcript: tf.Tensor
+    tokens: tf.Tensor
+    next_tokens: tf.Tensor
+    next_encoder_states: typing.Optional[tf.Tensor] = None
+    next_decoder_states: typing.Optional[tf.Tensor] = None

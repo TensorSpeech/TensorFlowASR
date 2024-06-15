@@ -173,18 +173,23 @@ class MHSAModule(Layer):
         )
         self.residual = Residual(factor=residual_factor, regularizer=bias_regularizer, name="residual", dtype=self.dtype)
 
+    def get_initial_state(self, batch_size: int):
+        return self.mha.get_initial_state(batch_size)
+
     def call(
         self,
         inputs,
+        initial_state=None,
         training=False,
         attention_mask=None,
         use_causal_mask=False,
         use_auto_mask=True,
     ):
-        _inputs, caching, relative_position_encoding, content_attention_bias, positional_attention_bias = inputs
+        _inputs, relative_position_encoding, content_attention_bias, positional_attention_bias = inputs
         outputs = self.pre_norm(_inputs, training=training)
-        outputs, caching = self.mha(
-            [outputs, outputs, outputs, caching, relative_position_encoding, content_attention_bias, positional_attention_bias],
+        outputs, states = self.mha(
+            [outputs, outputs, outputs, relative_position_encoding, content_attention_bias, positional_attention_bias],
+            initial_state=initial_state,
             training=training,
             attention_mask=attention_mask,
             use_causal_mask=use_causal_mask,
@@ -193,11 +198,11 @@ class MHSAModule(Layer):
         outputs = self.do(outputs, training=training)
         outputs = self.post_norm(outputs, training=training)
         outputs = self.residual([_inputs, outputs], training=training)
-        return outputs, caching
+        return outputs, states
 
     def compute_output_shape(self, input_shape):
-        output_shape, caching_shape, *_ = input_shape
-        return output_shape, caching_shape
+        output_shape, *_ = input_shape
+        return output_shape
 
 
 @keras.utils.register_keras_serializable(package=__name__)
@@ -417,19 +422,24 @@ class ConformerBlock(Layer):
             else Identity(name="postiden" if block_norm_position == "none" else "iden", dtype=self.dtype)
         )
 
+    def get_initial_state(self, batch_size: int):
+        return self.mhsam.get_initial_state(batch_size)
+
     def call(
         self,
         inputs,
+        initial_state=None,
         training=False,
         attention_mask=None,
         use_causal_mask=False,
         use_auto_mask=True,
     ):
-        inputs, caching, relative_position_encoding, content_attention_bias, positional_attention_bias = inputs
+        inputs, relative_position_encoding, content_attention_bias, positional_attention_bias = inputs
         outputs = self.pre_norm(inputs, training=training)
         outputs = self.ffm1(outputs, training=training)
-        outputs, caching = self.mhsam(
-            [outputs, caching, relative_position_encoding, content_attention_bias, positional_attention_bias],
+        outputs, states = self.mhsam(
+            [outputs, relative_position_encoding, content_attention_bias, positional_attention_bias],
+            initial_state=initial_state,
             training=training,
             attention_mask=attention_mask,
             use_causal_mask=use_causal_mask,
@@ -438,11 +448,11 @@ class ConformerBlock(Layer):
         outputs = self.convm(outputs, training=training)
         outputs = self.ffm2(outputs, training=training)
         outputs = self.post_norm(outputs, training=training)
-        return outputs, caching
+        return outputs, states
 
     def compute_output_shape(self, input_shape):
-        output_shape, caching_shape, *_ = input_shape
-        return output_shape, caching_shape
+        output_shape, *_ = input_shape
+        return output_shape
 
 
 @keras.utils.register_keras_serializable(package=__name__)
@@ -564,41 +574,31 @@ class ConformerEncoder(Layer):
         else:
             self.content_attention_bias, self.positional_attention_bias = None, None
 
-    def reset_caching(self, batch_size):
-        if self._memory_length is None:
-            return None
-        # fmt: off
-        return [
-            tf.zeros(shape=(batch_size, self._memory_length, self._dmodel), dtype=self.dtype)
-            for _ in range(self._num_blocks)
-        ]
-        # fmt: on
-
-    def call(self, inputs, training=False):
-        outputs, outputs_length, caching = inputs
+    def call(self, inputs, initial_state=None, training=False):
+        outputs, outputs_length = inputs
         outputs, outputs_length = self.conv_subsampling([outputs, outputs_length], training=training)
         outputs = self.linear(outputs, training=training)
         outputs = self.do(outputs, training=training)
         outputs, relative_position_encoding = self.relpe([outputs, outputs_length], training=training)
-        new_caching = None if self._memory_length is None else []
+        states = None if self._memory_length is None else []
         for i, cblock in enumerate(self.conformer_blocks):
-            outputs, new_cache = cblock(
+            outputs, _states = cblock(
                 [
                     outputs,
-                    None if caching is None else caching[i],
                     relative_position_encoding,
                     self.content_attention_bias,
                     self.positional_attention_bias,
                 ],
+                initial_state=None if initial_state is None else initial_state[i],
                 training=training,
                 use_causal_mask=self._use_attention_causal_mask,
                 use_auto_mask=self._use_attention_auto_mask,
             )
-            if new_caching is not None:
-                new_caching.append(new_cache)
-        return outputs, outputs_length, new_caching
+            if states is not None:
+                states.append(_states)
+        return outputs, outputs_length, states
 
-    def call_next(self, features, features_length, *args, **kwargs):
+    def call_next(self, features, features_length, previous_encoder_states, *args, **kwargs):
         """
         Recognize function for encoder network
 
@@ -613,19 +613,17 @@ class ConformerEncoder(Layer):
             Outputs, outputs_length, new_states
         """
         with tf.name_scope(f"{self.name}_call_next"):
-            outputs, outputs_length, _ = self.call((features, features_length, None), training=False)
-            return outputs, outputs_length, None
+            return self.call((features, features_length), initial_state=previous_encoder_states, training=False)
 
     def compute_mask(self, inputs, mask=None):
-        *outputs, caching = inputs
-        return *self.conv_subsampling.compute_mask(outputs, mask=mask), getattr(caching, "_keras_mask", None)
+        return *self.conv_subsampling.compute_mask(inputs, mask=mask), None
 
     def compute_output_shape(self, input_shape):
-        output_shape, output_length_shape, caching_shape = input_shape
+        output_shape, output_length_shape = input_shape
         output_shape, output_length_shape = self.conv_subsampling.compute_output_shape((output_shape, output_length_shape))
         output_shape = self.linear.compute_output_shape(output_shape)
         output_shape, relative_position_encoding_shape = self.relpe.compute_output_shape((output_shape, output_length_shape))
         output_shape = self.do.compute_output_shape(output_shape)
         for cblock in self.conformer_blocks:
-            output_shape, caching_shape = cblock.compute_output_shape((output_shape, caching_shape, relative_position_encoding_shape, None, None))
-        return output_shape, output_length_shape, caching_shape
+            output_shape = cblock.compute_output_shape((output_shape, relative_position_encoding_shape, None, None))
+        return output_shape, output_length_shape

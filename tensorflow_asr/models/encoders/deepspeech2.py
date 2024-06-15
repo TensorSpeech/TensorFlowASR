@@ -532,11 +532,11 @@ class DeepSpeech2Encoder(Layer):
         return self.rnn_module.get_initial_state(batch_size=batch_size)
 
     def call(self, inputs, training=False):
-        *outputs, caching = inputs
+        outputs = inputs
         outputs = self.conv_module(outputs, training=training)
         outputs = self.rnn_module(outputs, training=training)
         outputs = self.fc_module(outputs, training=training)
-        return *outputs, caching
+        return *outputs, None
 
     def call_next(self, features, features_length, previous_encoder_states, *args, **kwargs):
         """
@@ -560,12 +560,10 @@ class DeepSpeech2Encoder(Layer):
             return outputs, outputs_length, new_encoder_states
 
     def compute_mask(self, inputs, mask=None):
-        *outputs, caching = inputs
-        return *self.conv_module.compute_mask(outputs, mask=mask), getattr(caching, "_keras_mask", None)
+        return *self.conv_module.compute_mask(inputs, mask=mask), None
 
     def compute_output_shape(self, input_shape):
-        *output_shape, caching_shape = input_shape
-        output_shape = self.conv_module.compute_output_shape(output_shape)
+        output_shape = self.conv_module.compute_output_shape(input_shape)
         output_shape = self.rnn_module.compute_output_shape(output_shape)
         output_shape = self.fc_module.compute_output_shape(output_shape)
-        return *output_shape, caching_shape
+        return output_shape

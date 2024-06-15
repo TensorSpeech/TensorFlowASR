@@ -289,11 +289,11 @@ class ContextNetEncoder(Layer):
         self.dmodel = self.blocks[-1].dmodel
 
     def call(self, inputs, training=False):
-        outputs, outputs_length, caching = inputs
+        outputs, outputs_length = inputs
         outputs, outputs_length = self.reshape((outputs, outputs_length))
         for block in self.blocks:
             outputs, outputs_length = block((outputs, outputs_length), training=training)
-        return outputs, outputs_length, caching
+        return outputs, outputs_length, None
 
     def call_next(self, features, features_length, *args, **kwargs):
         """
@@ -310,19 +310,17 @@ class ContextNetEncoder(Layer):
             Outputs, outputs_length, new_states
         """
         with tf.name_scope(f"{self.name}_call_next"):
-            outputs, outputs_length, _ = self.call((features, features_length, None), training=False)
-            return outputs, outputs_length, None
+            return self.call((features, features_length), training=False)
 
     def compute_mask(self, inputs, mask=None):
-        outputs, outputs_length, caching = inputs
+        outputs, outputs_length = inputs
         maxlen = tf.shape(outputs)[1]
         maxlen, outputs_length = (math_util.get_reduced_length(length, self.time_reduction_factor) for length in (maxlen, outputs_length))
         mask = tf.sequence_mask(outputs_length, maxlen=maxlen, dtype=tf.bool)
-        return mask, None, getattr(caching, "_keras_mask", None)
+        return mask, None, None
 
     def compute_output_shape(self, input_shape):
-        *output_shape, caching_shape = input_shape
-        output_shape = self.reshape.compute_output_shape(output_shape)
+        output_shape = self.reshape.compute_output_shape(input_shape)
         for block in self.blocks:
             output_shape = block.compute_output_shape(output_shape)
-        return *output_shape, caching_shape
+        return output_shape

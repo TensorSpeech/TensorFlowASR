@@ -135,6 +135,29 @@ class FeatureExtraction(Layer):
 
     # ---------------------------------- signals --------------------------------- #
 
+    def get_signal_chunk_size_and_step(self, nframes):
+        """
+        This will ensure the "fft of chunked signal" is the same with "fft of whole signal"
+        The features are extracted by windowing the signal by length and strides
+        The chunk size is the size of the windowed signal,
+            which is (nframes - 1) * frame_step + frame_length
+        The next chunk will start at the position of the next frame,
+            which is nframes + 1 "steps", so we need to move nframes "steps" to get the next chunk
+
+        Parameters
+        ----------
+        nframes : int
+            Number of target frames of the chunk signals will result in
+
+        Returns
+        -------
+        (chunk_size, chunk_step)
+            Size of the chunk signals and the step to move to the next chunk
+        """
+        chunk_size = (nframes - 1) * self.frame_step + self.frame_length
+        chunk_step = nframes * self.frame_step
+        return chunk_size, chunk_step
+
     def normalize_signal(self, signal):
         if not self._normalize_signal:
             return signal

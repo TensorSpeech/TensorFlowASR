@@ -175,11 +175,11 @@ class RnnTransducerEncoder(Layer):
         return tf.transpose(tf.stack(states, axis=0), perm=[2, 0, 1, 3])
 
     def call(self, inputs, training=False):
-        outputs, outputs_length, caching = inputs
+        outputs, outputs_length = inputs
         outputs, outputs_length = self.reshape((outputs, outputs_length))
         for block in self.blocks:
             outputs, outputs_length = block((outputs, outputs_length), training=training)
-        return outputs, outputs_length, caching
+        return outputs, outputs_length, None
 
     def call_next(self, features, features_length, previous_encoder_states, *args, **kwargs):
         """
@@ -205,15 +205,15 @@ class RnnTransducerEncoder(Layer):
             return outputs, outputs_length, tf.transpose(tf.stack(new_states, axis=0), perm=[2, 0, 1, 3])
 
     def compute_mask(self, inputs, mask=None):
-        outputs, outputs_length, caching = inputs
+        outputs, outputs_length = inputs
         maxlen = tf.shape(outputs)[1]
         maxlen, outputs_length = (math_util.get_reduced_length(length, self.time_reduction_factor) for length in (maxlen, outputs_length))
         mask = tf.sequence_mask(outputs_length, maxlen=maxlen, dtype=tf.bool)
-        return mask, None, getattr(caching, "_keras_mask", None)
+        return mask, None
 
     def compute_output_shape(self, input_shape):
-        *output_shape, caching_shape = input_shape
+        output_shape = input_shape
         output_shape = self.reshape.compute_output_shape(output_shape)
         for block in self.blocks:
             output_shape = block.compute_output_shape(output_shape)
-        return *output_shape, caching_shape
+        return output_shape
