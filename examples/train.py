@@ -98,6 +98,7 @@ def main(
     model.fit(
         train_data_loader,
         epochs=config.learning_config.num_epochs,
+        verbose=1,
         validation_data=eval_data_loader,
         callbacks=callbacks.deserialize(config.learning_config.callbacks),
         steps_per_epoch=train_dataset.total_steps,
