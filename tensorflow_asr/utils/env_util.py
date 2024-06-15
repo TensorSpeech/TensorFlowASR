@@ -112,7 +112,7 @@ def setup_strategy(
     available_devices = setup_devices(devices)
     if len(available_devices) == 1:
         return tf.distribute.get_strategy()
-    return tf.distribute.MirroredStrategy(devices=[d.name for d in available_devices])
+    return tf.distribute.MultiWorkerMirroredStrategy()
 
 
 def has_devices(
