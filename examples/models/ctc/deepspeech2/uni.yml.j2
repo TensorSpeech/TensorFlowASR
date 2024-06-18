@@ -30,14 +30,14 @@ model_config:
     conv_strides: [ [ 2, 2 ], [ 1, 2 ] ]
     conv_filters: [ 32, 32 ]
     conv_activation: relu
-    conv_padding: same
+    conv_padding: causal
     conv_initializer: he_uniform
     rnn_nlayers: 5
     rnn_type: lstm
     rnn_units: 512
-    rnn_bidirectional: True
+    rnn_bidirectional: False
     rnn_unroll: False
-    rnn_rowconv: 0
+    rnn_rowconv: 3
     rnn_rowconv_activation: relu
     rnn_dropout: 0.5
     rnn_initializer: glorot_uniform
