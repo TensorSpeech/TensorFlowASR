@@ -191,6 +191,7 @@ class Conv2dSubsampling(Layer):
                         name=f"bn_{i}",
                         gamma_regularizer=kernel_regularizer,
                         beta_regularizer=bias_regularizer,
+                        synchronized=True,
                         dtype=self.dtype,
                     )
                 )
@@ -280,6 +281,7 @@ class Conv1dSubsampling(Layer):
                         name=f"bn_{i}",
                         gamma_regularizer=kernel_regularizer,
                         beta_regularizer=bias_regularizer,
+                        synchronized=True,
                         dtype=self.dtype,
                     )
                 )

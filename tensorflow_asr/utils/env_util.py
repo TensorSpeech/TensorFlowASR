@@ -112,7 +112,7 @@ def setup_strategy(
     except (ValueError, tf.errors.NotFoundError) as e:
         tf.get_logger().warning(e)
     setup_devices(devices)
-    return tf.distribute.MultiWorkerMirroredStrategy()
+    return tf.distribute.MirroredStrategy()
 
 
 def has_devices(

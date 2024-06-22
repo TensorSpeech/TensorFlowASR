@@ -46,7 +46,11 @@ class JasperSubBlock(keras.layers.Layer):
             dtype=self.dtype,
         )
         self.bn = keras.layers.BatchNormalization(
-            name="bn", gamma_regularizer=kernel_regularizer, beta_regularizer=bias_regularizer, dtype=self.dtype
+            name="bn",
+            gamma_regularizer=kernel_regularizer,
+            beta_regularizer=bias_regularizer,
+            synchronized=True,
+            dtype=self.dtype,
         )
         self.relu = keras.layers.ReLU(name="relu", dtype=self.dtype)
         self.do = keras.layers.Dropout(dropout, name="dropout", dtype=self.dtype)
@@ -83,7 +87,11 @@ class JasperResidual(keras.layers.Layer):
             dtype=self.dtype,
         )
         self.bn = keras.layers.BatchNormalization(
-            name="bn", gamma_regularizer=kernel_regularizer, beta_regularizer=bias_regularizer, dtype=self.dtype
+            name="bn",
+            gamma_regularizer=kernel_regularizer,
+            beta_regularizer=bias_regularizer,
+            synchronized=True,
+            dtype=self.dtype,
         )
 
     def call(self, inputs, training=False):

@@ -19,8 +19,6 @@ from tensorflow_asr.configs import Config
 from tensorflow_asr.models.base_model import BaseModel
 from tensorflow_asr.utils import cli_util, env_util, file_util
 
-env_util.setup_logging()
-
 
 def main(
     config_path: str,
@@ -30,6 +28,8 @@ def main(
     save_format: str = "h5",
     repodir: str = os.path.realpath(os.path.join(os.path.dirname(__file__), "..")),
 ):
+    env_util.setup_logging()
+
     assert output
     keras.backend.clear_session()
     env_util.setup_seed()

@@ -22,9 +22,6 @@ from tensorflow_asr.configs import Config
 from tensorflow_asr.models.base_model import BaseModel
 from tensorflow_asr.utils import app_util, cli_util, env_util, file_util
 
-env_util.setup_logging()
-logger = tf.get_logger()
-
 
 def main(
     config_path: str,
@@ -35,15 +32,17 @@ def main(
     mxp: str = "none",
     bs: int = 1,
     device: int = 0,
-    cpu: bool = False,
     jit_compile: bool = False,
     repodir: str = os.path.realpath(os.path.join(os.path.dirname(__file__), "..")),
 ):
+    env_util.setup_logging()
+    logger = tf.get_logger()
+
     outputdir = file_util.preprocess_paths(outputdir, isdir=True)
     checkpoint_name = os.path.splitext(os.path.basename(h5))[0]
 
     env_util.setup_seed()
-    env_util.setup_devices([device], cpu=cpu)
+    env_util.setup_devices(devices=[device])
     env_util.setup_mxp(mxp=mxp)
 
     config = Config(config_path, training=False, repodir=repodir, datadir=datadir)

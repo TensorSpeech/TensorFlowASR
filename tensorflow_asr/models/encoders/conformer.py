@@ -283,7 +283,11 @@ class ConvModule(Layer):
                 dtype=self.dtype,
             )
         self.bn = keras.layers.BatchNormalization(
-            name="bn", gamma_regularizer=kernel_regularizer, beta_regularizer=bias_regularizer, dtype=self.dtype
+            name="bn",
+            gamma_regularizer=kernel_regularizer,
+            beta_regularizer=bias_regularizer,
+            synchronized=True,
+            dtype=self.dtype,
         )
         self.swish = keras.layers.Activation(tf.nn.swish, name="swish", dtype=self.dtype)
         self.pw_conv_2 = keras.layers.Conv1D(

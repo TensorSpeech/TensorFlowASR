@@ -48,6 +48,7 @@ class RowConv1D(Layer):
             name="bn",
             gamma_regularizer=regularizer,
             beta_regularizer=regularizer,
+            synchronized=True,
             dtype=self.dtype,
         )
         self.activation = keras.activations.get(activation)
@@ -96,6 +97,7 @@ class ConvBlock(Layer):
             name="bn",
             gamma_regularizer=kernel_regularizer,
             beta_regularizer=bias_regularizer,
+            synchronized=True,
             dtype=self.dtype,
         )
         self.act = keras.layers.Activation(activation=activation, name=activation, dtype=self.dtype)
@@ -236,12 +238,6 @@ class RnnBlock(Layer):
         self._bidirectional = bidirectional
         if bidirectional:
             self.rnn = keras.layers.Bidirectional(self.rnn, name=f"b{rnn_type}", dtype=self.dtype)
-        self.bn = keras.layers.BatchNormalization(
-            name="bn",
-            gamma_regularizer=kernel_regularizer,
-            beta_regularizer=bias_regularizer,
-            dtype=self.dtype,
-        )
         self.rowconv = None
         if not bidirectional and rowconv > 0:
             self.rowconv = RowConv1D(
@@ -264,7 +260,6 @@ class RnnBlock(Layer):
     def call(self, inputs, training=False):
         outputs, outputs_length = inputs
         outputs, *_ = self.rnn(outputs, training=training)  # mask auto populate
-        outputs = self.bn(outputs, training=training)
         if self.rowconv is not None:
             outputs = self.rowconv(outputs, training=training)
         return outputs, outputs_length
@@ -273,7 +268,6 @@ class RnnBlock(Layer):
         with tf.name_scope(f"{self.name}_call_next"):
             outputs, outputs_length = inputs
             outputs, *_states = self.rnn(outputs, training=False, initial_state=tf.unstack(previous_encoder_states, axis=0))
-            outputs = self.bn(outputs, training=False)
             if self.rowconv is not None:
                 outputs = self.rowconv(outputs, training=False)
             return outputs, outputs_length, tf.stack(_states)
@@ -281,7 +275,6 @@ class RnnBlock(Layer):
     def compute_output_shape(self, input_shape):
         output_shape, output_length_shape = input_shape
         output_shape, *_ = self.rnn.compute_output_shape(output_shape)
-        output_shape = self.bn.compute_output_shape(output_shape)
         if self.rowconv is not None:
             output_shape = self.rowconv.compute_output_shape(output_shape)
         return output_shape, output_length_shape
@@ -384,16 +377,12 @@ class FcBlock(Layer):
             name="fc",
             dtype=self.dtype,
         )
-        self.bn = keras.layers.BatchNormalization(
-            name="bn", gamma_regularizer=kernel_regularizer, beta_regularizer=bias_regularizer, dtype=self.dtype
-        )
         self.act = keras.layers.Activation(activation=activation, name=activation, dtype=self.dtype)
         self.do = keras.layers.Dropout(dropout, name="dropout", dtype=self.dtype)
 
     def call(self, inputs, training=False):
         outputs, outputs_length = inputs
         outputs = self.fc(outputs, training=training)
-        outputs = self.bn(outputs, training=training)
         outputs = self.act(outputs, training=training)
         outputs = self.do(outputs, training=training)
         return outputs, outputs_length

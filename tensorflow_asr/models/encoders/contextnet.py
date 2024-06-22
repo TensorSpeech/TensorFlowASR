@@ -62,7 +62,11 @@ class ConvModule(Layer):
             dtype=self.dtype,
         )
         self.bn = keras.layers.BatchNormalization(
-            name="bn", gamma_regularizer=kernel_regularizer, beta_regularizer=bias_regularizer, dtype=self.dtype
+            name="bn",
+            gamma_regularizer=kernel_regularizer,
+            beta_regularizer=bias_regularizer,
+            synchronized=True,
+            dtype=self.dtype,
         )
         self.activation = get_activation(activation)
 

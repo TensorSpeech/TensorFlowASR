@@ -15,13 +15,13 @@ model_config:
       augmentation_config:
         feature_augment:
           time_masking:
-            prob: 0.5
+            prob: 1.0
             num_masks: 5
             mask_factor: -1 # whole utterance
             p_upperbound: 0.05
             mask_value: 0
           freq_masking:
-            prob: 0.5
+            prob: 1.0
             num_masks: 1
             mask_factor: 27
             mask_value: 0
