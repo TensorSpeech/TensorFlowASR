@@ -284,7 +284,8 @@ class BaseModel(keras.Model):
                     model._train_counter.assign_add(1)
                 return outputs
 
-            run_step = tf.function(run_step, jit_compile=self.jit_compile, reduce_retracing=True)
+            if self.jit_compile:
+                run_step = tf.function(run_step, jit_compile=self.jit_compile, reduce_retracing=True)
 
             data = next(iterator)
             outputs = model.distribute_strategy.run(run_step, args=(data,))
@@ -359,7 +360,8 @@ class BaseModel(keras.Model):
                     model._test_counter.assign_add(1)
                 return outputs
 
-            run_step = tf.function(run_step, jit_compile=self.jit_compile, reduce_retracing=True)
+            if self.jit_compile:
+                run_step = tf.function(run_step, jit_compile=self.jit_compile, reduce_retracing=True)
 
             data = next(iterator)
             outputs = model.distribute_strategy.run(run_step, args=(data,))
