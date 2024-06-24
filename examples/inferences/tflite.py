@@ -16,9 +16,8 @@ import tensorflow_text as tft
 from tensorflow.lite.python import interpreter
 
 from tensorflow_asr import tf
-from tensorflow_asr.utils import cli_util, data_util, env_util
+from tensorflow_asr.utils import cli_util, data_util
 
-env_util.setup_logging()
 logger = tf.get_logger()
 
 

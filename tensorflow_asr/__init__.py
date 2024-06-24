@@ -5,18 +5,14 @@ import os
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = os.environ.get("TF_CPP_MIN_LOG_LEVEL") or "3"
 os.environ["TF_FORCE_GPU_ALLOW_GROWTH"] = os.environ.get("TF_FORCE_GPU_ALLOW_GROWTH", "true")
 
-import keras
-import tensorflow as tf
-from tensorflow.python.util import deprecation  # pylint: disable = no-name-in-module
+from tensorflow_asr.utils import env_util  # import here fist to apply logging
 
-# might cause performance penalty if ops fallback to cpu, see https://cloud.google.com/tpu/docs/tensorflow-ops
-tf.config.set_soft_device_placement(False)
-deprecation._PRINT_DEPRECATION_WARNINGS = False  # comment this line to print deprecation warnings
+compile_utils = importlib.import_module(f"{env_util.KERAS_SRC}.engine.compile_utils")
+
+import keras
+import tensorflow as tf  # for reference
 
 from tensorflow_asr.utils import tf_util
-from tensorflow_asr.utils.env_util import KERAS_SRC
-
-compile_utils = importlib.import_module(f"{KERAS_SRC}.engine.compile_utils")
 
 
 @property
@@ -46,6 +42,7 @@ keras.layers.Layer.build = build
 keras.layers.Layer.compute_output_shape = compute_output_shape
 compile_utils.match_dtype_and_rank = match_dtype_and_rank
 
+# import submodules to register keras objects
 import glob
 from os.path import basename, dirname, isdir, isfile, join
 

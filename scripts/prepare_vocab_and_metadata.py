@@ -18,9 +18,8 @@ import os
 from tensorflow_asr import tf, tokenizers
 from tensorflow_asr.configs import Config
 from tensorflow_asr.datasets import ASRDataset
-from tensorflow_asr.utils import cli_util, env_util
+from tensorflow_asr.utils import cli_util
 
-env_util.setup_logging()
 logger = tf.get_logger()
 
 

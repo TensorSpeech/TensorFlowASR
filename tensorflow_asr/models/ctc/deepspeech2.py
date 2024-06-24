@@ -28,7 +28,7 @@ class DeepSpeech2Decoder(Layer):
         initializer=None,
         **kwargs,
     ):
-        super().__init__(**kwargs)
+        super().__init__(dtype=tf.float32, **kwargs)
         self.vocab = keras.layers.Dense(
             vocab_size,
             name="logits",
@@ -36,7 +36,7 @@ class DeepSpeech2Decoder(Layer):
             kernel_initializer=initializer,
             bias_regularizer=bias_regularizer,
             bias_initializer=initializer,
-            dtype=self.dtype,
+            dtype=tf.float32,
         )
 
     def call(self, inputs, training=False):

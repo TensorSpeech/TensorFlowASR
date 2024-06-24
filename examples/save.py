@@ -28,8 +28,6 @@ def main(
     save_format: str = "h5",
     repodir: str = os.path.realpath(os.path.join(os.path.dirname(__file__), "..")),
 ):
-    env_util.setup_logging()
-
     assert output
     keras.backend.clear_session()
     env_util.setup_seed()

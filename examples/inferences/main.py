@@ -19,7 +19,6 @@ from tensorflow_asr.configs import Config
 from tensorflow_asr.models import base_model
 from tensorflow_asr.utils import cli_util, data_util, env_util, file_util
 
-env_util.setup_logging()
 logger = tf.get_logger()
 
 

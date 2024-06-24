@@ -166,16 +166,6 @@ class BaseModel(keras.Model):
     def remove_gwn(self, original_weights):
         pass
 
-    # def _get_global_batch_size(self, y_pred):
-    #     global_batch_size = tf.shape(y_pred.logits)[0] * self.distribute_strategy.num_replicas_in_sync
-    #     return global_batch_size
-
-    # def _validate_and_get_metrics_result(self, logs):
-    #     logs = super()._validate_and_get_metrics_result(logs)
-    #     if "predictions" in logs:
-    #         del logs["predictions"]
-    #     return logs
-
     def _train_step(self, data: schemas.TrainData):
         x = data[0]
         y, _ = data_util.set_length(data[1].labels, data[1].labels_length)
@@ -214,7 +204,7 @@ class BaseModel(keras.Model):
                     data,
                 )
             )
-            for i in tf.range(1, self.ga.total_steps):
+            for i in range(1, self.ga.total_steps):
                 per_ga_gradients = self._train_step(
                     tf.nest.map_structure(
                         lambda x: math_util.slice_batch_tensor(x, index=i, batch_size=self._per_replica_batch_size),
@@ -242,7 +232,7 @@ class BaseModel(keras.Model):
         if not self.use_ga:
             self._test_step(data)
         else:
-            for i in tf.range(self.ga.total_steps):
+            for i in range(self.ga.total_steps):
                 per_ga_step_data = tf.nest.map_structure(
                     lambda x: math_util.slice_batch_tensor(x, index=i, batch_size=self._per_replica_batch_size), data
                 )
@@ -277,6 +267,7 @@ class BaseModel(keras.Model):
         def step_function(model, iterator):
             """Runs a single training step."""
 
+            @tf.autograph.experimental.do_not_convert
             def run_step(data):
                 outputs = model.train_step(data)
                 # Ensure counter is updated only if `train_step` succeeds.
@@ -284,15 +275,15 @@ class BaseModel(keras.Model):
                     model._train_counter.assign_add(1)
                 return outputs
 
-            if self.jit_compile:
+            if not self.run_eagerly:
                 run_step = tf.function(run_step, jit_compile=self.jit_compile, reduce_retracing=True)
 
             data = next(iterator)
             outputs = model.distribute_strategy.run(run_step, args=(data,))
             outputs = keras_util.reduce_per_replica(
                 outputs,
-                self.distribute_strategy,
-                reduction=self.distribute_reduction_method,
+                model.distribute_strategy,
+                reduction=model.distribute_reduction_method,
             )
             return outputs
 
@@ -353,6 +344,7 @@ class BaseModel(keras.Model):
         def step_function(model, iterator):
             """Runs a single evaluation step."""
 
+            @tf.autograph.experimental.do_not_convert
             def run_step(data):
                 outputs = model.test_step(data)
                 # Ensure counter is updated only if `test_step` succeeds.
@@ -360,15 +352,15 @@ class BaseModel(keras.Model):
                     model._test_counter.assign_add(1)
                 return outputs
 
-            if self.jit_compile:
+            if not self.run_eagerly:
                 run_step = tf.function(run_step, jit_compile=self.jit_compile, reduce_retracing=True)
 
             data = next(iterator)
             outputs = model.distribute_strategy.run(run_step, args=(data,))
             outputs = keras_util.reduce_per_replica(
                 outputs,
-                self.distribute_strategy,
-                reduction=self.distribute_reduction_method,
+                model.distribute_strategy,
+                reduction=model.distribute_reduction_method,
             )
             return outputs
 

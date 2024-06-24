@@ -22,6 +22,8 @@ from tensorflow_asr.configs import Config
 from tensorflow_asr.models.base_model import BaseModel
 from tensorflow_asr.utils import app_util, cli_util, env_util, file_util
 
+logger = tf.get_logger()
+
 
 def main(
     config_path: str,
@@ -35,8 +37,6 @@ def main(
     jit_compile: bool = False,
     repodir: str = os.path.realpath(os.path.join(os.path.dirname(__file__), "..")),
 ):
-    env_util.setup_logging()
-    logger = tf.get_logger()
 
     outputdir = file_util.preprocess_paths(outputdir, isdir=True)
     checkpoint_name = os.path.splitext(os.path.basename(h5))[0]

@@ -20,6 +20,8 @@ from tensorflow_asr.configs import Config
 from tensorflow_asr.models.base_model import BaseModel
 from tensorflow_asr.utils import cli_util, env_util, file_util
 
+logger = tf.get_logger()
+
 
 def main(
     config_path: str,
@@ -32,11 +34,9 @@ def main(
     mxp: str = "none",
     jit_compile: bool = False,
     ga_steps: int = None,
+    verbose: int = 1,
     repodir: str = os.path.realpath(os.path.join(os.path.dirname(__file__), "..")),
 ):
-    env_util.setup_logging()
-    logger = tf.get_logger()
-
     keras.backend.clear_session()
     env_util.setup_seed()
     strategy = env_util.setup_strategy(devices)
@@ -98,7 +98,7 @@ def main(
     model.fit(
         train_data_loader,
         epochs=config.learning_config.num_epochs,
-        verbose=1,
+        verbose=verbose,
         validation_data=eval_data_loader,
         callbacks=callbacks.deserialize(config.learning_config.callbacks),
         steps_per_epoch=train_dataset.total_steps,

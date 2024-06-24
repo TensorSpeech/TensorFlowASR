@@ -20,29 +20,28 @@ import warnings
 from datetime import datetime, timezone
 from typing import List, Union
 
-import keras
-import numpy as np
-import tensorflow as tf
-from packaging import version
-
-KERAS_SRC = "keras.src" if version.parse(tf.version.VERSION) >= version.parse("2.13.0") else "keras"
-
 
 def _logging_format_time(self, record, datefmt=None):
     return datetime.fromtimestamp(record.created, timezone.utc).astimezone().isoformat(sep="T", timespec="milliseconds")
 
 
-def setup_logging():
-    logging.basicConfig(level=logging.INFO, format=logging.BASIC_FORMAT, stream=sys.stdout, force=True)
-    logging.Formatter.formatTime = _logging_format_time
-    logging.captureWarnings(True)
-    if not getattr(sys, "ps1", sys.flags.interactive):  # disable propagate in command line
-        logging.getLogger().propagate = False
-        tf.get_logger().propagate = False
-    else:
-        logging.getLogger().propagate = True
-        tf.get_logger().propagate = True
-    warnings.filterwarnings("ignore")
+logging.basicConfig(level=logging.INFO, format=logging.BASIC_FORMAT, stream=sys.stdout, force=True)
+logging.Formatter.formatTime = _logging_format_time
+logging.captureWarnings(True)
+warnings.filterwarnings("ignore")
+
+import keras
+import numpy as np
+import tensorflow as tf
+from packaging import version
+from tensorflow.python.util import deprecation  # pylint: disable = no-name-in-module
+
+# might cause performance penalty if ops fallback to cpu, see https://cloud.google.com/tpu/docs/tensorflow-ops
+tf.config.set_soft_device_placement(False)
+deprecation._PRINT_DEPRECATION_WARNINGS = False  # comment this line to print deprecation warnings
+
+
+KERAS_SRC = "keras.src" if version.parse(tf.version.VERSION) >= version.parse("2.13.0") else "keras"
 
 
 def setup_devices(
@@ -83,7 +82,6 @@ def setup_tpu(
         resolver = tf.distribute.cluster_resolver.TPUClusterResolver()
     else:
         resolver = tf.distribute.cluster_resolver.TPUClusterResolver(tpu="grpc://" + tpu_address)
-    tf.config.experimental_connect_to_cluster(resolver)
     tf.tpu.experimental.initialize_tpu_system(resolver)
     return tf.distribute.TPUStrategy(resolver)
 
