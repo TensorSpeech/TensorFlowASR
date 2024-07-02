@@ -38,5 +38,5 @@ class CtcLoss(BaseLoss):
             blank_index=self.blank,
             name=self.name,
         )
-        losses = math_util.nan_to_num(losses, nan=losses.dtype.max)
+        losses = math_util.nan_to_num(losses, nan=losses.dtype.max / tf.shape(losses)[0] / tf.distribute.get_strategy().num_replicas_in_sync / 2)
         return losses
