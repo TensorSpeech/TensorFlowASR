@@ -54,17 +54,17 @@ def nan_to_num(x, nan=0.0, posinf=None, neginf=None):
         return x
 
     # Replace NaN with `nan`
-    x = tf.where(tf.math.is_nan(x), tf.constant(nan, dtype), x)
+    x = tf.where(tf.math.is_nan(x), nan, x)
 
     # Replace positive infinity with `posinf` or `dtype.max`
     if posinf is None:
         posinf = dtype.max
-    x = tf.where(tf.math.is_inf(x) & (x > 0), tf.constant(posinf, dtype), x)
+    x = tf.where(tf.math.is_inf(x) & (x > 0), posinf, x)
 
     # Replace negative infinity with `neginf` or `dtype.min`
     if neginf is None:
         neginf = dtype.min
-    x = tf.where(tf.math.is_inf(x) & (x < 0), tf.constant(neginf, dtype), x)
+    x = tf.where(tf.math.is_inf(x) & (x < 0), neginf, x)
 
     return x
 

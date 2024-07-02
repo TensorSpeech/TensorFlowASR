@@ -120,6 +120,8 @@ disable=too-few-public-methods,
         consider-using-f-string,
         fixme,
         unused-variable,
+        pointless-string-statement,
+        too-many-lines,
         
 # Enable the message, report, category or checker with the given id(s). You can
 # either give multiple identifier separated by comma (,) or put this option
