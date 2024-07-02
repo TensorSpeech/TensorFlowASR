@@ -264,148 +264,89 @@ class BaseModel(keras.Model):
         if self.train_function is not None and not force:
             return self.train_function
 
-        def step_function(model, iterator):
-            """Runs a single training step."""
+        @tf.autograph.experimental.do_not_convert
+        def one_step_on_data(data):
+            """Runs a single training step on a batch of data."""
+            outputs = self.train_step(data)
+            # Ensure counter is updated only if `train_step` succeeds.
+            with tf.control_dependencies(_minimum_control_deps(outputs)):
+                self._train_counter.assign_add(1)
+            return outputs
 
-            @tf.autograph.experimental.do_not_convert
-            def run_step(data):
-                outputs = model.train_step(data)
-                # Ensure counter is updated only if `train_step` succeeds.
-                with tf.control_dependencies(_minimum_control_deps(outputs)):
-                    model._train_counter.assign_add(1)
-                return outputs
+        if not self.run_eagerly:
+            one_step_on_data = tf.function(one_step_on_data, reduce_retracing=True, jit_compile=self.jit_compile)
 
-            if not self.run_eagerly:
-                run_step = tf.function(run_step, jit_compile=self.jit_compile, reduce_retracing=True)
-
+        @tf.autograph.experimental.do_not_convert
+        def one_step_on_iterator(iterator):
+            """Runs a single training step given a Dataset iterator."""
             data = next(iterator)
-            outputs = model.distribute_strategy.run(run_step, args=(data,))
+            outputs = self.distribute_strategy.run(one_step_on_data, args=(data,))
             outputs = keras_util.reduce_per_replica(
                 outputs,
-                model.distribute_strategy,
-                reduction=model.distribute_reduction_method,
+                self.distribute_strategy,
+                reduction=self.distribute_reduction_method,
             )
             return outputs
 
-        # Special case if steps_per_execution is one.
-        if self._steps_per_execution is None or self._steps_per_execution.numpy().item() == 1:
+        @tf.autograph.experimental.do_not_convert
+        def multi_step_on_iterator(iterator):
+            for _ in range(self.steps_per_execution):
+                outputs = one_step_on_iterator(iterator)
+            return outputs
 
-            def train_function(iterator):
-                """Runs a training execution with a single step."""
-                return step_function(self, iterator)
-
-            if not self.run_eagerly:
-                train_function = tf.function(train_function, reduce_retracing=True)
-                self.train_tf_function = train_function
-
-            if self._cluster_coordinator:
-                self.train_function = lambda it: self._cluster_coordinator.schedule(train_function, args=(it,))
-            else:
-                self.train_function = train_function
-
-        # If we're using a coordinator, use the value of
-        # self._steps_per_execution at the time the function is
-        # called/scheduled, and not when it is actually executed.
-        elif self._cluster_coordinator:
-
-            def train_function(iterator, steps_per_execution):
-                """Runs a training execution with multiple steps."""
-                for _ in tf.range(steps_per_execution):
-                    outputs = step_function(self, iterator)
-                return outputs
-
-            if not self.run_eagerly:
-                train_function = tf.function(train_function, reduce_retracing=True)
-                self.train_tf_function = train_function
-            # fmt: off
-            self.train_function = lambda it, cache: self._cluster_coordinator.schedule(
-                train_function, args=(it, cache, self._steps_per_execution.value())
-            )  # pylint: disable=line-too-long
-            # fmt: on
+        if self.steps_per_execution > 1:
+            train_function = multi_step_on_iterator
         else:
+            train_function = one_step_on_iterator
 
-            def train_function(iterator):
-                """Runs a training execution with multiple steps."""
-                for _ in tf.range(self._steps_per_execution):
-                    outputs = step_function(self, iterator)
-                return outputs
+        if not self.run_eagerly:
+            train_function = tf.function(train_function, reduce_retracing=True)
 
-            if not self.run_eagerly:
-                train_function = tf.function(train_function, reduce_retracing=True)
-                self.train_tf_function = train_function
-            self.train_function = train_function
-
+        self.train_function = train_function
         return self.train_function
 
     def make_test_function(self, force=False):
         if self.test_function is not None and not force:
             return self.test_function
 
-        def step_function(model, iterator):
-            """Runs a single evaluation step."""
+        @tf.autograph.experimental.do_not_convert
+        def one_step_on_data(data):
+            """Runs a single test step on a batch of data."""
+            outputs = self.test_step(data)
+            with tf.control_dependencies(_minimum_control_deps(outputs)):
+                self._test_counter.assign_add(1)
+            return outputs
 
-            @tf.autograph.experimental.do_not_convert
-            def run_step(data):
-                outputs = model.test_step(data)
-                # Ensure counter is updated only if `test_step` succeeds.
-                with tf.control_dependencies(_minimum_control_deps(outputs)):
-                    model._test_counter.assign_add(1)
-                return outputs
+        if not self.run_eagerly and self.jit_compile:
+            one_step_on_data = tf.function(one_step_on_data, reduce_retracing=True, jit_compile=True)
 
-            if not self.run_eagerly:
-                run_step = tf.function(run_step, jit_compile=self.jit_compile, reduce_retracing=True)
-
+        @tf.autograph.experimental.do_not_convert
+        def one_step_on_iterator(iterator):
+            """Runs a single test step given a Dataset iterator."""
             data = next(iterator)
-            outputs = model.distribute_strategy.run(run_step, args=(data,))
+            outputs = self.distribute_strategy.run(one_step_on_data, args=(data,))
             outputs = keras_util.reduce_per_replica(
                 outputs,
-                model.distribute_strategy,
-                reduction=model.distribute_reduction_method,
+                self.distribute_strategy,
+                reduction=self.distribute_reduction_method,
             )
             return outputs
 
-        # Special case if steps_per_execution is one.
-        if self._steps_per_execution is None or self._steps_per_execution.numpy().item() == 1:
+        @tf.autograph.experimental.do_not_convert
+        def multi_step_on_iterator(iterator):
+            for _ in range(self.steps_per_execution):
+                outputs = one_step_on_iterator(iterator)
+            return outputs
 
-            def test_function(iterator):
-                """Runs a test execution with a single step."""
-                return step_function(self, iterator)
-
-            if not self.run_eagerly:
-                test_function = tf.function(test_function, reduce_retracing=True)
-
-            if self._cluster_coordinator:
-                self.test_function = lambda it: self._cluster_coordinator.schedule(test_function, args=(it,))
-            else:
-                self.test_function = test_function
-
-        # If we're using a coordinator, use the value of
-        # self._steps_per_execution at the time the function is
-        # called/scheduled, and not when it is actually executed.
-        elif self._cluster_coordinator:
-
-            def test_function(iterator, steps_per_execution):
-                """Runs a test execution with multiple steps."""
-                for _ in tf.range(steps_per_execution):
-                    outputs = step_function(self, iterator)
-                return outputs
-
-            if not self.run_eagerly:
-                test_function = tf.function(test_function, reduce_retracing=True)
-
-            self.test_function = lambda it: self._cluster_coordinator.schedule(test_function, args=(it, self._steps_per_execution.value()))
+        if self.steps_per_execution > 1:
+            test_function = multi_step_on_iterator
         else:
+            test_function = one_step_on_iterator
 
-            def test_function(iterator):
-                """Runs a test execution with multiple steps."""
-                for _ in tf.range(self._steps_per_execution):
-                    outputs = step_function(self, iterator)
-                return outputs
+        if not self.run_eagerly:
+            test_function = tf.function(test_function, reduce_retracing=True)
 
-            if not self.run_eagerly:
-                test_function = tf.function(test_function, reduce_retracing=True)
-            self.test_function = test_function
-
+        self.test_function = test_function
         return self.test_function
 
     # -------------------------------- INFERENCE FUNCTIONS -------------------------------------
