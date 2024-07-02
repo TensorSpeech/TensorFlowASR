@@ -45,6 +45,30 @@ def nan_to_zero(
     return tf.where(tf.math.is_nan(input_tensor), tf.zeros_like(input_tensor), input_tensor)
 
 
+def nan_to_num(x, nan=0.0, posinf=None, neginf=None):
+    x = tf.convert_to_tensor(x)
+
+    dtype = x.dtype
+    dtype_as_dtype = tf.as_dtype(dtype)
+    if dtype_as_dtype.is_integer or not dtype_as_dtype.is_numeric:
+        return x
+
+    # Replace NaN with `nan`
+    x = tf.where(tf.math.is_nan(x), tf.constant(nan, dtype), x)
+
+    # Replace positive infinity with `posinf` or `dtype.max`
+    if posinf is None:
+        posinf = dtype.max
+    x = tf.where(tf.math.is_inf(x) & (x > 0), tf.constant(posinf, dtype), x)
+
+    # Replace negative infinity with `neginf` or `dtype.min`
+    if neginf is None:
+        neginf = dtype.min
+    x = tf.where(tf.math.is_inf(x) & (x < 0), tf.constant(neginf, dtype), x)
+
+    return x
+
+
 def bytes_to_string(
     array: np.ndarray,
     encoding: str = "utf-8",
