@@ -180,17 +180,6 @@ class ConvModule(Layer):
         outputs = self.post(outputs, training=training)
         return outputs
 
-    def compute_mask(self, inputs, mask=None):
-        outputs, outputs_length = inputs
-        maxlen = tf.shape(outputs)[1]
-        for conv in self.convs:
-            maxlen, outputs_length = (
-                math_util.conv_output_length(length, filter_size=conv.conv.kernel_size[0], padding=conv.conv.padding, stride=conv.conv.strides[0])
-                for length in (maxlen, outputs_length)
-            )
-        mask = tf.sequence_mask(outputs_length, maxlen=maxlen, dtype=tf.bool)
-        return mask, None
-
     def compute_output_shape(self, input_shape):
         output_shape = input_shape
         output_shape = self.pre.compute_output_shape(output_shape)
