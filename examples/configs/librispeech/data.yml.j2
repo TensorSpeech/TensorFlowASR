@@ -7,6 +7,7 @@ data_config:
       - {{datadir}}/train-clean-360/transcripts.tsv
       - {{datadir}}/train-other-500/transcripts.tsv
     tfrecords_dir: {{datadir}}/tfrecords
+    tfrecords_shards: 32
     shuffle: True
     cache: False
     buffer_size: 1000
@@ -22,6 +23,7 @@ data_config:
       - {{datadir}}/dev-clean/transcripts.tsv
       - {{datadir}}/dev-other/transcripts.tsv
     tfrecords_dir: {{datadir}}/tfrecords
+    tfrecords_shards: 2
     shuffle: True
     cache: False
     buffer_size: 1000
