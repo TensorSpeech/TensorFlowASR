@@ -29,7 +29,6 @@
 
 from tensorflow_asr import keras, tf
 from tensorflow_asr.losses.base_loss import BaseLoss
-from tensorflow_asr.utils import math_util
 
 logger = tf.get_logger()
 
@@ -41,8 +40,9 @@ class CtcLoss(BaseLoss):
 
     def call(self, y_true, y_pred):
         logits, logit_length, labels, label_length = super().call(y_true, y_pred)
+        labels = labels if self.use_tpu else tf.sparse.from_dense(labels)
         unique = tf.nn.ctc_unique_labels(labels) if self.use_tpu else None
-        losses = tf.nn.ctc_loss(
+        return tf.nn.ctc_loss(
             logits=logits,
             logit_length=logit_length,
             labels=labels,
@@ -52,9 +52,3 @@ class CtcLoss(BaseLoss):
             blank_index=self.blank,
             name=self.name,
         )
-        nan = tf.divide(
-            losses.dtype.max,
-            tf.cast(tf.shape(losses)[0] * tf.distribute.get_strategy().num_replicas_in_sync * 2, losses.dtype),
-        )
-        losses = math_util.nan_to_num(losses, nan=nan)
-        return losses

@@ -36,7 +36,7 @@ class Memory(Layer):
     """
 
     def __init__(self, memory_length, dmodel, **kwargs):
-        super().__init__(**kwargs)
+        super().__init__(trainable=False, **kwargs)
         assert memory_length > 0, "memory_length must be integer"
         self.memory_length = memory_length
         self.dmodel = dmodel

@@ -35,7 +35,7 @@ class Residual(Layer):
         name="residual",
         **kwargs,
     ):
-        super().__init__(name=name, **kwargs)
+        super().__init__(name=name, trainable=False, **kwargs)
         self._factor = factor
         self._initializer = initializer
         self._regularizer = regularizer

@@ -11,7 +11,8 @@ model_config:
       stride_ms: 10
       nfft: 512
       num_feature_bins: 160
-      feature_type: log_mel_spectrogram
+      normalize_signal: True
+      feature_type: spectrogram
       augmentation_config:
         feature_augment:
           time_masking:

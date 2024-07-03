@@ -36,7 +36,7 @@ class DeepSpeech2Decoder(Layer):
             kernel_initializer=initializer,
             bias_regularizer=bias_regularizer,
             bias_initializer=initializer,
-            dtype=tf.float32,
+            dtype=self.dtype,
         )
 
     def call(self, inputs, training=False):

@@ -97,7 +97,7 @@ class FeatureExtraction(Layer):
         """
         assert feature_type in asdict(FEATURE_TYPES()).values(), f"feature_type must be in {asdict(FEATURE_TYPES()).values()}"
 
-        super().__init__(name=feature_type, **kwargs)
+        super().__init__(name=feature_type, trainable=False, **kwargs)
         self.sample_rate = sample_rate
 
         self.frame_ms = frame_ms
@@ -161,7 +161,7 @@ class FeatureExtraction(Layer):
     def normalize_signal(self, signal):
         if not self._normalize_signal:
             return signal
-        gain = 1.0 / (tf.reduce_max(tf.abs(signal), axis=-1) + 1e-9)
+        gain = 1.0 / (tf.reduce_max(tf.abs(signal), axis=1, keepdims=True) + 1e-9)
         return signal * gain
 
     def preemphasis_signal(self, signal):

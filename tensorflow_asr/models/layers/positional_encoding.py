@@ -60,7 +60,7 @@ class SinusoidalPositionalEncoding(Layer):
         interleave=False,
         **kwargs,
     ):
-        super().__init__(**kwargs)
+        super().__init__(trainable=False, **kwargs)
         self.do = keras.layers.Dropout(dropout, dtype=self.dtype, name="dropout")
         self._scale = scale
         self._interleave = interleave

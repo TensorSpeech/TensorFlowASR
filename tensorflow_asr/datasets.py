@@ -313,16 +313,17 @@ class ASRDataset(BaseDataset):
             yield bytes(path, "utf-8"), audio, bytes(transcript, "utf-8")
 
     def _process_item(self, path: tf.Tensor, audio: tf.Tensor, transcript: tf.Tensor):
-        inputs = data_util.read_raw_audio(audio)
-        inputs_length = tf.shape(inputs)[0]
+        with tf.device("/CPU:0"):
+            inputs = data_util.read_raw_audio(audio)
+            inputs_length = tf.shape(inputs)[0]
 
-        labels = self.tokenizer.tokenize(transcript)
-        labels_length = tf.shape(labels, out_type=tf.int32)[0]
+            labels = self.tokenizer.tokenize(transcript)
+            labels_length = tf.shape(labels, out_type=tf.int32)[0]
 
-        predictions = self.tokenizer.prepand_blank(labels)
-        predictions_length = tf.shape(predictions, out_type=tf.int32)[0]
+            predictions = self.tokenizer.prepand_blank(labels)
+            predictions_length = tf.shape(predictions, out_type=tf.int32)[0]
 
-        return path, inputs, inputs_length, labels, labels_length, predictions, predictions_length
+            return path, inputs, inputs_length, labels, labels_length, predictions, predictions_length
 
     def parse(self, path: tf.Tensor, audio: tf.Tensor, transcript: tf.Tensor) -> schemas.TrainData:
         (
