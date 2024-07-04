@@ -313,7 +313,7 @@ class ASRDataset(BaseDataset):
             yield bytes(path, "utf-8"), audio, bytes(transcript, "utf-8")
 
     def _process_item(self, path: tf.Tensor, audio: tf.Tensor, transcript: tf.Tensor):
-        with tf.device("/CPU:0"):
+        with tf.device("/cpu:0"):
             inputs = data_util.read_raw_audio(audio)
             inputs_length = tf.shape(inputs)[0]
 

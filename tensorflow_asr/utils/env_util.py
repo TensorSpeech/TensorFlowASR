@@ -63,14 +63,14 @@ def setup_devices(
             gpus = [gpus[i] for i in devices]
         tf.config.set_visible_devices(gpus, "GPU")
         tf.get_logger().info(f"Run on {gpus}")
-        return tf.config.list_logical_devices("GPU")
+        return True
     # fallback to cpu
     cpus = tf.config.list_physical_devices("CPU")
     if cpus:
         if devices is not None:
             cpus = [cpus[i] for i in devices]
         tf.config.set_visible_devices(cpus, "CPU")
-        return tf.config.list_logical_devices("CPU")
+        return False
     # worst case
     raise RuntimeError("Failed to set visible devices, no devices found!")
 
@@ -109,8 +109,10 @@ def setup_strategy(
         return setup_tpu(tpu_address)
     except (ValueError, tf.errors.NotFoundError) as e:
         tf.get_logger().warning(e)
-    setup_devices(devices)
-    return tf.distribute.MirroredStrategy()
+    use_gpu = setup_devices(devices)
+    if use_gpu:
+        return tf.distribute.MirroredStrategy(cross_device_ops=tf.distribute.NcclAllReduce())
+    return tf.distribute.OneDeviceStrategy(device="/cpu:0")
 
 
 def has_devices(
