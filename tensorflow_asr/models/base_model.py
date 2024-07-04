@@ -15,6 +15,8 @@
 
 import importlib
 
+import numpy as np
+
 from tensorflow_asr import keras, schemas, tf
 from tensorflow_asr.models.layers.feature_extraction import FeatureExtraction
 from tensorflow_asr.optimizers.accumulation import GradientAccumulator
@@ -25,7 +27,8 @@ from tensorflow_asr.utils import data_util, env_util, file_util, keras_util, mat
 # data_adapter = importlib.import_module(f"{env_util.KERAS_SRC}.engine.data_adapter")
 # training_utils = importlib.import_module(f"{env_util.KERAS_SRC}.engine.training_utils")
 
-# tf_utils = importlib.import_module(f"{env_util.KERAS_SRC}.utils.tf_utils")
+tf_utils = importlib.import_module(f"{env_util.KERAS_SRC}.utils.tf_utils")
+io_utils = importlib.import_module(f"{env_util.KERAS_SRC}.utils.io_utils")
 # version_utils = importlib.import_module(f"{env_util.KERAS_SRC}.utils.version_utils")
 
 # _disallow_inside_tf_function = importlib.import_module(f"{env_util.KERAS_SRC}.engine.training")._disallow_inside_tf_function
@@ -287,7 +290,7 @@ class BaseModel(keras.Model):
                 self.distribute_strategy,
                 reduction=self.distribute_reduction_method,
             )
-            return outputs
+            return outputs, data
 
         @tf.autograph.experimental.do_not_convert
         def multi_step_on_iterator(iterator):
@@ -303,7 +306,16 @@ class BaseModel(keras.Model):
         if not self.run_eagerly:
             train_function = tf.function(train_function, reduce_retracing=True)
 
-        self.train_function = train_function
+        def train_function_wrapper(iterator):
+            outputs, data = train_function(iterator)
+            loss = outputs.get("loss")
+            if loss is not None:
+                loss = tf_utils.sync_to_numpy_or_python_type(loss)
+                if np.isnan(loss) or np.isinf(loss):
+                    io_utils.print_msg(f"Invalid loss for batch {data}")
+            return outputs
+
+        self.train_function = train_function_wrapper
         return self.train_function
 
     def make_test_function(self, force=False):

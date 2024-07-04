@@ -112,7 +112,7 @@ def setup_strategy(
     use_gpu = setup_devices(devices)
     if use_gpu:
         return tf.distribute.MirroredStrategy(cross_device_ops=tf.distribute.NcclAllReduce())
-    return tf.distribute.OneDeviceStrategy(device="/cpu:0")
+    return tf.distribute.get_strategy()
 
 
 def has_devices(

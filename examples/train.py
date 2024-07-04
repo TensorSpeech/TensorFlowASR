@@ -97,6 +97,7 @@ def main(
 
     model.fit(
         train_data_loader,
+        batch_size=shapes["batch_size"],
         epochs=config.learning_config.num_epochs,
         verbose=verbose,
         validation_data=eval_data_loader,
