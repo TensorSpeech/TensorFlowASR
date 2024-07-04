@@ -14,6 +14,7 @@
 
 from tensorflow_asr import keras, tf
 from tensorflow_asr.models.base_layer import Identity, Layer, Reshape
+from tensorflow_asr.models.layers import norm
 from tensorflow_asr.models.layers.convolution import DepthwiseConv1D
 from tensorflow_asr.utils import layer_util, math_util
 
@@ -44,7 +45,7 @@ class RowConv1D(Layer):
             name="conv",
             dtype=self.dtype,
         )
-        self.bn = keras.layers.BatchNormalization(
+        self.bn = norm.BatchNormalization(
             name="bn",
             gamma_regularizer=regularizer,
             beta_regularizer=regularizer,
@@ -93,7 +94,7 @@ class ConvBlock(Layer):
             bias_initializer=initializer,
             dtype=self.dtype,
         )
-        self.bn = keras.layers.BatchNormalization(
+        self.bn = norm.BatchNormalization(
             name="bn",
             gamma_regularizer=kernel_regularizer,
             beta_regularizer=bias_regularizer,

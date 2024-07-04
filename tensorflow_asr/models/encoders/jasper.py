@@ -16,6 +16,7 @@ import tensorflow as tf
 
 from tensorflow_asr import keras
 from tensorflow_asr.models.base_layer import Layer, Reshape
+from tensorflow_asr.models.layers import norm
 from tensorflow_asr.utils import math_util
 
 
@@ -45,7 +46,7 @@ class JasperSubBlock(keras.layers.Layer):
             name="conv1d",
             dtype=self.dtype,
         )
-        self.bn = keras.layers.BatchNormalization(
+        self.bn = norm.BatchNormalization(
             name="bn",
             gamma_regularizer=kernel_regularizer,
             beta_regularizer=bias_regularizer,
@@ -86,7 +87,7 @@ class JasperResidual(keras.layers.Layer):
             name="pointwise_conv1d",
             dtype=self.dtype,
         )
-        self.bn = keras.layers.BatchNormalization(
+        self.bn = norm.BatchNormalization(
             name="bn",
             gamma_regularizer=kernel_regularizer,
             beta_regularizer=bias_regularizer,

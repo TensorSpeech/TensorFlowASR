@@ -16,6 +16,7 @@ import typing
 
 from tensorflow_asr import keras, tf
 from tensorflow_asr.models.base_layer import Layer
+from tensorflow_asr.models.layers import norm
 from tensorflow_asr.utils import math_util, shape_util
 
 
@@ -187,7 +188,7 @@ class Conv2dSubsampling(Layer):
             )
             if norms[i] == "batch":
                 subblock.add(
-                    keras.layers.BatchNormalization(
+                    norm.BatchNormalization(
                         name=f"bn_{i}",
                         gamma_regularizer=kernel_regularizer,
                         beta_regularizer=bias_regularizer,
@@ -277,7 +278,7 @@ class Conv1dSubsampling(Layer):
             )
             if norms[i] == "batch":
                 subblock.add(
-                    keras.layers.BatchNormalization(
+                    norm.BatchNormalization(
                         name=f"bn_{i}",
                         gamma_regularizer=kernel_regularizer,
                         beta_regularizer=bias_regularizer,
