@@ -10,7 +10,7 @@ data_config:
     tfrecords_shards: 32
     shuffle: True
     cache: False
-    buffer_size: 1000
+    buffer_size: 100
     drop_remainder: True
     stage: train
     metadata: {{metadata}}
@@ -26,7 +26,7 @@ data_config:
     tfrecords_shards: 2
     shuffle: True
     cache: False
-    buffer_size: 1000
+    buffer_size: 100
     drop_remainder: True
     stage: eval
     metadata: {{metadata}}
