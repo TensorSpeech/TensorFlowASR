@@ -144,10 +144,9 @@ class BaseModel(keras.Model):
         if env_util.has_devices("TPU"):
             self.use_loss_scale = False
         else:
-            self.use_loss_scale = mxp != "none"
+            self.use_loss_scale = mxp != "none" and self.dtype_policy.name == "mixed_float16"
             if self.use_loss_scale:
-                optimizer = keras.mixed_precision.LossScaleOptimizer(optimizer)
-                logger.info("Using loss scale")
+                logger.info("Using loss scale")  # keras auto wrap optimizer with mixed precision loss scale optimizer
         if isinstance(ga_steps, int) and ga_steps > 1:
             self.use_ga = True
             self.ga = GradientAccumulator(ga_steps=ga_steps)

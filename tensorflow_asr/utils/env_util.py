@@ -154,6 +154,10 @@ def setup_mxp(
     elif mxp == "auto":
         tf.config.optimizer.set_experimental_options({"auto_mixed_precision": True})
         tf.get_logger().info("USING auto mixed precision policy")
+    else:
+        keras.mixed_precision.set_global_policy("float32")
+        tf.config.optimizer.set_experimental_options({"auto_mixed_precision": False})
+        tf.get_logger().info("USING float32 precision policy")
 
 
 def setup_seed(
