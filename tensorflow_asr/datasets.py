@@ -61,6 +61,7 @@
 # Where `predictions` and `predictions_length` are the label prepanded by blank and its length for training *Transducer*
 
 import json
+import logging
 import os
 from dataclasses import asdict, dataclass
 
@@ -72,7 +73,7 @@ from tensorflow_asr.configs import Config, DatasetConfig
 from tensorflow_asr.tokenizers import Tokenizer
 from tensorflow_asr.utils import data_util, feature_util, file_util, math_util
 
-logger = tf.get_logger()
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -314,8 +315,9 @@ class ASRDataset(BaseDataset):
 
     def _process_item(self, path: tf.Tensor, audio: tf.Tensor, transcript: tf.Tensor):
         with tf.device("/cpu:0"):
+
             inputs = data_util.read_raw_audio(audio)
-            inputs_length = tf.shape(inputs)[0]
+            inputs_length = tf.shape(inputs, out_type=tf.int32)[0]
 
             labels = self.tokenizer.tokenize(transcript)
             labels_length = tf.shape(labels, out_type=tf.int32)[0]

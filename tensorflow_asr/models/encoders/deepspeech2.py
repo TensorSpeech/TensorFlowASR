@@ -28,7 +28,7 @@ class RowConv1D(Layer):
         future_width=2,
         activation="relu",
         regularizer=None,
-        initializer=None,
+        initializer="glorot_uniform",
         **kwargs,
     ):
         assert future_width >= 0, "Future context must be positive"
@@ -41,7 +41,6 @@ class RowConv1D(Layer):
             depthwise_regularizer=regularizer,
             depthwise_initializer=initializer,
             bias_regularizer=regularizer,
-            bias_initializer=initializer,
             name="conv",
             dtype=self.dtype,
         )
@@ -78,7 +77,7 @@ class ConvBlock(Layer):
         activation: str = "relu",
         kernel_regularizer=None,
         bias_regularizer=None,
-        initializer=None,
+        initializer="glorot_uniform",
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -91,7 +90,6 @@ class ConvBlock(Layer):
             kernel_regularizer=kernel_regularizer,
             kernel_initializer=initializer,
             bias_regularizer=bias_regularizer,
-            bias_initializer=initializer,
             dtype=self.dtype,
         )
         self.bn = norm.BatchNormalization(
@@ -220,9 +218,8 @@ class RnnBlock(Layer):
             name=rnn_type,
             zero_output_for_mask=True,
             kernel_regularizer=kernel_regularizer,
-            kernel_initializer=initializer,
+            kernel_initializer=initializer or "glorot_uniform",
             bias_regularizer=bias_regularizer,
-            bias_initializer=initializer,
             dtype=self.dtype,
         )
         self._bidirectional = bidirectional
@@ -354,7 +351,7 @@ class FcBlock(Layer):
         dropout: float = 0.1,
         kernel_regularizer=None,
         bias_regularizer=None,
-        initializer=None,
+        initializer="glorot_uniform",
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -363,7 +360,6 @@ class FcBlock(Layer):
             kernel_regularizer=kernel_regularizer,
             kernel_initializer=initializer,
             bias_regularizer=bias_regularizer,
-            bias_initializer=initializer,
             name="fc",
             dtype=self.dtype,
         )

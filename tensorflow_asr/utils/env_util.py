@@ -14,11 +14,15 @@
 
 import logging
 import logging.handlers
+import os
 import random
 import sys
 import warnings
 from datetime import datetime, timezone
 from typing import List, Union
+
+TF_LOG_LEVEL = os.getenv("TF_LOG_LEVEL", "warning").upper()
+DEBUG = TF_LOG_LEVEL == "DEBUG"
 
 
 def _logging_format_time(self, record, datefmt=None):
@@ -36,8 +40,9 @@ import tensorflow as tf
 from packaging import version
 from tensorflow.python.util import deprecation  # pylint: disable = no-name-in-module
 
+tf.get_logger().setLevel(TF_LOG_LEVEL)
 # might cause performance penalty if ops fallback to cpu, see https://cloud.google.com/tpu/docs/tensorflow-ops
-tf.config.set_soft_device_placement(False)
+tf.config.set_soft_device_placement(DEBUG)
 deprecation._PRINT_DEPRECATION_WARNINGS = False  # comment this line to print deprecation warnings
 
 
@@ -111,7 +116,7 @@ def setup_strategy(
         tf.get_logger().warning(e)
     use_gpu = setup_devices(devices)
     if use_gpu:
-        return tf.distribute.MirroredStrategy(cross_device_ops=tf.distribute.NcclAllReduce())
+        return tf.distribute.MirroredStrategy()
     return tf.distribute.get_strategy()
 
 

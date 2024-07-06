@@ -14,6 +14,7 @@
 # limitations under the License.
 
 import importlib
+import logging
 
 import numpy as np
 
@@ -35,7 +36,7 @@ io_utils = importlib.import_module(f"{env_util.KERAS_SRC}.utils.io_utils")
 # _get_verbosity = importlib.import_module(f"{env_util.KERAS_SRC}.engine.training")._get_verbosity
 _minimum_control_deps = importlib.import_module(f"{env_util.KERAS_SRC}.engine.training")._minimum_control_deps
 
-logger = tf.get_logger()
+logger = logging.getLogger(__name__)
 
 
 class BaseModel(keras.Model):
@@ -195,6 +196,10 @@ class BaseModel(keras.Model):
         if self.use_loss_scale:
             gradients = self.optimizer.get_unscaled_gradients(gradients)
 
+        if env_util.DEBUG:
+            tf.print("")
+            tf.print("Outputs", outputs)
+
         return gradients
 
     def train_step(self, data: schemas.TrainData):
@@ -311,7 +316,9 @@ class BaseModel(keras.Model):
             if loss is not None:
                 loss = tf_utils.sync_to_numpy_or_python_type(loss)
                 if np.isnan(loss) or np.isinf(loss):
+                    io_utils.print_msg("")  # empty line for newline
                     io_utils.print_msg(f"Invalid loss for batch {data}")
+                    self.stop_training = True
             return outputs
 
         self.train_function = train_function_wrapper

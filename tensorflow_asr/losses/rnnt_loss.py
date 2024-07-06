@@ -15,6 +15,7 @@
 # RNNT loss implementation in pure TensorFlow is borrowed from [iamjanvijay's repo](https://github.com/iamjanvijay/rnnt)
 
 import importlib.util
+import logging
 import os
 
 import numpy as np
@@ -27,7 +28,7 @@ warp_rnnt_loss = importlib.import_module("warprnnt_tensorflow").rnnt_loss if imp
 
 TFASR_USE_CPU_LOSS = os.getenv("TFASR_USE_CPU_LOSS", "False") in ("true", "True", "1")
 
-logger = tf.get_logger()
+logger = logging.getLogger(__name__)
 
 
 class RnntLoss(BaseLoss):
@@ -257,6 +258,15 @@ def compute_rnnt_loss_and_grad_helper(
         input_max_len = output_shapes.logits[1]
         target_max_len = output_shapes.logits[2]
         vocab_size = output_shapes.logits[3]
+
+    if batch_size is None:
+        batch_size = shape_util.get_dim(logits, 0)
+    if input_max_len is None:
+        input_max_len = shape_util.get_dim(logits, 1)
+    if target_max_len is None:
+        target_max_len = shape_util.get_dim(logits, 2)
+    if vocab_size is None:
+        vocab_size = shape_util.get_dim(logits, 3)
 
     one_hot_labels = tf.one_hot(tf.tile(tf.expand_dims(labels, axis=1), multiples=[1, input_max_len, 1]), depth=vocab_size)
 

@@ -13,14 +13,15 @@
 # limitations under the License.
 
 
+import logging
 import os
 
-from tensorflow_asr import tf, tokenizers
+from tensorflow_asr import tokenizers
 from tensorflow_asr.configs import Config
 from tensorflow_asr.datasets import ASRDataset
 from tensorflow_asr.utils import cli_util
 
-logger = tf.get_logger()
+logger = logging.getLogger(__name__)
 
 
 def main(

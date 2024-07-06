@@ -118,13 +118,7 @@ class Jasper(CtcModel):
                 bias_regularizer=bias_regularizer,
                 name="encoder",
             ),
-            decoder=JasperDecoder(
-                vocab_size=vocab_size,
-                padding=padding,
-                kernel_regularizer=kernel_regularizer,
-                bias_regularizer=bias_regularizer,
-                name="decoder",
-            ),
+            decoder=JasperDecoder(vocab_size=vocab_size, padding=padding, name="decoder"),
             name=name,
             **kwargs,
         )

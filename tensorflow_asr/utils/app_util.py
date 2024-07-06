@@ -13,6 +13,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import logging
+
 import jiwer
 from tqdm import tqdm
 
@@ -20,7 +22,7 @@ from tensorflow_asr import tf
 from tensorflow_asr.models.base_model import BaseModel
 from tensorflow_asr.utils import file_util, math_util
 
-logger = tf.get_logger()
+logger = logging.getLogger(__name__)
 
 
 def evaluate_hypotheses(filepath: str):

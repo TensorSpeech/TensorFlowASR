@@ -27,10 +27,12 @@
 # limitations under the License.
 # ==============================================================================
 
+import logging
+
 from tensorflow_asr import keras, tf
 from tensorflow_asr.losses.base_loss import BaseLoss
 
-logger = tf.get_logger()
+logger = logging.getLogger(__name__)
 
 
 class CtcLoss(BaseLoss):
@@ -40,7 +42,6 @@ class CtcLoss(BaseLoss):
 
     def call(self, y_true, y_pred):
         logits, logit_length, labels, label_length = super().call(y_true, y_pred)
-        labels = labels if self.use_tpu else tf.sparse.from_dense(labels)
         unique = tf.nn.ctc_unique_labels(labels) if self.use_tpu else None
         return tf.nn.ctc_loss(
             logits=logits,

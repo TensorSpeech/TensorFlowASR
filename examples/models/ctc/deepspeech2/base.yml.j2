@@ -42,7 +42,6 @@ model_config:
     rnn_rowconv: 0
     rnn_rowconv_activation: relu
     rnn_dropout: 0.5
-    rnn_initializer: glorot_uniform
     fc_nlayers: 1
     fc_units: 1024
     fc_activation: relu
@@ -58,22 +57,18 @@ model_config:
       class_name: l2
       config:
         l2: 0.0005
-    initializer: glorot_uniform
 
 learning_config:
   optimizer_config:
-    class_name: Custom>SGD
+    class_name: Custom>Adam
     config:
       learning_rate:
-        class_name: PolynomialDecay
+        class_name: ExponentialDecay
         config:
-          initial_learning_rate: 0.001
-          decay_steps: 10000 # around 5 epochs with batch size 16 and 8 tpus
-          end_learning_rate: 0.0001
-          power: 0.5
-          cycle: False
-      momentum: 0.9
-      nesterov: True
+          initial_learning_rate: 0.0001
+          decay_steps: 5000
+          decay_rate: 0.9
+          staircase: True
 
   gwn_config: null
 
@@ -84,8 +79,6 @@ learning_config:
   num_epochs: 450
 
   callbacks:
-    - class_name: tensorflow_asr.callbacks>TerminateOnNaN
-      config: {}
     - class_name: tensorflow_asr.callbacks>ModelCheckpoint
       config:
         filepath: {{modeldir}}/checkpoints/{epoch:02d}.h5

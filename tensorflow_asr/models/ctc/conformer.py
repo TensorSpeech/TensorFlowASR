@@ -119,13 +119,7 @@ class Conformer(CtcModel):
                 trainable=encoder_trainable,
                 name="encoder",
             ),
-            decoder=ConformerDecoder(
-                vocab_size=vocab_size,
-                kernel_regularizer=kernel_regularizer,
-                bias_regularizer=bias_regularizer,
-                trainable=decoder_trainable,
-                name="decoder",
-            ),
+            decoder=ConformerDecoder(vocab_size=vocab_size, trainable=decoder_trainable, name="decoder"),
             name=name,
             **kwargs,
         )

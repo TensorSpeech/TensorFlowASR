@@ -13,14 +13,15 @@
 # limitations under the License.
 
 import json
+import logging
 import os
 
-from tensorflow_asr import callbacks, datasets, keras, tf, tokenizers  # import to aid logging messages
+from tensorflow_asr import callbacks, datasets, keras, tokenizers  # import to aid logging messages
 from tensorflow_asr.configs import Config
 from tensorflow_asr.models.base_model import BaseModel
 from tensorflow_asr.utils import cli_util, env_util, file_util
 
-logger = tf.get_logger()
+logger = logging.getLogger(__name__)
 
 
 def main(

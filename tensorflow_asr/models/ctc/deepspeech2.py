@@ -25,7 +25,7 @@ class DeepSpeech2Decoder(Layer):
         vocab_size: int,
         kernel_regularizer=None,
         bias_regularizer=None,
-        initializer=None,
+        initializer="glorot_uniform",
         **kwargs,
     ):
         super().__init__(dtype=tf.float32, **kwargs)
@@ -35,7 +35,6 @@ class DeepSpeech2Decoder(Layer):
             kernel_regularizer=kernel_regularizer,
             kernel_initializer=initializer,
             bias_regularizer=bias_regularizer,
-            bias_initializer=initializer,
             dtype=self.dtype,
         )
 
@@ -85,7 +84,7 @@ class DeepSpeech2(CtcModel):
         name: str = "deepspeech2",
         kernel_regularizer=None,
         bias_regularizer=None,
-        initializer=None,
+        initializer="glorot_uniform",
         **kwargs,
     ):
         super().__init__(
@@ -118,13 +117,7 @@ class DeepSpeech2(CtcModel):
                 initializer=initializer,
                 name="encoder",
             ),
-            decoder=DeepSpeech2Decoder(
-                vocab_size=vocab_size,
-                kernel_regularizer=kernel_regularizer,
-                bias_regularizer=bias_regularizer,
-                initializer=initializer,
-                name="decoder",
-            ),
+            decoder=DeepSpeech2Decoder(vocab_size=vocab_size, name="decoder"),
             name=name,
             **kwargs,
         )

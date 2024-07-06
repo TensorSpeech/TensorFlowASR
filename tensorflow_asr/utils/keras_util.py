@@ -1,14 +1,6 @@
 import tensorflow as tf
 
 
-def _is_per_replica_instance(obj):
-    return isinstance(obj, tf.distribute.DistributedValues) and isinstance(obj, tf.__internal__.CompositeTensor)
-
-
-def _collective_all_reduce_multi_worker(strategy):
-    return (isinstance(strategy, tf.distribute.MultiWorkerMirroredStrategy)) and strategy.extended._in_multi_worker_mode()
-
-
 def reduce_per_replica(values, strategy, reduction):
     """Attempt to reduce the structure `values` to single values.
 
@@ -66,19 +58,12 @@ def reduce_per_replica(values, strategy, reduction):
 
     def _reduce(v):
         """Reduce a single `PerReplica` object."""
-        if _collective_all_reduce_multi_worker(strategy):
-            if reduction == "sum":
-                return strategy.reduce("SUM", v)
-            if reduction == "mean":
-                return strategy.reduce("MEAN", v, axis=0)
-        if not _is_per_replica_instance(v):
-            return v
         if reduction == "first":
             return strategy.experimental_local_results(v)[0]
         if reduction == "sum":
-            return tf.reduce_sum(strategy.experimental_local_results(v))
+            return strategy.reduce("SUM", v, axis=None)
         if reduction == "mean":
-            return tf.reduce_mean(strategy.experimental_local_results(v), axis=0)
+            return strategy.reduce("MEAN", v, axis=None)
         raise ValueError("`reduction` must be one of " '"first", "mean", "sum", or "auto". ' f"Received: reduction={reduction}.")
 
     return tf.nest.map_structure(_reduce, values)
