@@ -347,12 +347,14 @@ class ASRDataset(BaseDataset):
             dataset = dataset.cache()  # cache original (unchanged data)
 
         dataset = dataset.map(self.parse, num_parallel_calls=AUTOTUNE, deterministic=False)
-        self.total_steps = math_util.get_num_batches(self.num_entries, batch_size, drop_remainders=self.drop_remainder)
+
+        if hasattr(self, "num_entries") and self.num_entries > 0:
+            self.total_steps = math_util.get_num_batches(self.num_entries, batch_size, drop_remainders=self.drop_remainder)
 
         if self.shuffle:
             dataset = dataset.shuffle(self.buffer_size or self.num_entries, reshuffle_each_iteration=True)
 
-        if self.indefinite and self.total_steps:
+        if self.indefinite and hasattr(self, "total_steps") and self.total_steps:
             dataset = dataset.repeat()
 
         if padded_shapes is None:
