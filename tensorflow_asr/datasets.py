@@ -64,6 +64,7 @@ import json
 import logging
 import os
 from dataclasses import asdict, dataclass
+from typing import List
 
 import numpy as np
 import tqdm
@@ -97,17 +98,14 @@ def get(
     raise ValueError(f"dataset_type must in {asdict(ASR_DATASER_TYPES()).values()}")
 
 
-def get_global_shape(
+def get_training_shape(
     config: Config,
-    strategy,
-    *datasets,
+    strategy: tf.distribute.Strategy,
+    *datasets: "ASRDataset",
     batch_size: int = None,
-    ga_steps: int = None,
 ):
     batch_size = (batch_size or config.learning_config.running_config.batch_size) * strategy.num_replicas_in_sync
-    ds_batch_size = batch_size
-    if ga_steps is not None and ga_steps > 1:
-        ds_batch_size *= ga_steps
+    train_batch_size = eval_batch_size = batch_size
 
     max_input_length, max_label_length = 0, 0
     for dset in datasets:
@@ -132,14 +130,12 @@ def get_global_shape(
         ),
     )
 
-    return dict(
-        ds_batch_size=ds_batch_size,
+    model_shapes = dict(
         batch_size=batch_size,
         input_shape=input_shape,
         prediction_shape=prediction_shape,
-        label_shape=label_shape,
-        padded_shapes=padded_shapes,
     )
+    return model_shapes, train_batch_size, eval_batch_size, padded_shapes
 
 
 BUFFER_SIZE = 100
@@ -179,6 +175,7 @@ class BaseDataset:
         self.total_steps = None  # for better training visualization
         self.metadata = metadata
         self.sample_rate = sample_rate
+        self.use_ga = False
         self.name = name
 
     def parse(self, *args, **kwargs):
@@ -344,17 +341,20 @@ class ASRDataset(BaseDataset):
 
     # -------------------------------- CREATION -------------------------------------
 
-    def process(self, dataset: tf.data.Dataset, batch_size: int, padded_shapes=None):
+    def process(
+        self,
+        dataset: tf.data.Dataset,
+        batch_size: int,
+        ga_steps: int = 1,
+        padded_shapes=None,
+    ):
+        dataset = dataset.map(self.parse, num_parallel_calls=AUTOTUNE, deterministic=False)
+
         if self.cache:
             dataset = dataset.cache()  # cache original (unchanged data)
 
-        dataset = dataset.map(self.parse, num_parallel_calls=AUTOTUNE, deterministic=False)
-
-        if hasattr(self, "num_entries") and self.num_entries > 0:
-            self.total_steps = math_util.get_num_batches(self.num_entries, batch_size, drop_remainders=self.drop_remainder)
-
         if self.shuffle:
-            dataset = dataset.shuffle(self.buffer_size or self.num_entries, reshuffle_each_iteration=True)
+            dataset = dataset.shuffle(max(self.buffer_size or self.num_entries, batch_size * 2), reshuffle_each_iteration=True)
 
         if self.indefinite and hasattr(self, "total_steps") and self.total_steps:
             dataset = dataset.repeat()
@@ -384,11 +384,31 @@ class ASRDataset(BaseDataset):
             drop_remainder=self.drop_remainder,
         )
 
+        # only apply for training dataset, eval and test dataset should not use GA
+        if ga_steps > 1 and self.stage == "train":
+
+            def _key_fn(i, _):
+                return i // ga_steps
+
+            def _reduce_fn(_, ds):
+                elem = ds.map(lambda _, x: x)
+                return tf.data.Dataset.from_tensors(elem)
+
+            dataset = dataset.enumerate().group_by_window(key_func=_key_fn, reduce_func=_reduce_fn, window_size=ga_steps)
+            self.use_ga = True
+
         # PREFETCH to improve speed of input length
         dataset = dataset.prefetch(AUTOTUNE)
+
+        # Update metadata
+        if hasattr(self, "num_entries") and self.num_entries > 0:
+            self.total_steps = math_util.get_num_batches(self.num_entries, batch_size, drop_remainders=self.drop_remainder)
+            if self.use_ga:
+                self.total_steps = math_util.get_num_batches(self.total_steps, ga_steps, drop_remainders=False)
+
         return dataset
 
-    def create(self, batch_size: int, padded_shapes=None):
+    def create(self, batch_size: int, ga_steps: int = 1, padded_shapes=None):
         if not self.enabled:
             return None
         self.read_entries()
@@ -399,7 +419,7 @@ class ASRDataset(BaseDataset):
             output_types=(tf.string, tf.string, tf.string),
             output_shapes=(tf.TensorShape([]), tf.TensorShape([]), tf.TensorShape([])),
         )
-        return self.process(dataset, batch_size, padded_shapes=padded_shapes)
+        return self.process(dataset, batch_size, ga_steps=ga_steps, padded_shapes=padded_shapes)
 
 
 class ASRTFRecordDataset(ASRDataset):
@@ -499,7 +519,7 @@ class ASRTFRecordDataset(ASRDataset):
         example = tf.io.parse_single_example(record, feature_description)
         return super().parse(**example)
 
-    def create(self, batch_size: int, padded_shapes=None):
+    def create(self, batch_size: int, ga_steps: int = 1, padded_shapes=None):
         if not self.enabled:
             return None
         have_data = self.create_tfrecords()
@@ -515,7 +535,7 @@ class ASRTFRecordDataset(ASRDataset):
             files_ds, compression_type=self.compression_type, buffer_size=self.tfrecords_buffer_size, num_parallel_reads=AUTOTUNE
         )
 
-        return self.process(dataset, batch_size, padded_shapes=padded_shapes)
+        return self.process(dataset, batch_size, ga_steps=ga_steps, padded_shapes=padded_shapes)
 
 
 class ASRSliceDataset(ASRDataset):
@@ -529,7 +549,7 @@ class ASRSliceDataset(ASRDataset):
         )
         return record[0], audio, record[2]
 
-    def create(self, batch_size: int, padded_shapes=None):
+    def create(self, batch_size: int, ga_steps: int = 1, padded_shapes=None):
         if not self.enabled:
             return None
         self.read_entries()
@@ -543,4 +563,4 @@ class ASRSliceDataset(ASRDataset):
         dataset = dataset.with_options(options)
         dataset = dataset.map(self.load, num_parallel_calls=AUTOTUNE, deterministic=False)
 
-        return self.process(dataset, batch_size, padded_shapes=padded_shapes)
+        return self.process(dataset, batch_size, ga_steps=ga_steps, padded_shapes=padded_shapes)

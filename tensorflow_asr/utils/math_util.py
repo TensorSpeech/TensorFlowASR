@@ -304,6 +304,25 @@ def slice_batch_tensor(
         return sliced_tensor
 
 
+def split_tensor_by_ga(
+    tensor: tf.Tensor,  # [B, ...]
+    batch_size: int,
+    ga_steps: int,
+):
+    """
+    Parameters
+    ----------
+    tensor : tf.Tensor of shape [B, ...]
+
+    Returns
+    -------
+    tf.Tensor of shape [num_batches, mini_batch_size, ...]
+    """
+    with tf.name_scope("split_tensor_by_ga"):
+        splits = [batch_size] * ga_steps
+        return tf.stack(tf.split(tensor, splits, num=ga_steps, axis=0), axis=0)
+
+
 def compute_time_length(
     tensor: tf.Tensor,
     dtype=tf.int32,

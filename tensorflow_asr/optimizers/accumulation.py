@@ -23,4 +23,4 @@ class GradientAccumulator:
     def accumulate(self, gradients, per_ga_gradients):
         """Accumulates :obj:`gradients` on the current replica."""
         with tf.name_scope(self.name):
-            return [None if x is None else x + y for x, y in zip(gradients, per_ga_gradients)]
+            return [None if x is None else x if y is None else x + y for x, y in zip(gradients, per_ga_gradients)]

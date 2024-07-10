@@ -15,6 +15,7 @@
 
 import importlib
 import logging
+import typing
 
 import numpy as np
 
@@ -22,7 +23,7 @@ from tensorflow_asr import keras, schemas, tf
 from tensorflow_asr.models.layers.feature_extraction import FeatureExtraction
 from tensorflow_asr.optimizers.accumulation import GradientAccumulator
 from tensorflow_asr.tokenizers import Tokenizer
-from tensorflow_asr.utils import data_util, env_util, file_util, keras_util, math_util, shape_util
+from tensorflow_asr.utils import data_util, env_util, file_util, keras_util, shape_util
 
 # base_layer = importlib.import_module(f"{env_util.KERAS_SRC}.engine.base_layer")
 # data_adapter = importlib.import_module(f"{env_util.KERAS_SRC}.engine.data_adapter")
@@ -191,7 +192,7 @@ class BaseModel(keras.Model):
             if self.use_ga:  # sum of gradients so the loss must be divided
                 loss = loss / self.ga.total_steps
 
-        gradients = tape.gradient(loss, self.trainable_variables)
+        gradients = tape.gradient(loss, self.trainable_variables, unconnected_gradients=tf.UnconnectedGradients.ZERO)
 
         if self.use_loss_scale:
             gradients = self.optimizer.get_unscaled_gradients(gradients)
@@ -202,27 +203,27 @@ class BaseModel(keras.Model):
 
         return gradients
 
-    def train_step(self, data: schemas.TrainData):
+    def train_step(self, data_list: typing.Union[schemas.TrainData, typing.Iterable[schemas.TrainData]]):
         if not self.use_ga:
+            data = data_list
             gradients = self._train_step(data)
         else:
-            gradients = self._train_step(
-                tf.nest.map_structure(
-                    lambda x: math_util.slice_batch_tensor(x, index=0, batch_size=self._per_replica_batch_size),
-                    data,
-                )
-            )
-            for i in range(1, self.ga.total_steps):
-                per_ga_gradients = self._train_step(
-                    tf.nest.map_structure(
-                        lambda x: math_util.slice_batch_tensor(x, index=i, batch_size=self._per_replica_batch_size),
-                        data,
-                    )
-                )
+            iterator = iter(data_list)
+            data = next(iterator)
+            gradients = self._train_step(data)
+
+            for _ in range(1, self.ga.total_steps):
+                try:
+                    data = next(iterator)
+                except StopIteration:
+                    break
+                per_ga_gradients = self._train_step(data)
                 gradients = self.ga.accumulate(gradients, per_ga_gradients)
+
         if self.gradn is not None:
             gradients = self.gradn(step=self.optimizer.iterations, gradients=gradients)
         self.optimizer.apply_gradients(zip(gradients, self.trainable_variables))
+
         metrics = self.get_metrics_result()
         return metrics
 
@@ -237,14 +238,7 @@ class BaseModel(keras.Model):
         self.compute_loss(x, y, y_pred, sample_weight)
 
     def test_step(self, data: schemas.TrainData):
-        if not self.use_ga:
-            self._test_step(data)
-        else:
-            for i in range(self.ga.total_steps):
-                per_ga_step_data = tf.nest.map_structure(
-                    lambda x: math_util.slice_batch_tensor(x, index=i, batch_size=self._per_replica_batch_size), data
-                )
-                self._test_step(per_ga_step_data)
+        self._test_step(data)
         metrics = self.get_metrics_result()
         return metrics
 

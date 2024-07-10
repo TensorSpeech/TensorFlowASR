@@ -58,26 +58,29 @@ def main(
         dataset_type=dataset_type,
     )
 
-    shapes = datasets.get_global_shape(
+    model_shapes, train_batch_size, eval_batch_size, padded_shapes = datasets.get_training_shape(
         config,
         strategy,
         train_dataset,
         eval_dataset,
         batch_size=bs or config.learning_config.batch_size,
-        ga_steps=ga_steps or config.learning_config.ga_steps,
     )
+    ga_steps = ga_steps or config.learning_config.ga_steps or 1
 
-    train_data_loader = train_dataset.create(shapes["ds_batch_size"], padded_shapes=shapes["padded_shapes"])
-    logger.info(f"train_data_loader.element_spec = {json.dumps(train_data_loader.element_spec, indent=2, default=str)}")
+    train_data_loader = train_dataset.create(train_batch_size, ga_steps=ga_steps, padded_shapes=padded_shapes)
+    if train_dataset.use_ga:
+        logger.info(f"train_data_loader.element_spec = {json.dumps(train_data_loader.element_spec.element_spec, indent=2, default=str)}")
+    else:
+        logger.info(f"train_data_loader.element_spec = {json.dumps(train_data_loader.element_spec, indent=2, default=str)}")
 
-    eval_data_loader = eval_dataset.create(shapes["ds_batch_size"], padded_shapes=shapes["padded_shapes"])
+    eval_data_loader = eval_dataset.create(eval_batch_size, padded_shapes=padded_shapes)
     if eval_data_loader:
         logger.info(f"eval_data_loader.element_spec = {json.dumps(eval_data_loader.element_spec, indent=2, default=str)}")
 
     with strategy.scope():
         model: BaseModel = keras.models.model_from_config(config.model_config)
         model.tokenizer = tokenizer
-        output_shapes = model.make(**shapes)
+        output_shapes = model.make(**model_shapes)
         if config.learning_config.pretrained:
             model.load_weights(
                 config.learning_config.pretrained,
@@ -98,7 +101,6 @@ def main(
 
     model.fit(
         train_data_loader,
-        batch_size=shapes["batch_size"],
         epochs=config.learning_config.num_epochs,
         verbose=verbose,
         validation_data=eval_data_loader,
