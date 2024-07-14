@@ -129,7 +129,7 @@ TF_VERSION="$(python3 -c 'import tensorflow; print(tensorflow.__version__)')" &&
 TF_VERSION_MAJOR="$(echo $TF_VERSION | cut -d'.' -f1,2)" && \
 PY_VERSION="$(python3 -c 'import platform; major, minor, patch = platform.python_version_tuple(); print(f"{major}{minor}");')" && \
 URL="https://github.com/sun1638650145/Libraries-and-Extensions-for-TensorFlow-for-Apple-Silicon" && \
-pip3 install "${URL}/releases/download/v${TF_VERSION_MAJOR}/tensorflow_text-${TF_VERSION_MAJOR}.0-cp${PY_VERSION}-cp${PY_VERSION}-macosx_11_0_arm64.whl"
+python3 -m pip install "${URL}/releases/download/v${TF_VERSION_MAJOR}/tensorflow_text-${TF_VERSION_MAJOR}.0-cp${PY_VERSION}-cp${PY_VERSION}-macosx_11_0_arm64.whl"
 ```
 
 ### Running in a container

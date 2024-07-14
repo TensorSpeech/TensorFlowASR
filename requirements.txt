@@ -51,3 +51,11 @@ tensorflow-text~=2.15.0
 # extra=tf2-15-gpu
 tensorflow[and-cuda]~=2.15.0
 tensorflow-text~=2.15.0
+
+# extra=tf2-16
+tensorflow~=2.16.0
+tensorflow-text~=2.16.0
+
+# extra=tf2-16-gpu
+tensorflow[and-cuda]~=2.16.0
+tensorflow-text~=2.16.0
