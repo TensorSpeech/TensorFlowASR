@@ -32,6 +32,8 @@ def main(
     bs: int = None,
     spx: int = 1,
     devices: list = None,
+    tpu_address: str = None,
+    device_type: str = "gpu",
     mxp: str = "none",
     jit_compile: bool = False,
     ga_steps: int = None,
@@ -40,7 +42,7 @@ def main(
 ):
     keras.backend.clear_session()
     env_util.setup_seed()
-    strategy = env_util.setup_strategy(devices)
+    strategy = env_util.setup_strategy(device_type=device_type, devices=devices, tpu_address=tpu_address)
     env_util.setup_mxp(mxp=mxp)
 
     config = Config(config_path, training=True, repodir=repodir, datadir=datadir, modeldir=modeldir)
@@ -68,10 +70,7 @@ def main(
     ga_steps = ga_steps or config.learning_config.ga_steps or 1
 
     train_data_loader = train_dataset.create(train_batch_size, ga_steps=ga_steps, padded_shapes=padded_shapes)
-    if train_dataset.use_ga:
-        logger.info(f"train_data_loader.element_spec = {json.dumps(train_data_loader.element_spec.element_spec, indent=2, default=str)}")
-    else:
-        logger.info(f"train_data_loader.element_spec = {json.dumps(train_data_loader.element_spec, indent=2, default=str)}")
+    logger.info(f"train_data_loader.element_spec = {json.dumps(train_data_loader.element_spec, indent=2, default=str)}")
 
     eval_data_loader = eval_dataset.create(eval_batch_size, padded_shapes=padded_shapes)
     if eval_data_loader:

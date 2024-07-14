@@ -20,6 +20,9 @@ class GradientAccumulator:
     def total_steps(self):
         return self._ga_steps
 
+    def is_apply_step(self, step):
+        return tf.math.equal(step % self._ga_steps, 0)
+
     def accumulate(self, gradients, per_ga_gradients):
         """Accumulates :obj:`gradients` on the current replica."""
         with tf.name_scope(self.name):

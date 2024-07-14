@@ -10,7 +10,7 @@ data_config:
     tfrecords_shards: 32
     shuffle: True
     cache: False
-    buffer_size: 100
+    buffer_size: 1000
     drop_remainder: True
     stage: train
     metadata: {{metadata}}
@@ -24,9 +24,9 @@ data_config:
       - {{datadir}}/dev-other/transcripts.tsv
     tfrecords_dir: {{datadir}}/tfrecords
     tfrecords_shards: 2
-    shuffle: True
+    shuffle: False
     cache: False
-    buffer_size: 100
+    buffer_size: 1000
     drop_remainder: True
     stage: eval
     metadata: {{metadata}}

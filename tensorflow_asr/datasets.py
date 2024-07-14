@@ -64,7 +64,6 @@ import json
 import logging
 import os
 from dataclasses import asdict, dataclass
-from typing import List
 
 import numpy as np
 import tqdm
@@ -386,15 +385,6 @@ class ASRDataset(BaseDataset):
 
         # only apply for training dataset, eval and test dataset should not use GA
         if ga_steps > 1 and self.stage == "train":
-
-            def _key_fn(i, _):
-                return i // ga_steps
-
-            def _reduce_fn(_, ds):
-                elem = ds.map(lambda _, x: x)
-                return tf.data.Dataset.from_tensors(elem)
-
-            dataset = dataset.enumerate().group_by_window(key_func=_key_fn, reduce_func=_reduce_fn, window_size=ga_steps)
             self.use_ga = True
 
         # PREFETCH to improve speed of input length

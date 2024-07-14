@@ -49,74 +49,36 @@ deprecation._PRINT_DEPRECATION_WARNINGS = False  # comment this line to print de
 KERAS_SRC = "keras.src" if version.parse(tf.version.VERSION) >= version.parse("2.13.0") else "keras"
 
 
-def setup_devices(
+def setup_gpu(
     devices: List[int] = None,
 ):
-    """
-    Setting visible devices
-
-    Parameters
-    ----------
-    devices : List[int], optional
-        List of visible devices' indices, by default None
-    cpu : bool, optional
-        Use cpu or not, by default False
-    """
     gpus = tf.config.list_physical_devices("GPU")
-    if gpus:
-        if devices is not None:
-            gpus = [gpus[i] for i in devices]
-        tf.config.set_visible_devices(gpus, "GPU")
-        tf.get_logger().info(f"Run on {gpus}")
-        return True
-    # fallback to cpu
-    cpus = tf.config.list_physical_devices("CPU")
-    if cpus:
-        if devices is not None:
-            cpus = [cpus[i] for i in devices]
-        tf.config.set_visible_devices(cpus, "CPU")
-        return False
-    # worst case
-    raise RuntimeError("Failed to set visible devices, no devices found!")
+    if not gpus:
+        raise RuntimeError("No GPUs found!")
+    if devices is not None:
+        gpus = [gpus[i] for i in devices]
+    tf.config.set_visible_devices(gpus, "GPU")
+    tf.get_logger().info(f"Run on {gpus}")
+    return tf.distribute.MirroredStrategy()
 
 
 def setup_tpu(
     tpu_address=None,
 ):
-    if tpu_address is None:
-        resolver = tf.distribute.cluster_resolver.TPUClusterResolver()
-    else:
-        resolver = tf.distribute.cluster_resolver.TPUClusterResolver(tpu="grpc://" + tpu_address)
+    resolver = tf.distribute.cluster_resolver.TPUClusterResolver(tpu=tpu_address)
     tf.tpu.experimental.initialize_tpu_system(resolver)
     return tf.distribute.TPUStrategy(resolver)
 
 
 def setup_strategy(
-    devices: List[int],
+    device_type: str,
+    devices: List[int] = None,
     tpu_address: str = None,
 ):
-    """
-    Setting mirrored strategy for training
-
-    Parameters
-    ----------
-    devices : List[int]
-        List of visible devices' indices
-    tpu_address : str, optional
-        An optional custom tpu address, by default None
-
-    Returns
-    -------
-    f.distribute.Strategy
-        TPUStrategy for training on tpus or MirroredStrategy for training on gpus
-    """
-    try:
+    if device_type.lower() == "tpu":
         return setup_tpu(tpu_address)
-    except (ValueError, tf.errors.NotFoundError) as e:
-        tf.get_logger().warning(e)
-    use_gpu = setup_devices(devices)
-    if use_gpu:
-        return tf.distribute.MirroredStrategy()
+    if device_type.lower() == "gpu":
+        return setup_gpu(devices)
     return tf.distribute.get_strategy()
 
 

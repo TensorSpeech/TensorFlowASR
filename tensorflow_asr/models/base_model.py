@@ -15,7 +15,6 @@
 
 import importlib
 import logging
-import typing
 
 import numpy as np
 
@@ -152,6 +151,7 @@ class BaseModel(keras.Model):
         if isinstance(ga_steps, int) and ga_steps > 1:
             self.use_ga = True
             self.ga = GradientAccumulator(ga_steps=ga_steps)
+            kwargs["steps_per_execution"] = 1
             logger.info(f"Using gradient accumulation with accumulate steps = {ga_steps}")
         else:
             self.use_ga = False
@@ -203,29 +203,23 @@ class BaseModel(keras.Model):
 
         return gradients
 
-    def train_step(self, data_list: typing.Union[schemas.TrainData, typing.Iterable[schemas.TrainData]]):
-        if not self.use_ga:
-            data = data_list
-            gradients = self._train_step(data)
-        else:
-            iterator = iter(data_list)
-            data = next(iterator)
-            gradients = self._train_step(data)
-
-            for _ in range(1, self.ga.total_steps):
-                try:
-                    data = next(iterator)
-                except StopIteration:
-                    break
-                per_ga_gradients = self._train_step(data)
-                gradients = self.ga.accumulate(gradients, per_ga_gradients)
-
+    def _apply_gradients(self, gradients):
         if self.gradn is not None:
             gradients = self.gradn(step=self.optimizer.iterations, gradients=gradients)
         self.optimizer.apply_gradients(zip(gradients, self.trainable_variables))
 
+    def train_step(self, data):
+        gradients = self._train_step(data)
+        self._apply_gradients(gradients)
         metrics = self.get_metrics_result()
         return metrics
+
+    def train_step_ga(self, data, prev_gradients):
+        gradients = self._train_step(data)
+        if prev_gradients is not None:
+            gradients = self.ga.accumulate(prev_gradients, gradients)
+        metrics = self.get_metrics_result()
+        return metrics, gradients
 
     def _test_step(self, data: schemas.TrainData):
         x = data[0]
@@ -279,6 +273,18 @@ class BaseModel(keras.Model):
             one_step_on_data = tf.function(one_step_on_data, reduce_retracing=True, jit_compile=self.jit_compile)
 
         @tf.autograph.experimental.do_not_convert
+        def one_ga_step_on_data(data, prev_gradients):
+            """Runs a single training step on a batch of data."""
+            outputs, gradients = self.train_step_ga(data, prev_gradients)
+            # Ensure counter is updated only if `train_step` succeeds.
+            with tf.control_dependencies(_minimum_control_deps(outputs)):
+                self._train_counter.assign_add(1)
+            return outputs, gradients
+
+        if not self.run_eagerly:
+            one_ga_step_on_data = tf.function(one_ga_step_on_data, reduce_retracing=True, jit_compile=self.jit_compile)
+
+        @tf.autograph.experimental.do_not_convert
         def one_step_on_iterator(iterator):
             """Runs a single training step given a Dataset iterator."""
             data = next(iterator)
@@ -292,11 +298,31 @@ class BaseModel(keras.Model):
 
         @tf.autograph.experimental.do_not_convert
         def multi_step_on_iterator(iterator):
-            for _ in range(self.steps_per_execution):
-                outputs = one_step_on_iterator(iterator)
-            return outputs
+            for _ in range(self.steps_per_execution.numpy().item()):
+                outputs, data = one_step_on_iterator(iterator)
+            return outputs, data
 
-        if self.steps_per_execution > 1:
+        @tf.autograph.experimental.do_not_convert
+        def ga_step_in_iterator(iterator):
+            data = next(iterator)
+            outputs, gradients = self.distribute_strategy.run(one_ga_step_on_data, args=(data, None))
+            for _ in range(1, self.ga.total_steps):
+                try:
+                    data = next(iterator)
+                    outputs, gradients = self.distribute_strategy.run(one_ga_step_on_data, args=(data, gradients))
+                except StopIteration:
+                    break
+            self.distribute_strategy.run(self._apply_gradients, args=(gradients,))
+            outputs = keras_util.reduce_per_replica(
+                outputs,
+                self.distribute_strategy,
+                reduction=self.distribute_reduction_method,
+            )
+            return outputs, data
+
+        if self.use_ga:
+            train_function = ga_step_in_iterator
+        elif self.steps_per_execution > 1:
             train_function = multi_step_on_iterator
         else:
             train_function = one_step_on_iterator
@@ -347,7 +373,7 @@ class BaseModel(keras.Model):
 
         @tf.autograph.experimental.do_not_convert
         def multi_step_on_iterator(iterator):
-            for _ in range(self.steps_per_execution):
+            for _ in range(self.steps_per_execution.numpy().item()):
                 outputs = one_step_on_iterator(iterator)
             return outputs
 

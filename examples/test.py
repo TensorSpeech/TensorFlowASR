@@ -34,7 +34,6 @@ def main(
     h5: str = None,
     mxp: str = "none",
     bs: int = 1,
-    device: int = 0,
     jit_compile: bool = False,
     repodir: str = os.path.realpath(os.path.join(os.path.dirname(__file__), "..")),
 ):
@@ -43,7 +42,6 @@ def main(
     checkpoint_name = os.path.splitext(os.path.basename(h5))[0]
 
     env_util.setup_seed()
-    env_util.setup_devices(devices=[device])
     env_util.setup_mxp(mxp=mxp)
 
     config = Config(config_path, training=False, repodir=repodir, datadir=datadir)
