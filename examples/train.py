@@ -36,11 +36,12 @@ def main(
     jit_compile: bool = False,
     ga_steps: int = None,
     verbose: int = 1,
+    tpu_address: str = None,
     repodir: str = os.path.realpath(os.path.join(os.path.dirname(__file__), "..")),
 ):
     keras.backend.clear_session()
     env_util.setup_seed()
-    strategy = env_util.setup_strategy(devices)
+    strategy = env_util.setup_strategy(devices, tpu_address=tpu_address)
     env_util.setup_mxp(mxp=mxp)
 
     config = Config(config_path, training=True, repodir=repodir, datadir=datadir, modeldir=modeldir)
@@ -68,10 +69,7 @@ def main(
     ga_steps = ga_steps or config.learning_config.ga_steps or 1
 
     train_data_loader = train_dataset.create(train_batch_size, ga_steps=ga_steps, padded_shapes=padded_shapes)
-    if train_dataset.use_ga:
-        logger.info(f"train_data_loader.element_spec = {json.dumps(train_data_loader.element_spec.element_spec, indent=2, default=str)}")
-    else:
-        logger.info(f"train_data_loader.element_spec = {json.dumps(train_data_loader.element_spec, indent=2, default=str)}")
+    logger.info(f"train_data_loader.element_spec = {json.dumps(train_data_loader.element_spec, indent=2, default=str)}")
 
     eval_data_loader = eval_dataset.create(eval_batch_size, padded_shapes=padded_shapes)
     if eval_data_loader:

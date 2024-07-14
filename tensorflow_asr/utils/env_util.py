@@ -83,10 +83,7 @@ def setup_devices(
 def setup_tpu(
     tpu_address=None,
 ):
-    if tpu_address is None:
-        resolver = tf.distribute.cluster_resolver.TPUClusterResolver()
-    else:
-        resolver = tf.distribute.cluster_resolver.TPUClusterResolver(tpu="grpc://" + tpu_address)
+    resolver = tf.distribute.cluster_resolver.TPUClusterResolver(tpu=tpu_address)
     tf.tpu.experimental.initialize_tpu_system(resolver)
     return tf.distribute.TPUStrategy(resolver)
 
