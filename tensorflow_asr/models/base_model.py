@@ -24,16 +24,8 @@ from tensorflow_asr.optimizers.accumulation import GradientAccumulator
 from tensorflow_asr.tokenizers import Tokenizer
 from tensorflow_asr.utils import data_util, env_util, file_util, keras_util, shape_util
 
-# base_layer = importlib.import_module(f"{env_util.KERAS_SRC}.engine.base_layer")
-# data_adapter = importlib.import_module(f"{env_util.KERAS_SRC}.engine.data_adapter")
-# training_utils = importlib.import_module(f"{env_util.KERAS_SRC}.engine.training_utils")
-
 tf_utils = importlib.import_module(f"{env_util.KERAS_SRC}.utils.tf_utils")
 io_utils = importlib.import_module(f"{env_util.KERAS_SRC}.utils.io_utils")
-# version_utils = importlib.import_module(f"{env_util.KERAS_SRC}.utils.version_utils")
-
-# _disallow_inside_tf_function = importlib.import_module(f"{env_util.KERAS_SRC}.engine.training")._disallow_inside_tf_function
-# _get_verbosity = importlib.import_module(f"{env_util.KERAS_SRC}.engine.training")._get_verbosity
 _minimum_control_deps = importlib.import_module(f"{env_util.KERAS_SRC}.engine.training")._minimum_control_deps
 
 logger = logging.getLogger(__name__)
