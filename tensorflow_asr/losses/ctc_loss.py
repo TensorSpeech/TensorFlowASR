@@ -29,14 +29,14 @@
 
 import logging
 
-from tensorflow_asr import keras, tf
+from tensorflow_asr import tf
 from tensorflow_asr.losses.base_loss import BaseLoss
 
 logger = logging.getLogger(__name__)
 
 
 class CtcLoss(BaseLoss):
-    def __init__(self, blank=0, reduction=keras.losses.Reduction.AUTO, name=None):
+    def __init__(self, blank=0, reduction="sum_over_batch_size", name=None):
         super().__init__(blank=blank, reduction=reduction, name=name)
         logger.info("Use CTC loss")
 

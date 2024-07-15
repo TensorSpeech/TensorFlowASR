@@ -20,7 +20,7 @@ import os
 
 import numpy as np
 
-from tensorflow_asr import keras, schemas, tf
+from tensorflow_asr import schemas, tf
 from tensorflow_asr.losses.base_loss import BaseLoss
 from tensorflow_asr.utils import env_util, shape_util
 
@@ -35,7 +35,7 @@ class RnntLoss(BaseLoss):
     def __init__(
         self,
         blank,
-        reduction=keras.losses.Reduction.AUTO,
+        reduction="sum_over_batch_size",
         output_shapes=None,
         name=None,
     ):

@@ -1,4 +1,9 @@
 import tensorflow as tf
+from keras.src.saving import serialization_lib
+
+
+def model_from_config(model_config: dict, custom_objects=None):
+    return serialization_lib.deserialize_keras_object(model_config, custom_objects=custom_objects)
 
 
 def reduce_per_replica(values, strategy, reduction):

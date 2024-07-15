@@ -13,6 +13,7 @@
 # limitations under the License.
 
 from tensorflow_asr import keras, tf
+from tensorflow_asr.models.layers.convolution import Conv2D
 
 
 def get_rnn(
@@ -32,7 +33,7 @@ def get_conv(
     assert conv_type in ["conv1d", "conv2d"]
     if conv_type == "conv1d":
         return keras.layers.Conv1D
-    return keras.layers.Conv2D
+    return Conv2D
 
 
 def add_gwn(

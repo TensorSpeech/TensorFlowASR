@@ -145,5 +145,4 @@ def setup_seed(
     random.seed(seed)
     np.random.seed(seed)
     tf.random.set_seed(seed)
-    keras.backend.experimental.enable_tf_random_generator()
     keras.utils.set_random_seed(seed)

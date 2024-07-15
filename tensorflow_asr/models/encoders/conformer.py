@@ -17,7 +17,6 @@
 from tensorflow_asr import keras, tf
 from tensorflow_asr.models.activations.glu import GLU
 from tensorflow_asr.models.base_layer import Identity, Layer
-from tensorflow_asr.models.layers import norm
 from tensorflow_asr.models.layers.convolution import DepthwiseConv1D
 from tensorflow_asr.models.layers.multihead_attention import MultiHeadAttention, MultiHeadRelativeAttention
 from tensorflow_asr.models.layers.positional_encoding import RelativeSinusoidalPositionalEncoding, SinusoidalPositionalEncoding
@@ -279,11 +278,11 @@ class ConvModule(Layer):
                 strides=1,
                 padding=padding,
                 name="dw_conv",
-                kernel_regularizer=kernel_regularizer,
+                depthwise_regularizer=kernel_regularizer,
                 bias_regularizer=bias_regularizer,
                 dtype=self.dtype,
             )
-        self.bn = norm.BatchNormalization(
+        self.bn = keras.layers.BatchNormalization(
             name="bn",
             gamma_regularizer=kernel_regularizer,
             beta_regularizer=bias_regularizer,

@@ -19,7 +19,7 @@ logger = tf.get_logger()
 
 
 class BaseLoss(keras.losses.Loss):
-    def __init__(self, blank=0, reduction=keras.losses.Reduction.AUTO, name=None):
+    def __init__(self, blank=0, reduction="sum_over_batch_size", name=None):
         super().__init__(reduction=reduction, name=name)
         assert blank == 0, "Only support blank=0"
         self.blank = blank

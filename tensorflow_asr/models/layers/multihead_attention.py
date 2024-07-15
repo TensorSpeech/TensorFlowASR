@@ -13,18 +13,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import importlib
-import math
-
-from keras.layers import EinsumDense
-from keras.layers import MultiHeadAttention as KerasMultiHeadAttention
+from keras.src.layers.attention import multi_head_attention as mha_module
 
 from tensorflow_asr import keras, tf
 from tensorflow_asr.models.layers.memory import Memory
 from tensorflow_asr.utils import shape_util
-from tensorflow_asr.utils.env_util import KERAS_SRC
-
-mha_module = importlib.import_module(f"{KERAS_SRC}.layers.attention.multi_head_attention")
 
 
 def rel_left_shift(x, causal=False):
@@ -163,7 +156,7 @@ def compute_attention_mask(query, value, key=None, attention_mask=None, use_caus
 
 
 @keras.utils.register_keras_serializable(package=__name__)
-class MultiHeadAttention(KerasMultiHeadAttention):
+class MultiHeadAttention(keras.layers.MultiHeadAttention):
     def __init__(
         self,
         num_heads,
@@ -181,8 +174,11 @@ class MultiHeadAttention(KerasMultiHeadAttention):
         activity_regularizer=None,
         kernel_constraint=None,
         bias_constraint=None,
+        seed=None,
         **kwargs,
     ):
+        self._memory_length = memory_length
+        self._memory = None
         super().__init__(
             num_heads,
             key_dim,
@@ -198,77 +194,21 @@ class MultiHeadAttention(KerasMultiHeadAttention):
             activity_regularizer,
             kernel_constraint,
             bias_constraint,
+            seed,
             **kwargs,
         )
-        if not hasattr(self, "_compute_attention_mask"):
-            self._compute_attention_mask = compute_attention_mask
-        if not hasattr(self, "_compute_causal_mask"):
-            self._compute_causal_mask = compute_causal_mask
-        self._memory_length = memory_length
-        self.stateful = self._memory_length is not None
 
-    def _get_common_kwargs_for_sublayer(self):
-        common_kwargs = dict(
-            kernel_regularizer=self._kernel_regularizer,
-            bias_regularizer=self._bias_regularizer,
-            activity_regularizer=self._activity_regularizer,
-            kernel_constraint=self._kernel_constraint,
-            bias_constraint=self._bias_constraint,
-            dtype=self.dtype,
-        )
-        # Create new clone of kernel/bias initializer, so that we don't reuse
-        # the initializer instance, which could lead to same init value since
-        # initializer is stateless.
-        kernel_initializer = self._kernel_initializer.__class__.from_config(self._kernel_initializer.get_config())
-        bias_initializer = self._bias_initializer.__class__.from_config(self._bias_initializer.get_config())
-        common_kwargs["kernel_initializer"] = kernel_initializer
-        common_kwargs["bias_initializer"] = bias_initializer
-        return common_kwargs
-
-    def _build_attention(self, rank):
-        """Builds multi-head dot-product attention computations.
-
-        This function builds attributes necessary for `_compute_attention` to
-        customize attention computation to replace the default dot-product
-        attention.
-
-        Args:
-            rank: the rank of query, key, value tensors.
-        """
-        if self._attention_axes is None:
-            self._attention_axes = tuple(range(1, rank - 2))
-        else:
-            self._attention_axes = tuple(self._attention_axes)
-        (
-            self._dot_product_equation,
-            self._combine_equation,
-            attn_scores_rank,
-        ) = mha_module._build_attention_equation(rank, attn_axes=self._attention_axes)
-        norm_axes = tuple(range(attn_scores_rank - len(self._attention_axes), attn_scores_rank))
-        self._softmax = keras.layers.Softmax(axis=norm_axes, dtype=self.dtype)  # stable training
-        self._dropout_layer = keras.layers.Dropout(rate=self._dropout, dtype=self.dtype)
-
-    def _masked_softmax(self, attention_scores, attention_mask=None):
-        # Normalize the attention scores to probabilities.
-        # `attention_scores` = [B, N, T, S]
-        if attention_mask is not None:
-            # The expand dim happens starting from the `num_heads` dimension,
-            # (<batch_dims>, num_heads, <query_attention_dims,
-            # key_attention_dims>)
-            mask_expansion_axis = -len(self._attention_axes) * 2 - 1
-            for _ in range(len(attention_scores.shape) - len(attention_mask.shape)):
-                attention_mask = tf.expand_dims(attention_mask, axis=mask_expansion_axis)
-        attention_scores = self._softmax(attention_scores, attention_mask)
-        return tf.cast(attention_scores, self.dtype)
-
-    def _build_from_signature(self, query, value, key=None):
-        super()._build_from_signature(query, value, key)
-        with tf.init_scope():  # pylint: disable=not-context-manager
-            batch_size, _, dmodel = self._query_shape
-            if self._memory_length is not None:
-                self._memory = Memory(batch_size=batch_size, memory_length=self._memory_length, dmodel=dmodel, name="memory", dtype=self.dtype)
-            else:
-                self._memory = None
+    def build(self, input_shape):
+        query_shape, key_shape, value_shape = input_shape
+        if self._memory_length is not None:
+            self._memory = Memory(
+                batch_size=query_shape[0],
+                memory_length=self._memory_length,
+                dmodel=query_shape[-1],
+                name="memory",
+                dtype=self.dtype_policy,
+            )
+        return super().build(query_shape, value_shape, key_shape)
 
     def get_initial_state(self, batch_size: int):
         if self._memory is None:
@@ -295,20 +235,28 @@ class MultiHeadAttention(KerasMultiHeadAttention):
     def call(
         self,
         inputs,
-        initial_state=None,
+        query_mask=None,
+        value_mask=None,
+        key_mask=None,
         attention_mask=None,
+        use_auto_mask=False,
         return_attention_scores=False,
-        training=False,
+        training=None,
         use_causal_mask=False,
-        use_auto_mask=True,
+        initial_state=None,
     ):
-        query, key, value, *_ = inputs
-
-        if not self._built_from_signature:
-            self._build_from_signature(query=query, value=value, key=key)
+        query, key, value = inputs
 
         if use_auto_mask:
-            attention_mask = self._compute_attention_mask(query, value, key=key, attention_mask=attention_mask, use_causal_mask=use_causal_mask)
+            attention_mask = self._compute_attention_mask(
+                query,
+                value,
+                query_mask=query_mask,
+                value_mask=value_mask,
+                key_mask=key_mask,
+                attention_mask=attention_mask,
+                use_causal_mask=use_causal_mask,
+            )
 
         #   N = `num_attention_heads`
         #   H = `size_per_head`
@@ -331,8 +279,26 @@ class MultiHeadAttention(KerasMultiHeadAttention):
         return attention_output, states
 
     def compute_output_shape(self, input_shape):
-        query_shape, *_ = input_shape
-        return query_shape
+        query_shape, key_shape, value_shape, *_ = input_shape
+        return super().compute_output_shape(query_shape, value_shape, key_shape)
+
+    def compute_output_spec(
+        self,
+        inputs,
+        query_mask=None,
+        value_mask=None,
+        key_mask=None,
+        attention_mask=None,
+        use_auto_mask=False,
+        return_attention_scores=False,
+        training=None,
+        use_causal_mask=False,
+        initial_state=None,
+    ):
+        query, value, key, *_ = inputs
+        output_spec, *attention_score_spec = super().compute_output_spec(
+            query, value, key, query_mask, value_mask, key_mask, attention_mask, return_attention_scores, training, use_causal_mask
+        )
 
 
 @keras.utils.register_keras_serializable(package=__name__)
@@ -347,13 +313,14 @@ class MultiHeadRelativeAttention(MultiHeadAttention):
         output_shape=None,
         attention_axes=None,
         memory_length=None,
-        kernel_initializer="variance_scaling",
+        kernel_initializer="glorot_uniform",
         bias_initializer="zeros",
         kernel_regularizer=None,
         bias_regularizer=None,
         activity_regularizer=None,
         kernel_constraint=None,
         bias_constraint=None,
+        seed=None,
         use_attention_bias=False,
         causal=False,
         **kwargs,
@@ -374,48 +341,43 @@ class MultiHeadRelativeAttention(MultiHeadAttention):
             activity_regularizer,
             kernel_constraint,
             bias_constraint,
+            seed,
             **kwargs,
         )
-        self._relative_position_encoding_shape = None
         self._use_attention_bias = use_attention_bias
         self._causal = causal
 
-    def _build_from_signature(self, query, value, relative_position_encoding, key=None):
-        super()._build_from_signature(query=query, value=value, key=key)
-        if hasattr(relative_position_encoding, "shape"):
-            self._relative_position_encoding_shape = tf.TensorShape(relative_position_encoding.shape)
+    def build(self, input_shape):
+        *rest_input_shape, relpe_shape, _, _ = input_shape
+        relpe_rank = len(relpe_shape)
+        einsum_equation, bias_axes, output_rank = mha_module._build_proj_equation(relpe_rank - 1, bound_dims=1, output_dims=2)
+        self._relpe_dense = keras.layers.EinsumDense(
+            einsum_equation,
+            output_shape=mha_module._get_output_shape(output_rank - 1, [self._num_heads, self._key_dim]),
+            bias_axes=bias_axes if self._use_bias else None,
+            name="encoding",
+            **self._get_common_kwargs_for_sublayer(),
+        )
+        if self._use_attention_bias:
+            self.content_attention_bias = self.add_weight(
+                name="content_attention_bias",
+                shape=[self._num_heads, self._key_dim],
+                trainable=True,
+                initializer="zeros",
+                regularizer=self._bias_regularizer,
+                dtype=self.variable_dtype,
+            )
+            self.positional_attention_bias = self.add_weight(
+                name="positional_attention_bias",
+                shape=[self._num_heads, self._key_dim],
+                trainable=True,
+                initializer="zeros",
+                regularizer=self._bias_regularizer,
+                dtype=self.variable_dtype,
+            )
         else:
-            self._relative_position_encoding_shape = tf.TensorShape(relative_position_encoding)
-        with tf.init_scope():  # pylint: disable=not-context-manager
-            einsum_equation, bias_axes, output_rank = mha_module._build_proj_equation(
-                self._relative_position_encoding_shape.rank - 1, bound_dims=1, output_dims=2
-            )
-            self._encoding_dense = EinsumDense(
-                einsum_equation,
-                output_shape=mha_module._get_output_shape(output_rank - 1, [self._num_heads, self._key_dim]),
-                bias_axes=bias_axes if self._use_bias else None,
-                name="encoding",
-                **self._get_common_kwargs_for_sublayer(),
-            )
-            if self._use_attention_bias:
-                self.content_attention_bias = self.add_weight(
-                    name="content_attention_bias",
-                    shape=[self._num_heads, self._key_dim],
-                    trainable=True,
-                    initializer="zeros",
-                    regularizer=self._bias_regularizer,
-                    dtype=self.variable_dtype,
-                )
-                self.positional_attention_bias = self.add_weight(
-                    name="positional_attention_bias",
-                    shape=[self._num_heads, self._key_dim],
-                    trainable=True,
-                    initializer="zeros",
-                    regularizer=self._bias_regularizer,
-                    dtype=self.variable_dtype,
-                )
-            else:
-                self.content_attention_bias, self.positional_attention_bias = None, None
+            self.content_attention_bias, self.positional_attention_bias = None, None
+        return super().build(rest_input_shape)
 
     def _compute_attention(
         self,
@@ -426,12 +388,16 @@ class MultiHeadRelativeAttention(MultiHeadAttention):
         content_attention_bias=None,
         positional_attention_bias=None,
         attention_mask=None,
-        training=False,
+        training=None,
     ):
         cbias = self.content_attention_bias if content_attention_bias is None else content_attention_bias
         pbias = self.positional_attention_bias if positional_attention_bias is None else positional_attention_bias
-        content_attention = tf.einsum(self._dot_product_equation, key, (query + tf.cast(cbias, query.dtype)))  # BSNH,BTNH->BNTS
-        positional_attention = tf.einsum(self._dot_product_equation, position, (query + tf.cast(pbias, query.dtype)))  # BRNH,BTNH->BNTR
+
+        content_query = tf.multiply((query + tf.cast(cbias, query.dtype)), tf.cast(self._inverse_sqrt_key_dim, query.dtype))
+        content_attention = tf.einsum(self._dot_product_equation, key, content_query)  # BSNH,BTNH->BNTS
+
+        positional_query = tf.multiply((query + tf.cast(pbias, query.dtype)), tf.cast(self._inverse_sqrt_key_dim, query.dtype))
+        positional_attention = tf.einsum(self._dot_product_equation, position, positional_query)  # BRNH,BTNH->BNTR
         positional_attention = rel_left_shift(positional_attention, causal=self._causal)  # BNTR -> BNTS
         positional_attention = tf.slice(
             positional_attention,
@@ -440,61 +406,72 @@ class MultiHeadRelativeAttention(MultiHeadAttention):
         )
 
         attention_scores = content_attention + positional_attention
-        attention_scores = tf.multiply(attention_scores, 1.0 / math.sqrt(float(self._key_dim)))
 
         attention_scores = self._masked_softmax(attention_scores, attention_mask)
 
-        attention_output = self._dropout_layer(attention_scores, training=training)
+        # This is actually dropping out entire tokens to attend to, which might
+        # seem a bit unusual, but is taken from the original Transformer paper.
+        if self.dropout:
+            final_attn_scores = self._dropout_layer(attention_scores, training=training)
+        else:
+            final_attn_scores = attention_scores
 
-        attention_output = tf.einsum(self._combine_equation, attention_output, value)  # BNTS,BSNH->BTNH
+        # `context_layer` = [B, T, N, H]
+        attention_output = tf.einsum(self._combine_equation, final_attn_scores, value)
         return attention_output, attention_scores
 
     def call(
         self,
         inputs,
-        initial_state=None,
+        query_mask=None,
+        value_mask=None,
+        key_mask=None,
         attention_mask=None,
-        training=False,
-        use_causal_mask=False,
-        use_auto_mask=True,
+        use_auto_mask=False,
         return_attention_scores=False,
+        training=None,
+        use_causal_mask=False,
+        initial_state=None,
     ):
-        query, key, value, relative_position_encoding, content_attention_bias, positional_attention_bias, *_ = inputs
-
-        if not self._built_from_signature:
-            self._build_from_signature(query, value, relative_position_encoding, key=key)
+        query, key, value, relpe, content_attention_bias, positional_attention_bias = inputs
 
         if use_auto_mask:
-            attention_mask = self._compute_attention_mask(query, value, key=key, attention_mask=attention_mask, use_causal_mask=use_causal_mask)
+            attention_mask = self._compute_attention_mask(
+                query,
+                value,
+                query_mask=query_mask,
+                value_mask=value_mask,
+                key_mask=key_mask,
+                attention_mask=attention_mask,
+                use_causal_mask=use_causal_mask,
+            )
 
         #   N = `num_attention_heads`
         #   H = `size_per_head`
         # `query` = [B, T, N ,H]
         query = self._query_dense(query)
 
-        # `key` = [B, S + M, N, H]
+        # `key` = [B, S, N, H]
         key = self._key_dense(key)
 
-        # `value` = [B, S + M, N, H]
+        # `value` = [B, S, N, H]
         value = self._value_dense(value)
 
         # `position` = [B, R, N, H]
-        position = self._encoding_dense(relative_position_encoding)
+        position = self._relpe_dense(relpe)
 
         query, key, value, states = self._with_memory(query, key, value, initial_state, training)
 
         attention_output, attention_scores = self._compute_attention(
-            query=query,
-            key=key,
-            value=value,
-            position=position,
+            query,
+            key,
+            value,
+            position,
             content_attention_bias=content_attention_bias,
             positional_attention_bias=positional_attention_bias,
             attention_mask=attention_mask,
             training=training,
         )
-
-        # `attention_output` = [B, S, N, H]
         attention_output = self._output_dense(attention_output)
 
         if return_attention_scores:

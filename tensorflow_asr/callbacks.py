@@ -12,16 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import importlib
-
 import numpy as np
+from keras.src.saving import serialization_lib
 
 from tensorflow_asr import keras, tf
 from tensorflow_asr.datasets import ASRDataset
 from tensorflow_asr.utils import file_util
-from tensorflow_asr.utils.env_util import KERAS_SRC
-
-serialization_lib = importlib.import_module(f"{KERAS_SRC}.saving.serialization_lib")
 
 
 @keras.utils.register_keras_serializable(package=__name__)
@@ -191,22 +187,17 @@ class ModelCheckpoint(keras.callbacks.ModelCheckpoint):
     def __init__(
         self,
         filepath,
-        monitor: str = "val_loss",
-        verbose: int = 0,
-        save_best_only: bool = False,
-        save_weights_only: bool = False,
-        mode: str = "auto",
+        monitor="val_loss",
+        verbose=0,
+        save_best_only=False,
+        save_weights_only=False,
+        mode="auto",
         save_freq="epoch",
-        options=None,
         initial_value_threshold=None,
-        **kwargs,
     ):
         filepath = file_util.preprocess_paths(filepath)
-        self._org_options = options
-        if options is not None:
-            options = tf.train.CheckpointOptions(**options)
-        super().__init__(filepath, monitor, verbose, save_best_only, save_weights_only, mode, save_freq, options, initial_value_threshold, **kwargs)
         self._mode = mode
+        super().__init__(filepath, monitor, verbose, save_best_only, save_weights_only, mode, save_freq, initial_value_threshold)
 
     def get_config(self):
         return {
@@ -217,7 +208,6 @@ class ModelCheckpoint(keras.callbacks.ModelCheckpoint):
             "save_weights_only": self.save_weights_only,
             "mode": self._mode,
             "save_freq": self.save_freq,
-            "options": self._org_options,
             "initial_value_threshold": self.best,
         }
 
@@ -233,17 +223,15 @@ class BackupAndRestore(keras.callbacks.BackupAndRestore):
         backup_dir,
         save_freq="epoch",
         delete_checkpoint=True,
-        save_before_preemption=False,
     ):
         backup_dir = file_util.preprocess_paths(backup_dir, isdir=True)
-        super().__init__(backup_dir, save_freq, delete_checkpoint, save_before_preemption)
+        super().__init__(backup_dir, save_freq, delete_checkpoint)
 
     def get_config(self):
         return {
             "backup_dir": self.backup_dir,
             "save_freq": self.save_freq,
             "delete_checkpoint": self.delete_checkpoint,
-            "save_before_preemption": self.save_before_preemption,
         }
 
     @classmethod

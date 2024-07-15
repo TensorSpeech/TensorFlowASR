@@ -19,7 +19,7 @@ import os
 from tensorflow_asr import callbacks, datasets, keras, tokenizers  # import to aid logging messages
 from tensorflow_asr.configs import Config
 from tensorflow_asr.models.base_model import BaseModel
-from tensorflow_asr.utils import cli_util, env_util, file_util
+from tensorflow_asr.utils import cli_util, env_util, file_util, keras_util
 
 logger = logging.getLogger(__name__)
 
@@ -77,7 +77,7 @@ def main(
         logger.info(f"eval_data_loader.element_spec = {json.dumps(eval_data_loader.element_spec, indent=2, default=str)}")
 
     with strategy.scope():
-        model: BaseModel = keras.models.model_from_config(config.model_config)
+        model: BaseModel = keras_util.model_from_config(config.model_config)
         model.tokenizer = tokenizer
         output_shapes = model.make(**model_shapes)
         if config.learning_config.pretrained:

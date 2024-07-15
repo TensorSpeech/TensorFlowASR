@@ -13,10 +13,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import importlib
+# import importlib
 import logging
 
 import numpy as np
+from keras.src.utils import io_utils, tf_utils
 
 from tensorflow_asr import keras, schemas, tf
 from tensorflow_asr.models.layers.feature_extraction import FeatureExtraction
@@ -24,9 +25,9 @@ from tensorflow_asr.optimizers.accumulation import GradientAccumulator
 from tensorflow_asr.tokenizers import Tokenizer
 from tensorflow_asr.utils import data_util, env_util, file_util, keras_util, shape_util
 
-tf_utils = importlib.import_module(f"{env_util.KERAS_SRC}.utils.tf_utils")
-io_utils = importlib.import_module(f"{env_util.KERAS_SRC}.utils.io_utils")
-_minimum_control_deps = importlib.import_module(f"{env_util.KERAS_SRC}.engine.training")._minimum_control_deps
+# tf_utils = importlib.import_module(f"{env_util.KERAS_SRC}.utils.tf_utils")
+# io_utils = importlib.import_module(f"{env_util.KERAS_SRC}.utils.io_utils")
+# _minimum_control_deps = importlib.import_module(f"{env_util.KERAS_SRC}.engine.training")._minimum_control_deps
 
 logger = logging.getLogger(__name__)
 
@@ -44,42 +45,18 @@ class BaseModel(keras.Model):
     def tokenizer(self, tokenizer: Tokenizer):
         self._tokenizer = tokenizer
 
-    def summary(
-        self,
-        line_length=127,
-        expand_nested=True,
-        show_trainable=True,
-        **kwargs,
-    ):
+    def summary(self, line_length=127, expand_nested=True, show_trainable=True, **kwargs):
         super().summary(line_length=line_length, expand_nested=expand_nested, show_trainable=show_trainable, **kwargs)
 
-    def save(
-        self,
-        filepath,
-        overwrite=True,
-        save_format=None,
-        **kwargs,
-    ):
+    def save(self, filepath, overwrite=True, save_format=None, **kwargs):
         with file_util.save_file(filepath) as path:
             super().save(filepath=path, overwrite=overwrite, save_format=save_format, **kwargs)
 
-    def save_weights(
-        self,
-        filepath,
-        overwrite=True,
-        save_format=None,
-        options=None,
-    ):
+    def save_weights(self, filepath, overwrite=True):
         with file_util.save_file(filepath) as path:
-            super().save_weights(filepath=path, overwrite=overwrite, save_format=save_format, options=options)
+            super().save_weights(filepath=path, overwrite=overwrite)
 
-    def load_weights(
-        self,
-        filepath,
-        by_name=False,
-        skip_mismatch=False,
-        options=None,
-    ):
+    def load_weights(self, filepath, by_name=False, skip_mismatch=False, options=None):
         with file_util.read_file(filepath) as path:
             super().load_weights(filepath=path, by_name=by_name, skip_mismatch=skip_mismatch, options=options)
 
@@ -257,8 +234,8 @@ class BaseModel(keras.Model):
             """Runs a single training step on a batch of data."""
             outputs = self.train_step(data)
             # Ensure counter is updated only if `train_step` succeeds.
-            with tf.control_dependencies(_minimum_control_deps(outputs)):
-                self._train_counter.assign_add(1)
+            # with tf.control_dependencies(_minimum_control_deps(outputs)):
+            #     self._train_counter.assign_add(1)
             return outputs
 
         if not self.run_eagerly:
@@ -269,8 +246,8 @@ class BaseModel(keras.Model):
             """Runs a single training step on a batch of data."""
             outputs, gradients = self.train_step_ga(data, prev_gradients)
             # Ensure counter is updated only if `train_step` succeeds.
-            with tf.control_dependencies(_minimum_control_deps(outputs)):
-                self._train_counter.assign_add(1)
+            # with tf.control_dependencies(_minimum_control_deps(outputs)):
+            #     self._train_counter.assign_add(1)
             return outputs, gradients
 
         if not self.run_eagerly:
@@ -324,9 +301,11 @@ class BaseModel(keras.Model):
 
         def train_function_wrapper(iterator):
             outputs, data = train_function(iterator)
-            loss = outputs.get("loss")
+            try:
+                loss = float(outputs.get("loss"))
+            except:  # pylint: disable=bare-except
+                loss = None
             if loss is not None:
-                loss = tf_utils.sync_to_numpy_or_python_type(loss)
                 if np.isnan(loss) or np.isinf(loss):
                     io_utils.print_msg("")  # empty line for newline
                     io_utils.print_msg(f"Invalid loss for batch {data}")
@@ -344,8 +323,8 @@ class BaseModel(keras.Model):
         def one_step_on_data(data):
             """Runs a single test step on a batch of data."""
             outputs = self.test_step(data)
-            with tf.control_dependencies(_minimum_control_deps(outputs)):
-                self._test_counter.assign_add(1)
+            # with tf.control_dependencies(_minimum_control_deps(outputs)):
+            #     self._test_counter.assign_add(1)
             return outputs
 
         if not self.run_eagerly and self.jit_compile:
@@ -383,7 +362,7 @@ class BaseModel(keras.Model):
     # -------------------------------- INFERENCE FUNCTIONS -------------------------------------
 
     def get_initial_tokens(self, batch_size=1):
-        return tf.ones([batch_size, 1], dtype=tf.int32) * self.blank
+        return tf.ones([batch_size, 1], dtype=tf.int32) * self.tokenizer.blank
 
     def get_initial_encoder_states(self, batch_size=1):
         return tf.zeros([], dtype=self.dtype)

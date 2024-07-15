@@ -23,10 +23,9 @@ class Layer(keras.layers.Layer):
         trainable=True,
         name=None,
         dtype=None,
-        dynamic=False,
         **kwargs,
     ):
-        super().__init__(trainable, name, dtype, dynamic, **kwargs)
+        super().__init__(trainable=trainable, name=name, dtype=dtype, **kwargs)
         self.supports_masking = True
 
 

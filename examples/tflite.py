@@ -35,7 +35,7 @@ def main(
     config = Config(config_path, training=False, repodir=repodir)
     tokenizer = tokenizers.get(config)
 
-    model: BaseModel = keras.models.model_from_config(config.model_config)
+    model: BaseModel = keras.Model.from_config(config.model_config)
     model.tokenizer = tokenizer
     model.make(batch_size=bs)
     if h5 and tf.io.gfile.exists(h5):

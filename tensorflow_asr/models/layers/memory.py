@@ -81,3 +81,6 @@ class Memory(Layer):
 
     def compute_output_shape(self, input_shape):
         return input_shape[0], self.memory_length, self.dmodel
+
+    def compute_output_spec(self, *args, **kwargs):
+        return super().compute_output_spec(*args, **kwargs)

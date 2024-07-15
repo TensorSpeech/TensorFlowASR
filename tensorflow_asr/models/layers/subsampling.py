@@ -16,7 +16,7 @@ import typing
 
 from tensorflow_asr import keras, tf
 from tensorflow_asr.models.base_layer import Layer
-from tensorflow_asr.models.layers import norm
+from tensorflow_asr.models.layers.convolution import Conv2D
 from tensorflow_asr.utils import math_util, shape_util
 
 
@@ -68,7 +68,7 @@ class VggSubsampling(Layer):
         **kwargs,
     ):
         super().__init__(name=name, **kwargs)
-        self.conv1 = keras.layers.Conv2D(
+        self.conv1 = Conv2D(
             filters=filters[0],
             kernel_size=kernel_size,
             strides=1,
@@ -79,7 +79,7 @@ class VggSubsampling(Layer):
             activation=activation,
             dtype=self.dtype,
         )
-        self.conv2 = keras.layers.Conv2D(
+        self.conv2 = Conv2D(
             filters=filters[0],
             kernel_size=kernel_size,
             strides=1,
@@ -91,7 +91,7 @@ class VggSubsampling(Layer):
             dtype=self.dtype,
         )
         self.maxpool1 = keras.layers.MaxPool2D(pool_size=pool_size, strides=strides, padding=padding, dtype=self.dtype, name="maxpool_1")
-        self.conv3 = keras.layers.Conv2D(
+        self.conv3 = Conv2D(
             filters=filters[1],
             kernel_size=kernel_size,
             strides=1,
@@ -102,7 +102,7 @@ class VggSubsampling(Layer):
             activation=activation,
             dtype=self.dtype,
         )
-        self.conv4 = keras.layers.Conv2D(
+        self.conv4 = Conv2D(
             filters=filters[1],
             kernel_size=kernel_size,
             strides=1,
@@ -175,7 +175,7 @@ class Conv2dSubsampling(Layer):
         for i in range(len(filters)):
             subblock = keras.Sequential(name=f"block_{i}")
             subblock.add(
-                keras.layers.Conv2D(
+                Conv2D(
                     filters=filters[i],
                     kernel_size=kernels[i],
                     strides=strides[i],
@@ -188,7 +188,7 @@ class Conv2dSubsampling(Layer):
             )
             if norms[i] == "batch":
                 subblock.add(
-                    norm.BatchNormalization(
+                    keras.layers.BatchNormalization(
                         name=f"bn_{i}",
                         gamma_regularizer=kernel_regularizer,
                         beta_regularizer=bias_regularizer,
@@ -278,7 +278,7 @@ class Conv1dSubsampling(Layer):
             )
             if norms[i] == "batch":
                 subblock.add(
-                    norm.BatchNormalization(
+                    keras.layers.BatchNormalization(
                         name=f"bn_{i}",
                         gamma_regularizer=kernel_regularizer,
                         beta_regularizer=bias_regularizer,

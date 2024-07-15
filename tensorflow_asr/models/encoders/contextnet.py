@@ -17,7 +17,6 @@ from typing import List
 
 from tensorflow_asr import keras, tf
 from tensorflow_asr.models.base_layer import Layer, Reshape
-from tensorflow_asr.models.layers import norm
 from tensorflow_asr.utils import math_util
 
 L2 = keras.regularizers.l2(1e-6)
@@ -62,7 +61,7 @@ class ConvModule(Layer):
             name="conv",
             dtype=self.dtype,
         )
-        self.bn = norm.BatchNormalization(
+        self.bn = keras.layers.BatchNormalization(
             name="bn",
             gamma_regularizer=kernel_regularizer,
             beta_regularizer=bias_regularizer,
