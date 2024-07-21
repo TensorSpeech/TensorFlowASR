@@ -83,9 +83,9 @@ class SinusoidalPositionalEncoding(Layer):
         outputs += pe
         return outputs, pe
 
-    def compute_output_shape(self, input_shape):
-        output_shape, _ = input_shape
-        return output_shape, output_shape
+    # def compute_output_shape(self, input_shape):
+    #     output_shape, _ = input_shape
+    #     return output_shape, output_shape
 
 
 @keras.utils.register_keras_serializable(package=__name__)
@@ -172,10 +172,10 @@ class RelativeSinusoidalPositionalEncoding(SinusoidalPositionalEncoding):
         pe = self.do(pe, training=training)
         return outputs, pe
 
-    def compute_output_shape(self, input_shape):
-        output_shape, _ = input_shape
-        B, T, V = output_shape
-        pT = 2 * T - 1 if T is not None else None
-        if self._memory_length > 0 and T is not None:
-            pT += self._memory_length
-        return output_shape, (B, pT, V)
+    # def compute_output_shape(self, input_shape):
+    #     output_shape, _ = input_shape
+    #     B, T, V = output_shape
+    #     pT = 2 * T - 1 if T is not None else None
+    #     if self._memory_length > 0 and T is not None:
+    #         pT += self._memory_length
+    #     return output_shape, (B, pT, V)

@@ -360,6 +360,9 @@ def rnnt_loss_tf(
         orig_dtype = logits.dtype
         if orig_dtype in (tf.float16, tf.bfloat16):
             logits = tf.cast(logits, tf.float32)
+        logit_length = tf.cast(logit_length, tf.int32)
+        labels = tf.cast(labels, tf.int32)
+        label_length = tf.cast(label_length, tf.int32)
 
         args = [logits, labels, label_length, logit_length]
 

@@ -52,10 +52,10 @@ class Embedding(keras.layers.Embedding):
         mask = tf.sequence_mask(outputs_length, maxlen=tf.shape(outputs)[1], dtype=tf.bool)
         return mask, None
 
-    def compute_output_shape(self, input_shape):
-        output_shape, output_length_shape = input_shape
-        output_shape = super().compute_output_shape(output_shape)
-        return output_shape, output_length_shape
+    # def compute_output_shape(self, input_shape):
+    #     output_shape, output_length_shape = input_shape
+    #     output_shape = super().compute_output_shape(output_shape)
+    #     return output_shape, output_length_shape
 
 
 @keras.utils.register_keras_serializable(package=__name__)
@@ -87,7 +87,7 @@ class OneHotBlank(Layer):
         mask = tf.sequence_mask(outputs_length, maxlen=tf.shape(outputs)[1], dtype=tf.bool)
         return mask, None
 
-    def compute_output_shape(self, input_shape):
-        output_shape, output_length_shape = input_shape
-        output_shape = output_shape + (self.depth,)
-        return output_shape, output_length_shape
+    # def compute_output_shape(self, input_shape):
+    #     output_shape, output_length_shape = input_shape
+    #     output_shape = output_shape + (self.depth,)
+    #     return output_shape, output_length_shape

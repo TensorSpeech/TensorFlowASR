@@ -244,6 +244,8 @@ class MultiHeadAttention(keras.layers.MultiHeadAttention):
         training=None,
         use_causal_mask=False,
         initial_state=None,
+        return_states=False,
+        **kwargs,
     ):
         query, key, value = inputs
 
@@ -269,14 +271,20 @@ class MultiHeadAttention(keras.layers.MultiHeadAttention):
         # `value` = [B, S, N, H]
         value = self._value_dense(value)
 
-        query, key, value, states = self._with_memory(query, key, value, initial_state, training)
+        if return_states:
+            query, key, value, states = self._with_memory(query, key, value, initial_state, training)
 
         attention_output, attention_scores = self._compute_attention(query, key, value, attention_mask, training)
         attention_output = self._output_dense(attention_output)
 
         if return_attention_scores:
-            return attention_output, states, attention_scores
-        return attention_output, states
+            if return_states:
+                return attention_output, states, attention_scores
+            return attention_output, attention_scores
+
+        if return_states:
+            return attention_output, states
+        return (attention_output,)
 
     def compute_output_shape(self, input_shape):
         query_shape, key_shape, value_shape, *_ = input_shape
@@ -294,11 +302,22 @@ class MultiHeadAttention(keras.layers.MultiHeadAttention):
         training=None,
         use_causal_mask=False,
         initial_state=None,
+        return_states=False,
     ):
         query, value, key, *_ = inputs
         output_spec, *attention_score_spec = super().compute_output_spec(
             query, value, key, query_mask, value_mask, key_mask, attention_mask, return_attention_scores, training, use_causal_mask
         )
+        if not return_states:
+            return [output_spec] + attention_score_spec
+        if self._memory_length is None:
+            return [output_spec, None] + attention_score_spec
+        states_shape = (query.shape[0], self._memory_length, query.shape[-1])
+        states_spec = {
+            "key": keras.KerasTensor(states_shape, dtype=self.compute_dtype),
+            "value": keras.KerasTensor(states_shape, dtype=self.compute_dtype),
+        }
+        return [output_spec, states_spec] + attention_score_spec
 
 
 @keras.utils.register_keras_serializable(package=__name__)
@@ -348,7 +367,7 @@ class MultiHeadRelativeAttention(MultiHeadAttention):
         self._causal = causal
 
     def build(self, input_shape):
-        *rest_input_shape, relpe_shape, _, _ = input_shape
+        *rest_input_shape, relpe_shape = input_shape
         relpe_rank = len(relpe_shape)
         einsum_equation, bias_axes, output_rank = mha_module._build_proj_equation(relpe_rank - 1, bound_dims=1, output_dims=2)
         self._relpe_dense = keras.layers.EinsumDense(
@@ -423,6 +442,8 @@ class MultiHeadRelativeAttention(MultiHeadAttention):
     def call(
         self,
         inputs,
+        content_attention_bias=None,
+        positional_attention_bias=None,
         query_mask=None,
         value_mask=None,
         key_mask=None,
@@ -432,8 +453,10 @@ class MultiHeadRelativeAttention(MultiHeadAttention):
         training=None,
         use_causal_mask=False,
         initial_state=None,
+        return_states=False,
+        **kwargs,
     ):
-        query, key, value, relpe, content_attention_bias, positional_attention_bias = inputs
+        query, key, value, relpe = inputs
 
         if use_auto_mask:
             attention_mask = self._compute_attention_mask(
@@ -460,7 +483,8 @@ class MultiHeadRelativeAttention(MultiHeadAttention):
         # `position` = [B, R, N, H]
         position = self._relpe_dense(relpe)
 
-        query, key, value, states = self._with_memory(query, key, value, initial_state, training)
+        if return_states:
+            query, key, value, states = self._with_memory(query, key, value, initial_state, training)
 
         attention_output, attention_scores = self._compute_attention(
             query,
@@ -475,5 +499,10 @@ class MultiHeadRelativeAttention(MultiHeadAttention):
         attention_output = self._output_dense(attention_output)
 
         if return_attention_scores:
-            return attention_output, states, attention_scores
-        return attention_output, states
+            if return_states:
+                return attention_output, states, attention_scores
+            return attention_output, attention_scores
+
+        if return_states:
+            return attention_output, states
+        return (attention_output,)

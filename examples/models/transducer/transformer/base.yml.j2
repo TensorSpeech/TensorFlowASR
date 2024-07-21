@@ -93,7 +93,7 @@ learning_config:
     batch_size: 2
     num_epochs: 300
     checkpoint:
-      filepath: {{modeldir}}/checkpoints/{epoch:02d}.h5
+      filepath: {{modeldir}}/checkpoints/{epoch:02d}.weights.h5
       save_best_only: False
       save_weights_only: True
       save_freq: epoch

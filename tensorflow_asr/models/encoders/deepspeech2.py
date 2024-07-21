@@ -13,7 +13,7 @@
 # limitations under the License.
 
 from tensorflow_asr import keras, tf
-from tensorflow_asr.models.base_layer import Identity, Layer, Reshape
+from tensorflow_asr.models.base_layer import Layer, Reshape
 from tensorflow_asr.models.layers.convolution import DepthwiseConv1D
 from tensorflow_asr.utils import layer_util, math_util
 
@@ -121,12 +121,12 @@ class ConvBlock(Layer):
         mask = tf.sequence_mask(outputs_length, maxlen=maxlen, dtype=tf.bool)
         return mask, None
 
-    def compute_output_shape(self, input_shape):
-        output_shape, output_length_shape = input_shape
-        output_shape = self.conv.compute_output_shape(output_shape)
-        output_shape = self.bn.compute_output_shape(output_shape)
-        output_shape = self.act.compute_output_shape(output_shape)
-        return output_shape, output_length_shape
+    # def compute_output_shape(self, input_shape):
+    #     output_shape, output_length_shape = input_shape
+    #     output_shape = self.conv.compute_output_shape(output_shape)
+    #     output_shape = self.bn.compute_output_shape(output_shape)
+    #     output_shape = self.act.compute_output_shape(output_shape)
+    #     return output_shape, output_length_shape
 
 
 @keras.utils.register_keras_serializable(package=__name__)
@@ -148,7 +148,7 @@ class ConvModule(Layer):
         assert conv_type in ("conv1d", "conv2d")
         assert len(kernels) == len(strides) == len(filters)
 
-        self.pre = Reshape(name="preprocess", dtype=self.dtype) if conv_type == "conv1d" else Identity(name="iden", dtype=self.dtype)
+        self.pre = Reshape(name="preprocess", dtype=self.dtype) if conv_type == "conv1d" else keras.layers.Identity(name="iden", dtype=self.dtype)
 
         self.convs = []
         self.time_reduction_factor = 1
@@ -169,7 +169,7 @@ class ConvModule(Layer):
             self.convs.append(conv_block)
             self.time_reduction_factor *= conv_block.time_reduction_factor
 
-        self.post = Reshape(name="postprocess", dtype=self.dtype) if conv_type == "conv2d" else Identity(name="iden", dtype=self.dtype)
+        self.post = Reshape(name="postprocess", dtype=self.dtype) if conv_type == "conv2d" else keras.layers.Identity(name="iden", dtype=self.dtype)
 
     def call(self, inputs, training=False):
         outputs = self.pre(inputs, training=training)
@@ -178,13 +178,13 @@ class ConvModule(Layer):
         outputs = self.post(outputs, training=training)
         return outputs
 
-    def compute_output_shape(self, input_shape):
-        output_shape = input_shape
-        output_shape = self.pre.compute_output_shape(output_shape)
-        for conv in self.convs:
-            output_shape = conv.compute_output_shape(output_shape)
-        output_shape = self.post.compute_output_shape(output_shape)
-        return output_shape
+    # def compute_output_shape(self, input_shape):
+    #     output_shape = input_shape
+    #     output_shape = self.pre.compute_output_shape(output_shape)
+    #     for conv in self.convs:
+    #         output_shape = conv.compute_output_shape(output_shape)
+    #     output_shape = self.post.compute_output_shape(output_shape)
+    #     return output_shape
 
 
 # ------------------------------------ RNN ----------------------------------- #

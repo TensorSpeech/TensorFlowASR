@@ -152,16 +152,16 @@ class TransducerPrediction(Layer):
     def compute_mask(self, inputs, mask=None):
         return self.label_encoder.compute_mask(inputs, mask=mask)
 
-    def compute_output_shape(self, input_shape):
-        output_shape, output_length_shape = input_shape
-        output_shape, output_length_shape = self.label_encoder.compute_output_shape((output_shape, output_length_shape))
-        for i, rnn in enumerate(self.rnns):
-            output_shape = (
-                self.projections[i].compute_output_shape(output_shape)
-                if self.projections[i] is not None
-                else rnn.compute_output_shape(output_shape)[0]
-            )
-        return tuple(output_shape), tuple(output_length_shape)
+    # def compute_output_shape(self, input_shape):
+    #     output_shape, output_length_shape = input_shape
+    #     output_shape, output_length_shape = self.label_encoder.compute_output_shape((output_shape, output_length_shape))
+    #     for i, rnn in enumerate(self.rnns):
+    #         output_shape = (
+    #             self.projections[i].compute_output_shape(output_shape)
+    #             if self.projections[i] is not None
+    #             else rnn.compute_output_shape(output_shape)[0]
+    #         )
+    #     return tuple(output_shape), tuple(output_length_shape)
 
 
 @keras.utils.register_keras_serializable(package=__name__)
@@ -197,9 +197,9 @@ class TransducerJointMerge(Layer):
             outputs = tf.multiply(enc_out, pred_out)  # broadcast operator
         return outputs  # [B, T, U, V]
 
-    def compute_output_shape(self, input_shape):
-        enc_shape, pred_shape = input_shape
-        return enc_shape[0], enc_shape[1], pred_shape[1], enc_shape[-1]
+    # def compute_output_shape(self, input_shape):
+    #     enc_shape, pred_shape = input_shape
+    #     return enc_shape[0], enc_shape[1], pred_shape[1], enc_shape[-1]
 
 
 @keras.utils.register_keras_serializable(package=__name__)
@@ -281,11 +281,11 @@ class TransducerJoint(Layer):
     def compute_mask(self, inputs, mask=None):
         return self.joint.compute_mask(inputs, mask=mask)
 
-    def compute_output_shape(self, input_shape):
-        encoder_shape, prediction_shape = input_shape
-        batch_shape = encoder_shape[0]
-        encoder_time_shape, prediction_time_shape = encoder_shape[1], prediction_shape[1]
-        return batch_shape, encoder_time_shape, prediction_time_shape, self.ffn_out.units
+    # def compute_output_shape(self, input_shape):
+    #     encoder_shape, prediction_shape = input_shape
+    #     batch_shape = encoder_shape[0]
+    #     encoder_time_shape, prediction_time_shape = encoder_shape[1], prediction_shape[1]
+    #     return batch_shape, encoder_time_shape, prediction_time_shape, self.ffn_out.units
 
 
 class Transducer(BaseModel):
@@ -407,8 +407,8 @@ class Transducer(BaseModel):
 
     def call(self, inputs: schemas.TrainInput, training=False):
         features, features_length = self.feature_extraction((inputs.inputs, inputs.inputs_length), training=training)
-        enc, logits_length, _ = self.encoder((features, features_length), training=training)
-        pred, _ = self.predict_net((inputs.predictions, inputs.predictions_length), training=training)
+        enc, logits_length, *_ = self.encoder((features, features_length), training=training)
+        pred, *_ = self.predict_net((inputs.predictions, inputs.predictions_length), training=training)
         logits = self.joint_net((enc, pred), training=training)
         return schemas.TrainOutput(
             logits=logits,

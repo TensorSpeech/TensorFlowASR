@@ -16,7 +16,7 @@
 
 from tensorflow_asr import keras, tf
 from tensorflow_asr.models.activations.glu import GLU
-from tensorflow_asr.models.base_layer import Identity, Layer
+from tensorflow_asr.models.base_layer import Layer
 from tensorflow_asr.models.layers.convolution import DepthwiseConv1D
 from tensorflow_asr.models.layers.multihead_attention import MultiHeadAttention, MultiHeadRelativeAttention
 from tensorflow_asr.models.layers.positional_encoding import RelativeSinusoidalPositionalEncoding, SinusoidalPositionalEncoding
@@ -61,7 +61,7 @@ class FFModule(Layer):
         self.pre_norm = (
             keras.layers.LayerNormalization(name="ln", gamma_regularizer=kernel_regularizer, beta_regularizer=kernel_regularizer, dtype=self.dtype)
             if norm_position == "pre"
-            else Identity(name="preiden" if norm_position == "none" else "iden", dtype=self.dtype)
+            else keras.layers.Identity(name="preiden" if norm_position == "none" else "iden", dtype=self.dtype)
         )
         self.ffn1 = keras.layers.Dense(
             units=scale_factor * input_dim,
@@ -83,7 +83,7 @@ class FFModule(Layer):
         self.post_norm = (
             keras.layers.LayerNormalization(name="ln", gamma_regularizer=kernel_regularizer, beta_regularizer=kernel_regularizer, dtype=self.dtype)
             if norm_position == "post"
-            else Identity(name="postiden" if norm_position == "none" else "iden", dtype=self.dtype)
+            else keras.layers.Identity(name="postiden" if norm_position == "none" else "iden", dtype=self.dtype)
         )
         self.residual = Residual(factor=residual_factor, regularizer=bias_regularizer, name="residual", dtype=self.dtype)
 
@@ -94,11 +94,11 @@ class FFModule(Layer):
         outputs = self.ffn2(outputs, training=training)
         outputs = self.do2(outputs, training=training)
         outputs = self.post_norm(outputs, training=training)
-        outputs = self.residual([inputs, outputs], training=training)
+        outputs = self.residual((inputs, outputs), training=training)
         return outputs
 
-    def compute_output_shape(self, input_shape):
-        return input_shape
+    # def compute_output_shape(self, input_shape):
+    #     return input_shape
 
 
 @keras.utils.register_keras_serializable(package=__name__)
@@ -139,7 +139,7 @@ class MHSAModule(Layer):
         self.pre_norm = (
             keras.layers.LayerNormalization(name="ln", gamma_regularizer=kernel_regularizer, beta_regularizer=kernel_regularizer, dtype=self.dtype)
             if norm_position == "pre"
-            else Identity(name="preiden" if norm_position == "none" else "iden", dtype=self.dtype)
+            else keras.layers.Identity(name="preiden" if norm_position == "none" else "iden", dtype=self.dtype)
         )
         if mha_type == "relmha":
             self.mha = MultiHeadRelativeAttention(
@@ -169,7 +169,7 @@ class MHSAModule(Layer):
         self.post_norm = (
             keras.layers.LayerNormalization(name="ln", gamma_regularizer=kernel_regularizer, beta_regularizer=kernel_regularizer, dtype=self.dtype)
             if norm_position == "post"
-            else Identity(name="postiden" if norm_position == "none" else "iden", dtype=self.dtype)
+            else keras.layers.Identity(name="postiden" if norm_position == "none" else "iden", dtype=self.dtype)
         )
         self.residual = Residual(factor=residual_factor, regularizer=bias_regularizer, name="residual", dtype=self.dtype)
 
@@ -179,30 +179,50 @@ class MHSAModule(Layer):
     def call(
         self,
         inputs,
+        content_attention_bias=None,
+        positional_attention_bias=None,
         initial_state=None,
         training=False,
         attention_mask=None,
         use_causal_mask=False,
         use_auto_mask=True,
+        return_states=False,
     ):
-        _inputs, relative_position_encoding, content_attention_bias, positional_attention_bias = inputs
+        _inputs, relative_position_encoding = inputs
         outputs = self.pre_norm(_inputs, training=training)
-        outputs, states = self.mha(
-            [outputs, outputs, outputs, relative_position_encoding, content_attention_bias, positional_attention_bias],
+        outputs, *states = self.mha(
+            [outputs, outputs, outputs, relative_position_encoding],
+            content_attention_bias=content_attention_bias,
+            positional_attention_bias=positional_attention_bias,
             initial_state=initial_state,
             training=training,
             attention_mask=attention_mask,
             use_causal_mask=use_causal_mask,
             use_auto_mask=use_auto_mask,
+            return_states=return_states,
         )
         outputs = self.do(outputs, training=training)
         outputs = self.post_norm(outputs, training=training)
-        outputs = self.residual([_inputs, outputs], training=training)
-        return outputs, states
+        outputs = self.residual((_inputs, outputs), training=training)
+        if return_states:
+            return [outputs] + states
+        return [outputs]
 
-    def compute_output_shape(self, input_shape):
-        output_shape, *_ = input_shape
-        return output_shape
+    # def compute_output_shape(self, input_shape):
+    #     output_shape, *_ = input_shape
+    #     return output_shape
+
+    # def compute_output_spec(
+    #     self,
+    #     inputs,
+    #     initial_state=None,
+    #     attention_mask=None,
+    #     use_causal_mask=False,
+    #     use_auto_mask=True,
+    # ):
+    #     return self.mha.compute_output_spec(
+    #         inputs, attention_mask=attention_mask, use_causal_mask=use_causal_mask, use_auto_mask=use_auto_mask, initial_state=initial_state
+    #     )
 
 
 @keras.utils.register_keras_serializable(package=__name__)
@@ -247,7 +267,7 @@ class ConvModule(Layer):
         self.pre_norm = (
             keras.layers.LayerNormalization(name="ln", gamma_regularizer=kernel_regularizer, beta_regularizer=kernel_regularizer, dtype=self.dtype)
             if norm_position == "pre"
-            else Identity(name="preiden" if norm_position == "none" else "iden", dtype=self.dtype)
+            else keras.layers.Identity(name="preiden" if norm_position == "none" else "iden", dtype=self.dtype)
         )
         self.pw_conv_1 = keras.layers.Conv1D(
             filters=scale_factor * input_dim,
@@ -304,7 +324,7 @@ class ConvModule(Layer):
         self.post_norm = (
             keras.layers.LayerNormalization(name="ln", gamma_regularizer=kernel_regularizer, beta_regularizer=kernel_regularizer, dtype=self.dtype)
             if norm_position == "post"
-            else Identity(name="postiden" if norm_position == "none" else "iden", dtype=self.dtype)
+            else keras.layers.Identity(name="postiden" if norm_position == "none" else "iden", dtype=self.dtype)
         )
         self.residual = Residual(factor=residual_factor, regularizer=bias_regularizer, name="residual", dtype=self.dtype)
 
@@ -318,11 +338,11 @@ class ConvModule(Layer):
         outputs = self.pw_conv_2(outputs, training=training)
         outputs = self.do(outputs, training=training)
         outputs = self.post_norm(outputs, training=training)
-        outputs = self.residual([inputs, outputs], training=training)
+        outputs = self.residual((inputs, outputs), training=training)
         return outputs
 
-    def compute_output_shape(self, input_shape):
-        return input_shape
+    # def compute_output_shape(self, input_shape):
+    #     return input_shape
 
 
 @keras.utils.register_keras_serializable(package=__name__)
@@ -366,7 +386,7 @@ class ConformerBlock(Layer):
         self.pre_norm = (
             keras.layers.LayerNormalization(name="ln", gamma_regularizer=kernel_regularizer, beta_regularizer=kernel_regularizer, dtype=self.dtype)
             if block_norm_position == "pre"
-            else Identity(name="preiden" if block_norm_position == "none" else "iden", dtype=self.dtype)
+            else keras.layers.Identity(name="preiden" if block_norm_position == "none" else "iden", dtype=self.dtype)
         )
         self.ffm1 = FFModule(
             input_dim=input_dim,
@@ -423,7 +443,7 @@ class ConformerBlock(Layer):
         self.post_norm = (
             keras.layers.LayerNormalization(name="ln", gamma_regularizer=kernel_regularizer, beta_regularizer=kernel_regularizer, dtype=self.dtype)
             if block_norm_position == "post"
-            else Identity(name="postiden" if block_norm_position == "none" else "iden", dtype=self.dtype)
+            else keras.layers.Identity(name="postiden" if block_norm_position == "none" else "iden", dtype=self.dtype)
         )
 
     def get_initial_state(self, batch_size: int):
@@ -432,31 +452,39 @@ class ConformerBlock(Layer):
     def call(
         self,
         inputs,
+        content_attention_bias=None,
+        positional_attention_bias=None,
         initial_state=None,
         training=False,
         attention_mask=None,
         use_causal_mask=False,
         use_auto_mask=True,
+        return_states=False,
     ):
-        inputs, relative_position_encoding, content_attention_bias, positional_attention_bias = inputs
-        outputs = self.pre_norm(inputs, training=training)
+        _inputs, relative_position_encoding = inputs
+        outputs = self.pre_norm(_inputs, training=training)
         outputs = self.ffm1(outputs, training=training)
-        outputs, states = self.mhsam(
-            [outputs, relative_position_encoding, content_attention_bias, positional_attention_bias],
+        outputs, *states = self.mhsam(
+            [outputs, relative_position_encoding],
+            content_attention_bias=content_attention_bias,
+            positional_attention_bias=positional_attention_bias,
             initial_state=initial_state,
             training=training,
             attention_mask=attention_mask,
             use_causal_mask=use_causal_mask,
             use_auto_mask=use_auto_mask,
+            return_states=return_states,
         )
         outputs = self.convm(outputs, training=training)
         outputs = self.ffm2(outputs, training=training)
         outputs = self.post_norm(outputs, training=training)
-        return outputs, states
+        if return_states:
+            return [outputs] + states
+        return [outputs]
 
-    def compute_output_shape(self, input_shape):
-        output_shape, *_ = input_shape
-        return output_shape
+    # def compute_output_shape(self, input_shape):
+    #     output_shape, *_ = input_shape
+    #     return output_shape
 
 
 @keras.utils.register_keras_serializable(package=__name__)
@@ -578,29 +606,36 @@ class ConformerEncoder(Layer):
         else:
             self.content_attention_bias, self.positional_attention_bias = None, None
 
-    def call(self, inputs, initial_state=None, training=False):
+    def call(
+        self,
+        inputs,
+        initial_state=None,
+        training=False,
+        return_states=False,
+    ):
         outputs, outputs_length = inputs
-        outputs, outputs_length = self.conv_subsampling([outputs, outputs_length], training=training)
+        outputs, outputs_length = self.conv_subsampling((outputs, outputs_length), training=training)
         outputs = self.linear(outputs, training=training)
         outputs = self.do(outputs, training=training)
-        outputs, relative_position_encoding = self.relpe([outputs, outputs_length], training=training)
+        outputs, relative_position_encoding = self.relpe((outputs, outputs_length), training=training)
         states = None if self._memory_length is None else []
         for i, cblock in enumerate(self.conformer_blocks):
-            outputs, _states = cblock(
-                [
-                    outputs,
-                    relative_position_encoding,
-                    self.content_attention_bias,
-                    self.positional_attention_bias,
-                ],
+            outputs, *_states = cblock(
+                (outputs, relative_position_encoding),
+                content_attention_bias=self.content_attention_bias,
+                positional_attention_bias=self.positional_attention_bias,
                 initial_state=None if initial_state is None else initial_state[i],
                 training=training,
                 use_causal_mask=self._use_attention_causal_mask,
                 use_auto_mask=self._use_attention_auto_mask,
+                return_states=return_states,
             )
-            if states is not None:
-                states.append(_states)
-        return outputs, outputs_length, states
+            if not states:
+                continue
+            states.extend(_states)
+        if return_states:
+            return outputs, outputs_length, states
+        return outputs, outputs_length
 
     def call_next(self, features, features_length, previous_encoder_states, *args, **kwargs):
         """
@@ -617,17 +652,17 @@ class ConformerEncoder(Layer):
             Outputs, outputs_length, new_states
         """
         with tf.name_scope(f"{self.name}_call_next"):
-            return self.call((features, features_length), initial_state=previous_encoder_states, training=False)
+            return self((features, features_length), initial_state=previous_encoder_states, training=False, return_states=True)
 
     def compute_mask(self, inputs, mask=None):
-        return *self.conv_subsampling.compute_mask(inputs, mask=mask), None
+        return self.conv_subsampling.compute_mask(inputs, mask=mask)
 
-    def compute_output_shape(self, input_shape):
-        output_shape, output_length_shape = input_shape
-        output_shape, output_length_shape = self.conv_subsampling.compute_output_shape((output_shape, output_length_shape))
-        output_shape = self.linear.compute_output_shape(output_shape)
-        output_shape, relative_position_encoding_shape = self.relpe.compute_output_shape((output_shape, output_length_shape))
-        output_shape = self.do.compute_output_shape(output_shape)
-        for cblock in self.conformer_blocks:
-            output_shape = cblock.compute_output_shape((output_shape, relative_position_encoding_shape, None, None))
-        return output_shape, output_length_shape
+    # def compute_output_shape(self, input_shape):
+    #     output_shape, output_length_shape = input_shape
+    #     output_shape, output_length_shape = self.conv_subsampling.compute_output_shape((output_shape, output_length_shape))
+    #     output_shape = self.linear.compute_output_shape(output_shape)
+    #     output_shape, relative_position_encoding_shape = self.relpe.compute_output_shape((output_shape, output_length_shape))
+    #     output_shape = self.do.compute_output_shape(output_shape)
+    #     for cblock in self.conformer_blocks:
+    #         output_shape = cblock.compute_output_shape((output_shape, relative_position_encoding_shape, None, None))
+    #     return output_shape, output_length_shape

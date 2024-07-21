@@ -63,7 +63,7 @@ model_config:
 
 learning_config:
   optimizer_config:
-    class_name: Custom>Adam
+    class_name: Adam
     config:
       learning_rate:
         class_name: tensorflow_asr.optimizers.schedules>TransformerSchedule
@@ -91,7 +91,7 @@ learning_config:
       config: {}
     - class_name: tensorflow_asr.callbacks>ModelCheckpoint
       config:
-        filepath: {{modeldir}}/checkpoints/{epoch:02d}.h5
+        filepath: {{modeldir}}/checkpoints/{epoch:02d}.weights.h5
         save_best_only: False
         save_weights_only: True
         save_freq: epoch

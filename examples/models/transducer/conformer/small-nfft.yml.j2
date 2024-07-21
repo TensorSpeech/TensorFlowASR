@@ -45,7 +45,7 @@ model_config:
     encoder_interleave_relpe: True
     encoder_use_attention_causal_mask: False
     encoder_use_attention_auto_mask: True
-    encoder_mhsam_use_attention_bias: True
+    encoder_mhsam_use_attention_bias: False
     encoder_kernel_size: 32
     encoder_dropout: 0.1
     encoder_padding: causal
@@ -78,7 +78,7 @@ model_config:
 
 learning_config:
   optimizer_config:
-    class_name: Custom>Adam
+    class_name: Adam
     config:
       learning_rate:
         class_name: tensorflow_asr.optimizers.schedules>TransformerSchedule
@@ -108,7 +108,7 @@ learning_config:
       config: {}
     - class_name: tensorflow_asr.callbacks>ModelCheckpoint
       config:
-        filepath: {{modeldir}}/checkpoints/{epoch:02d}.h5
+        filepath: {{modeldir}}/checkpoints/{epoch:02d}.weights.h5
         save_best_only: False
         save_weights_only: True
         save_freq: epoch
