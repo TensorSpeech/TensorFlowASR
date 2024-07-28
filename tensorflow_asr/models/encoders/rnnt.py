@@ -14,13 +14,13 @@
 """ http://arxiv.org/abs/1811.06621 """
 
 from tensorflow_asr import keras, tf
-from tensorflow_asr.models.base_layer import Layer, Reshape
+from tensorflow_asr.models.base_layer import Reshape
 from tensorflow_asr.models.layers.subsampling import TimeReduction
 from tensorflow_asr.utils import layer_util, math_util
 
 
 @keras.utils.register_keras_serializable(package=__name__)
-class RnnTransducerBlock(Layer):
+class RnnTransducerBlock(keras.Model):
     def __init__(
         self,
         reduction_position: str = "pre",
@@ -123,7 +123,7 @@ class RnnTransducerBlock(Layer):
 
 
 @keras.utils.register_keras_serializable(package=__name__)
-class RnnTransducerEncoder(Layer):
+class RnnTransducerEncoder(keras.Model):
     def __init__(
         self,
         reduction_positions: list = ["pre", "pre", "pre", "pre", "pre", "pre", "pre", "pre"],
@@ -179,7 +179,7 @@ class RnnTransducerEncoder(Layer):
         outputs, outputs_length = self.reshape((outputs, outputs_length))
         for block in self.blocks:
             outputs, outputs_length = block((outputs, outputs_length), training=training)
-        return outputs, outputs_length, None
+        return outputs, outputs_length
 
     def call_next(self, features, features_length, previous_encoder_states, *args, **kwargs):
         """
