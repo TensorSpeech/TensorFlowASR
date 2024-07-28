@@ -358,7 +358,7 @@ class Transducer(BaseModel):
 
     def compile(self, optimizer, output_shapes=None, **kwargs):
         loss = RnntLoss(blank=self.blank, output_shapes=output_shapes, name="rnnt_loss")
-        return super().compile(loss, optimizer, **kwargs)
+        return super().compile(loss=loss, optimizer=optimizer, **kwargs)
 
     def apply_gwn(self):
         if self.gwn_config:

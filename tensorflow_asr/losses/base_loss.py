@@ -12,8 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from tensorflow_asr import keras, tf
-from tensorflow_asr.utils import data_util, env_util, math_util
+from tensorflow_asr import keras, schemas, tf
+from tensorflow_asr.utils import env_util
 
 logger = tf.get_logger()
 
@@ -25,19 +25,15 @@ class BaseLoss(keras.losses.Loss):
         self.blank = blank
         self.use_tpu = env_util.has_devices("TPU")
 
-    def call(self, y_true, y_pred):
-        # logits
-        logits = y_pred
-        logit_length = data_util.get_length(logits)
-        if logit_length is None:
-            logit_length = tf.shape(logits, out_type=tf.int32)[1] * tf.ones(shape=(tf.shape(logits)[0],), dtype=tf.int32)
-        # labels
-        labels = y_true
-        label_length = data_util.get_length(labels)
-        if label_length is None:
-            label_length = math_util.count_non_blank(labels, blank=self.blank, axis=1)
-        # returns
-        return logits, logit_length, labels, label_length
+    def call(
+        self,
+        y_true: schemas.TrainLabel,
+        y_pred: schemas.TrainOutput,
+    ):
+        logit_length = tf.cast(y_pred.logits_length, tf.int32)
+        labels = tf.cast(y_true.labels, tf.int32)
+        label_length = tf.cast(y_true.labels_length, tf.int32)
+        return y_pred.logits, logit_length, labels, label_length
 
     def get_config(self):
         config = super().get_config()

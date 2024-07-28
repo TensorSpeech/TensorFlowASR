@@ -17,17 +17,14 @@
 import logging
 
 import numpy as np
-from keras.src.utils import io_utils, tf_utils
+from keras.src import tree
+from keras.src.utils import io_utils
 
 from tensorflow_asr import keras, schemas, tf
 from tensorflow_asr.models.layers.feature_extraction import FeatureExtraction
 from tensorflow_asr.optimizers.accumulation import GradientAccumulator
 from tensorflow_asr.tokenizers import Tokenizer
-from tensorflow_asr.utils import data_util, env_util, file_util, keras_util, shape_util
-
-# tf_utils = importlib.import_module(f"{env_util.KERAS_SRC}.utils.tf_utils")
-# io_utils = importlib.import_module(f"{env_util.KERAS_SRC}.utils.io_utils")
-# _minimum_control_deps = importlib.import_module(f"{env_util.KERAS_SRC}.engine.training")._minimum_control_deps
+from tensorflow_asr.utils import file_util, keras_util, shape_util
 
 logger = logging.getLogger(__name__)
 
@@ -102,21 +99,14 @@ class BaseModel(keras.Model):
     def compile(
         self,
         loss,
-        optimizer,
+        optimizer=None,
         run_eagerly=None,
-        mxp="none",
         ga_steps=None,
         gwn_config=None,
         gradn_config=None,
         **kwargs,
     ):
         optimizer = keras.optimizers.get(optimizer)
-        if env_util.has_devices("TPU"):
-            self.use_loss_scale = False
-        else:
-            self.use_loss_scale = mxp != "none" and self.dtype_policy.name == "mixed_float16"
-            if self.use_loss_scale:
-                logger.info("Using loss scale")  # keras auto wrap optimizer with mixed precision loss scale optimizer
         if isinstance(ga_steps, int) and ga_steps > 1:
             self.use_ga = True
             self.ga = GradientAccumulator(ga_steps=ga_steps)
@@ -127,7 +117,8 @@ class BaseModel(keras.Model):
         self.gwn_config = gwn_config
         self.gradn = keras.regularizers.get(gradn_config) if gradn_config else None
         self.distribute_reduction_method = "mean"
-        super().compile(optimizer=optimizer, loss=loss, run_eagerly=run_eagerly, **kwargs)
+        self.tfasr_loss = loss
+        super().compile(optimizer=optimizer, run_eagerly=run_eagerly, **kwargs)
 
     def call(self, inputs: schemas.TrainInput, training=False):
         raise NotImplementedError()
@@ -139,37 +130,44 @@ class BaseModel(keras.Model):
     def remove_gwn(self, original_weights):
         pass
 
+    def tfasr_compute_loss(
+        self,
+        x=None,
+        y=None,
+        y_pred=None,
+        sample_weight=None,
+        training=True,
+    ):
+        loss = self.tfasr_loss(y, y_pred)
+        self.add_loss(loss)
+        return super()._compute_loss(x, y, y_pred, sample_weight, training)
+
     def _train_step(self, data: schemas.TrainData):
-        x = data[0]
-        y, _ = data_util.set_length(data[1].labels, data[1].labels_length)
+        x, y = data
         sample_weight = None
 
         with tf.GradientTape() as tape:
             tape.watch(x.inputs)
             original_weights = self.apply_gwn()
-            outputs: schemas.TrainOutput = self(x, training=True)
-            tape.watch(outputs.logits)
-            y_pred = outputs.logits
-            y_pred, _ = data_util.set_length(y_pred, outputs.logits_length)
+            y_pred: schemas.TrainOutput = self(x, training=True)
+            tape.watch(y_pred.logits)
             self.remove_gwn(original_weights)
-            tape.watch(y_pred)
-            loss = self.compute_loss(x, y, y_pred, sample_weight)
+            loss = self.tfasr_compute_loss(
+                x=x,
+                y=y,
+                y_pred=y_pred,
+                sample_weight=sample_weight,
+                training=True,
+            )
+            self._loss_tracker.update_state(loss, sample_weight=tf.shape(tree.flatten(x)[0])[0])
 
-            if self.use_loss_scale:
-                loss = self.optimizer.get_scaled_loss(loss)
+            if self.optimizer is not None:
+                loss = self.optimizer.scale_loss(loss)
 
             if self.use_ga:  # sum of gradients so the loss must be divided
                 loss = loss / self.ga.total_steps
 
-        gradients = tape.gradient(loss, self.trainable_variables, unconnected_gradients=tf.UnconnectedGradients.ZERO)
-
-        if self.use_loss_scale:
-            gradients = self.optimizer.get_unscaled_gradients(gradients)
-
-        if env_util.DEBUG:
-            tf.print("")
-            tf.print("Outputs", outputs)
-
+        gradients = tape.gradient(loss, self.trainable_variables)
         return gradients
 
     def _apply_gradients(self, gradients):
@@ -191,14 +189,20 @@ class BaseModel(keras.Model):
         return metrics, gradients
 
     def _test_step(self, data: schemas.TrainData):
-        x = data[0]
-        y, _ = data_util.set_length(data[1].labels, data[1].labels_length)
+        x, y = data
         sample_weight = None
-
-        outputs = self(x, training=False)
-        y_pred, _ = data_util.set_length(outputs.logits, outputs.logits_length)
-
-        self.compute_loss(x, y, y_pred, sample_weight)
+        y_pred = self(x, training=False)
+        loss = self.tfasr_compute_loss(
+            x=x,
+            y=y,
+            y_pred=y_pred,
+            sample_weight=sample_weight,
+            training=False,
+        )
+        self._loss_tracker.update_state(
+            loss,
+            sample_weight=tf.shape(tree.flatten(x)[0])[0],
+        )
 
     def test_step(self, data: schemas.TrainData):
         self._test_step(data)

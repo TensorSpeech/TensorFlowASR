@@ -30,6 +30,7 @@
         "pylint"
     ],
     "python.analysis.fixAll": [
+        "source.unusedImports",
         "source.convertImportFormat"
     ],
     "python.analysis.importFormat": "absolute"

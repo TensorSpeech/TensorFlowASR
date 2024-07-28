@@ -531,7 +531,7 @@ class DeepSpeech2Encoder(Layer):
             return outputs, outputs_length, new_encoder_states
 
     def compute_mask(self, inputs, mask=None):
-        return *self.conv_module.compute_mask(inputs, mask=mask), None
+        return *self.conv_module.compute_mask(inputs, mask), None
 
     def compute_output_shape(self, input_shape):
         output_shape = self.conv_module.compute_output_shape(input_shape)

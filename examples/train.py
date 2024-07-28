@@ -91,7 +91,6 @@ def main(
             output_shapes=output_shapes,
             steps_per_execution=spx,
             jit_compile=jit_compile,
-            mxp=mxp,
             ga_steps=ga_steps or config.learning_config.ga_steps,
             gwn_config=config.learning_config.gwn_config,
             gradn_config=config.learning_config.gradn_config,
