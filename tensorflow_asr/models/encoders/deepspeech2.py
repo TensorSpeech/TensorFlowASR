@@ -495,7 +495,7 @@ class DeepSpeech2Encoder(keras.Model):
         outputs = self.conv_module(outputs, training=training)
         outputs = self.rnn_module(outputs, training=training)
         outputs = self.fc_module(outputs, training=training)
-        return *outputs, None
+        return outputs
 
     def call_next(self, features, features_length, previous_encoder_states, *args, **kwargs):
         """
@@ -519,7 +519,7 @@ class DeepSpeech2Encoder(keras.Model):
             return outputs, outputs_length, new_encoder_states
 
     def compute_mask(self, inputs, mask=None):
-        return *self.conv_module.compute_mask(inputs, mask), None
+        return self.conv_module.compute_mask(inputs, mask)
 
     def compute_output_shape(self, input_shape):
         output_shape = self.conv_module.compute_output_shape(input_shape)
