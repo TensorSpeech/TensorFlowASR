@@ -44,7 +44,7 @@ class JasperDecoder(Layer):
     def call(self, inputs, training=False):
         logits, logits_length, *_ = inputs
         logits = self.vocab(logits, training=training)
-        return logits, logits_length, None
+        return logits, logits_length
 
     def call_next(self, logits, logits_length, *args, **kwargs):
         outputs, outputs_length = self((logits, logits_length), training=False)

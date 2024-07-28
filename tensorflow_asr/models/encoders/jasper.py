@@ -15,7 +15,7 @@
 import tensorflow as tf
 
 from tensorflow_asr import keras
-from tensorflow_asr.models.base_layer import Layer, Reshape
+from tensorflow_asr.models.base_layer import Reshape
 from tensorflow_asr.utils import math_util
 
 
@@ -64,6 +64,9 @@ class JasperSubBlock(keras.layers.Layer):
         outputs = self.do(outputs, training=training)
         return outputs
 
+    def compute_output_shape(self, input_shape):
+        return self.conv1d.compute_output_shape(input_shape)
+
 
 @keras.utils.register_keras_serializable(package=__name__)
 class JasperResidual(keras.layers.Layer):
@@ -98,6 +101,9 @@ class JasperResidual(keras.layers.Layer):
         outputs = self.pointwise_conv1d(inputs, training=training)
         outputs = self.bn(outputs, training=training)
         return outputs
+
+    def compute_output_shape(self, input_shape):
+        return self.pointwise_conv1d.compute_output_shape(input_shape)
 
 
 @keras.utils.register_keras_serializable(package=__name__)
@@ -211,9 +217,15 @@ class JasperBlock(keras.layers.Layer):
             outputs = self.subblock_residual([outputs, [inputs]], training=training)
         return outputs, residuals
 
+    def compute_output_shape(self, input_shape):
+        output_shape, residuals_shape = input_shape
+        for subblock in self.subblocks:
+            output_shape = subblock.compute_output_shape(output_shape)
+        return output_shape, residuals_shape
+
 
 @keras.utils.register_keras_serializable(package=__name__)
-class JasperEncoder(Layer):
+class JasperEncoder(keras.Model):
     def __init__(
         self,
         dense: bool = False,
@@ -317,7 +329,7 @@ class JasperEncoder(Layer):
         outputs = self.second_additional_block(outputs, training=training)
         outputs = self.third_additional_block(outputs, training=training)
         outputs_length = math_util.get_reduced_length(outputs_length, self.time_reduction_factor)
-        return outputs, outputs_length, None
+        return outputs, outputs_length
 
     def call_next(self, features, features_length, previous_encoder_states, *args, **kwargs):
         """
