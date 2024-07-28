@@ -22,7 +22,7 @@ from tensorflow_asr.models.layers.subsampling import Conv1dSubsampling, Conv2dSu
 
 
 @keras.utils.register_keras_serializable(package=__name__)
-class Pointwiseffn(Layer):
+class PointwiseFFN(Layer):
     def __init__(
         self,
         dmodel,
@@ -54,9 +54,12 @@ class Pointwiseffn(Layer):
         outputs = self.ffn2(outputs, training=training)
         return outputs
 
+    def compute_output_shape(self, input_shape):
+        return input_shape[:-1] + (self.ffn2.units,)
+
 
 @keras.utils.register_keras_serializable(package=__name__)
-class TransformerBlock(Layer):
+class TransformerBlock(keras.Model):
     def __init__(
         self,
         dmodel,
@@ -121,7 +124,7 @@ class TransformerBlock(Layer):
                 beta_regularizer=kernel_regularizer, gamma_regularizer=bias_regularizer, name="ln_2", dtype=self.dtype
             )
         )
-        self.pwffn = Pointwiseffn(
+        self.pwffn = PointwiseFFN(
             dmodel=dmodel,
             dff=dff,
             activation=pwffn_activation,
@@ -139,21 +142,27 @@ class TransformerBlock(Layer):
     def call(
         self,
         inputs,
+        content_attention_bias=None,
+        positional_attention_bias=None,
         initial_state=None,
         training=False,
         attention_mask=None,
         use_causal_mask=False,
         use_auto_mask=True,
+        return_states=False,
     ):
-        original_outputs, relative_position_encoding, content_attention_bias, positional_attention_bias = inputs
+        original_outputs, relative_position_encoding = inputs
         outputs = self.norm1(original_outputs, training=training) if self._norm_position == "pre" else original_outputs
-        outputs, states = self.mha(
-            [outputs, outputs, outputs, relative_position_encoding, content_attention_bias, positional_attention_bias],
+        outputs, *states = self.mha(
+            [outputs, outputs, outputs, relative_position_encoding],
+            content_attention_bias=content_attention_bias,
+            positional_attention_bias=positional_attention_bias,
             initial_state=initial_state,
             training=training,
             attention_mask=attention_mask,
             use_causal_mask=use_causal_mask,
             use_auto_mask=use_auto_mask,
+            return_states=return_states,
         )
         outputs = self.do1(outputs, training=training)
         outputs = self.norm1(outputs, training=training) if self._norm_position == "post" else outputs
@@ -163,7 +172,9 @@ class TransformerBlock(Layer):
         outputs = self.do2(outputs, training=training)
         outputs = self.norm2(outputs, training=training) if self._norm_position == "post" else outputs
         outputs = self.residual2([original_outputs, outputs], training=training)
-        return outputs, states
+        if return_states:
+            return (outputs,) + states
+        return (outputs,)
 
     def compute_output_shape(self, input_shape):
         output_shape, *_ = input_shape
@@ -171,7 +182,7 @@ class TransformerBlock(Layer):
 
 
 @keras.utils.register_keras_serializable(package=__name__)
-class TransformerEncoder(Layer):
+class TransformerEncoder(keras.Model):
     def __init__(
         self,
         subsampling,
@@ -285,7 +296,13 @@ class TransformerEncoder(Layer):
     def get_initial_state(self, batch_size):
         return [block.get_initial_state(batch_size) for block in self.blocks]
 
-    def call(self, inputs, initial_state=None, training=False):
+    def call(
+        self,
+        inputs,
+        initial_state=None,
+        training=False,
+        return_states=False,
+    ):
         outputs, outputs_length = inputs
         outputs, outputs_length = self.subsampling([outputs, outputs_length], training=training)
         outputs = self.linear(outputs, training=training)
@@ -293,21 +310,22 @@ class TransformerEncoder(Layer):
         outputs = self.do(outputs, training=training)
         states = None if self._memory_length is None else []
         for i, block in enumerate(self.blocks):
-            outputs, _states = block(
-                [
-                    outputs,
-                    relative_position_encoding,
-                    self.content_attention_bias,
-                    self.positional_attention_bias,
-                ],
+            outputs, *_states = block(
+                [outputs, relative_position_encoding],
+                content_attention_bias=self.content_attention_bias,
+                positional_attention_bias=self.positional_attention_bias,
                 initial_state=None if initial_state is None else initial_state[i],
                 training=training,
                 use_causal_mask=self._use_attention_causal_mask,
                 use_auto_mask=self._use_attention_auto_mask,
+                return_states=return_states,
             )
-            if states is not None:
-                states.append(_states)
-        return outputs, outputs_length, states
+            if not _states:
+                continue
+            states.extend(_states)
+        if return_states:
+            return outputs, outputs_length, states
+        return outputs, outputs_length
 
     def call_next(self, features, features_length, previous_encoder_states, *args, **kwargs):
         """
@@ -327,7 +345,7 @@ class TransformerEncoder(Layer):
             return self.call((features, features_length), initial_state=previous_encoder_states, training=False)
 
     def compute_mask(self, inputs, mask=None):
-        return *self.subsampling.compute_mask(inputs, mask=mask), None
+        return self.subsampling.compute_mask(inputs, mask=mask)
 
     def compute_output_shape(self, input_shape):
         output_shape, output_length_shape = input_shape
@@ -336,5 +354,5 @@ class TransformerEncoder(Layer):
         output_shape, relative_position_encoding_shape = self.relpe.compute_output_shape((output_shape, output_length_shape))
         output_shape = self.do.compute_output_shape(output_shape)
         for block in self.blocks:
-            output_shape, _ = block.compute_output_shape((output_shape, relative_position_encoding_shape, None, None))
+            output_shape = block.compute_output_shape((output_shape, relative_position_encoding_shape, None, None))
         return output_shape, output_length_shape

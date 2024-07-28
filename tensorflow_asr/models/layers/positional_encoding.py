@@ -78,7 +78,7 @@ class SinusoidalPositionalEncoding(Layer):
             interleave=self._interleave,
             dtype=outputs.dtype,
         )
-        pe *= tf.sequence_mask(outputs_length, maxlen=length, dtype=pe.dtype)
+        pe *= tf.expand_dims(tf.sequence_mask(outputs_length, maxlen=length, dtype=pe.dtype), axis=-1)
         pe = self.do(pe, training=training)
         outputs += pe
         return outputs, pe

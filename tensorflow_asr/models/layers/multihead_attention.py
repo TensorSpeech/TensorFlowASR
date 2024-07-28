@@ -204,7 +204,7 @@ class MultiHeadAttention(keras.layers.MultiHeadAttention):
         )
 
     def build(self, input_shape):
-        query_shape, key_shape, value_shape = input_shape
+        query_shape, key_shape, value_shape, *_ = input_shape
         if self._memory_length is not None:
             self._memory = Memory(
                 batch_size=query_shape[0],
@@ -252,7 +252,7 @@ class MultiHeadAttention(keras.layers.MultiHeadAttention):
         return_states=False,
         **kwargs,
     ):
-        query, key, value = inputs
+        query, key, value, *_ = inputs
 
         if use_auto_mask:
             attention_mask = self._compute_attention_mask(

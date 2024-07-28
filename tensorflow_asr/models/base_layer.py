@@ -28,6 +28,9 @@ class Layer(keras.layers.Layer):
         super().__init__(trainable=trainable, name=name, dtype=dtype, **kwargs)
         self.supports_masking = True
 
+    def compute_output_shape(self, input_shape):
+        return input_shape
+
 
 @keras.utils.register_keras_serializable(package=__name__)
 class Reshape(Layer):
