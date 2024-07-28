@@ -79,8 +79,5 @@ class Memory(Layer):
         new_memory._keras_mask = new_memory_mask  # pylint: disable=protected-access
         return new_inputs, new_memory
 
-    # def compute_output_shape(self, input_shape):
-    #     return input_shape[0], self.memory_length, self.dmodel
-
-    # def compute_output_spec(self, *args, **kwargs):
-    #     return super().compute_output_spec(*args, **kwargs)
+    def compute_output_shape(self, input_shape):
+        return input_shape, (input_shape[0], self.memory_length, self.dmodel)

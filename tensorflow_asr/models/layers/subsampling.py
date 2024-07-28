@@ -45,11 +45,11 @@ class TimeReduction(Layer):
         mask = tf.sequence_mask(outputs_length, maxlen=maxlen, dtype=tf.bool)
         return mask, None
 
-    # def compute_output_shape(self, input_shape):
-    #     output_shape, output_length_shape = input_shape
-    #     reduced_time = math_util.legacy_get_reduced_length(output_shape[1], self.time_reduction_factor)
-    #     output_shape = output_shape[:1] + (reduced_time,) + output_shape[2:]
-    #     return output_shape, output_length_shape
+    def compute_output_shape(self, input_shape):
+        output_shape, output_length_shape = input_shape
+        reduced_time = math_util.legacy_get_reduced_length(output_shape[1], self.time_reduction_factor)
+        output_shape = output_shape[:1] + (reduced_time,) + output_shape[2:]
+        return output_shape, output_length_shape
 
 
 @keras.utils.register_keras_serializable(package=__name__)
@@ -141,16 +141,16 @@ class VggSubsampling(Layer):
         mask = tf.sequence_mask(outputs_length, maxlen=maxlen, dtype=tf.bool)
         return mask, None
 
-    # def compute_output_shape(self, input_shape):
-    #     output_shape, output_length_shape = input_shape
-    #     outputs_shape = self.conv1.compute_output_shape(output_shape)
-    #     outputs_shape = self.conv2.compute_output_shape(outputs_shape)
-    #     outputs_shape = self.maxpool1.compute_output_shape(outputs_shape)
-    #     outputs_shape = self.conv3.compute_output_shape(outputs_shape)
-    #     outputs_shape = self.conv4.compute_output_shape(outputs_shape)
-    #     outputs_shape = self.maxpool2.compute_output_shape(outputs_shape)
-    #     outputs_shape = outputs_shape[:2] + (outputs_shape[2] * outputs_shape[3],)
-    #     return outputs_shape, output_length_shape
+    def compute_output_shape(self, input_shape):
+        output_shape, output_length_shape = input_shape
+        outputs_shape = self.conv1.compute_output_shape(output_shape)
+        outputs_shape = self.conv2.compute_output_shape(outputs_shape)
+        outputs_shape = self.maxpool1.compute_output_shape(outputs_shape)
+        outputs_shape = self.conv3.compute_output_shape(outputs_shape)
+        outputs_shape = self.conv4.compute_output_shape(outputs_shape)
+        outputs_shape = self.maxpool2.compute_output_shape(outputs_shape)
+        outputs_shape = outputs_shape[:2] + (outputs_shape[2] * outputs_shape[3],)
+        return outputs_shape, output_length_shape
 
 
 @keras.utils.register_keras_serializable(package=__name__)
@@ -235,12 +235,12 @@ class Conv2dSubsampling(Layer):
         mask = tf.sequence_mask(outputs_length, maxlen=maxlen, dtype=tf.bool)
         return mask, None
 
-    # def compute_output_shape(self, input_shape):
-    #     output_shape, output_length_shape = input_shape
-    #     for block in self.convs:
-    #         output_shape = block.layers[0].compute_output_shape(output_shape)
-    #     output_shape = output_shape[:2] + (output_shape[2] * output_shape[3],)
-    #     return output_shape, output_length_shape
+    def compute_output_shape(self, input_shape):
+        output_shape, output_length_shape = input_shape
+        for block in self.convs:
+            output_shape = block.layers[0].compute_output_shape(output_shape)
+        output_shape = output_shape[:2] + (output_shape[2] * output_shape[3],)
+        return output_shape, output_length_shape
 
 
 @keras.utils.register_keras_serializable(package=__name__)
@@ -325,9 +325,9 @@ class Conv1dSubsampling(Layer):
         mask = tf.sequence_mask(outputs_length, maxlen=maxlen, dtype=tf.bool)
         return mask, None
 
-    # def compute_output_shape(self, input_shape):
-    #     output_shape, output_length_shape = input_shape
-    #     output_shape = output_shape[:2] + (output_shape[2] * output_shape[3],)
-    #     for block in self.convs:
-    #         output_shape = block.layers[0].compute_output_shape(output_shape)
-    #     return output_shape, output_length_shape
+    def compute_output_shape(self, input_shape):
+        output_shape, output_length_shape = input_shape
+        output_shape = output_shape[:2] + (output_shape[2] * output_shape[3],)
+        for block in self.convs:
+            output_shape = block.layers[0].compute_output_shape(output_shape)
+        return output_shape, output_length_shape

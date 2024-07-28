@@ -61,5 +61,5 @@ class Residual(Layer):
         x = x + alpha * residual_x
         return x
 
-    # def compute_output_shape(self, input_shape):
-    #     return input_shape[0]
+    def compute_output_shape(self, input_shape):
+        return input_shape[0]

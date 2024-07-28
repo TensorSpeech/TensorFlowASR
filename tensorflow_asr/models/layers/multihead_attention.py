@@ -13,6 +13,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import collections
+
 from keras.src.layers.attention import multi_head_attention as mha_module
 
 from tensorflow_asr import keras, tf
@@ -179,6 +181,9 @@ class MultiHeadAttention(keras.layers.MultiHeadAttention):
     ):
         self._memory_length = memory_length
         self._memory = None
+        if output_shape:
+            if not isinstance(output_shape, collections.abc.Sized):
+                output_shape = (output_shape,)
         super().__init__(
             num_heads,
             key_dim,

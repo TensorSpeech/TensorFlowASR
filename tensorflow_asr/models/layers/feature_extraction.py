@@ -312,11 +312,11 @@ class FeatureExtraction(Layer):
         padded_nframes = self.get_nframes(tf.shape(signals, tf.int32)[1])
         return tf.sequence_mask(nframes, maxlen=padded_nframes, dtype=tf.bool), None
 
-    # def compute_output_shape(self, input_shape):
-    #     signal_shape, signal_length_shape = input_shape
-    #     B, nsamples = signal_shape
-    #     if nsamples is None:
-    #         output_shape = [B, None, self.num_feature_bins, 1]
-    #     else:
-    #         output_shape = [B, self.get_nframes(nsamples + self.padding), self.num_feature_bins, 1]
-    #     return tf.TensorShape(output_shape), tf.TensorShape(signal_length_shape)
+    def compute_output_shape(self, input_shape):
+        signal_shape, signal_length_shape = input_shape
+        B, nsamples = signal_shape
+        if nsamples is None:
+            output_shape = [B, None, self.num_feature_bins, 1]
+        else:
+            output_shape = [B, self.get_nframes(nsamples + self.padding), self.num_feature_bins, 1]
+        return tf.TensorShape(output_shape), tf.TensorShape(signal_length_shape)

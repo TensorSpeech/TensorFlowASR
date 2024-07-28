@@ -121,16 +121,16 @@ class ConvBlock(Layer):
         mask = tf.sequence_mask(outputs_length, maxlen=maxlen, dtype=tf.bool)
         return mask, None
 
-    # def compute_output_shape(self, input_shape):
-    #     output_shape, output_length_shape = input_shape
-    #     output_shape = self.conv.compute_output_shape(output_shape)
-    #     output_shape = self.bn.compute_output_shape(output_shape)
-    #     output_shape = self.act.compute_output_shape(output_shape)
-    #     return output_shape, output_length_shape
+    def compute_output_shape(self, input_shape):
+        output_shape, output_length_shape = input_shape
+        output_shape = self.conv.compute_output_shape(output_shape)
+        output_shape = self.bn.compute_output_shape(output_shape)
+        output_shape = self.act.compute_output_shape(output_shape)
+        return output_shape, output_length_shape
 
 
 @keras.utils.register_keras_serializable(package=__name__)
-class ConvModule(Layer):
+class ConvModule(keras.Model):
     def __init__(
         self,
         conv_type: str = "conv2d",
@@ -177,14 +177,6 @@ class ConvModule(Layer):
             outputs = conv(outputs, training=training)
         outputs = self.post(outputs, training=training)
         return outputs
-
-    # def compute_output_shape(self, input_shape):
-    #     output_shape = input_shape
-    #     output_shape = self.pre.compute_output_shape(output_shape)
-    #     for conv in self.convs:
-    #         output_shape = conv.compute_output_shape(output_shape)
-    #     output_shape = self.post.compute_output_shape(output_shape)
-    #     return output_shape
 
 
 # ------------------------------------ RNN ----------------------------------- #
@@ -267,7 +259,7 @@ class RnnBlock(Layer):
 
 
 @keras.utils.register_keras_serializable(package=__name__)
-class RnnModule(Layer):
+class RnnModule(keras.Model):
     def __init__(
         self,
         nlayers: int = 5,
@@ -331,12 +323,6 @@ class RnnModule(Layer):
             new_states.append(_states)
         return outputs, tf.transpose(tf.stack(new_states, axis=0), perm=[2, 0, 1, 3])
 
-    def compute_output_shape(self, input_shape):
-        output_shape = input_shape
-        for block in self.blocks:
-            output_shape = block.compute_output_shape(output_shape)
-        return output_shape
-
 
 # ------------------------------ FULLY CONNECTED ----------------------------- #
 
@@ -379,7 +365,7 @@ class FcBlock(Layer):
 
 
 @keras.utils.register_keras_serializable(package=__name__)
-class FcModule(Layer):
+class FcModule(keras.Model):
     def __init__(
         self,
         nlayers: int = 0,
@@ -412,15 +398,9 @@ class FcModule(Layer):
             outputs = block(outputs, training=training)
         return outputs
 
-    def compute_output_shape(self, input_shape):
-        output_shape = input_shape
-        for block in self.blocks:
-            output_shape = block.compute_output_shape(output_shape)
-        return output_shape
-
 
 @keras.utils.register_keras_serializable(package=__name__)
-class DeepSpeech2Encoder(Layer):
+class DeepSpeech2Encoder(keras.Model):
     def __init__(
         self,
         conv_type: str = "conv2d",

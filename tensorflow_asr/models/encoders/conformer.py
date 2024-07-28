@@ -16,7 +16,6 @@
 
 from tensorflow_asr import keras, tf
 from tensorflow_asr.models.activations.glu import GLU
-from tensorflow_asr.models.base_layer import Layer
 from tensorflow_asr.models.layers.convolution import DepthwiseConv1D
 from tensorflow_asr.models.layers.multihead_attention import MultiHeadAttention, MultiHeadRelativeAttention
 from tensorflow_asr.models.layers.positional_encoding import RelativeSinusoidalPositionalEncoding, SinusoidalPositionalEncoding
@@ -26,7 +25,7 @@ L2 = keras.regularizers.l2(1e-6)
 
 
 @keras.utils.register_keras_serializable(package=__name__)
-class FFModule(Layer):
+class FFModule(keras.Model):
     r"""
     architecture::
       input
@@ -97,12 +96,9 @@ class FFModule(Layer):
         outputs = self.residual((inputs, outputs), training=training)
         return outputs
 
-    # def compute_output_shape(self, input_shape):
-    #     return input_shape
-
 
 @keras.utils.register_keras_serializable(package=__name__)
-class MHSAModule(Layer):
+class MHSAModule(keras.Model):
     r"""
     architecture::
       input
@@ -208,25 +204,9 @@ class MHSAModule(Layer):
             return [outputs] + states
         return [outputs]
 
-    # def compute_output_shape(self, input_shape):
-    #     output_shape, *_ = input_shape
-    #     return output_shape
-
-    # def compute_output_spec(
-    #     self,
-    #     inputs,
-    #     initial_state=None,
-    #     attention_mask=None,
-    #     use_causal_mask=False,
-    #     use_auto_mask=True,
-    # ):
-    #     return self.mha.compute_output_spec(
-    #         inputs, attention_mask=attention_mask, use_causal_mask=use_causal_mask, use_auto_mask=use_auto_mask, initial_state=initial_state
-    #     )
-
 
 @keras.utils.register_keras_serializable(package=__name__)
-class ConvModule(Layer):
+class ConvModule(keras.Model):
     r"""
     architecture::
       input
@@ -341,12 +321,9 @@ class ConvModule(Layer):
         outputs = self.residual((inputs, outputs), training=training)
         return outputs
 
-    # def compute_output_shape(self, input_shape):
-    #     return input_shape
-
 
 @keras.utils.register_keras_serializable(package=__name__)
-class ConformerBlock(Layer):
+class ConformerBlock(keras.Model):
     r"""
     architecture::
       x = x + 1/2 * FFN(x)
@@ -482,13 +459,9 @@ class ConformerBlock(Layer):
             return [outputs] + states
         return [outputs]
 
-    # def compute_output_shape(self, input_shape):
-    #     output_shape, *_ = input_shape
-    #     return output_shape
-
 
 @keras.utils.register_keras_serializable(package=__name__)
-class ConformerEncoder(Layer):
+class ConformerEncoder(keras.Model):
     def __init__(
         self,
         subsampling,
@@ -656,13 +629,3 @@ class ConformerEncoder(Layer):
 
     def compute_mask(self, inputs, mask=None):
         return self.conv_subsampling.compute_mask(inputs, mask=mask)
-
-    # def compute_output_shape(self, input_shape):
-    #     output_shape, output_length_shape = input_shape
-    #     output_shape, output_length_shape = self.conv_subsampling.compute_output_shape((output_shape, output_length_shape))
-    #     output_shape = self.linear.compute_output_shape(output_shape)
-    #     output_shape, relative_position_encoding_shape = self.relpe.compute_output_shape((output_shape, output_length_shape))
-    #     output_shape = self.do.compute_output_shape(output_shape)
-    #     for cblock in self.conformer_blocks:
-    #         output_shape = cblock.compute_output_shape((output_shape, relative_position_encoding_shape, None, None))
-    #     return output_shape, output_length_shape
