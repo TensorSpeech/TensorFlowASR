@@ -90,7 +90,7 @@ class VggSubsampling(Layer):
             activation=activation,
             dtype=self.dtype,
         )
-        self.maxpool1 = keras.layers.MaxPool2D(pool_size=pool_size, strides=strides, padding=padding, dtype=self.dtype, name="maxpool_1")
+        self.maxpool1 = keras.layers.MaxPool2D(pool_size=pool_size, strides=strides, padding="same", dtype=self.dtype, name="maxpool_1")
         self.conv3 = Conv2D(
             filters=filters[1],
             kernel_size=kernel_size,
@@ -113,7 +113,7 @@ class VggSubsampling(Layer):
             activation=activation,
             dtype=self.dtype,
         )
-        self.maxpool2 = keras.layers.MaxPool2D(pool_size=pool_size, strides=strides, padding=padding, dtype=self.dtype, name="maxpool_2")
+        self.maxpool2 = keras.layers.MaxPool2D(pool_size=pool_size, strides=strides, padding="same", dtype=self.dtype, name="maxpool_2")
         self.time_reduction_factor = self.maxpool1.pool_size[0] * self.maxpool2.pool_size[0]
 
     def call(self, inputs, training=False):
@@ -135,7 +135,12 @@ class VggSubsampling(Layer):
         maxlen = tf.shape(outputs)[1]
         for pool in (self.maxpool1, self.maxpool2):
             maxlen, outputs_length = (
-                math_util.conv_output_length(length, pool.pool_size[0], padding=pool.padding, stride=pool.strides[0])
+                math_util.conv_output_length(
+                    length,
+                    pool.pool_size[0],
+                    padding=pool.padding,
+                    stride=pool.strides[0],
+                )
                 for length in (maxlen, outputs_length)
             )
         mask = tf.sequence_mask(outputs_length, maxlen=maxlen, dtype=tf.bool)
@@ -216,7 +221,7 @@ class Conv2dSubsampling(Layer):
             outputs_length = math_util.conv_output_length(
                 outputs_length,
                 filter_size=block.layers[0].kernel_size[0],
-                padding=block.layers[0].padding,
+                padding=block.layers[0]._padding,
                 stride=block.layers[0].strides[0],
             )
         outputs = math_util.merge_two_last_dims(outputs)
@@ -228,7 +233,10 @@ class Conv2dSubsampling(Layer):
         for block in self.convs:
             maxlen, outputs_length = (
                 math_util.conv_output_length(
-                    length, filter_size=block.layers[0].kernel_size[0], padding=block.layers[0].padding, stride=block.layers[0].strides[0]
+                    length,
+                    filter_size=block.layers[0].kernel_size[0],
+                    padding=block.layers[0]._padding,
+                    stride=block.layers[0].strides[0],
                 )
                 for length in (maxlen, outputs_length)
             )
@@ -307,7 +315,7 @@ class Conv1dSubsampling(Layer):
             outputs_length = math_util.conv_output_length(
                 outputs_length,
                 filter_size=block.layers[0].kernel_size[0],
-                padding=block.layers[0].padding,
+                padding=block.layers[0]._padding,
                 stride=block.layers[0].strides[0],
             )
         return outputs, outputs_length
@@ -318,7 +326,10 @@ class Conv1dSubsampling(Layer):
         for block in self.convs:
             maxlen, outputs_length = (
                 math_util.conv_output_length(
-                    length, filter_size=block.layers[0].kernel_size[0], padding=block.layers[0].padding, stride=block.layers[0].strides[0]
+                    length,
+                    filter_size=block.layers[0].kernel_size[0],
+                    padding=block.layers[0]._padding,
+                    stride=block.layers[0].strides[0],
                 )
                 for length in (maxlen, outputs_length)
             )

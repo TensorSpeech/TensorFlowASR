@@ -107,7 +107,10 @@ class ConvBlock(Layer):
         outputs = self.bn(outputs, training=training)
         outputs = self.act(outputs, training=training)
         outputs_length = math_util.conv_output_length(
-            outputs_length, filter_size=self.conv.kernel_size[0], padding=self.conv.padding, stride=self.conv.strides[0]
+            outputs_length,
+            filter_size=self.conv.kernel_size[0],
+            padding=self.conv._padding,
+            stride=self.conv.strides[0],
         )
         return outputs, outputs_length
 
@@ -115,7 +118,12 @@ class ConvBlock(Layer):
         outputs, outputs_length = inputs
         maxlen = tf.shape(outputs)[1]
         maxlen, outputs_length = (
-            math_util.conv_output_length(length, filter_size=self.conv.kernel_size[0], padding=self.conv.padding, stride=self.conv.strides[0])
+            math_util.conv_output_length(
+                length,
+                filter_size=self.conv.kernel_size[0],
+                padding=self.conv._padding,
+                stride=self.conv.strides[0],
+            )
             for length in (maxlen, outputs_length)
         )
         mask = tf.sequence_mask(outputs_length, maxlen=maxlen, dtype=tf.bool)
