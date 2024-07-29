@@ -34,7 +34,6 @@ TensorFlowASR implements some automatic speech recognition architectures such as
   - [Installing from source (recommended)](#installing-from-source-recommended)
   - [Installing via PyPi](#installing-via-pypi)
   - [Installing for development](#installing-for-development)
-  - [Install for Apple Sillicon](#install-for-apple-sillicon)
   - [Running in a container](#running-in-a-container)
 - [Training \& Testing Tutorial](#training--testing-tutorial)
 - [Features Extraction](#features-extraction)
@@ -74,13 +73,14 @@ TensorFlowASR implements some automatic speech recognition architectures such as
 
 For training and testing, you should use `git clone` for installing necessary packages from other authors (`ctc_decoders`, `rnnt_loss`, etc.)
 
+**NOTE ONLY FOR APPLE SILICON**: TensorFlowASR requires python >= 3.12
+
 ### Installing from source (recommended)
 
 ```bash
 git clone https://github.com/TensorSpeech/TensorFlowASR.git
 cd TensorFlowASR
-# Tensorflow 2.x (with 2.x.x >= 2.5.1)
-pip3 install ".[tf2.x]" # or ".[tf2.x-gpu]"
+pip3 install ".[linux,and-cuda]" # or ".[apple]"
 ```
 
 For anaconda3:
@@ -91,15 +91,14 @@ conda activate tfasr
 pip install -U tensorflow-gpu # upgrade to latest version of tensorflow
 git clone https://github.com/TensorSpeech/TensorFlowASR.git
 cd TensorFlowASR
-# Tensorflow 2.x (with 2.x.x >= 2.5.1)
-pip3 install ".[tf2.x]" # or ".[tf2.x-gpu]"
+pip3 install ".[linux,and-cuda]" # or ".[apple]"
 ```
 
 ### Installing via PyPi
 
 ```bash
 # Tensorflow 2.x (with 2.x >= 2.3)
-pip3 install "TensorFlowASR[tf2.x]" # or pip3 install "TensorFlowASR[tf2.x-gpu]"
+pip3 install "TensorFlowASR[linux,and-cuda]" # or "TensorFlowASR[apple]"
 ```
 
 ### Installing for development
@@ -107,29 +106,7 @@ pip3 install "TensorFlowASR[tf2.x]" # or pip3 install "TensorFlowASR[tf2.x-gpu]"
 ```bash
 git clone https://github.com/TensorSpeech/TensorFlowASR.git
 cd TensorFlowASR
-pip3 install -e ".[dev]"
-pip3 install -e ".[tf2.x]" # or ".[tf2.x-gpu]" or ".[tf2.x-apple]" for apple m1 machine
-```
-
-### Install for Apple Sillicon
-
-Due to tensorflow-text is not built for Apple Sillicon, we need to install it with the prebuilt wheel file from [sun1638650145/Libraries-and-Extensions-for-TensorFlow-for-Apple-Silicon](https://github.com/sun1638650145/Libraries-and-Extensions-for-TensorFlow-for-Apple-Silicon)
-
-```bash
-git clone https://github.com/TensorSpeech/TensorFlowASR.git
-cd TensorFlowASR
-pip3 install -e "." # or pip3 install -e ".[dev] for development # or pip3 install "TensorFlowASR[dev]" from PyPi
-pip3 install tensorflow~=2.14.0 # change minor version if you want
-```
-
-Do this after installing TensorFlowASR with tensorflow above
-
-```bash
-TF_VERSION="$(python3 -c 'import tensorflow; print(tensorflow.__version__)')" && \
-TF_VERSION_MAJOR="$(echo $TF_VERSION | cut -d'.' -f1,2)" && \
-PY_VERSION="$(python3 -c 'import platform; major, minor, patch = platform.python_version_tuple(); print(f"{major}{minor}");')" && \
-URL="https://github.com/sun1638650145/Libraries-and-Extensions-for-TensorFlow-for-Apple-Silicon" && \
-python3 -m pip install "${URL}/releases/download/v${TF_VERSION_MAJOR}/tensorflow_text-${TF_VERSION_MAJOR}.0-cp${PY_VERSION}-cp${PY_VERSION}-macosx_11_0_arm64.whl"
+pip3 install -e ".[apple,dev]" # or .[linux,dev] or .[linux,and-cuda,dev]
 ```
 
 ### Running in a container
