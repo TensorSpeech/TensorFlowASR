@@ -1,4 +1,4 @@
-{% import "examples/configs/librispeech/characters/char.yml.j2" as decoder_config with context %}
+{% import "examples/configs/librispeech/sentencepiece/sp.256.yml.j2" as decoder_config with context %}
 {{decoder_config}}
 
 model_config:
@@ -38,7 +38,7 @@ model_config:
     encoder_mhsam_residual_factor: 1.0
     encoder_convm_residual_factor: 1.0
     encoder_dmodel: 176
-    encoder_num_blocks: 16
+    encoder_num_blocks: 4
     encoder_head_size: 44 # == dmodel // num_heads
     encoder_num_heads: 4
     encoder_mha_type: relmha
