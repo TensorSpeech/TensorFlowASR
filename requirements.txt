@@ -9,15 +9,16 @@ jinja2~=3.1.3
 fire~=0.6.0
 jiwer~=3.0.3
 
-# extra=and-cuda
+# extra=tf
+tensorflow~=2.16.0
+
+# extra=tf-cuda
 tensorflow[and-cuda]~=2.16.0
 
 # extra=linux
-tensorflow~=2.16.0
 tensorflow-text~=2.16.0
 
 # extra=apple
-tensorflow~=2.16.0
 tensorflow-text @ https://github.com/sun1638650145/Libraries-and-Extensions-for-TensorFlow-for-Apple-Silicon/releases/download/v2.16/tensorflow_text-2.16.1-cp312-cp312-macosx_11_0_arm64.whl
 
 # extra=dev
