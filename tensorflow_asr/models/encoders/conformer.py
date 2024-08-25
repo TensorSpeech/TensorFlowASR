@@ -126,6 +126,7 @@ class MHSAModule(keras.Model):
         use_attention_bias=False,
         kernel_regularizer=L2,
         bias_regularizer=L2,
+        activity_regularizer=L2,
         name="mhsa_module",
         **kwargs,
     ):
@@ -147,6 +148,7 @@ class MHSAModule(keras.Model):
                 use_attention_bias=use_attention_bias,
                 kernel_regularizer=kernel_regularizer,
                 bias_regularizer=bias_regularizer,
+                activity_regularizer=activity_regularizer,
                 name="mhsa",
                 dtype=self.dtype,
             )
@@ -158,6 +160,7 @@ class MHSAModule(keras.Model):
                 memory_length=memory_length,
                 kernel_regularizer=kernel_regularizer,
                 bias_regularizer=bias_regularizer,
+                activity_regularizer=activity_regularizer,
                 name="mhsa",
                 dtype=self.dtype,
             )
@@ -355,6 +358,7 @@ class ConformerBlock(keras.Model):
         memory_length=None,
         kernel_regularizer=L2,
         bias_regularizer=L2,
+        activity_regularizer=L2,
         name="conformer_block",
         **kwargs,
     ):
@@ -389,6 +393,7 @@ class ConformerBlock(keras.Model):
             memory_length=memory_length,
             kernel_regularizer=kernel_regularizer,
             bias_regularizer=bias_regularizer,
+            activity_regularizer=activity_regularizer,
             name="mhsa_module",
             dtype=self.dtype,
         )
@@ -489,6 +494,7 @@ class ConformerEncoder(keras.Model):
         memory_length=None,
         kernel_regularizer=L2,
         bias_regularizer=L2,
+        activity_regularizer=L2,
         name="conformer_encoder",
         **kwargs,
     ):
@@ -553,6 +559,7 @@ class ConformerEncoder(keras.Model):
                 memory_length=memory_length,
                 kernel_regularizer=kernel_regularizer,
                 bias_regularizer=bias_regularizer,
+                activity_regularizer=activity_regularizer,
                 name=f"block_{i}",
                 dtype=self.dtype,
             )

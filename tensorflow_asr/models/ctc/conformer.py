@@ -25,6 +25,7 @@ class ConformerDecoder(Layer):
         vocab_size: int,
         kernel_regularizer=L2,
         bias_regularizer=L2,
+        activity_regularizer=L2,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -33,6 +34,7 @@ class ConformerDecoder(Layer):
             units=vocab_size,
             kernel_regularizer=kernel_regularizer,
             bias_regularizer=bias_regularizer,
+            activity_regularizer=activity_regularizer,
             name="logits",
             dtype=self.dtype,
         )
@@ -85,6 +87,7 @@ class Conformer(CtcModel):
         decoder_trainable: bool = True,
         kernel_regularizer=L2,
         bias_regularizer=L2,
+        activity_regularizer=None,
         name: str = "conformer",
         **kwargs,
     ):
@@ -116,10 +119,17 @@ class Conformer(CtcModel):
                 memory_length=encoder_memory_length,
                 kernel_regularizer=kernel_regularizer,
                 bias_regularizer=bias_regularizer,
+                activity_regularizer=activity_regularizer,
                 trainable=encoder_trainable,
                 name="encoder",
             ),
-            decoder=ConformerDecoder(vocab_size=vocab_size, trainable=decoder_trainable, name="decoder"),
+            decoder=ConformerDecoder(
+                vocab_size=vocab_size,
+                kernel_regularizer=kernel_regularizer,
+                bias_regularizer=bias_regularizer,
+                trainable=decoder_trainable,
+                name="decoder",
+            ),
             name=name,
             **kwargs,
         )

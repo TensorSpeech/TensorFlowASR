@@ -47,6 +47,8 @@ class TransducerPrediction(Layer):
         projection_units: int = 0,
         kernel_regularizer=None,
         bias_regularizer=None,
+        activity_regularizer=None,
+        recurrent_regularizer=None,
         name="transducer_prediction",
         **kwargs,
     ):
@@ -73,6 +75,8 @@ class TransducerPrediction(Layer):
                 zero_output_for_mask=True,
                 kernel_regularizer=kernel_regularizer,
                 bias_regularizer=bias_regularizer,
+                activity_regularizer=activity_regularizer,
+                recurrent_regularizer=recurrent_regularizer,
                 dtype=self.dtype,
             )
             ln = (
@@ -88,6 +92,7 @@ class TransducerPrediction(Layer):
                     name=f"projection_{i}",
                     kernel_regularizer=kernel_regularizer,
                     bias_regularizer=bias_regularizer,
+                    activity_regularizer=activity_regularizer,
                     dtype=self.dtype,
                 )
                 if projection_units > 0
@@ -215,6 +220,7 @@ class TransducerJoint(Layer):
         joint_mode: str = "add",
         kernel_regularizer=None,
         bias_regularizer=None,
+        activity_regularizer=None,
         name="tranducer_joint",
         **kwargs,
     ):
@@ -230,6 +236,7 @@ class TransducerJoint(Layer):
                 name="enc",
                 kernel_regularizer=kernel_regularizer,
                 bias_regularizer=bias_regularizer,
+                activity_regularizer=activity_regularizer,
                 dtype=self.dtype,
             )
         if self.prejoint_prediction_linear:
@@ -238,6 +245,8 @@ class TransducerJoint(Layer):
                 use_bias=False,
                 name="pred",
                 kernel_regularizer=kernel_regularizer,
+                bias_regularizer=bias_regularizer,
+                activity_regularizer=activity_regularizer,
                 dtype=self.dtype,
             )
 
@@ -252,6 +261,7 @@ class TransducerJoint(Layer):
                 name="ffn",
                 kernel_regularizer=kernel_regularizer,
                 bias_regularizer=bias_regularizer,
+                activity_regularizer=activity_regularizer,
                 dtype=self.dtype,
             )
 
@@ -260,6 +270,7 @@ class TransducerJoint(Layer):
             name="vocab",
             kernel_regularizer=kernel_regularizer,
             bias_regularizer=bias_regularizer,
+            activity_regularizer=activity_regularizer,
             dtype=self.dtype,
         )
 
@@ -316,6 +327,8 @@ class Transducer(BaseModel):
         postjoint_linear: bool = False,
         kernel_regularizer=None,
         bias_regularizer=None,
+        activity_regularizer=None,
+        recurrent_regularizer=None,
         name="transducer",
         **kwargs,
     ):
@@ -336,6 +349,8 @@ class Transducer(BaseModel):
             projection_units=prediction_projection_units,
             kernel_regularizer=kernel_regularizer,
             bias_regularizer=bias_regularizer,
+            activity_regularizer=activity_regularizer,
+            recurrent_regularizer=recurrent_regularizer,
             trainable=prediction_trainable,
             name="prediction",
             dtype=self.dtype,
@@ -350,6 +365,7 @@ class Transducer(BaseModel):
             joint_mode=joint_mode,
             kernel_regularizer=kernel_regularizer,
             bias_regularizer=bias_regularizer,
+            activity_regularizer=activity_regularizer,
             trainable=joint_trainable,
             name="joint",
             dtype=self.dtype,
@@ -1060,4 +1076,5 @@ class Transducer(BaseModel):
     #         y_hat_prediction = tf.gather_nd(prediction, y_hat_score_index)
     #         y_hat_states = tf.gather_nd(B.states.stack(), y_hat_score_index)
 
+    #         return Hypothesis(index=y_hat_index, prediction=y_hat_prediction, states=y_hat_states)
     #         return Hypothesis(index=y_hat_index, prediction=y_hat_prediction, states=y_hat_states)

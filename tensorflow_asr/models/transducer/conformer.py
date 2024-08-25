@@ -67,6 +67,8 @@ class Conformer(Transducer):
         joint_trainable: bool = True,
         kernel_regularizer=L2,
         bias_regularizer=L2,
+        activity_regularizer=None,
+        recurrent_regularizer=None,
         name: str = "conformer",
         **kwargs,
     ):
@@ -97,6 +99,7 @@ class Conformer(Transducer):
                 memory_length=encoder_memory_length,
                 kernel_regularizer=kernel_regularizer,
                 bias_regularizer=bias_regularizer,
+                activity_regularizer=activity_regularizer,
                 trainable=encoder_trainable,
                 name="encoder",
             ),
@@ -121,6 +124,8 @@ class Conformer(Transducer):
             joint_trainable=joint_trainable,
             kernel_regularizer=kernel_regularizer,
             bias_regularizer=bias_regularizer,
+            activity_regularizer=activity_regularizer,
+            recurrent_regularizer=recurrent_regularizer,
             name=name,
             **kwargs,
         )
