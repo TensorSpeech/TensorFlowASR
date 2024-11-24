@@ -202,6 +202,11 @@ class MultiHeadAttention(keras.layers.MultiHeadAttention):
             seed=seed,
             **kwargs,
         )
+        self._precomputed_output_shape = None
+
+    @property
+    def output_shape(self):
+        return self._precomputed_output_shape
 
     def build(self, input_shape):
         query_shape, key_shape, value_shape, *_ = input_shape
@@ -213,6 +218,7 @@ class MultiHeadAttention(keras.layers.MultiHeadAttention):
                 name="memory",
                 dtype=self.dtype_policy,
             )
+        self._precomputed_output_shape = self.compute_output_shape(input_shape)
         return super().build(query_shape, value_shape, key_shape)
 
     def get_initial_state(self, batch_size: int):
