@@ -1,4 +1,4 @@
-# pylint: disable=redefined-builtin,method-hidden
+# pylint: disable=redefined-builtin,method-hidden,invalid-overridden-method
 # -*- coding: utf-8 -*-
 """
 Created on Tue Jul 18 20:29:39 2023
@@ -879,7 +879,6 @@ class ClassicCtcLossData(BaseCtcLossData):
         horizontal_non_blank_grad_term = self.select_from_act(act, self.preceded_label)
         return horizontal_non_blank_grad_term
 
-    @property
     @cached_property
     def loss(self) -> tf.Tensor:
         """shape = [batch_size]"""
@@ -892,7 +891,6 @@ class ClassicCtcLossData(BaseCtcLossData):
         )
         return loss
 
-    @property
     @cached_property
     def gamma(self) -> tf.Tensor:
         """shape = [
@@ -1003,7 +1001,6 @@ class ClassicCtcLossData(BaseCtcLossData):
         diagonal_gamma = tf.tile(diagonal_gamma, [self.batch_size, self.max_logit_length_plus_one, 1, 1, 1, 1])
         return diagonal_gamma
 
-    @property
     @cached_property
     def beta(self) -> tf.Tensor:
         """Calculates the beta_{b,t,l,s} that is logarithmic probability of sample 0 <= b < batch_size - 1 in the batch
@@ -1060,7 +1057,6 @@ class ClassicCtcLossData(BaseCtcLossData):
         beta_last = tf.tile(input=tf.expand_dims(beta_last, axis=2), multiples=[1, 1, 2])
         return beta_last
 
-    @property
     @cached_property
     def alpha(self) -> tf.Tensor:
         """Calculates the alpha_{b,t,l,s} that is
