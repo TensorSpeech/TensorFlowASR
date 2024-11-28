@@ -46,12 +46,14 @@ class BaseModel(keras.Model):
         super().summary(line_length=line_length, expand_nested=expand_nested, show_trainable=show_trainable, **kwargs)
 
     def save(self, filepath, overwrite=True, save_format=None, **kwargs):
-        with file_util.save_file(filepath) as path:
-            super().save(filepath=path, overwrite=overwrite, save_format=save_format, **kwargs)
+        with tf.device("/CPU:0"):
+            with file_util.save_file(filepath) as path:
+                super().save(filepath=path, overwrite=overwrite, save_format=save_format, **kwargs)
 
     def save_weights(self, filepath, overwrite=True):
-        with file_util.save_file(filepath) as path:
-            super().save_weights(filepath=path, overwrite=overwrite)
+        with tf.device("/CPU:0"):
+            with file_util.save_file(filepath) as path:
+                super().save_weights(filepath=path, overwrite=overwrite)
 
     def load_weights(self, filepath, by_name=False, skip_mismatch=False, options=None):
         with file_util.read_file(filepath) as path:
