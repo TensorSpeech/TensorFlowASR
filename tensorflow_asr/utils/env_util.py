@@ -65,7 +65,9 @@ def setup_gpu(
 def setup_tpu(
     tpu_address=None,
 ):
-    resolver = tf.distribute.cluster_resolver.TPUClusterResolver.connect(tpu=tpu_address)
+    resolver = tf.distribute.cluster_resolver.TPUClusterResolver(tpu=tpu_address)
+    tf.config.experimental_connect_to_cluster(resolver)
+    tf.tpu.experimental.initialize_tpu_system(resolver)
     return tf.distribute.TPUStrategy(resolver)
 
 
