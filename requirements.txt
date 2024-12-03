@@ -12,16 +12,16 @@ keras~=3.6.0
 cached_property~=2.0.1
 
 # extra=tf
-tensorflow~=2.16.0
+tensorflow~=2.18.0
 
 # extra=tf-cuda
-tensorflow[and-cuda]~=2.16.0
+tensorflow[and-cuda]~=2.18.0
 
 # extra=linux
-tensorflow-text~=2.16.0
+tensorflow-text~=2.18.0
 
 # extra=apple
-tensorflow-text @ https://github.com/sun1638650145/Libraries-and-Extensions-for-TensorFlow-for-Apple-Silicon/releases/download/v2.16/tensorflow_text-2.16.1-cp312-cp312-macosx_11_0_arm64.whl
+tensorflow-text @ https://github.com/sun1638650145/Libraries-and-Extensions-for-TensorFlow-for-Apple-Silicon/releases/download/v2.18/tensorflow-2.18.0-cp312-cp312-macosx_15_0_arm64.whl
 
 # extra=dev
 pytest~=7.4.1
