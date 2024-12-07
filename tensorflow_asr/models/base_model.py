@@ -45,19 +45,17 @@ class BaseModel(keras.Model):
     def summary(self, line_length=127, expand_nested=True, show_trainable=True, **kwargs):
         super().summary(line_length=line_length, expand_nested=expand_nested, show_trainable=show_trainable, **kwargs)
 
-    def save(self, filepath, overwrite=True, save_format=None, **kwargs):
-        with tf.device("/CPU:0"):
-            with file_util.save_file(filepath) as path:
-                super().save(filepath=path, overwrite=overwrite, save_format=save_format, **kwargs)
+    def save(self, filepath, overwrite=True, zipped=None, **kwargs):
+        with file_util.save_file(filepath) as path:
+            super().save(filepath=path, overwrite=overwrite, zipped=zipped, **kwargs)
 
     def save_weights(self, filepath, overwrite=True):
-        with tf.device("/CPU:0"):
-            with file_util.save_file(filepath) as path:
-                super().save_weights(filepath=path, overwrite=overwrite)
+        with file_util.save_file(filepath) as path:
+            super().save_weights(filepath=path, overwrite=overwrite)
 
-    def load_weights(self, filepath, by_name=False, skip_mismatch=False, options=None):
+    def load_weights(self, filepath, skip_mismatch=False, **kwargs):
         with file_util.read_file(filepath) as path:
-            super().load_weights(filepath=path, by_name=by_name, skip_mismatch=skip_mismatch, options=options)
+            super().load_weights(filepath=path, skip_mismatch=skip_mismatch, **kwargs)
 
     def add_custom_metric(self, metric: keras.metrics.Metric):
         if not hasattr(self, "_tfasr_metrics"):
