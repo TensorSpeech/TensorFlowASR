@@ -332,7 +332,7 @@ class RnnTransducer(Transducer):
         """
         features = self.speech_featurizer.tf_extract(signal)
         encoded, new_encoder_states = self.encoder_inference(features, encoder_states)
-        hypothesis = self._perform_greedy(encoded, tf.shape(encoded)[0], predicted, prediction_states)
+        hypothesis = self._perform_greedy(encoded, tf.shape(encoded)[0], predicted, prediction_states, tflite=True)
         transcript = self.text_featurizer.indices2upoints(hypothesis.prediction)
         return transcript, hypothesis.index, new_encoder_states, hypothesis.states
 
@@ -345,7 +345,7 @@ class RnnTransducer(Transducer):
     ):
         features = self.speech_featurizer.tf_extract(signal)
         encoded, new_encoder_states = self.encoder_inference(features, encoder_states)
-        hypothesis = self._perform_greedy(encoded, tf.shape(encoded)[0], predicted, prediction_states)
+        hypothesis = self._perform_greedy(encoded, tf.shape(encoded)[0], predicted, prediction_states, tflite=True)
         indices = self.text_featurizer.normalize_indices(hypothesis.prediction)
         upoints = tf.gather_nd(self.text_featurizer.upoints, tf.expand_dims(indices, axis=-1))  # [None, max_subword_length]
 
