@@ -38,7 +38,7 @@ def main(
     jit_compile: bool = False,
     ga_steps: int = None,
     verbose: int = 1,
-    repodir: str = os.path.realpath(os.path.join(os.path.dirname(__file__), "..")),
+    repodir: str = os.getcwd(),
 ):
     keras.backend.clear_session()
     env_util.setup_seed()

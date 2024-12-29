@@ -1,3 +1,12 @@
+- [Training Tutorial](#training-tutorial)
+  - [1. Install packages](#1-install-packages)
+  - [2. Prepare transcripts files](#2-prepare-transcripts-files)
+  - [3. Prepare config file](#3-prepare-config-file)
+  - [4. \[Optional\]\[Required if using TPUs\] Create tfrecords](#4-optionalrequired-if-using-tpus-create-tfrecords)
+  - [5. Generate vocabulary and metadata](#5-generate-vocabulary-and-metadata)
+  - [6. Run training](#6-run-training)
+
+
 # Training Tutorial
 
 These commands are example for librispeech dataset, but we can apply similar to other datasets
@@ -16,14 +25,14 @@ pip install ".[tf2.x]"
 This is the example for preparing transcript files for librispeech data corpus
 
 ```bash
-python scripts/create_librispeech_trans.py \
+tensorflow_asr utils create_librispeech_trans \
     --directory=/path/to/dataset/train-clean-100 \
     --output=/path/to/dataset/train-clean-100/transcripts.tsv
 ```
 
 Do the same thing with `train-clean-360`, `train-other-500`, `dev-clean`, `dev-other`, `test-clean`, `test-other`
 
-For other datasets, you must prepare your own python script like the `scripts/create_librispeech_trans.py`
+For other datasets, you must prepare your own python script like the `tensorflow_asr/scripts/utils/create_librispeech_trans.py`
 
 ## 3. Prepare config file
 
@@ -34,7 +43,7 @@ Please take a look in some examples for config files in `examples/*/*.yml.j2`
 ## 4. [Optional][Required if using TPUs] Create tfrecords
 
 ```bash
-python scripts/create_tfrecords.py \
+tensorflow_asr utils create_tfrecords \
     --config-path=/path/to/config.yml.j2 \
     --mode=\["train","eval","test"\] \
     --datadir=/path/to/datadir
@@ -47,7 +56,7 @@ You can reduce the flag `--modes` to `--modes=\["train","eval"\]` to only create
 This step requires defining path to vocabulary file and other options for generating vocabulary in config file.
 
 ```bash
-python scripts/prepare_vocab_and_metadata.py \
+tensorflow_asr utils prepare_vocab_and_metadata \
     --config-path=/path/to/config.yml.j2 \
     --datadir=/path/to/datadir
 ```
@@ -58,7 +67,7 @@ The inputs, outputs and other options of vocabulary are defined in the config fi
 ## 6. Run training
 
 ```bash
-python examples/train.py \
+tensorflow_asr train \
     --mxp=auto \
     --jit-compile \
     --config-path=/path/to/config.yml.j2 \
@@ -66,5 +75,5 @@ python examples/train.py \
     --modeldir=/path/to/modeldir \
     --datadir=/path/to/datadir
 ## See others params
-python examples/train.py --help
+tensorflow_asr train --help
 ```

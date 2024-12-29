@@ -26,7 +26,7 @@ def main(
     file_path: str,
     config_path: str,
     h5: str,
-    repodir: str = os.path.realpath(os.path.join(os.path.dirname(__file__), "..", "..")),
+    repodir: str = os.getcwd(),
 ):
     env_util.setup_seed()
     file_path = file_util.preprocess_paths(file_path)
@@ -34,7 +34,7 @@ def main(
     config = Config(config_path, training=False, repodir=repodir)
     tokenizer = tokenizers.get(config)
 
-    model: base_model.BaseModel = keras.models.model_from_config(config.model_config)
+    model: base_model.BaseModel = keras.Model.from_config(config.model_config)
     model.make(batch_size=1)
     model.load_weights(h5, by_name=file_util.is_hdf5_filepath(h5), skip_mismatch=False)
     model.summary()

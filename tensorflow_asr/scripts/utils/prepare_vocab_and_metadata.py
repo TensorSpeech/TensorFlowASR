@@ -27,7 +27,7 @@ logger = logging.getLogger(__name__)
 def main(
     config_path: str,
     datadir: str,
-    repodir: str = os.path.realpath(os.path.join(os.path.dirname(__file__), "..")),
+    repodir: str = os.getcwd(),
 ):
     config = Config(config_path, repodir=repodir, datadir=datadir)
     if not config.decoder_config.vocabulary:

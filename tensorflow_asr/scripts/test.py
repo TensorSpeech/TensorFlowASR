@@ -35,7 +35,7 @@ def main(
     mxp: str = "none",
     bs: int = 1,
     jit_compile: bool = False,
-    repodir: str = os.path.realpath(os.path.join(os.path.dirname(__file__), "..")),
+    repodir: str = os.getcwd(),
 ):
 
     outputdir = file_util.preprocess_paths(outputdir, isdir=True)
