@@ -76,7 +76,8 @@ def rel_left_shift(x, causal=False):
 
 
 def compute_causal_mask(query, value=None):
-    """Computes a causal mask (e.g., for masked self-attention layers).
+    """
+    Computes a causal mask (e.g., for masked self-attention layers).
     For example, if query and value both contain sequences of length 4,
     this function returns a boolean `Tensor` equal to:
     ```
@@ -98,7 +99,56 @@ def compute_causal_mask(query, value=None):
     return tf.linalg.band_part(tf.ones((1, q_seq_length, v_seq_length), tf.bool), -1, 0)  # creates a lower triangular matrix
 
 
-def compute_attention_mask(query, value, key=None, attention_mask=None, use_causal_mask=False):
+def compute_streaming_mask(chunk_size, memory_length, query, value=None):
+    """
+    Computes a streaming mask as in http://arxiv.org/abs/2010.11395
+    For example, if query and value both contain sequences of length 8, chunk size 2, history_size 2
+    Chunk size = 2 -> it can see < 2 frames in the future because it in the same chunk, the 2nd frame is the last frame in the chunk therefore it does not see future # pylint: disable=line-too-long
+    History size = 2 -> it can see history_size = 2 frames in the past
+    The * indicates the current frame
+    All frames in the same chunk can see each other
+    this function returns a boolean `Tensor` equal to:
+    ```
+    [[[ 1*,  1,  0,  0,  0,  0,  0,  0 ],
+      [ 1,  1*,  0,  0,  0,  0,  0,  0 ],
+      [ 1,  1,  1*,  1,  0,  0,  0,  0 ],
+      [ 1,  1,  1,  1*,  0,  0,  0,  0 ],
+      [ 0,  0,  1,  1,  1*,  1,  0,  0 ],
+      [ 0,  0,  1,  1,  1,  1*,  0,  0 ],
+      [ 0,  0,  0,  0,  1,  1,  1*,  1 ],
+      [ 0,  0,  0,  0,  1,  1,  1,  1*]]]
+    ```
+    Args:
+      chunk_size: chunk size to split
+      history_size: history size to keep
+      query: query `Tensor` of shape `(B, T, ...)`.
+      value: value `Tensor` of shape `(B, S, ...)` (optional, defaults to query).
+    Returns:
+      mask: a boolean `Tensor` of shape [1, T, S]
+    """
+    q_seq_length = tf.shape(query)[1]
+    v_seq_length = q_seq_length if value is None else tf.shape(value)[1]
+
+    def _fn(x):
+        index = x * chunk_size
+        start_index = tf.maximum(0, index - memory_length)
+        end_index_excluded = tf.minimum(v_seq_length, index + chunk_size)
+        indices = tf.range(start=start_index, limit=end_index_excluded, dtype=tf.int32)
+        values = tf.ones_like(indices, dtype=tf.bool)
+        return tf.tensor_scatter_nd_update(tf.zeros([v_seq_length], dtype=tf.bool), tf.expand_dims(indices, axis=-1), values)
+
+    return tf.expand_dims(tf.map_fn(_fn, tf.math.floordiv(tf.range(q_seq_length), chunk_size), dtype=tf.bool), axis=0)
+
+
+def compute_attention_mask(
+    query,
+    value,
+    key=None,
+    attention_mask=None,
+    use_causal_mask=False,
+    chunk_size=None,
+    memoth_length=None,
+):
     """Computes the attention mask, using the Keras masks of the inputs.
 
     * The `query`'s mask is reshaped from [B, T] to [B, T, 1].
@@ -151,6 +201,9 @@ def compute_attention_mask(query, value, key=None, attention_mask=None, use_caus
         # the shape of the causal mask is [1, T, S]
         mask = compute_causal_mask(query, value)
         auto_mask = mask if auto_mask is None else auto_mask & mask
+    if chunk_size is not None and memoth_length is not None:
+        mask = compute_streaming_mask(chunk_size, memoth_length, query, value)
+        auto_mask = mask if auto_mask is None else auto_mask & mask
     if auto_mask is not None:
         # merge attention_mask & automatic mask, to shape [B, T, S]
         attention_mask = auto_mask if attention_mask is None else tf.cast(attention_mask, bool) & auto_mask
@@ -169,6 +222,7 @@ class MultiHeadAttention(keras.layers.MultiHeadAttention):
         output_shape=None,
         attention_axes=None,
         memory_length=None,
+        chunk_size=None,
         kernel_initializer="glorot_uniform",
         bias_initializer="zeros",
         kernel_regularizer=None,
@@ -180,6 +234,7 @@ class MultiHeadAttention(keras.layers.MultiHeadAttention):
         **kwargs,
     ):
         self._memory_length = memory_length
+        self._chunk_size = chunk_size
         self._memory = None
         if output_shape:
             if not isinstance(output_shape, collections.abc.Sized):
@@ -242,6 +297,22 @@ class MultiHeadAttention(keras.layers.MultiHeadAttention):
         }
 
         return query, new_key, new_value, new_states
+
+    def _compute_attention_mask(
+        self,
+        query,
+        value,
+        query_mask=None,
+        value_mask=None,
+        key_mask=None,
+        attention_mask=None,
+        use_causal_mask=False,
+    ):
+        auto_mask = super()._compute_attention_mask(query, value, query_mask, value_mask, key_mask, attention_mask, use_causal_mask)
+        if self._chunk_size is not None and self._memory_length is not None:
+            mask = compute_streaming_mask(self._chunk_size, self._memory_length, query, value)
+            auto_mask = mask if auto_mask is None else auto_mask & mask
+        return auto_mask
 
     def call(
         self,
@@ -343,6 +414,7 @@ class MultiHeadRelativeAttention(MultiHeadAttention):
         output_shape=None,
         attention_axes=None,
         memory_length=None,
+        chunk_size=None,
         kernel_initializer="glorot_uniform",
         bias_initializer="zeros",
         kernel_regularizer=None,
@@ -364,6 +436,7 @@ class MultiHeadRelativeAttention(MultiHeadAttention):
             output_shape=output_shape,
             attention_axes=attention_axes,
             memory_length=memory_length,
+            chunk_size=chunk_size,
             kernel_initializer=kernel_initializer,
             bias_initializer=bias_initializer,
             kernel_regularizer=kernel_regularizer,
