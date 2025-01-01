@@ -50,7 +50,8 @@ model_config:
     encoder_kernel_size: 32
     encoder_dropout: 0.1
     encoder_padding: same
-    encoder_memory_length: 60 # frames
+    encoder_memory_length: null
+    encoder_history_size: 60 # frames
     encoder_chunk_size: 15 # frames
     blank: 0
     vocab_size: {{decoder_config.vocabsize}}
