@@ -27,15 +27,11 @@ cd $PROJECT_DIR/externals/warp-ctc/build || exit
 if [ "$CUDA_HOME" ]; then
   cmake \
       -DWITH_GPU=ON \
-      -DCMAKE_C_COMPILER_LAUNCHER="$(which gcc-14)" \
-      -DCMAKE_CXX_COMPILER_LAUNCHER="$(which g++-14)"  \
       -DCUDA_TOOLKIT_ROOT_DIR="$CUDA_HOME" ..
 else
   cmake \
       -DWITH_GPU=OFF \
       ..
-      # -DCMAKE_C_COMPILER_LAUNCHER="$(which gcc-14)" \
-      # -DCMAKE_CXX_COMPILER_LAUNCHER="$(which g++-14)" ..
 fi
 
 make -j $(nproc)
