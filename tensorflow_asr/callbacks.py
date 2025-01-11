@@ -12,12 +12,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import logging
+import os
+from http import HTTPStatus
+
 import numpy as np
 from keras.src.saving import serialization_lib
 
 from tensorflow_asr import keras, tf
 from tensorflow_asr.datasets import ASRDataset
 from tensorflow_asr.utils import file_util
+
+logger = logging.getLogger(__name__)
 
 
 @keras.utils.register_keras_serializable(package=__name__)
@@ -222,7 +228,7 @@ class BackupAndRestore(keras.callbacks.BackupAndRestore):
         self,
         backup_dir,
         save_freq="epoch",
-        delete_checkpoint=True,
+        delete_checkpoint=False,
     ):
         backup_dir = file_util.preprocess_paths(backup_dir, isdir=True)
         super().__init__(backup_dir, save_freq, delete_checkpoint)
@@ -265,6 +271,93 @@ class EarlyStopping(keras.callbacks.EarlyStopping):
             "baseline": self.baseline,
             "restore_best_weights": self.restore_best_weights,
             "start_from_epoch": self.start_from_epoch,
+        }
+
+    @classmethod
+    def from_config(cls, config):
+        return cls(**config)
+
+
+@keras.utils.register_keras_serializable(package=__name__)
+class KaggleModelBackupAndRestore(keras.callbacks.Callback):
+    def __init__(
+        self,
+        model_handle: str,
+        model_dir: str,
+        save_freq="epoch",
+    ):
+        super().__init__()
+
+        try:
+            import kagglehub  # pylint: disable=import-outside-toplevel,unused-import
+
+            self._api = kagglehub  # use option 2,3 to authenticate kaggle: https://github.com/Kaggle/kagglehub?tab=readme-ov-file#option-2-read-credentials-from-environment-variables pylint: disable=line-too-long
+        except ImportError as e:
+            raise ImportError("Kaggle library is not installed. Please install it via `pip install '.[kaggle]'`.") from e
+
+        self._model_handle = model_handle
+        self._model_dir = file_util.preprocess_paths(model_dir, isdir=True)
+        if file_util.is_cloud_path(model_dir):
+            raise ValueError(f"Model dir must be local path for Kaggle backup and restore. Received: {model_dir}")
+        self.save_freq = save_freq
+        if save_freq != "epoch" and not isinstance(save_freq, int):
+            raise ValueError(
+                "Invalid value for argument `save_freq`. " f"Received: save_freq={save_freq}. " "Expected either 'epoch' or an integer value."
+            )
+
+        self._batches_seen_since_last_saving = 0
+        self._last_batch_seen = 0
+        self._current_epoch = 0
+
+    def _should_save_on_batch(self, batch):
+        """Handles batch-level saving logic, supports steps_per_execution."""
+        if self.save_freq == "epoch":
+            return False
+        if batch <= self._last_batch_seen:  # New epoch.
+            add_batches = batch + 1  # batches are zero-indexed.
+        else:
+            add_batches = batch - self._last_batch_seen
+        self._batches_seen_since_last_saving += add_batches
+        self._last_batch_seen = batch
+
+        if self._batches_seen_since_last_saving >= self.save_freq:
+            self._batches_seen_since_last_saving = 0
+            return True
+        return False
+
+    def _restore(self):
+        from kagglehub.exceptions import KaggleApiHTTPError  # pylint: disable=import-outside-toplevel
+
+        try:
+            cached_path = self._api.model_download(handle=self._model_handle, force_download=True)
+            os.system(f"cp -rfv {cached_path} {self._model_dir}")
+        except KaggleApiHTTPError as e:
+            if e.response is not None and (e.response.status_code in (HTTPStatus.NOT_FOUND, HTTPStatus.FORBIDDEN)):
+                logger.info(
+                    f"Model '{self._model_handle}' does not exist or access is forbidden. It will be auto-create on saving. Skipping restore..."
+                )
+
+    def _backup(self, notes: str):
+        self._api.model_upload(handle=self._model_handle, local_model_dir=self._model_dir, version_notes=notes, ignore_patterns=[".DS_Store"])
+
+    def on_train_begin(self, logs=None):
+        self._restore()
+
+    def on_epoch_end(self, epoch, logs=None):
+        self._current_epoch = epoch + 1
+        self._last_batch_seen = 0
+        if self.save_freq == "epoch":
+            self._backup(notes=f"Backed up model at epoch {self._current_epoch}")
+
+    def on_train_batch_end(self, batch, logs=None):
+        if self._should_save_on_batch(batch):
+            self._backup(notes=f"Backed up model at batch {batch}")
+
+    def get_config(self):
+        return {
+            "model_handle": self._model_handle,
+            "model_dir": self._model_dir,
+            "save_freq": self.save_freq,
         }
 
     @classmethod
