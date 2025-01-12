@@ -91,13 +91,13 @@ learning_config:
   num_epochs: 450
 
   callbacks:
+    - class_name: tensorflow_asr.callbacks>TerminateOnNaN
+      config: {}
     - class_name: tensorflow_asr.callbacks>KaggleModelBackupAndRestore
       config:
         model_handle: lordh9072/tensorflow-asr-conformer-ctc-small/tensorFlow2/default
         model_dir: {{modeldir}}
         save_freq: epoch
-    - class_name: tensorflow_asr.callbacks>TerminateOnNaN
-      config: {}
     - class_name: tensorflow_asr.callbacks>ModelCheckpoint
       config:
         filepath: {{modeldir}}/checkpoints/{epoch:02d}.weights.h5

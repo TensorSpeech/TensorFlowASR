@@ -289,8 +289,11 @@ class KaggleModelBackupAndRestore(keras.callbacks.Callback):
         super().__init__()
 
         try:
+            os.environ["TQDM_DISABLE"] = "True"
+            os.environ["DISABLE_KAGGLE_CACHE"] = "true"
             import kagglehub  # pylint: disable=import-outside-toplevel,unused-import
 
+            logging.getLogger("kagglehub").disabled = True
             self._api = kagglehub  # use option 2,3 to authenticate kaggle: https://github.com/Kaggle/kagglehub?tab=readme-ov-file#option-2-read-credentials-from-environment-variables pylint: disable=line-too-long
         except ImportError as e:
             raise ImportError("Kaggle library is not installed. Please install it via `pip install '.[kaggle]'`.") from e
@@ -356,7 +359,12 @@ class KaggleModelBackupAndRestore(keras.callbacks.Callback):
                     f"Model '{self._model_handle}' does not exist or access is forbidden. It will be auto-create on saving. Skipping restore..."
                 )
 
-    def _backup(self, notes: str):
+    def _backup(self, logs, notes: str):
+        logs = logs or {}
+        loss = logs.get("loss")
+        if loss is not None:
+            if np.isnan(loss) or np.isinf(loss):
+                return  # Don't save this epoch if loss is NaN or Inf
         self._api.model_upload(handle=self._model_handle, local_model_dir=self._model_dir, version_notes=notes, ignore_patterns=[".DS_Store"])
 
     def on_train_begin(self, logs=None):
@@ -366,11 +374,11 @@ class KaggleModelBackupAndRestore(keras.callbacks.Callback):
         self._current_epoch = epoch + 1
         self._last_batch_seen = 0
         if self.save_freq == "epoch":
-            self._backup(notes=f"Backed up model at epoch {self._current_epoch}")
+            self._backup(logs, notes=f"Backed up model at epoch {self._current_epoch}")
 
     def on_train_batch_end(self, batch, logs=None):
         if self._should_save_on_batch(batch):
-            self._backup(notes=f"Backed up model at batch {batch}")
+            self._backup(logs, notes=f"Backed up model at batch {batch}")
 
     def get_config(self):
         return {
