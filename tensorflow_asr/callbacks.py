@@ -330,14 +330,26 @@ class KaggleModelBackupAndRestore(keras.callbacks.Callback):
 
         try:
             cached_path = self._api.model_download(handle=self._model_handle, force_download=True)
-            latest_version = None
-            for x in os.listdir(cached_path):
-                try:
-                    latest_version = max(filter(None, (latest_version, int(x))))
-                except:  # pylint: disable=bare-except
-                    pass
-            if latest_version is not None:
-                os.system(f"cp -rfv {os.path.join(cached_path, latest_version)} {self._model_dir}")
+            logger.info(f"Restoring model from '{cached_path}'...")
+            has_version = False
+            try:
+                has_version = int(os.path.basename(cached_path))
+            except:  # pylint: disable=bare-except
+                pass
+            if not has_version:
+                latest_version = None
+                for x in os.listdir(cached_path):
+                    try:
+                        latest_version = max(filter(None, (latest_version, int(x))))
+                    except:  # pylint: disable=bare-except
+                        pass
+                if not latest_version:
+                    logger.info(f"Model '{self._model_handle}' does not have any version. Skipping restore...")
+                    return
+                cached_path = os.path.join(cached_path, str(latest_version))
+            else:
+                cached_path = os.path.join(cached_path, "*")
+            os.system(f"cp -rfv {cached_path} {self._model_dir}")
         except KaggleApiHTTPError as e:
             if e.response is not None and (e.response.status_code in (HTTPStatus.NOT_FOUND, HTTPStatus.FORBIDDEN)):
                 logger.info(
