@@ -330,7 +330,14 @@ class KaggleModelBackupAndRestore(keras.callbacks.Callback):
 
         try:
             cached_path = self._api.model_download(handle=self._model_handle, force_download=True)
-            os.system(f"cp -rfv {cached_path} {self._model_dir}")
+            latest_version = None
+            for x in os.listdir(cached_path):
+                try:
+                    latest_version = max(filter(None, (latest_version, int(x))))
+                except:  # pylint: disable=bare-except
+                    pass
+            if latest_version is not None:
+                os.system(f"cp -rfv {os.path.join(cached_path, latest_version)} {self._model_dir}")
         except KaggleApiHTTPError as e:
             if e.response is not None and (e.response.status_code in (HTTPStatus.NOT_FOUND, HTTPStatus.FORBIDDEN)):
                 logger.info(
