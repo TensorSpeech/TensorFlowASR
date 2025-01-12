@@ -222,6 +222,7 @@ class MultiHeadAttention(keras.layers.MultiHeadAttention):
         use_bias=True,
         output_shape=None,
         attention_axes=None,
+        flash_attention=None,
         memory_length=None,
         history_size=None,
         chunk_size=None,
@@ -250,6 +251,7 @@ class MultiHeadAttention(keras.layers.MultiHeadAttention):
             use_bias=use_bias,
             output_shape=output_shape,
             attention_axes=attention_axes,
+            flash_attention=flash_attention,
             kernel_initializer=kernel_initializer,
             bias_initializer=bias_initializer,
             kernel_regularizer=kernel_regularizer,
@@ -416,6 +418,7 @@ class MultiHeadRelativeAttention(MultiHeadAttention):
         use_bias=True,
         output_shape=None,
         attention_axes=None,
+        flash_attention=None,
         memory_length=None,
         history_size=None,
         chunk_size=None,
@@ -439,6 +442,7 @@ class MultiHeadRelativeAttention(MultiHeadAttention):
             use_bias=use_bias,
             output_shape=output_shape,
             attention_axes=attention_axes,
+            flash_attention=flash_attention,
             memory_length=memory_length,
             history_size=history_size,
             chunk_size=chunk_size,
@@ -502,10 +506,10 @@ class MultiHeadRelativeAttention(MultiHeadAttention):
         pbias = self.positional_attention_bias if positional_attention_bias is None else positional_attention_bias
 
         content_query = tf.multiply((query + tf.cast(cbias, query.dtype)), tf.cast(self._inverse_sqrt_key_dim, query.dtype))
-        content_attention = tf.einsum(self._dot_product_equation, key, content_query)  # BSNH,BTNH->BNTS
+        content_attention = tf.einsum(self._dot_product_equation, key, content_query, optimize="optimal")  # BSNH,BTNH->BNTS
 
         positional_query = tf.multiply((query + tf.cast(pbias, query.dtype)), tf.cast(self._inverse_sqrt_key_dim, query.dtype))
-        positional_attention = tf.einsum(self._dot_product_equation, position, positional_query)  # BRNH,BTNH->BNTR
+        positional_attention = tf.einsum(self._dot_product_equation, position, positional_query, optimize="optimal")  # BRNH,BTNH->BNTR
         positional_attention = rel_left_shift(positional_attention, causal=self._causal)  # BNTR -> BNTS
         positional_attention = tf.slice(
             positional_attention,
@@ -525,7 +529,7 @@ class MultiHeadRelativeAttention(MultiHeadAttention):
             final_attn_scores = attention_scores
 
         # `context_layer` = [B, T, N, H]
-        attention_output = tf.einsum(self._combine_equation, final_attn_scores, value)
+        attention_output = tf.einsum(self._combine_equation, final_attn_scores, value, optimize="optimal")
         return attention_output, attention_scores
 
     def call(
