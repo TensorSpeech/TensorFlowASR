@@ -66,7 +66,6 @@ import os
 from dataclasses import asdict, dataclass
 
 import numpy as np
-import tqdm
 
 from tensorflow_asr import schemas, tf
 from tensorflow_asr.configs import Config, DatasetConfig
@@ -226,12 +225,14 @@ class ASRDataset(BaseDataset):
     # -------------------------------- metadata -------------------------------------
 
     def compute_metadata(self):
+        from tqdm import tqdm  # pylint: disable=import-outside-toplevel
+
         self.max_input_length = 0 if self.max_input_length is None else self.max_input_length
         self.max_label_length = 0 if self.max_label_length is None else self.max_label_length
         if self.max_input_length > 0 and self.max_label_length > 0:
             return  # already computed
         self.read_entries()
-        for _, duration, transcript in tqdm.tqdm(self.entries, desc=f"Computing metadata for entries in {self.stage} dataset"):
+        for _, duration, transcript in tqdm(self.entries, desc=f"Computing metadata for entries in {self.stage} dataset"):
             input_length = math_util.get_nsamples(duration, self.sample_rate)
             label = self.tokenizer.tokenize(transcript).numpy()
             label_length = len(label)

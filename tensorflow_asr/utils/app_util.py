@@ -16,7 +16,6 @@
 import logging
 
 import jiwer
-from tqdm import tqdm
 
 from tensorflow_asr import tf
 from tensorflow_asr.models.base_model import BaseModel
@@ -40,6 +39,8 @@ def evaluate_hypotheses(filepath: str):
         {"greedy": {wer, cer, mer, wil, wip}, "beam": {wer, cer, mer, wil, wip}}
         The results are original, NOT multiplied with 100.
     """
+    from tqdm import tqdm  # pylint: disable=import-outside-toplevel
+
     logger.info(f"Reading file {filepath} ...")
     reference, greedy_hypothesis, beam_hypothesis = [], [], []
     with file_util.read_file(filepath) as path:

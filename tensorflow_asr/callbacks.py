@@ -289,8 +289,6 @@ class KaggleModelBackupAndRestore(keras.callbacks.Callback):
         super().__init__()
 
         try:
-            os.environ["TQDM_DISABLE"] = "True"
-            os.environ["DISABLE_KAGGLE_CACHE"] = "true"
             import kagglehub  # pylint: disable=import-outside-toplevel,unused-import
 
             logging.getLogger("kagglehub").disabled = True
