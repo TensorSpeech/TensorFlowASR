@@ -39,6 +39,7 @@ with open("requirements.txt", "r", encoding="utf-8") as fr:
 with open("README.md", "r", encoding="utf-8") as fh:
     long_description = fh.read()
 
+print(install_requires, extras_requires)
 
 setup(
     name="TensorFlowASR",
@@ -62,5 +63,5 @@ setup(
         "License :: OSI Approved :: Apache Software License",
         "Topic :: Software Development :: Libraries :: Python Modules",
     ],
-    python_requires=">=3.6, <4",
+    python_requires=">=3.8, <4",
 )

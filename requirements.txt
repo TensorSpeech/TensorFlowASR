@@ -14,20 +14,28 @@ cached_property~=2.0.1
 # extra=kaggle
 ipywidgets~=8.1.5
 kagglehub~=0.3.6
+
+# extra=tf216
 tensorflow~=2.16.0
 tensorflow-text~=2.16.0
 
-# extra=kaggle-cuda
-ipywidgets~=8.1.5
-kagglehub~=0.3.6
+# extra=tf216cuda
 tensorflow[and-cuda]~=2.16.0
 tensorflow-text~=2.16.0
 
-# extra=linux
+# extra=tf217
+tensorflow~=2.17.0
+tensorflow-text~=2.17.0
+
+# extra=tf217cuda
+tensorflow[and-cuda]~=2.17.0
+tensorflow-text~=2.17.0
+
+# extra=tf218
 tensorflow~=2.18.0
 tensorflow-text~=2.18.0
 
-# extra=linux-cuda
+# extra=tf218cuda
 tensorflow[and-cuda]~=2.18.0
 tensorflow-text~=2.18.0
 
