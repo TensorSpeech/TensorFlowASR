@@ -133,10 +133,9 @@ def compute_streaming_mask(chunk_size, history_size, query, value=None):
         index = x * chunk_size
         start_index = tf.maximum(0, index - history_size)
         end_index_excluded = tf.minimum(v_seq_length, index + chunk_size)
-        keep = tf.ones([end_index_excluded - start_index], dtype=tf.bool)
-        masked_out_pre = tf.zeros([start_index - 0], dtype=tf.bool)
-        masked_out_post = tf.zeros([v_seq_length - end_index_excluded], dtype=tf.bool)
-        return tf.concat([masked_out_pre, keep, masked_out_post], axis=0)
+        keep = tf.sequence_mask(end_index_excluded, v_seq_length, dtype=tf.bool)
+        drop = tf.math.logical_not(tf.sequence_mask(start_index, v_seq_length, dtype=tf.bool))
+        return keep & drop
 
     return tf.expand_dims(tf.map_fn(_fn, tf.math.floordiv(tf.range(q_seq_length), chunk_size), dtype=tf.bool), axis=0)
 
