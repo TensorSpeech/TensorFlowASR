@@ -126,8 +126,8 @@ def compute_streaming_mask(chunk_size, history_size, query, value=None):
     Returns:
       mask: a boolean `Tensor` of shape [1, T, S]
     """
-    q_seq_length = tf.shape(query)[1]
-    v_seq_length = q_seq_length if value is None else tf.shape(value)[1]
+    q_seq_length = shape_util.shape_list(query)[1]
+    v_seq_length = q_seq_length if value is None else shape_util.shape_list(value)[1]
 
     def _fn(x):
         index = x * chunk_size
