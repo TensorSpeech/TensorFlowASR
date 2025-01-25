@@ -28,12 +28,15 @@
 # ==============================================================================
 
 import logging
+import os
 
 from tensorflow_asr import tf
 from tensorflow_asr.losses.base_loss import BaseLoss
 from tensorflow_asr.losses.impl.ctc_tpu import classic_ctc_loss as ctc_loss_tpu
 
 logger = logging.getLogger(__name__)
+
+TFASR_USE_TF_CTC = os.getenv("TFASR_USE_TF_CTC", "False") in ("true", "True", "1")
 
 
 class CtcLoss(BaseLoss):
@@ -43,7 +46,7 @@ class CtcLoss(BaseLoss):
 
     def call(self, y_true, y_pred):
         logits, logit_length, labels, label_length = super().call(y_true, y_pred)
-        if self.use_tpu:
+        if self.use_tpu and not TFASR_USE_TF_CTC:
             return ctc_loss_tpu(
                 labels=labels,
                 logits=logits,
@@ -57,6 +60,7 @@ class CtcLoss(BaseLoss):
             labels=labels,
             label_length=label_length,
             logits_time_major=False,
+            unique=tf.nn.ctc_unique_labels(labels) if self.use_tpu else None,
             blank_index=self.blank,
             name=self.name,
         )
