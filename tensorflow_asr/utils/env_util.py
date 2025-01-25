@@ -60,7 +60,8 @@ def setup_gpu(
     if devices is not None:
         gpus = [gpus[i] for i in devices]
     tf.config.set_visible_devices(gpus, "GPU")
-    logger.info(f"Run on {gpus}")
+    logger.info(f"Run on GPU")
+    logger.info(f"All devices: {gpus}")
     return tf.distribute.MirroredStrategy()
 
 
@@ -70,7 +71,8 @@ def setup_tpu(
     resolver = tf.distribute.cluster_resolver.TPUClusterResolver(tpu=tpu_address)
     tf.config.experimental_connect_to_cluster(resolver)
     tf.tpu.experimental.initialize_tpu_system(resolver)
-    logger.info(f"Running on TPU {tpu_address}")
+    logger.info(f"Run on TPU {tpu_address}")
+    logger.info(f"All devices: {tf.config.list_logical_devices('TPU')}")
     return tf.distribute.TPUStrategy(resolver)
 
 
