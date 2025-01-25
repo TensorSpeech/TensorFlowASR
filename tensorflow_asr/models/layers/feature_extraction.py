@@ -187,7 +187,9 @@ class FeatureExtraction(Layer):
         return audio_feature
 
     def stft(self, signal):
-        signal = tf.cast(signal, tf.float32)
+        orig_dtype = signal.dtype
+        if orig_dtype in (tf.float16, tf.bfloat16):
+            signal = tf.cast(signal, tf.float32)
         if self.use_librosa_like_stft:
             # signal = tf.pad(signal, [[self.nfft // 2, self.nfft // 2]], mode="REFLECT")
             window = tf.signal.hann_window(self.frame_length, periodic=True)
@@ -202,7 +204,8 @@ class FeatureExtraction(Layer):
                 tf.signal.stft(signal, frame_length=self.frame_length, frame_step=self.frame_step, fft_length=self.nfft, pad_end=self.pad_end)
             )
         fft_features = tf.square(fft_features)
-        fft_features = tf.cast(fft_features, self.dtype)
+        if orig_dtype in (tf.float16, tf.bfloat16):
+            fft_features = tf.cast(fft_features, orig_dtype)
         return fft_features
 
     def logarithm(self, S):
@@ -218,6 +221,7 @@ class FeatureExtraction(Layer):
             sample_rate=self.sample_rate,
             lower_edge_hertz=self.lower_edge_hertz,
             upper_edge_hertz=self.upper_edge_hertz,
+            dtype=S.dtype,
         )
         mel_spectrogram = tf.matmul(S, linear_to_weight_matrix)
         return self.logarithm(mel_spectrogram)
