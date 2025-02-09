@@ -312,11 +312,14 @@ class MultiHeadAttention(keras.layers.MultiHeadAttention):
         attention_mask=None,
         use_causal_mask=False,
     ):
-        auto_mask = super()._compute_attention_mask(query, value, query_mask, value_mask, key_mask, attention_mask, use_causal_mask)
-        if self._chunk_size is not None and self._history_size is not None:
-            mask = compute_streaming_mask(self._chunk_size, self._history_size, query, value)
-            auto_mask = mask if auto_mask is None else auto_mask & mask
-        return auto_mask
+        return compute_attention_mask(
+            query=query,
+            value=value,
+            attention_mask=attention_mask,
+            use_causal_mask=use_causal_mask,
+            chunk_size=self._chunk_size,
+            history_size=self._history_size,
+        )
 
     def call(
         self,
