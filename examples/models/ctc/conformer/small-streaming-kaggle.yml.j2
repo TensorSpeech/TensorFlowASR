@@ -46,13 +46,12 @@ model_config:
     encoder_use_attention_causal_mask: False
     encoder_use_attention_auto_mask: True
     encoder_mhsam_use_attention_bias: True
-    encoder_mhsam_causal: True
     encoder_kernel_size: 32
     encoder_dropout: 0.1
     encoder_padding: causal
     encoder_memory_length: null
     encoder_history_size: 60 # frames
-    encoder_chunk_size: 15 # frames
+    encoder_chunk_size: 24 # frames
     blank: 0
     vocab_size: {{decoder_config.vocabsize}}
     kernel_regularizer:
@@ -100,7 +99,7 @@ learning_config:
       config: {}
     - class_name: tensorflow_asr.callbacks>KaggleModelBackupAndRestore
       config:
-        model_handle: lordh9072/tensorflow-asr-conformer-ctc-small-relmha-streaming/tensorFlow2/default
+        model_handle: lordh9072/tensorflow-asr-conformer-ctc-streaming/tensorFlow2/default
         model_dir: {{modeldir}}
         save_freq: epoch
     - class_name: tensorflow_asr.callbacks>ModelCheckpoint
