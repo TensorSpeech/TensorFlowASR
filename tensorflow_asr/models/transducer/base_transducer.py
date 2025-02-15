@@ -21,6 +21,7 @@ from tensorflow_asr.losses.rnnt_loss import RnntLoss
 from tensorflow_asr.models.base_layer import Layer
 from tensorflow_asr.models.base_model import BaseModel
 from tensorflow_asr.models.layers.embedding import Embedding, OneHotBlank
+from tensorflow_asr.models.layers.general import Activation
 from tensorflow_asr.utils import layer_util, shape_util
 
 Hypothesis = collections.namedtuple("Hypothesis", ("index", "prediction", "states"))
@@ -253,7 +254,7 @@ class TransducerJoint(Layer):
         self.joint = TransducerJointMerge(joint_mode=joint_mode, name="merge", dtype=self.dtype)
 
         activation = activation.lower()
-        self.activation = keras.layers.Activation(activation, name=activation, dtype=self.dtype)
+        self.activation = Activation(activation, name=activation, dtype=self.dtype)
 
         if self.postjoint_linear:
             self.ffn = keras.layers.Dense(

@@ -17,6 +17,7 @@
 from tensorflow_asr import keras, tf
 from tensorflow_asr.models.activations.glu import GLU
 from tensorflow_asr.models.layers.convolution import DepthwiseConv1D
+from tensorflow_asr.models.layers.general import Activation, Dropout, Identity
 from tensorflow_asr.models.layers.multihead_attention import MultiHeadAttention, MultiHeadRelativeAttention
 from tensorflow_asr.models.layers.positional_encoding import RelativeSinusoidalPositionalEncoding, SinusoidalPositionalEncoding
 from tensorflow_asr.models.layers.residual import Residual
@@ -60,7 +61,7 @@ class FFModule(keras.Model):
         self.pre_norm = (
             keras.layers.LayerNormalization(name="ln", gamma_regularizer=kernel_regularizer, beta_regularizer=kernel_regularizer, dtype=self.dtype)
             if norm_position == "pre"
-            else keras.layers.Identity(name="preiden" if norm_position == "none" else "iden", dtype=self.dtype)
+            else Identity(name="preiden" if norm_position == "none" else "iden", dtype=self.dtype)
         )
         self.ffn1 = keras.layers.Dense(
             units=scale_factor * input_dim,
@@ -70,7 +71,7 @@ class FFModule(keras.Model):
             activation="swish",
             dtype=self.dtype,
         )
-        self.do1 = keras.layers.Dropout(rate=dropout, name="dropout_1", dtype=self.dtype)
+        self.do1 = Dropout(rate=dropout, name="dropout_1", dtype=self.dtype)
         self.ffn2 = keras.layers.Dense(
             units=input_dim,
             name="dense_2",
@@ -78,11 +79,11 @@ class FFModule(keras.Model):
             bias_regularizer=bias_regularizer,
             dtype=self.dtype,
         )
-        self.do2 = keras.layers.Dropout(rate=dropout, name="dropout_2", dtype=self.dtype)
+        self.do2 = Dropout(rate=dropout, name="dropout_2", dtype=self.dtype)
         self.post_norm = (
             keras.layers.LayerNormalization(name="ln", gamma_regularizer=kernel_regularizer, beta_regularizer=kernel_regularizer, dtype=self.dtype)
             if norm_position == "post"
-            else keras.layers.Identity(name="postiden" if norm_position == "none" else "iden", dtype=self.dtype)
+            else Identity(name="postiden" if norm_position == "none" else "iden", dtype=self.dtype)
         )
         self.residual = Residual(factor=residual_factor, regularizer=bias_regularizer, name="residual", dtype=self.dtype)
 
@@ -139,7 +140,7 @@ class MHSAModule(keras.Model):
         self.pre_norm = (
             keras.layers.LayerNormalization(name="ln", gamma_regularizer=kernel_regularizer, beta_regularizer=kernel_regularizer, dtype=self.dtype)
             if norm_position == "pre"
-            else keras.layers.Identity(name="preiden" if norm_position == "none" else "iden", dtype=self.dtype)
+            else Identity(name="preiden" if norm_position == "none" else "iden", dtype=self.dtype)
         )
         if mha_type == "relmha":
             self.mha = MultiHeadRelativeAttention(
@@ -173,11 +174,11 @@ class MHSAModule(keras.Model):
                 name="mhsa",
                 dtype=self.dtype,
             )
-        self.do = keras.layers.Dropout(dropout, name="dropout", dtype=self.dtype)
+        self.do = Dropout(dropout, name="dropout", dtype=self.dtype)
         self.post_norm = (
             keras.layers.LayerNormalization(name="ln", gamma_regularizer=kernel_regularizer, beta_regularizer=kernel_regularizer, dtype=self.dtype)
             if norm_position == "post"
-            else keras.layers.Identity(name="postiden" if norm_position == "none" else "iden", dtype=self.dtype)
+            else Identity(name="postiden" if norm_position == "none" else "iden", dtype=self.dtype)
         )
         self.residual = Residual(factor=residual_factor, regularizer=bias_regularizer, name="residual", dtype=self.dtype)
 
@@ -259,7 +260,7 @@ class ConvModule(keras.Model):
         self.pre_norm = (
             keras.layers.LayerNormalization(name="ln", gamma_regularizer=kernel_regularizer, beta_regularizer=kernel_regularizer, dtype=self.dtype)
             if norm_position == "pre"
-            else keras.layers.Identity(name="preiden" if norm_position == "none" else "iden", dtype=self.dtype)
+            else Identity(name="preiden" if norm_position == "none" else "iden", dtype=self.dtype)
         )
         self.pw_conv_1 = keras.layers.Conv1D(
             filters=scale_factor * input_dim,
@@ -301,7 +302,7 @@ class ConvModule(keras.Model):
             synchronized=True,
             dtype=self.dtype,
         )
-        self.swish = keras.layers.Activation(tf.nn.swish, name="swish", dtype=self.dtype)
+        self.swish = Activation(tf.nn.swish, name="swish", dtype=self.dtype)
         self.pw_conv_2 = keras.layers.Conv1D(
             filters=input_dim,
             kernel_size=1,
@@ -312,11 +313,11 @@ class ConvModule(keras.Model):
             bias_regularizer=bias_regularizer,
             dtype=self.dtype,
         )
-        self.do = keras.layers.Dropout(rate=dropout, name="dropout", dtype=self.dtype)
+        self.do = Dropout(rate=dropout, name="dropout", dtype=self.dtype)
         self.post_norm = (
             keras.layers.LayerNormalization(name="ln", gamma_regularizer=kernel_regularizer, beta_regularizer=kernel_regularizer, dtype=self.dtype)
             if norm_position == "post"
-            else keras.layers.Identity(name="postiden" if norm_position == "none" else "iden", dtype=self.dtype)
+            else Identity(name="postiden" if norm_position == "none" else "iden", dtype=self.dtype)
         )
         self.residual = Residual(factor=residual_factor, regularizer=bias_regularizer, name="residual", dtype=self.dtype)
 
@@ -379,7 +380,7 @@ class ConformerBlock(keras.Model):
         self.pre_norm = (
             keras.layers.LayerNormalization(name="ln", gamma_regularizer=kernel_regularizer, beta_regularizer=kernel_regularizer, dtype=self.dtype)
             if block_norm_position == "pre"
-            else keras.layers.Identity(name="preiden" if block_norm_position == "none" else "iden", dtype=self.dtype)
+            else Identity(name="preiden" if block_norm_position == "none" else "iden", dtype=self.dtype)
         )
         self.ffm1 = FFModule(
             input_dim=input_dim,
@@ -440,7 +441,7 @@ class ConformerBlock(keras.Model):
         self.post_norm = (
             keras.layers.LayerNormalization(name="ln", gamma_regularizer=kernel_regularizer, beta_regularizer=kernel_regularizer, dtype=self.dtype)
             if block_norm_position == "post"
-            else keras.layers.Identity(name="postiden" if block_norm_position == "none" else "iden", dtype=self.dtype)
+            else Identity(name="postiden" if block_norm_position == "none" else "iden", dtype=self.dtype)
         )
 
     def get_initial_state(self, batch_size: int):
@@ -535,7 +536,7 @@ class ConformerEncoder(keras.Model):
         self.linear = keras.layers.Dense(
             dmodel, name="linear", kernel_regularizer=kernel_regularizer, bias_regularizer=bias_regularizer, dtype=self.dtype
         )
-        self.do = keras.layers.Dropout(dropout, name="dropout", dtype=self.dtype)
+        self.do = Dropout(dropout, name="dropout", dtype=self.dtype)
 
         self._mha_type = mha_type
         self._num_heads = num_heads

@@ -17,6 +17,7 @@ import typing
 from tensorflow_asr import keras, tf
 from tensorflow_asr.models.base_layer import Layer
 from tensorflow_asr.models.layers.convolution import Conv2D
+from tensorflow_asr.models.layers.general import Activation
 from tensorflow_asr.utils import math_util, shape_util
 
 
@@ -210,7 +211,7 @@ class Conv2dSubsampling(Layer):
                         dtype=self.dtype,
                     )
                 )
-            subblock.add(keras.layers.Activation(activations[i], name=f"{activations[i]}_{i}", dtype=self.dtype))
+            subblock.add(Activation(activations[i], name=f"{activations[i]}_{i}", dtype=self.dtype))
             self.convs.append(subblock)
             self.time_reduction_factor *= subblock.layers[0].strides[0]
 
@@ -303,7 +304,7 @@ class Conv1dSubsampling(Layer):
                         dtype=self.dtype,
                     )
                 )
-            subblock.add(keras.layers.Activation(activations[i], name=f"{activations[i]}_{i}", dtype=self.dtype))
+            subblock.add(Activation(activations[i], name=f"{activations[i]}_{i}", dtype=self.dtype))
             self.convs.append(subblock)
             self.time_reduction_factor *= subblock.layers[0].strides[0]
 

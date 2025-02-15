@@ -15,6 +15,7 @@
 from tensorflow_asr import keras, tf
 from tensorflow_asr.models.base_layer import Layer, Reshape
 from tensorflow_asr.models.layers.convolution import DepthwiseConv1D
+from tensorflow_asr.models.layers.general import Activation, Dropout, Identity
 from tensorflow_asr.utils import layer_util, math_util
 
 # ----------------------------------- CONV ----------------------------------- #
@@ -98,7 +99,7 @@ class ConvBlock(Layer):
             synchronized=True,
             dtype=self.dtype,
         )
-        self.act = keras.layers.Activation(activation=activation, name=activation, dtype=self.dtype)
+        self.act = Activation(activation=activation, name=activation, dtype=self.dtype)
         self.time_reduction_factor = self.conv.strides[0]
 
     def call(self, inputs, training=False):
@@ -156,7 +157,7 @@ class ConvModule(keras.Model):
         assert conv_type in ("conv1d", "conv2d")
         assert len(kernels) == len(strides) == len(filters)
 
-        self.pre = Reshape(name="preprocess", dtype=self.dtype) if conv_type == "conv1d" else keras.layers.Identity(name="iden", dtype=self.dtype)
+        self.pre = Reshape(name="preprocess", dtype=self.dtype) if conv_type == "conv1d" else Identity(name="iden", dtype=self.dtype)
 
         self.convs = []
         self.time_reduction_factor = 1
@@ -177,7 +178,7 @@ class ConvModule(keras.Model):
             self.convs.append(conv_block)
             self.time_reduction_factor *= conv_block.time_reduction_factor
 
-        self.post = Reshape(name="postprocess", dtype=self.dtype) if conv_type == "conv2d" else keras.layers.Identity(name="iden", dtype=self.dtype)
+        self.post = Reshape(name="postprocess", dtype=self.dtype) if conv_type == "conv2d" else Identity(name="iden", dtype=self.dtype)
 
     def call(self, inputs, training=False):
         outputs = self.pre(inputs, training=training)
@@ -356,8 +357,8 @@ class FcBlock(Layer):
             name="fc",
             dtype=self.dtype,
         )
-        self.act = keras.layers.Activation(activation=activation, name=activation, dtype=self.dtype)
-        self.do = keras.layers.Dropout(dropout, name="dropout", dtype=self.dtype)
+        self.act = Activation(activation=activation, name=activation, dtype=self.dtype)
+        self.do = Dropout(dropout, name="dropout", dtype=self.dtype)
 
     def call(self, inputs, training=False):
         outputs, outputs_length = inputs

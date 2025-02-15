@@ -313,6 +313,7 @@ class BaseModel(keras.Model):
                 if np.isnan(loss) or np.isinf(loss):
                     io_utils.print_msg("")  # empty line for newline
                     io_utils.print_msg(f"Invalid loss for batch {data}")
+                    io_utils.print_msg(f"Invalid loss for output {outputs}")
                     self.stop_training = True
             return outputs
 

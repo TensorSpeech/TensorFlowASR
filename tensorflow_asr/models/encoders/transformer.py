@@ -15,6 +15,7 @@
 
 from tensorflow_asr import keras, tf
 from tensorflow_asr.models.base_layer import Layer
+from tensorflow_asr.models.layers.general import Dropout
 from tensorflow_asr.models.layers.multihead_attention import MultiHeadAttention, MultiHeadRelativeAttention
 from tensorflow_asr.models.layers.positional_encoding import RelativeSinusoidalPositionalEncoding, SinusoidalPositionalEncoding
 from tensorflow_asr.models.layers.residual import Residual
@@ -124,7 +125,7 @@ class TransformerBlock(keras.Model):
                 dtype=self.dtype,
             )
         )
-        self.do1 = keras.layers.Dropout(dropout, name="do_1", dtype=self.dtype)
+        self.do1 = Dropout(dropout, name="do_1", dtype=self.dtype)
         self.residual1 = Residual(factor=residual_factor, regularizer=bias_regularizer, name="residual_1", dtype=self.dtype)
         self.norm2 = (
             None
@@ -142,7 +143,7 @@ class TransformerBlock(keras.Model):
             name="pwffn",
             dtype=self.dtype,
         )
-        self.do2 = keras.layers.Dropout(dropout, name="do_2", dtype=self.dtype)
+        self.do2 = Dropout(dropout, name="do_2", dtype=self.dtype)
         self.residual2 = Residual(factor=residual_factor, regularizer=bias_regularizer, name="residual_2", dtype=self.dtype)
 
     def get_initial_state(self, batch_size):
@@ -250,7 +251,7 @@ class TransformerEncoder(keras.Model):
             name="linear",
             dtype=self.dtype,
         )
-        self.do = keras.layers.Dropout(dropout, name="dropout", dtype=self.dtype)
+        self.do = Dropout(dropout, name="dropout", dtype=self.dtype)
 
         if mha_type == "relmha":
             self.relpe = RelativeSinusoidalPositionalEncoding(

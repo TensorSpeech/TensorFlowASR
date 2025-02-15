@@ -16,6 +16,7 @@ import tensorflow as tf
 
 from tensorflow_asr import keras
 from tensorflow_asr.models.base_layer import Reshape
+from tensorflow_asr.models.layers.general import Dropout
 from tensorflow_asr.utils import math_util
 
 
@@ -53,7 +54,7 @@ class JasperSubBlock(keras.layers.Layer):
             dtype=self.dtype,
         )
         self.relu = keras.layers.ReLU(name="relu", dtype=self.dtype)
-        self.do = keras.layers.Dropout(dropout, name="dropout", dtype=self.dtype)
+        self.do = Dropout(dropout, name="dropout", dtype=self.dtype)
         self.reduction_factor = strides
 
     def call(self, inputs, training=False):
