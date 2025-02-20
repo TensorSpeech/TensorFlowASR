@@ -1,4 +1,4 @@
-{% import "examples/configs/librispeech/sentencepiece/sp.256.yml.j2" as decoder_config with context %}
+{% import "examples/configs/librispeech/characters/char.yml.j2" as decoder_config with context %}
 {{decoder_config}}
 
 model_config:
@@ -99,7 +99,7 @@ learning_config:
       config: {}
     - class_name: tensorflow_asr.callbacks>KaggleModelBackupAndRestore
       config:
-        model_handle: lordh9072/tensorflow-asr-conformer-ctc-streaming/tensorFlow2/default
+        model_handle: lordh9072/tensorflow-asr-conformer-ctc-streaming/tensorFlow2/characters
         model_dir: {{modeldir}}
         save_freq: epoch
     - class_name: tensorflow_asr.callbacks>ModelCheckpoint
