@@ -1,4 +1,4 @@
-{% import "examples/configs/librispeech/characters/char.yml.j2" as decoder_config with context %}
+{% import "examples/configs/librispeech/sentencepiece/sp.256.yml.j2" as decoder_config with context %}
 {{decoder_config}}
 
 model_config:
@@ -12,19 +12,6 @@ model_config:
       nfft: 512
       num_feature_bins: 80
       feature_type: log_mel_spectrogram
-      augmentation_config:
-        feature_augment:
-          time_masking:
-            prob: 0.5
-            num_masks: 5
-            mask_factor: -1 # whole utterance
-            p_upperbound: 0.05
-            mask_value: 0
-          freq_masking:
-            prob: 0.5
-            num_masks: 2
-            mask_factor: 27
-            mask_value: 0
     encoder_subsampling:
       class_name: tensorflow_asr.models.layers.subsampling>Conv2dSubsampling
       config:
@@ -50,8 +37,8 @@ model_config:
     encoder_dropout: 0.1
     encoder_padding: causal
     encoder_memory_length: null
-    encoder_history_size: 60 # frames
-    encoder_chunk_size: 24 # frames
+    encoder_history_size: 64 # frames = 4 * chunk_size
+    encoder_chunk_size: 16 # frames
     blank: 0
     vocab_size: {{decoder_config.vocabsize}}
     kernel_regularizer:
