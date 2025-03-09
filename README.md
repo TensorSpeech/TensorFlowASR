@@ -155,11 +155,11 @@ Go to [drive](https://drive.google.com/drive/folders/1BD0AK30n8hc-yR28C5FW3LqzZx
 
 ### Vietnamese
 
-| **Name**                               | **Source**                                                                             | **Hours** |
-| :------------------------------------- | :------------------------------------------------------------------------------------- | :-------- |
-| Vivos                                  | [https://ailab.hcmus.edu.vn/vivos](https://ailab.hcmus.edu.vn/vivos)                   | 15h       |
-| InfoRe Technology 1                    | [InfoRe1 (passwd: BroughtToYouByInfoRe)](https://files.huylenguyen.com/25hours.zip)    | 25h       |
-| InfoRe Technology 2 (used in VLSP2019) | [InfoRe2 (passwd: BroughtToYouByInfoRe)](https://files.huylenguyen.com/audiobooks.zip) | 415h      |
+| **Name**                               | **Source**                                                                                                           | **Hours** |
+| :------------------------------------- | :------------------------------------------------------------------------------------------------------------------- | :-------- |
+| Vivos                                  | [https://ailab.hcmus.edu.vn/vivos](https://www.kaggle.com/datasets/kynthesis/vivos-vietnamese-speech-corpus-for-asr) | 15h       |
+| InfoRe Technology 1                    | [InfoRe1 (passwd: BroughtToYouByInfoRe)](https://files.huylenguyen.com/datasets/infore/25hours.zip)                  | 25h       |
+| InfoRe Technology 2 (used in VLSP2019) | [InfoRe2 (passwd: BroughtToYouByInfoRe)](https://files.huylenguyen.com/datasets/infore/audiobooks.zip)               | 415h      |
 
 ## How to contribute
 
