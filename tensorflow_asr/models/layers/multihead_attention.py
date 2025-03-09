@@ -128,16 +128,17 @@ def compute_streaming_mask(chunk_size, history_size, query, value=None):
     """
     q_seq_length = shape_util.shape_list(query)[1]
     v_seq_length = q_seq_length if value is None else shape_util.shape_list(value)[1]
+    hist_size = tf.where(tf.less(history_size, 0), v_seq_length, tf.constant(history_size, tf.int32))
 
     def _fn(x):
         index = x * chunk_size
-        start_index = tf.maximum(0, index - history_size)
+        start_index = tf.maximum(0, index - hist_size)
         end_index_excluded = tf.minimum(v_seq_length, index + chunk_size)
         keep = tf.sequence_mask(end_index_excluded, v_seq_length, dtype=tf.bool)
         drop = tf.math.logical_not(tf.sequence_mask(start_index, v_seq_length, dtype=tf.bool))
         return keep & drop
 
-    return tf.expand_dims(tf.map_fn(_fn, tf.math.floordiv(tf.range(q_seq_length), chunk_size), dtype=tf.bool), axis=0)
+    return tf.expand_dims(tf.map_fn(_fn, tf.math.floordiv(tf.range(q_seq_length, dtype=tf.int32), chunk_size), dtype=tf.bool), axis=0)
 
 
 def compute_attention_mask(
