@@ -39,8 +39,6 @@ with open("requirements.txt", "r", encoding="utf-8") as fr:
 with open("README.md", "r", encoding="utf-8") as fh:
     long_description = fh.read()
 
-print(install_requires, extras_requires)
-
 setup(
     name="TensorFlowASR",
     version="3.0.0",

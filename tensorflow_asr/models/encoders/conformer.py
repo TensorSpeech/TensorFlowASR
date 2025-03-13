@@ -225,11 +225,11 @@ class ConvModule(keras.Model):
       input
       /   \
       |   ln(.)                   # input_dim
-      |   conv1d(.)              # 2 * input_dim
+      |   conv1d(.)               # 2 * input_dim
       |    |
       |   glu(.)                  # input_dim
       |   depthwise_conv_1d(.)
-      |   bnorm(.)
+      |   norm(.)                 # batch or layer
       |   swish(.)
       |    |
       |   conv1d(.)
@@ -249,6 +249,7 @@ class ConvModule(keras.Model):
         scale_factor=2,
         residual_factor=1.0,
         norm_position="pre",
+        dw_norm_type="batch",
         use_group_conv=False,
         kernel_regularizer=L2,
         bias_regularizer=L2,
@@ -257,6 +258,7 @@ class ConvModule(keras.Model):
     ):
         super().__init__(name=name, **kwargs)
         assert norm_position in ("pre", "post", "none")
+        assert dw_norm_type in ("batch", "layer")
         self.pre_norm = (
             keras.layers.LayerNormalization(name="ln", gamma_regularizer=kernel_regularizer, beta_regularizer=kernel_regularizer, dtype=self.dtype)
             if norm_position == "pre"
@@ -295,12 +297,21 @@ class ConvModule(keras.Model):
                 bias_regularizer=bias_regularizer,
                 dtype=self.dtype,
             )
-        self.bn = keras.layers.BatchNormalization(
-            name="bn",
-            gamma_regularizer=kernel_regularizer,
-            beta_regularizer=bias_regularizer,
-            synchronized=True,
-            dtype=self.dtype,
+        self.dw_norm = (
+            keras.layers.BatchNormalization(
+                name="dw_bn",
+                gamma_regularizer=kernel_regularizer,
+                beta_regularizer=bias_regularizer,
+                synchronized=True,
+                dtype=self.dtype,
+            )
+            if dw_norm_type == "batch"
+            else keras.layers.LayerNormalization(
+                name="dw_ln",
+                gamma_regularizer=kernel_regularizer,
+                beta_regularizer=bias_regularizer,
+                dtype=self.dtype,
+            )
         )
         self.swish = Activation(tf.nn.swish, name="swish", dtype=self.dtype)
         self.pw_conv_2 = keras.layers.Conv1D(
@@ -326,7 +337,7 @@ class ConvModule(keras.Model):
         outputs = self.pw_conv_1(outputs, training=training)
         outputs = self.glu(outputs, training=training)
         outputs = self.dw_conv(outputs, training=training)
-        outputs = self.bn(outputs, training=training)
+        outputs = self.dw_norm(outputs, training=training)
         outputs = self.swish(outputs, training=training)
         outputs = self.pw_conv_2(outputs, training=training)
         outputs = self.do(outputs, training=training)
@@ -364,6 +375,7 @@ class ConformerBlock(keras.Model):
         convm_scale_factor=2,
         convm_residual_factor=1.0,
         convm_use_group_conv=False,
+        convm_dw_norm_type="batch",
         module_norm_position="pre",
         block_norm_position="post",
         memory_length=None,
@@ -422,6 +434,7 @@ class ConformerBlock(keras.Model):
             scale_factor=convm_scale_factor,
             residual_factor=convm_residual_factor,
             norm_position=module_norm_position,
+            dw_norm_type=convm_dw_norm_type,
             use_group_conv=convm_use_group_conv,
             kernel_regularizer=kernel_regularizer,
             bias_regularizer=bias_regularizer,
@@ -505,6 +518,7 @@ class ConformerEncoder(keras.Model):
         convm_scale_factor=2,
         convm_residual_factor=1.0,
         convm_use_group_conv=False,
+        convm_dw_norm_type="batch",
         dropout=0.1,
         module_norm_position="pre",
         block_norm_position="post",
@@ -574,6 +588,7 @@ class ConformerEncoder(keras.Model):
                 convm_scale_factor=convm_scale_factor,
                 convm_residual_factor=convm_residual_factor,
                 convm_use_group_conv=convm_use_group_conv,
+                convm_dw_norm_type=convm_dw_norm_type,
                 module_norm_position=module_norm_position,
                 block_norm_position=block_norm_position,
                 memory_length=memory_length,
