@@ -1,4 +1,4 @@
-{% import "examples/configs/librispeech/sentencepiece/sp.256.yml.j2" as decoder_config with context %}
+{% import "examples/configs/librispeech/sentencepiece/sp.yml.j2" as decoder_config with context %}
 {{decoder_config}}
 
 model_config:
@@ -19,7 +19,7 @@ model_config:
         kernels: [3, 3]
         strides: [2, 2]
         paddings: ["causal", "causal"]
-        norms: ["batch", "batch"]
+        norms: ["layer", "layer"]
         activations: ["swish", "swish"]
     encoder_ffm_residual_factor: 0.5
     encoder_mhsam_residual_factor: 1.0
@@ -34,7 +34,7 @@ model_config:
     encoder_use_attention_auto_mask: True
     encoder_mhsam_use_attention_bias: True
     encoder_convm_dw_norm_type: layer
-    encoder_kernel_size: 32
+    encoder_kernel_size: 31
     encoder_dropout: 0.1
     encoder_padding: causal
     encoder_memory_length: null

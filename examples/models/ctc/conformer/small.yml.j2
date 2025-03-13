@@ -31,7 +31,7 @@ model_config:
         filters: [176, 176]
         kernels: [3, 3]
         strides: [2, 2]
-        paddings: ["causal", "causal"]
+        paddings: ["same", "same"]
         norms: ["batch", "batch"]
         activations: ["swish", "swish"]
     encoder_ffm_residual_factor: 0.5
@@ -46,9 +46,9 @@ model_config:
     encoder_use_attention_causal_mask: False
     encoder_use_attention_auto_mask: True
     encoder_mhsam_use_attention_bias: True
-    encoder_kernel_size: 32
+    encoder_kernel_size: 31
     encoder_dropout: 0.1
-    encoder_padding: causal
+    encoder_padding: same
     encoder_memory_length: null
     blank: 0
     vocab_size: {{decoder_config.vocabsize}}
@@ -82,9 +82,7 @@ learning_config:
       epsilon: 1e-9
       weight_decay: 1e-6
 
-  gwn_config:
-    predict_net_step: 20000
-    predict_net_stddev: 0.075
+  gwn_config: null
 
   gradn_config: null
 
