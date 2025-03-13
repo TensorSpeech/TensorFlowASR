@@ -15,6 +15,7 @@
 
 import collections
 
+from keras.src import backend
 from keras.src.layers.attention import multi_head_attention as mha_module
 
 from tensorflow_asr import keras, tf
@@ -313,14 +314,11 @@ class MultiHeadAttention(keras.layers.MultiHeadAttention):
         attention_mask=None,
         use_causal_mask=False,
     ):
-        return compute_attention_mask(
-            query=query,
-            value=value,
-            attention_mask=attention_mask,
-            use_causal_mask=use_causal_mask,
-            chunk_size=self._chunk_size,
-            history_size=self._history_size,
-        )
+        attention_mask = super()._compute_attention_mask(query, value, query_mask, value_mask, key_mask, attention_mask, use_causal_mask)
+        if self._chunk_size is not None and self._history_size is not None:
+            mask = compute_streaming_mask(self._chunk_size, self._history_size, query, value)
+            attention_mask = mask if attention_mask is None else attention_mask & mask
+        return attention_mask
 
     def call(
         self,
@@ -329,7 +327,7 @@ class MultiHeadAttention(keras.layers.MultiHeadAttention):
         value_mask=None,
         key_mask=None,
         attention_mask=None,
-        use_auto_mask=False,
+        use_auto_mask=True,
         return_attention_scores=False,
         training=None,
         use_causal_mask=False,
@@ -338,6 +336,17 @@ class MultiHeadAttention(keras.layers.MultiHeadAttention):
         **kwargs,
     ):
         query, key, value, *_ = inputs
+
+        self._return_attention_scores = return_attention_scores
+        if key is None:
+            key = value
+
+        # Delete the masks because the masks are handled at the level of the
+        # layer
+        query_mask = backend.get_keras_mask(query)
+        backend.set_keras_mask(query, None)
+        backend.set_keras_mask(value, None)
+        backend.set_keras_mask(key, None)
 
         if use_auto_mask:
             attention_mask = self._compute_attention_mask(
@@ -367,6 +376,10 @@ class MultiHeadAttention(keras.layers.MultiHeadAttention):
         attention_output, attention_scores = self._compute_attention(query, key, value, attention_mask, training)
         attention_output = self._output_dense(attention_output)
 
+        # Set mask on output if needed
+        if query_mask is not None:
+            backend.set_keras_mask(attention_output, query_mask)
+
         if return_attention_scores:
             if return_states:
                 return attention_output, states, attention_scores
@@ -387,7 +400,7 @@ class MultiHeadAttention(keras.layers.MultiHeadAttention):
         value_mask=None,
         key_mask=None,
         attention_mask=None,
-        use_auto_mask=False,
+        use_auto_mask=True,
         return_attention_scores=False,
         training=None,
         use_causal_mask=False,
@@ -544,7 +557,7 @@ class MultiHeadRelativeAttention(MultiHeadAttention):
         value_mask=None,
         key_mask=None,
         attention_mask=None,
-        use_auto_mask=False,
+        use_auto_mask=True,
         return_attention_scores=False,
         training=None,
         use_causal_mask=False,
@@ -553,6 +566,17 @@ class MultiHeadRelativeAttention(MultiHeadAttention):
         **kwargs,
     ):
         query, key, value, relpe = inputs
+
+        self._return_attention_scores = return_attention_scores
+        if key is None:
+            key = value
+
+        # Delete the masks because the masks are handled at the level of the
+        # layer
+        query_mask = backend.get_keras_mask(query)
+        backend.set_keras_mask(query, None)
+        backend.set_keras_mask(value, None)
+        backend.set_keras_mask(key, None)
 
         if use_auto_mask:
             attention_mask = self._compute_attention_mask(
@@ -593,6 +617,10 @@ class MultiHeadRelativeAttention(MultiHeadAttention):
             training=training,
         )
         attention_output = self._output_dense(attention_output)
+
+        # Set mask on output if needed
+        if query_mask is not None:
+            backend.set_keras_mask(attention_output, query_mask)
 
         if return_attention_scores:
             if return_states:
