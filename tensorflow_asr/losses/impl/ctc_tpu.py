@@ -311,8 +311,8 @@ def smart_transpose(a: tf.Tensor, perm=List[int]) -> tf.Tensor:
     """
     if len(perm) > len(a.shape):
         raise ValueError(f"Tensor with shape '{a.shape}' cannot be reshaped to '{perm}'")
-    else:
-        perm_rest = list(range(len(perm), len(a.shape)))
+
+    perm_rest = list(range(len(perm), len(a.shape)))
 
     return tf.transpose(a=a, perm=perm + perm_rest)
 
@@ -343,8 +343,8 @@ def smart_reshape(tensor: tf.Tensor, shape: List[Optional[Union[int, tf.Tensor]]
     """
     if len(shape) > len(tensor.shape):
         raise ValueError(f"Tensor with shape {tensor.shape} cannot be reshaped to {shape}.")
-    else:
-        shape = shape + [None] * (len(tensor.shape) - len(shape))
+
+    shape = shape + [None] * (len(tensor.shape) - len(shape))
 
     original_shape = tf.shape(tensor)
     new_shape = []
@@ -1282,3 +1282,28 @@ class ClassicCtcLossData(BaseCtcLossData):
         # shape = [batch, DIMS_A, max_logit_length, num_tokens, DIMS_B]
 
         return output_reshaped
+
+
+def ctc_loss_tpu(
+    labels: tf.Tensor,
+    logits: tf.Tensor,
+    label_length: tf.Tensor,
+    logit_length: tf.Tensor,
+    blank_index: Union[int, tf.Tensor] = 0,
+) -> tf.Tensor:
+    orig_dtype = logits.dtype
+    if orig_dtype in (tf.float16, tf.bfloat16):
+        logits = tf.cast(logits, tf.float32)
+    loss = tf.reduce_sum(
+        classic_ctc_loss(
+            labels=labels,
+            logits=logits,
+            label_length=label_length,
+            logit_length=logit_length,
+            blank_index=blank_index,
+        ),
+        axis=1,
+    )
+    if orig_dtype in (tf.float16, tf.bfloat16):
+        loss = tf.cast(loss, orig_dtype)
+    return loss

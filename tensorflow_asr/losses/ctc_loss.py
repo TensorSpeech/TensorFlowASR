@@ -32,7 +32,7 @@ import os
 
 from tensorflow_asr import tf
 from tensorflow_asr.losses.base_loss import BaseLoss
-from tensorflow_asr.losses.impl.ctc_tpu import classic_ctc_loss as ctc_loss_tpu
+from tensorflow_asr.losses.impl.ctc_tpu import ctc_loss_tpu
 
 logger = logging.getLogger(__name__)
 
