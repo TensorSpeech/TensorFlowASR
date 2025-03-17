@@ -34,7 +34,7 @@ class Conformer(Transducer):
         encoder_interleave_relpe: bool = True,
         encoder_use_attention_causal_mask: bool = False,
         encoder_use_attention_auto_mask: bool = True,
-        encoder_kernel_size: int = 32,
+        encoder_kernel_size: int = 31,
         encoder_padding: str = "causal",
         encoder_ffm_scale_factor: int = 4,
         encoder_ffm_residual_factor: float = 0.5,

@@ -42,7 +42,7 @@ TFASR_USE_TF_CTC = os.getenv("TFASR_USE_TF_CTC", "False") in ("true", "True", "1
 class CtcLoss(BaseLoss):
     def __init__(self, blank=0, reduction="sum_over_batch_size", name=None):
         super().__init__(blank=blank, reduction=reduction, name=name)
-        logger.info("Use CTC loss TPU implementation" if self.use_tpu else "Use CTC loss")
+        logger.info("Use CTC loss TPU implementation" if self.use_tpu and not TFASR_USE_TF_CTC else "Use CTC loss")
 
     def call(self, y_true, y_pred):
         logits, logit_length, labels, label_length = super().call(y_true, y_pred)

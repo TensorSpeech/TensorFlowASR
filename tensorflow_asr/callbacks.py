@@ -329,6 +329,8 @@ class KaggleModelBackupAndRestore(keras.callbacks.Callback):
     def _restore(self):
         from kagglehub.exceptions import KaggleApiHTTPError  # pylint: disable=import-outside-toplevel
 
+        os.environ["TQDM_DISABLE"] = "1"
+
         try:
             cached_path = self._api.model_download(handle=self._model_handle, force_download=True)
             logger.info(f"Restoring model from '{cached_path}'...")
@@ -350,12 +352,14 @@ class KaggleModelBackupAndRestore(keras.callbacks.Callback):
                 cached_path = os.path.join(cached_path, str(latest_version))
             else:
                 cached_path = os.path.join(cached_path, "*")
-            os.system(f"cp -rfv {cached_path} {self._model_dir}")
+            os.system(f"cp -rf {cached_path} {self._model_dir}")
         except KaggleApiHTTPError as e:
             if e.response is not None and (e.response.status_code in (HTTPStatus.NOT_FOUND, HTTPStatus.FORBIDDEN)):
                 logger.info(
                     f"Model '{self._model_handle}' does not exist or access is forbidden. It will be auto-create on saving. Skipping restore..."
                 )
+        finally:
+            os.environ["TQDM_DISABLE"] = ""
 
     def _backup(self, logs, notes: str):
         logs = logs or {}

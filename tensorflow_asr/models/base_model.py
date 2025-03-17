@@ -32,7 +32,7 @@ logger = logging.getLogger(__name__)
 class BaseModel(keras.Model):
     def __init__(self, speech_config: dict, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.feature_extraction = FeatureExtraction(**speech_config)  # use float32 for better accuracy
+        self.feature_extraction = FeatureExtraction(**speech_config)
 
     @property
     def tokenizer(self):
