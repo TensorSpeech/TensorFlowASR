@@ -1294,15 +1294,12 @@ def ctc_loss_tpu(
     orig_dtype = logits.dtype
     if orig_dtype in (tf.float16, tf.bfloat16):
         logits = tf.cast(logits, tf.float32)
-    loss = tf.reduce_sum(
-        classic_ctc_loss(
-            labels=labels,
-            logits=logits,
-            label_length=label_length,
-            logit_length=logit_length,
-            blank_index=blank_index,
-        ),
-        axis=1,
+    loss = classic_ctc_loss(
+        labels=labels,
+        logits=logits,
+        label_length=label_length,
+        logit_length=logit_length,
+        blank_index=blank_index,
     )
     if orig_dtype in (tf.float16, tf.bfloat16):
         loss = tf.cast(loss, orig_dtype)
