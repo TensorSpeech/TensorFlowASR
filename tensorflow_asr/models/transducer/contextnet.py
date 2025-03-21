@@ -47,7 +47,7 @@ class ContextNet(Transducer):
         joint_mode: str = "add",
         joint_trainable: bool = True,
         kernel_regularizer=L2,
-        bias_regularizer=L2,
+        bias_regularizer=None,
         name: str = "contextnet",
         **kwargs,
     ):

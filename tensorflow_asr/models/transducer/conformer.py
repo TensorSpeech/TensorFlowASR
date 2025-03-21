@@ -71,7 +71,7 @@ class Conformer(Transducer):
         joint_mode: str = "add",
         joint_trainable: bool = True,
         kernel_regularizer=L2,
-        bias_regularizer=L2,
+        bias_regularizer=None,
         activity_regularizer=None,
         recurrent_regularizer=None,
         name: str = "conformer",

@@ -197,7 +197,7 @@ class Conv2dSubsampling(Layer):
                     keras.layers.BatchNormalization(
                         name=f"bn_{i}",
                         gamma_regularizer=kernel_regularizer,
-                        beta_regularizer=bias_regularizer,
+                        beta_regularizer=kernel_regularizer,
                         synchronized=True,
                         dtype=self.dtype,
                     )
@@ -207,7 +207,7 @@ class Conv2dSubsampling(Layer):
                     keras.layers.LayerNormalization(
                         name=f"ln_{i}",
                         gamma_regularizer=kernel_regularizer,
-                        beta_regularizer=bias_regularizer,
+                        beta_regularizer=kernel_regularizer,
                         dtype=self.dtype,
                     )
                 )
@@ -290,7 +290,7 @@ class Conv1dSubsampling(Layer):
                     keras.layers.BatchNormalization(
                         name=f"bn_{i}",
                         gamma_regularizer=kernel_regularizer,
-                        beta_regularizer=bias_regularizer,
+                        beta_regularizer=kernel_regularizer,
                         synchronized=True,
                         dtype=self.dtype,
                     )
@@ -300,7 +300,7 @@ class Conv1dSubsampling(Layer):
                     keras.layers.LayerNormalization(
                         name=f"ln_{i}",
                         gamma_regularizer=kernel_regularizer,
-                        beta_regularizer=bias_regularizer,
+                        beta_regularizer=kernel_regularizer,
                         dtype=self.dtype,
                     )
                 )

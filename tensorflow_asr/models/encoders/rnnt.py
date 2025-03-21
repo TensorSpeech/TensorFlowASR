@@ -50,7 +50,7 @@ class RnnTransducerBlock(keras.Model):
             dtype=self.dtype,
         )
         self.ln = (
-            keras.layers.LayerNormalization(name="ln", gamma_regularizer=kernel_regularizer, beta_regularizer=bias_regularizer, dtype=self.dtype)
+            keras.layers.LayerNormalization(name="ln", gamma_regularizer=kernel_regularizer, beta_regularizer=kernel_regularizer, dtype=self.dtype)
             if layer_norm
             else None
         )

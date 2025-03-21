@@ -82,7 +82,7 @@ class TransducerPrediction(Layer):
             )
             ln = (
                 keras.layers.LayerNormalization(
-                    name=f"ln_{i}", gamma_regularizer=kernel_regularizer, beta_regularizer=bias_regularizer, dtype=self.dtype
+                    name=f"ln_{i}", gamma_regularizer=kernel_regularizer, beta_regularizer=kernel_regularizer, dtype=self.dtype
                 )
                 if layer_norm
                 else None
@@ -243,7 +243,6 @@ class TransducerJoint(Layer):
         if self.prejoint_prediction_linear:
             self.ffn_pred = keras.layers.Dense(
                 joint_dim,
-                use_bias=False,
                 name="pred",
                 kernel_regularizer=kernel_regularizer,
                 bias_regularizer=bias_regularizer,

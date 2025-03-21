@@ -52,7 +52,7 @@ class FFModule(keras.Model):
         residual_factor=0.5,
         norm_position="pre",
         kernel_regularizer=L2,
-        bias_regularizer=L2,
+        bias_regularizer=None,
         name="ff_module",
         **kwargs,
     ):
@@ -129,8 +129,8 @@ class MHSAModule(keras.Model):
         chunk_size=None,
         use_attention_bias=False,
         kernel_regularizer=L2,
-        bias_regularizer=L2,
-        activity_regularizer=L2,
+        bias_regularizer=None,
+        activity_regularizer=None,
         name="mhsa_module",
         **kwargs,
     ):
@@ -252,7 +252,7 @@ class ConvModule(keras.Model):
         dw_norm_type="batch",
         use_group_conv=False,
         kernel_regularizer=L2,
-        bias_regularizer=L2,
+        bias_regularizer=None,
         name="conv_module",
         **kwargs,
     ):
@@ -301,7 +301,7 @@ class ConvModule(keras.Model):
             keras.layers.BatchNormalization(
                 name="dw_bn",
                 gamma_regularizer=kernel_regularizer,
-                beta_regularizer=bias_regularizer,
+                beta_regularizer=kernel_regularizer,
                 synchronized=True,
                 dtype=self.dtype,
             )
@@ -309,7 +309,7 @@ class ConvModule(keras.Model):
             else keras.layers.LayerNormalization(
                 name="dw_ln",
                 gamma_regularizer=kernel_regularizer,
-                beta_regularizer=bias_regularizer,
+                beta_regularizer=kernel_regularizer,
                 dtype=self.dtype,
             )
         )
@@ -382,8 +382,8 @@ class ConformerBlock(keras.Model):
         history_size=None,
         chunk_size=None,
         kernel_regularizer=L2,
-        bias_regularizer=L2,
-        activity_regularizer=L2,
+        bias_regularizer=None,
+        activity_regularizer=None,
         name="conformer_block",
         **kwargs,
     ):
@@ -526,8 +526,8 @@ class ConformerEncoder(keras.Model):
         history_size=None,
         chunk_size=None,
         kernel_regularizer=L2,
-        bias_regularizer=L2,
-        activity_regularizer=L2,
+        bias_regularizer=None,
+        activity_regularizer=None,
         name="conformer_encoder",
         **kwargs,
     ):

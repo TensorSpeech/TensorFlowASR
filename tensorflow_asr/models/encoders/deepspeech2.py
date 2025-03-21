@@ -95,7 +95,7 @@ class ConvBlock(Layer):
         self.bn = keras.layers.BatchNormalization(
             name="bn",
             gamma_regularizer=kernel_regularizer,
-            beta_regularizer=bias_regularizer,
+            beta_regularizer=kernel_regularizer,
             synchronized=True,
             dtype=self.dtype,
         )
