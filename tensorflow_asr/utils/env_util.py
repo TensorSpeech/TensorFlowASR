@@ -118,6 +118,7 @@ def setup_mxp(
     if mxp == "strict":
         policy = "mixed_bfloat16" if has_devices("TPU") else "mixed_float16"
         keras.mixed_precision.set_global_policy(policy)
+        tf.config.optimizer.set_experimental_options({"auto_mixed_precision": False})
         logger.info(f"USING mixed precision policy {policy}")
     elif mxp == "strict_auto":
         policy = "mixed_bfloat16" if has_devices("TPU") else "mixed_float16"
