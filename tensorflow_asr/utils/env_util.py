@@ -118,19 +118,19 @@ def setup_mxp(
     if mxp == "strict":
         policy = "mixed_bfloat16" if has_devices("TPU") else "mixed_float16"
         keras.mixed_precision.set_global_policy(policy)
-        tf.get_logger().info(f"USING mixed precision policy {policy}")
+        logger.info(f"USING mixed precision policy {policy}")
     elif mxp == "strict_auto":
         policy = "mixed_bfloat16" if has_devices("TPU") else "mixed_float16"
         keras.mixed_precision.set_global_policy(policy)
         tf.config.optimizer.set_experimental_options({"auto_mixed_precision": True})
-        tf.get_logger().info(f"USING auto mixed precision policy {policy}")
+        logger.info(f"USING auto mixed precision policy {policy}")
     elif mxp == "auto":
         tf.config.optimizer.set_experimental_options({"auto_mixed_precision": True})
-        tf.get_logger().info("USING auto mixed precision policy")
+        logger.info("USING auto mixed precision policy")
     else:
         keras.mixed_precision.set_global_policy("float32")
         tf.config.optimizer.set_experimental_options({"auto_mixed_precision": False})
-        tf.get_logger().info("USING float32 precision policy")
+        logger.info("USING float32 precision policy")
 
 
 def setup_seed(
