@@ -107,7 +107,7 @@ class Transformer(CtcModel):
                 history_size=encoder_history_size,
                 chunk_size=encoder_chunk_size,
                 relmha_causal=encoder_mha_causal,
-                relmha_flash_attention=encoder_flash_attention,
+                flash_attention=encoder_flash_attention,
                 kernel_regularizer=kernel_regularizer,
                 bias_regularizer=bias_regularizer,
                 trainable=encoder_trainable,
