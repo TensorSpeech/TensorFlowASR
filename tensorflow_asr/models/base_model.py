@@ -167,13 +167,13 @@ class BaseModel(keras.Model):
             if self.use_ga:  # sum of gradients so the loss must be divided
                 loss = loss / self.ga.total_steps
 
-        gradients = tape.gradient(loss, self.trainable_variables)
+        gradients = tape.gradient(loss, self.trainable_weights)
         return gradients
 
     def _apply_gradients(self, gradients):
         if self.gradn is not None:
             gradients = self.gradn(step=self.optimizer.iterations, gradients=gradients)
-        self.optimizer.apply_gradients(zip(gradients, self.trainable_variables))
+        self.optimizer.apply_gradients(zip(gradients, self.trainable_weights))
 
     def train_step(self, data):
         gradients = self._train_step(data)
