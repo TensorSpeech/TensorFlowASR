@@ -184,12 +184,15 @@ class BaseModel(keras.Model, TensorFlowTrainer):
         metrics = self.get_metrics_result()
         return metrics
 
-    def train_step_ga(self, data, prev_gradients):
-        gradients = self._train_step(data)
-        if prev_gradients is not None:
-            gradients = self.ga.accumulate(prev_gradients, gradients)
+    def train_step_ga(self, data_buffer):
+        first_data, *rest_data = data_buffer
+        gradients = self._train_step(first_data)
+        for data in rest_data:
+            next_gradients = self._train_step(data)
+            gradients = self.ga.accumulate(gradients, next_gradients)
+        self._apply_gradients(gradients)
         metrics = self.get_metrics_result()
-        return metrics, gradients
+        return metrics
 
     def _test_step(self, data: schemas.TrainData):
         x, y = data
@@ -241,22 +244,29 @@ class BaseModel(keras.Model, TensorFlowTrainer):
             return self.train_function
 
         @tf.autograph.experimental.do_not_convert
-        def one_ga_step_on_data(iterator):
-            data = next(iterator)
-            outputs, gradients = self.distribute_strategy.run(self.train_step_ga, args=(data, None))
-            for _ in range(1, self.ga.total_steps):
-                try:
-                    data = next(iterator)
-                    outputs, gradients = self.distribute_strategy.run(self.train_step_ga, args=(data, gradients))
-                except StopIteration:
-                    break
-            self.distribute_strategy.run(self._apply_gradients, args=(gradients,))
+        def one_ga_step_on_data(data_buffer):
+            outputs = self.distribute_strategy.run(self.train_step_ga, args=(data_buffer,))
             outputs = reduce_per_replica(
                 outputs,
                 self.distribute_strategy,
                 reduction="auto",
             )
             return outputs
+            # data = next(iterator)
+            # outputs, gradients = self.distribute_strategy.run(self.train_step_ga, args=(data, None))
+            # for _ in range(1, self.ga.total_steps):
+            #     try:
+            #         data = next(iterator)
+            #         outputs, gradients = self.distribute_strategy.run(self.train_step_ga, args=(data, gradients))
+            #     except StopIteration:
+            #         break
+            # self.distribute_strategy.run(self._apply_gradients, args=(gradients,))
+            # outputs = reduce_per_replica(
+            #     outputs,
+            #     self.distribute_strategy,
+            #     reduction="auto",
+            # )
+            # return outputs
 
         if not self.run_eagerly:
             one_ga_step_on_data = tf.function(
@@ -266,7 +276,10 @@ class BaseModel(keras.Model, TensorFlowTrainer):
             )
 
         def function(iterator):
-            return one_ga_step_on_data(iterator)
+            data_buffer = []
+            for _, data in zip(range(self.ga.total_steps), iterator):
+                data_buffer.append(data)
+            return one_ga_step_on_data(data_buffer)
 
         self.train_function = function
         return self.train_function
