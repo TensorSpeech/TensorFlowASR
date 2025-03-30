@@ -210,7 +210,6 @@ class RnnBlock(Layer):
         super().__init__(**kwargs)
         self.rnn = layer_util.get_rnn(rnn_type)(
             units,
-            dropout=dropout,
             unroll=unroll,
             return_sequences=True,
             return_state=True,
@@ -235,6 +234,7 @@ class RnnBlock(Layer):
                 activation=rowconv_activation,
                 dtype=self.dtype,
             )
+        self.do = Dropout(dropout, name="dropout", dtype=self.dtype)
 
     def get_initial_state(self, batch_size: int):
         if self._bidirectional:
@@ -249,6 +249,7 @@ class RnnBlock(Layer):
         outputs, *_ = self.rnn(outputs, training=training)  # mask auto populate
         if self.rowconv is not None:
             outputs = self.rowconv(outputs, training=training)
+        outputs = self.do(outputs, training=training)
         return outputs, outputs_length
 
     def call_next(self, inputs, previous_encoder_states):
