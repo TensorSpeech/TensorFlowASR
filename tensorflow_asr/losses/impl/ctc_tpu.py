@@ -134,7 +134,7 @@ def pad_until(tensor: tf.Tensor, desired_size: Union[tf.Tensor, int], axis: int,
         raise ValueError()
 
     current_size = tf.shape(tensor)[axis]
-    paddings = [[0, 0]] * axis + [[0, desired_size - current_size]] + [[0, 0]] * (rank - axis - 1)
+    paddings = [[0, 0]] * axis + [[0, tf.maximum(desired_size - current_size, 0)]] + [[0, 0]] * (rank - axis - 1)
     return tf.pad(tensor=tensor, paddings=paddings, constant_values=pad_value)
 
 
@@ -644,7 +644,7 @@ class BaseCtcLossData(ABC):
     @cached_property
     def cleaned_label(self):
         # Repair padding- apparently, TPU/ GPU jit cannot handle the padding here; I'm not sure why. Anyway, it does not seem necessary in our case.
-        labels = self._original_label[:, : self.max_label_length_plus_one]
+        # labels = self._original_label[:, : self.max_label_length_plus_one]
         """
         labels = tf.cond(
             pred=tf.shape(self._original_label)[1] > self.max_label_length,
@@ -657,13 +657,21 @@ class BaseCtcLossData(ABC):
             )
         )
         """
-        mask = tf.sequence_mask(lengths=self._original_label_length, maxlen=tf.shape(labels)[1])
-        blank_label = tf.ones_like(labels) * self.pad_token_index
-        cleaned_label = tf.where(
-            condition=mask,
-            x=labels,
-            y=blank_label,
+        # mask = tf.sequence_mask(lengths=self._original_label_length, maxlen=tf.shape(labels)[1])
+        # blank_label = tf.ones_like(labels) * self.pad_token_index
+        # cleaned_label = tf.where(
+        #     condition=mask,
+        #     x=labels,
+        #     y=blank_label,
+        # )
+        # return cleaned_label
+        cleaned_label = pad_until(
+            tensor=self._original_label,
+            desired_size=self.max_label_length_plus_one,
+            pad_value=self.pad_token_index,
+            axis=1,
         )
+        cleaned_label = cleaned_label[:, : self.max_label_length_plus_one]
         return cleaned_label
 
     def select_from_act(self, act: tf.Tensor, label: tf.Tensor) -> tf.Tensor:
