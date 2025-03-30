@@ -161,11 +161,11 @@ class BaseModel(keras.Model):
             )
             self._loss_tracker.update_state(loss, sample_weight=tf.shape(tree.flatten(x)[0])[0])
 
-            if self.optimizer is not None:
-                loss = self.optimizer.scale_loss(loss)
-
             if self.use_ga:  # sum of gradients so the loss must be divided
                 loss = loss / self.ga.total_steps
+
+            if self.optimizer is not None:
+                loss = self.optimizer.scale_loss(loss)
 
         gradients = tape.gradient(loss, self.trainable_weights)
         return gradients
