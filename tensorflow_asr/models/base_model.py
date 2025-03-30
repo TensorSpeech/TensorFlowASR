@@ -16,20 +16,20 @@
 # import importlib
 import logging
 
-import numpy as np
 from keras.src import tree
-from keras.src.utils import io_utils
+from keras.src.backend.tensorflow.trainer import TensorFlowTrainer, reduce_per_replica
+from keras.src.losses import loss as loss_module
 
 from tensorflow_asr import keras, schemas, tf
 from tensorflow_asr.models.layers.feature_extraction import FeatureExtraction
 from tensorflow_asr.optimizers.accumulation import GradientAccumulator
 from tensorflow_asr.tokenizers import Tokenizer
-from tensorflow_asr.utils import file_util, keras_util, shape_util
+from tensorflow_asr.utils import file_util, shape_util
 
 logger = logging.getLogger(__name__)
 
 
-class BaseModel(keras.Model):
+class BaseModel(keras.Model, TensorFlowTrainer):
     def __init__(self, speech_config: dict, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.feature_extraction = FeatureExtraction(**speech_config)
@@ -159,7 +159,10 @@ class BaseModel(keras.Model):
                 sample_weight=sample_weight,
                 training=True,
             )
-            self._loss_tracker.update_state(loss, sample_weight=tf.shape(tree.flatten(x)[0])[0])
+            self._loss_tracker.update_state(
+                loss_module.unscale_loss_for_distribution(loss),
+                sample_weight=tf.shape(tree.flatten(x)[0])[0],
+            )
 
             if self.use_ga:  # sum of gradients so the loss must be divided
                 loss = loss / self.ga.total_steps
@@ -200,7 +203,7 @@ class BaseModel(keras.Model):
             training=False,
         )
         self._loss_tracker.update_state(
-            loss,
+            loss_module.unscale_loss_for_distribution(loss),
             sample_weight=tf.shape(tree.flatten(x)[0])[0],
         )
 
@@ -233,135 +236,130 @@ class BaseModel(keras.Model):
         if self.train_function is not None and not force:
             return self.train_function
 
-        @tf.autograph.experimental.do_not_convert
-        def one_step_on_data(data):
-            """Runs a single training step on a batch of data."""
-            outputs = self.train_step(data)
-            # Ensure counter is updated only if `train_step` succeeds.
-            # with tf.control_dependencies(_minimum_control_deps(outputs)):
-            #     self._train_counter.assign_add(1)
-            return outputs
-
-        if not self.run_eagerly:
-            one_step_on_data = tf.function(one_step_on_data, reduce_retracing=True, jit_compile=self.jit_compile)
+        if not self.use_ga:
+            self.train_function = self._make_function(self.train_step)
+            return self.train_function
 
         @tf.autograph.experimental.do_not_convert
-        def one_ga_step_on_data(data, prev_gradients):
-            """Runs a single training step on a batch of data."""
-            outputs, gradients = self.train_step_ga(data, prev_gradients)
-            # Ensure counter is updated only if `train_step` succeeds.
-            # with tf.control_dependencies(_minimum_control_deps(outputs)):
-            #     self._train_counter.assign_add(1)
-            return outputs, gradients
-
-        if not self.run_eagerly:
-            one_ga_step_on_data = tf.function(one_ga_step_on_data, reduce_retracing=True, jit_compile=self.jit_compile)
-
-        @tf.autograph.experimental.do_not_convert
-        def one_step_on_iterator(iterator):
-            """Runs a single training step given a Dataset iterator."""
+        def one_ga_step_on_data(iterator):
             data = next(iterator)
-            outputs = self.distribute_strategy.run(one_step_on_data, args=(data,))
-            outputs = keras_util.reduce_per_replica(
-                outputs,
-                self.distribute_strategy,
-                reduction=self.distribute_reduction_method,
-            )
-            return outputs, data
-
-        @tf.autograph.experimental.do_not_convert
-        def multi_step_on_iterator(iterator):
-            for _ in range(self.steps_per_execution.numpy().item()):
-                outputs, data = one_step_on_iterator(iterator)
-            return outputs, data
-
-        @tf.autograph.experimental.do_not_convert
-        def ga_step_in_iterator(iterator):
-            data = next(iterator)
-            outputs, gradients = self.distribute_strategy.run(one_ga_step_on_data, args=(data, None))
+            outputs, gradients = self.distribute_strategy.run(self.train_step_ga, args=(data, None))
             for _ in range(1, self.ga.total_steps):
                 try:
                     data = next(iterator)
-                    outputs, gradients = self.distribute_strategy.run(one_ga_step_on_data, args=(data, gradients))
+                    outputs, gradients = self.distribute_strategy.run(self.train_step_ga, args=(data, gradients))
                 except StopIteration:
                     break
             self.distribute_strategy.run(self._apply_gradients, args=(gradients,))
-            outputs = keras_util.reduce_per_replica(
+            outputs = reduce_per_replica(
                 outputs,
                 self.distribute_strategy,
-                reduction=self.distribute_reduction_method,
+                reduction="auto",
             )
-            return outputs, data
-
-        if self.use_ga:
-            train_function = ga_step_in_iterator
-        elif self.steps_per_execution > 1:
-            train_function = multi_step_on_iterator
-        else:
-            train_function = one_step_on_iterator
-
-        if not self.run_eagerly:
-            train_function = tf.function(train_function, reduce_retracing=True)
-
-        def train_function_wrapper(iterator):
-            outputs, data = train_function(iterator)
-            try:
-                loss = float(outputs.get("loss"))
-            except:  # pylint: disable=bare-except
-                loss = None
-            if loss is not None:
-                if np.isnan(loss) or np.isinf(loss):
-                    io_utils.print_msg("")  # empty line for newline
-                    io_utils.print_msg(f"Invalid loss for batch {data}")
-                    self.stop_training = True
             return outputs
 
-        self.train_function = train_function_wrapper
+        if not self.run_eagerly:
+            one_ga_step_on_data = tf.function(
+                one_ga_step_on_data,
+                reduce_retracing=True,
+                jit_compile=self.jit_compile,
+            )
+
+        def function(iterator):
+            return one_ga_step_on_data(iterator)
+
+        self.train_function = function
         return self.train_function
 
-    def make_test_function(self, force=False):
-        if self.test_function is not None and not force:
-            return self.test_function
+    # def make_train_function(self, force=False):
+    #     if self.train_function is not None and not force:
+    #         return self.train_function
 
-        @tf.autograph.experimental.do_not_convert
-        def one_step_on_data(data):
-            """Runs a single test step on a batch of data."""
-            outputs = self.test_step(data)
-            # with tf.control_dependencies(_minimum_control_deps(outputs)):
-            #     self._test_counter.assign_add(1)
-            return outputs
+    #     @tf.autograph.experimental.do_not_convert
+    #     def one_step_on_data(data):
+    #         """Runs a single training step on a batch of data."""
+    #         outputs = self.train_step(data)
+    #         # Ensure counter is updated only if `train_step` succeeds.
+    #         # with tf.control_dependencies(_minimum_control_deps(outputs)):
+    #         #     self._train_counter.assign_add(1)
+    #         return outputs
 
-        if not self.run_eagerly and self.jit_compile:
-            one_step_on_data = tf.function(one_step_on_data, reduce_retracing=True, jit_compile=True)
+    #     if not self.run_eagerly:
+    #         one_step_on_data = tf.function(one_step_on_data, reduce_retracing=True, jit_compile=self.jit_compile)
 
-        @tf.autograph.experimental.do_not_convert
-        def one_step_on_iterator(iterator):
-            """Runs a single test step given a Dataset iterator."""
-            data = next(iterator)
-            outputs = self.distribute_strategy.run(one_step_on_data, args=(data,))
-            outputs = keras_util.reduce_per_replica(
-                outputs,
-                self.distribute_strategy,
-                reduction=self.distribute_reduction_method,
-            )
-            return outputs
+    #     @tf.autograph.experimental.do_not_convert
+    #     def one_ga_step_on_data(data, prev_gradients):
+    #         """Runs a single training step on a batch of data."""
+    #         outputs, gradients = self.train_step_ga(data, prev_gradients)
+    #         # Ensure counter is updated only if `train_step` succeeds.
+    #         # with tf.control_dependencies(_minimum_control_deps(outputs)):
+    #         #     self._train_counter.assign_add(1)
+    #         return outputs, gradients
 
-        @tf.autograph.experimental.do_not_convert
-        def multi_step_on_iterator(iterator):
-            for _ in range(self.steps_per_execution.numpy().item()):
-                outputs = one_step_on_iterator(iterator)
-            return outputs
+    #     if not self.run_eagerly:
+    #         one_ga_step_on_data = tf.function(one_ga_step_on_data, reduce_retracing=True, jit_compile=self.jit_compile)
 
-        if self.steps_per_execution > 1:
-            test_function = multi_step_on_iterator
-        else:
-            test_function = one_step_on_iterator
+    #     @tf.autograph.experimental.do_not_convert
+    #     def one_step_on_iterator(iterator):
+    #         """Runs a single training step given a Dataset iterator."""
+    #         data = next(iterator)
+    #         outputs = self.distribute_strategy.run(self.train_step, args=(data,))
+    #         outputs = keras_util.reduce_per_replica(
+    #             outputs,
+    #             self.distribute_strategy,
+    #             reduction=self.distribute_reduction_method,
+    #         )
+    #         return outputs, data
 
-        if not self.run_eagerly:
-            test_function = tf.function(test_function, reduce_retracing=True)
+    #     @tf.autograph.experimental.do_not_convert
+    #     def multi_step_on_iterator(iterator):
+    #         for _ in range(self.steps_per_execution):
+    #             outputs, data = one_step_on_iterator(iterator)
+    #         return outputs, data
 
-        self.test_function = test_function
-        return self.test_function
+    #     @tf.autograph.experimental.do_not_convert
+    #     def ga_step_in_iterator(iterator):
+    #         data = next(iterator)
+    #         outputs, gradients = self.distribute_strategy.run(one_ga_step_on_data, args=(data, None))
+    #         for _ in range(1, self.ga.total_steps):
+    #             try:
+    #                 data = next(iterator)
+    #                 outputs, gradients = self.distribute_strategy.run(one_ga_step_on_data, args=(data, gradients))
+    #             except StopIteration:
+    #                 break
+    #         self.distribute_strategy.run(self._apply_gradients, args=(gradients,))
+    #         outputs = keras_util.reduce_per_replica(
+    #             outputs,
+    #             self.distribute_strategy,
+    #             reduction=self.distribute_reduction_method,
+    #         )
+    #         return outputs, data
+
+    #     if self.use_ga:
+    #         train_function = ga_step_in_iterator
+    #     elif self.steps_per_execution > 1:
+    #         train_function = multi_step_on_iterator
+    #     else:
+    #         train_function = one_step_on_iterator
+
+    #     if not self.run_eagerly:
+    #         train_function = tf.function(train_function, reduce_retracing=True)
+
+    #     def train_function_wrapper(iterator):
+    #         outputs, data = train_function(iterator)
+    #         try:
+    #             loss = float(outputs.get("loss"))
+    #         except:  # pylint: disable=bare-except
+    #             loss = None
+    #         if loss is not None:
+    #             if np.isnan(loss) or np.isinf(loss):
+    #                 io_utils.print_msg("")  # empty line for newline
+    #                 io_utils.print_msg(f"Invalid loss for batch {data}")
+    #                 self.stop_training = True
+    #         return outputs
+
+    #     self.train_function = train_function_wrapper
+    #     return self.train_function
 
     # -------------------------------- INFERENCE FUNCTIONS -------------------------------------
 
