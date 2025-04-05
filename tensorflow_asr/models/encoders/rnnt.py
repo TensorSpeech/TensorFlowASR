@@ -18,7 +18,7 @@ from keras.src import backend
 from tensorflow_asr import keras, tf
 from tensorflow_asr.models.base_layer import Reshape
 from tensorflow_asr.models.layers.subsampling import TimeReduction
-from tensorflow_asr.utils import layer_util, math_util
+from tensorflow_asr.utils import env_util, layer_util, math_util
 
 
 @keras.utils.register_keras_serializable(package=__name__)
@@ -49,6 +49,7 @@ class RnnTransducerBlock(keras.Model):
             zero_output_for_mask=True,
             kernel_regularizer=kernel_regularizer,
             bias_regularizer=bias_regularizer,
+            use_cudnn=env_util.TF_CUDNN,
             dtype=self.dtype,
         )
         self.ln = (

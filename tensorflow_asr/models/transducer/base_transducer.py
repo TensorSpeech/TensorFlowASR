@@ -24,7 +24,7 @@ from tensorflow_asr.models.base_layer import Layer
 from tensorflow_asr.models.base_model import BaseModel
 from tensorflow_asr.models.layers.embedding import Embedding, OneHotBlank
 from tensorflow_asr.models.layers.general import Activation
-from tensorflow_asr.utils import layer_util, shape_util
+from tensorflow_asr.utils import env_util, layer_util, shape_util
 
 Hypothesis = collections.namedtuple("Hypothesis", ("index", "prediction", "states"))
 
@@ -63,12 +63,11 @@ class TransducerPrediction(Layer):
             else OneHotBlank(blank=blank, depth=vocab_size, name=label_encoder_mode, dtype=self.dtype)
         )
         # Initialize rnn layers
-        RnnClass = layer_util.get_rnn(rnn_type)
         self.rnns = []
         self.lns = []
         self.projections = []
         for i in range(num_rnns):
-            rnn = RnnClass(
+            rnn = layer_util.get_rnn(rnn_type)(
                 units=rnn_units,
                 return_sequences=True,
                 name=f"{rnn_type}_{i}",
@@ -80,6 +79,7 @@ class TransducerPrediction(Layer):
                 bias_regularizer=bias_regularizer,
                 activity_regularizer=activity_regularizer,
                 recurrent_regularizer=recurrent_regularizer,
+                use_cudnn=env_util.TF_CUDNN,
                 dtype=self.dtype,
             )
             ln = (

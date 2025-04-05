@@ -16,7 +16,7 @@ from tensorflow_asr import keras, tf
 from tensorflow_asr.models.base_layer import Layer, Reshape
 from tensorflow_asr.models.layers.convolution import DepthwiseConv1D
 from tensorflow_asr.models.layers.general import Activation, Dropout, Identity
-from tensorflow_asr.utils import layer_util, math_util
+from tensorflow_asr.utils import env_util, layer_util, math_util
 
 # ----------------------------------- CONV ----------------------------------- #
 
@@ -221,6 +221,7 @@ class RnnBlock(Layer):
             kernel_regularizer=kernel_regularizer,
             kernel_initializer=initializer or "glorot_uniform",
             bias_regularizer=bias_regularizer,
+            use_cudnn=env_util.TF_CUDNN,
             dtype=self.dtype,
         )
         self._bidirectional = bidirectional

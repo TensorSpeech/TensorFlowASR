@@ -22,6 +22,8 @@ from typing import List, Union
 
 TF_LOG_LEVEL = os.getenv("TF_LOG_LEVEL", "warning").upper()
 TF_SOFT_PLACEMENT = os.getenv("TF_SOFT_PLACEMENT", "true").upper() == "TRUE"
+TF_CUDNN = os.getenv("TF_CUDNN", "auto").lower()
+TF_CUDNN = "auto" if TF_CUDNN == "auto" else TF_CUDNN == "true"
 DEBUG = TF_LOG_LEVEL == "DEBUG"
 
 
