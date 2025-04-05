@@ -1,10 +1,10 @@
-{% import "examples/configs/librispeech/sentencepiece/sp.256.yml.j2" as decoder_config with context %}
+{% import "examples/configs/librispeech/sentencepiece/sp.yml.j2" as decoder_config with context %}
 {{decoder_config}}
 
 model_config:
-  class_name: tensorflow_asr.models.ctc.transformer>Transformer
+  class_name: tensorflow_asr.models.ctc.conformer>Conformer
   config:
-    name: transformer
+    name: conformer
     speech_config:
       sample_rate: 16000
       frame_ms: 25
@@ -15,35 +15,41 @@ model_config:
       augmentation_config:
         feature_augment:
           time_masking:
-            prob: 1.0
+            prob: 0.5
             num_masks: 5
-            mask_factor: -1
+            mask_factor: -1 # whole utterance
             p_upperbound: 0.05
+            mask_value: 0
           freq_masking:
-            prob: 1.0
+            prob: 0.5
             num_masks: 2
             mask_factor: 27
+            mask_value: 0
     encoder_subsampling:
-      type: conv2d
-      filters: [512, 512]
-      kernels: [3, 3]
-      strides: [2, 2]
-      paddings: ["causal", "causal"]
-      norms: ["batch", "batch"]
-      activations: ["relu", "relu"]
-    encoder_dropout: 0.1
-    encoder_residual_factor: 1.0
-    encoder_norm_position: post
-    encoder_dmodel: 512
-    encoder_dff: 1024
-    encoder_num_blocks: 6
-    encoder_head_size: 128
+      class_name: tensorflow_asr.models.layers.subsampling>Conv2dSubsampling
+      config:
+        filters: [176, 176]
+        kernels: [3, 3]
+        strides: [2, 2]
+        paddings: ["causal", "causal"]
+        norms: ["layer", "layer"]
+        activations: ["swish", "swish"]
+    encoder_ffm_residual_factor: 0.5
+    encoder_mhsam_residual_factor: 1.0
+    encoder_convm_residual_factor: 1.0
+    encoder_dmodel: 176
+    encoder_num_blocks: 4
+    encoder_head_size: 44 # == dmodel // num_heads
     encoder_num_heads: 4
-    encoder_mha_type: mha
+    encoder_mha_type: relmha
     encoder_interleave_relpe: True
     encoder_use_attention_causal_mask: False
     encoder_use_attention_auto_mask: True
-    encoder_pwffn_activation: relu
+    encoder_mhsam_use_attention_bias: True
+    encoder_convm_dw_norm_type: layer
+    encoder_kernel_size: 31
+    encoder_dropout: 0.1
+    encoder_padding: causal
     encoder_memory_length: null
     encoder_history_size: 64 # frames = 4 * chunk_size
     encoder_chunk_size: 16 # frames
@@ -61,13 +67,15 @@ learning_config:
       learning_rate:
         class_name: tensorflow_asr.optimizers.schedules>TransformerSchedule
         config:
-          dmodel: 512
+          dmodel: 176
           warmup_steps: 10000
           max_lr: null
           min_lr: null
+          scale: 2.0
       beta_1: 0.9
       beta_2: 0.98
       epsilon: 1e-9
+      weight_decay: 1e-6
 
   gwn_config:
     predict_net_step: 0
@@ -82,11 +90,6 @@ learning_config:
   callbacks:
     - class_name: tensorflow_asr.callbacks>TerminateOnNaN
       config: {}
-    - class_name: tensorflow_asr.callbacks>KaggleModelBackupAndRestore
-      config:
-        model_handle: lordh9072/tensorflow-asr-transformer-ctc-base-streaming/tensorFlow2/default
-        model_dir: {{modeldir}}
-        save_freq: epoch
     - class_name: tensorflow_asr.callbacks>ModelCheckpoint
       config:
         filepath: {{modeldir}}/checkpoints/{epoch:02d}.weights.h5

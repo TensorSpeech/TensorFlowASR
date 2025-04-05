@@ -9,6 +9,7 @@ model_config:
       sample_rate: 16000
       frame_ms: 25
       stride_ms: 10
+      nfft: 512
       num_feature_bins: 80
       feature_type: log_mel_spectrogram
       augmentation_config:
@@ -44,7 +45,7 @@ model_config:
     encoder_interleave_relpe: True
     encoder_use_attention_causal_mask: False
     encoder_use_attention_auto_mask: True
-    encoder_mhsam_use_attention_bias: True
+    encoder_mhsam_use_attention_bias: False
     encoder_kernel_size: 31
     encoder_dropout: 0.1
     encoder_padding: causal

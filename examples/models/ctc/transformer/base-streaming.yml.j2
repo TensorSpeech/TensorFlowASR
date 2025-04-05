@@ -2,9 +2,9 @@
 {{decoder_config}}
 
 model_config:
-  class_name: tensorflow_asr.models.ctc.conformer>Conformer
+  class_name: tensorflow_asr.models.ctc.transformer>Transformer
   config:
-    name: conformer
+    name: transformer
     speech_config:
       sample_rate: 16000
       frame_ms: 25
@@ -15,41 +15,38 @@ model_config:
       augmentation_config:
         feature_augment:
           time_masking:
-            prob: 0.5
+            prob: 1.0
             num_masks: 5
-            mask_factor: -1 # whole utterance
+            mask_factor: -1
             p_upperbound: 0.05
-            mask_value: 0
           freq_masking:
-            prob: 0.5
+            prob: 1.0
             num_masks: 2
             mask_factor: 27
-            mask_value: 0
     encoder_subsampling:
-      class_name: tensorflow_asr.models.layers.subsampling>Conv2dSubsampling
-      config:
-        filters: [176, 176]
-        kernels: [3, 3]
-        strides: [2, 2]
-        paddings: ["same", "same"]
-        norms: ["batch", "batch"]
-        activations: ["swish", "swish"]
-    encoder_ffm_residual_factor: 0.5
-    encoder_mhsam_residual_factor: 1.0
-    encoder_convm_residual_factor: 1.0
-    encoder_dmodel: 176
-    encoder_num_blocks: 16
-    encoder_head_size: 44 # == dmodel // num_heads
+      type: conv2d
+      filters: [512, 512]
+      kernels: [3, 3]
+      strides: [2, 2]
+      paddings: ["causal", "causal"]
+      norms: ["batch", "batch"]
+      activations: ["relu", "relu"]
+    encoder_dropout: 0.1
+    encoder_residual_factor: 1.0
+    encoder_norm_position: post
+    encoder_dmodel: 512
+    encoder_dff: 1024
+    encoder_num_blocks: 6
+    encoder_head_size: 128
     encoder_num_heads: 4
-    encoder_mha_type: relmha
+    encoder_mha_type: mha
     encoder_interleave_relpe: True
     encoder_use_attention_causal_mask: False
     encoder_use_attention_auto_mask: True
-    encoder_mhsam_use_attention_bias: True
-    encoder_kernel_size: 31
-    encoder_dropout: 0.1
-    encoder_padding: same
+    encoder_pwffn_activation: relu
     encoder_memory_length: null
+    encoder_history_size: 64 # frames = 4 * chunk_size
+    encoder_chunk_size: 16 # frames
     blank: 0
     vocab_size: {{decoder_config.vocabsize}}
     kernel_regularizer:
@@ -64,17 +61,17 @@ learning_config:
       learning_rate:
         class_name: tensorflow_asr.optimizers.schedules>TransformerSchedule
         config:
-          dmodel: 176
+          dmodel: 512
           warmup_steps: 10000
           max_lr: null
           min_lr: null
-          scale: 2.0
       beta_1: 0.9
       beta_2: 0.98
       epsilon: 1e-9
-      weight_decay: 1e-6
 
-  gwn_config: null
+  gwn_config:
+    predict_net_step: 0
+    predict_net_stddev: 0.075
 
   gradn_config: null
 
@@ -85,11 +82,6 @@ learning_config:
   callbacks:
     - class_name: tensorflow_asr.callbacks>TerminateOnNaN
       config: {}
-    - class_name: tensorflow_asr.callbacks>KaggleModelBackupAndRestore
-      config:
-        model_handle: lordh9072/tensorflow-asr-conformer-ctc-small/tensorFlow2/default
-        model_dir: {{modeldir}}
-        save_freq: epoch
     - class_name: tensorflow_asr.callbacks>ModelCheckpoint
       config:
         filepath: {{modeldir}}/checkpoints/{epoch:02d}.weights.h5
