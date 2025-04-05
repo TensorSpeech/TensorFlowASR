@@ -307,8 +307,6 @@ class ASRDataset(BaseDataset):
 
     def generator(self):
         for path, _, transcript in self.entries:
-            if not path or not transcript:
-                continue
             audio = data_util.load_and_convert_to_wav(path, sample_rate=self.sample_rate).numpy()
             yield bytes(path, "utf-8"), audio, bytes(transcript, "utf-8")
 
