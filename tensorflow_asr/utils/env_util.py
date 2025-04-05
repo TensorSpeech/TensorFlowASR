@@ -54,6 +54,7 @@ logger = logging.getLogger(__name__)
 def setup_gpu(
     devices: List[int] = None,
 ):
+    logger.info(f"Using TF_CUDNN={TF_CUDNN}, TF_SOFT_PLACEMENT={TF_SOFT_PLACEMENT}")
     tf.config.set_soft_device_placement(DEBUG or TF_SOFT_PLACEMENT)
     gpus = tf.config.list_physical_devices("GPU")
     if not gpus:
