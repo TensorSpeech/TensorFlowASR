@@ -13,7 +13,6 @@
 # limitations under the License.
 
 import logging
-import logging.handlers
 import os
 import random
 import sys
@@ -22,6 +21,7 @@ from datetime import datetime, timezone
 from typing import List, Union
 
 TF_LOG_LEVEL = os.getenv("TF_LOG_LEVEL", "warning").upper()
+TF_SOFT_PLACEMENT = os.getenv("TF_SOFT_PLACEMENT", "true").upper() == "TRUE"
 DEBUG = TF_LOG_LEVEL == "DEBUG"
 
 
@@ -41,8 +41,6 @@ from packaging import version
 from tensorflow.python.util import deprecation  # pylint: disable = no-name-in-module
 
 tf.get_logger().setLevel(TF_LOG_LEVEL)
-# might cause performance penalty if ops fallback to cpu, see https://cloud.google.com/tpu/docs/tensorflow-ops
-tf.config.set_soft_device_placement(DEBUG)
 deprecation._PRINT_DEPRECATION_WARNINGS = False  # comment this line to print deprecation warnings
 
 
@@ -54,13 +52,14 @@ logger = logging.getLogger(__name__)
 def setup_gpu(
     devices: List[int] = None,
 ):
+    tf.config.set_soft_device_placement(DEBUG or TF_SOFT_PLACEMENT)
     gpus = tf.config.list_physical_devices("GPU")
     if not gpus:
         raise RuntimeError("No GPUs found!")
     if devices is not None:
         gpus = [gpus[i] for i in devices]
     tf.config.set_visible_devices(gpus, "GPU")
-    logger.info(f"Run on GPU")
+    logger.info("Run on GPU")
     logger.info(f"All devices: {gpus}")
     return tf.distribute.MirroredStrategy()
 
@@ -68,6 +67,8 @@ def setup_gpu(
 def setup_tpu(
     tpu_address=None,
 ):
+    # might cause performance penalty if ops fallback to cpu, see https://cloud.google.com/tpu/docs/tensorflow-ops
+    tf.config.set_soft_device_placement(DEBUG)
     resolver = tf.distribute.cluster_resolver.TPUClusterResolver(tpu=tpu_address)
     tf.config.experimental_connect_to_cluster(resolver)
     tf.tpu.experimental.initialize_tpu_system(resolver)
