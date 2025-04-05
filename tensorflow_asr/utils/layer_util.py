@@ -15,7 +15,7 @@
 from typing import List
 
 from tensorflow_asr import keras, tf
-from tensorflow_asr.models.layers.convolution import Conv2D
+from tensorflow_asr.models.layers.convolution import Conv1D, Conv2D
 
 
 def get_rnn(
@@ -34,7 +34,7 @@ def get_conv(
 ):
     assert conv_type in ["conv1d", "conv2d"]
     if conv_type == "conv1d":
-        return keras.layers.Conv1D
+        return Conv1D
     return Conv2D
 
 

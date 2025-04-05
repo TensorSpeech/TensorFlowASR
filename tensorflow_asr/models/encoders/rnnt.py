@@ -13,6 +13,8 @@
 # limitations under the License.
 """ http://arxiv.org/abs/1811.06621 """
 
+from keras.src import backend
+
 from tensorflow_asr import keras, tf
 from tensorflow_asr.models.base_layer import Reshape
 from tensorflow_asr.models.layers.subsampling import TimeReduction
@@ -103,7 +105,7 @@ class RnnTransducerBlock(keras.Model):
                 outputs,
                 training=False,
                 initial_state=tf.unstack(previous_encoder_states, axis=0),
-                mask=getattr(inputs, "_keras_mask", None),
+                mask=backend.get_keras_mask(inputs),
             )
             new_states = tf.stack(_states, axis=0)
             if self.ln is not None:

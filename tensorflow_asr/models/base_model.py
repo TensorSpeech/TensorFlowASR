@@ -100,7 +100,7 @@ class BaseModel(keras.Model, TensorFlowTrainer):
         self,
         loss,
         optimizer=None,
-        run_eagerly=None,
+        run_eagerly=False,
         ga_steps=None,
         gwn_config=None,
         gradn_config=None,

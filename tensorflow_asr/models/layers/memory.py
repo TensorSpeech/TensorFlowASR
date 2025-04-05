@@ -12,6 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from keras.src import backend
+
 from tensorflow_asr import keras, tf
 from tensorflow_asr.models.base_layer import Layer
 from tensorflow_asr.utils import math_util
@@ -42,7 +44,7 @@ class Memory(Layer):
         self.dmodel = dmodel
 
     def _get_inputs(self, inputs, default_mask_value=1):
-        inputs_mask = getattr(inputs, "_keras_mask", None)
+        inputs_mask = backend.get_keras_mask(inputs)
         if inputs_mask is None:
             batch_size, max_length, *_ = tf.shape(inputs)
             inputs_mask = tf.cast(tf.ones((batch_size, max_length), dtype=tf.int32) * default_mask_value, dtype=tf.bool)
@@ -50,7 +52,7 @@ class Memory(Layer):
 
     def get_initial_state(self, batch_size: int):
         memory = tf.zeros(shape=(batch_size, self.memory_length, self.dmodel), dtype=self.dtype)
-        memory._keras_mask = tf.zeros(shape=(batch_size, self.memory_length), dtype=tf.bool)  # pylint: disable=protected-access
+        backend.set_keras_mask(memory, tf.zeros(shape=(batch_size, self.memory_length), dtype=tf.bool))
         return memory
 
     def call(self, inputs, memories=None, training=False):

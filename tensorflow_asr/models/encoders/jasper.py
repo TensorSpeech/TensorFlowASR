@@ -16,6 +16,7 @@ import tensorflow as tf
 
 from tensorflow_asr import keras
 from tensorflow_asr.models.base_layer import Reshape
+from tensorflow_asr.models.layers.convolution import Conv1D
 from tensorflow_asr.models.layers.general import Dropout
 from tensorflow_asr.utils import math_util
 
@@ -35,7 +36,7 @@ class JasperSubBlock(keras.layers.Layer):
         **kwargs,
     ):
         super().__init__(**kwargs)
-        self.conv1d = keras.layers.Conv1D(
+        self.conv1d = Conv1D(
             filters=channels,
             kernel_size=kernels,
             strides=strides,
@@ -80,7 +81,7 @@ class JasperResidual(keras.layers.Layer):
         **kwargs,
     ):
         super().__init__(**kwargs)
-        self.pointwise_conv1d = keras.layers.Conv1D(
+        self.pointwise_conv1d = Conv1D(
             filters=channels,
             kernel_size=1,
             strides=1,

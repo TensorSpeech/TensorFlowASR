@@ -181,9 +181,9 @@ def compute_attention_mask(
         `query`, `key`, `value`, and `attention_mask` tensors, and the
         causal mask if `use_causal_mask=True`.
     """
-    query_mask = getattr(query, "_keras_mask", None)
-    value_mask = None  # getattr(value, "_keras_mask", None)
-    key_mask = None  # getattr(key, "_keras_mask", None)
+    query_mask = backend.get_keras_mask(query)
+    value_mask = None
+    key_mask = None
     auto_mask = None
     if query_mask is not None:
         query_mask = tf.cast(query_mask, tf.bool)  # defensive casting

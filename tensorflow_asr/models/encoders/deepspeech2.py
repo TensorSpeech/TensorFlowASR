@@ -112,6 +112,7 @@ class ConvBlock(Layer):
             filter_size=self.conv.kernel_size[0],
             padding=self.conv._padding,
             stride=self.conv.strides[0],
+            dilation=self.conv.dilation_rate[0],
         )
         return outputs, outputs_length
 
@@ -124,6 +125,7 @@ class ConvBlock(Layer):
                 filter_size=self.conv.kernel_size[0],
                 padding=self.conv._padding,
                 stride=self.conv.strides[0],
+                dilation=self.conv.dilation_rate[0],
             )
             for length in (maxlen, outputs_length)
         )

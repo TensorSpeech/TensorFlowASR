@@ -307,12 +307,13 @@ class ASRDataset(BaseDataset):
 
     def generator(self):
         for path, _, transcript in self.entries:
+            if not path or not transcript:
+                continue
             audio = data_util.load_and_convert_to_wav(path, sample_rate=self.sample_rate).numpy()
             yield bytes(path, "utf-8"), audio, bytes(transcript, "utf-8")
 
     def _process_item(self, path: tf.Tensor, audio: tf.Tensor, transcript: tf.Tensor):
         with tf.device("/CPU:0"):
-
             inputs = data_util.read_raw_audio(audio)
             inputs_length = tf.shape(inputs, out_type=tf.int32)[0]
 

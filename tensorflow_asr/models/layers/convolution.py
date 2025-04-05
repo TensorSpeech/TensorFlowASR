@@ -38,6 +38,50 @@ def _compute_causal_padding(inputs, rank, data_format, dilation_rate, kernel_siz
 
 
 @keras.utils.register_keras_serializable(package=__name__)
+class Conv1D(keras.layers.Conv1D):
+    def __init__(
+        self,
+        filters,
+        kernel_size,
+        strides=1,
+        padding="valid",
+        data_format=None,
+        dilation_rate=1,
+        groups=1,
+        activation=None,
+        use_bias=True,
+        kernel_initializer="glorot_uniform",
+        bias_initializer="zeros",
+        kernel_regularizer=None,
+        bias_regularizer=None,
+        activity_regularizer=None,
+        kernel_constraint=None,
+        bias_constraint=None,
+        **kwargs,
+    ):
+        super().__init__(
+            filters,
+            kernel_size,
+            strides,
+            padding,
+            data_format,
+            dilation_rate,
+            groups,
+            activation,
+            use_bias,
+            kernel_initializer,
+            bias_initializer,
+            kernel_regularizer,
+            bias_regularizer,
+            activity_regularizer,
+            kernel_constraint,
+            bias_constraint,
+            **kwargs,
+        )
+        self._padding = padding
+
+
+@keras.utils.register_keras_serializable(package=__name__)
 class Conv2D(keras.layers.Conv2D):
     def __init__(
         self,

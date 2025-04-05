@@ -16,6 +16,8 @@
 
 import collections
 
+from keras.src import backend
+
 from tensorflow_asr import keras, schemas, tf
 from tensorflow_asr.losses.rnnt_loss import RnntLoss
 from tensorflow_asr.models.base_layer import Layer
@@ -180,8 +182,8 @@ class TransducerJointMerge(Layer):
 
     def compute_mask(self, inputs, mask=None):
         enc_out, pred_out = inputs
-        enc_mask = mask[0] if mask else getattr(enc_out, "_keras_mask", None)  # BT
-        pred_mask = mask[1] if mask else getattr(pred_out, "_keras_mask", None)  # BU
+        enc_mask = mask[0] if mask else backend.get_keras_mask(enc_out)  # BT
+        pred_mask = mask[1] if mask else backend.get_keras_mask(pred_out)  # BU
         auto_mask = None
         if enc_mask is not None:
             auto_mask = enc_mask[:, :, tf.newaxis]  # BT1

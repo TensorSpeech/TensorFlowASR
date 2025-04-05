@@ -16,7 +16,7 @@
 
 from tensorflow_asr import keras, tf
 from tensorflow_asr.models.activations.glu import GLU
-from tensorflow_asr.models.layers.convolution import DepthwiseConv1D
+from tensorflow_asr.models.layers.convolution import Conv1D, DepthwiseConv1D
 from tensorflow_asr.models.layers.general import Activation, Dropout, Identity
 from tensorflow_asr.models.layers.multihead_attention import MultiHeadAttention, MultiHeadRelativeAttention
 from tensorflow_asr.models.layers.positional_encoding import RelativeSinusoidalPositionalEncoding, SinusoidalPositionalEncoding
@@ -264,7 +264,7 @@ class ConvModule(keras.Model):
             if norm_position == "pre"
             else Identity(name="preiden" if norm_position == "none" else "iden", dtype=self.dtype)
         )
-        self.pw_conv_1 = keras.layers.Conv1D(
+        self.pw_conv_1 = Conv1D(
             filters=scale_factor * input_dim,
             kernel_size=1,
             strides=1,
@@ -276,7 +276,7 @@ class ConvModule(keras.Model):
         )
         self.glu = GLU(axis=-1, name="glu", dtype=self.dtype)
         if use_group_conv:
-            self.dw_conv = keras.layers.Conv1D(
+            self.dw_conv = Conv1D(
                 filters=input_dim,
                 kernel_size=kernel_size,
                 strides=1,
@@ -314,7 +314,7 @@ class ConvModule(keras.Model):
             )
         )
         self.swish = Activation(tf.nn.swish, name="swish", dtype=self.dtype)
-        self.pw_conv_2 = keras.layers.Conv1D(
+        self.pw_conv_2 = Conv1D(
             filters=input_dim,
             kernel_size=1,
             strides=1,

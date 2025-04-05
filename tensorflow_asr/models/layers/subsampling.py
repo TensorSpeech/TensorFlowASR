@@ -16,7 +16,7 @@ import typing
 
 from tensorflow_asr import keras, tf
 from tensorflow_asr.models.base_layer import Layer
-from tensorflow_asr.models.layers.convolution import Conv2D
+from tensorflow_asr.models.layers.convolution import Conv1D, Conv2D
 from tensorflow_asr.models.layers.general import Activation
 from tensorflow_asr.utils import math_util, shape_util
 
@@ -224,6 +224,7 @@ class Conv2dSubsampling(Layer):
                 filter_size=block.layers[0].kernel_size[0],
                 padding=block.layers[0]._padding,
                 stride=block.layers[0].strides[0],
+                dilation=block.layers[0].dilation_rate[0],
             )
         outputs = math_util.merge_two_last_dims(outputs)
         return outputs, outputs_length
@@ -238,6 +239,7 @@ class Conv2dSubsampling(Layer):
                     filter_size=block.layers[0].kernel_size[0],
                     padding=block.layers[0]._padding,
                     stride=block.layers[0].strides[0],
+                    dilation=block.layers[0].dilation_rate[0],
                 )
                 for length in (maxlen, outputs_length)
             )
@@ -274,7 +276,7 @@ class Conv1dSubsampling(Layer):
         for i in range(len(filters)):
             subblock = keras.Sequential(name=f"block_{i}")
             subblock.add(
-                keras.layers.Conv1D(
+                Conv1D(
                     filters=filters[i],
                     kernel_size=kernels[i],
                     strides=strides[i],
@@ -318,6 +320,7 @@ class Conv1dSubsampling(Layer):
                 filter_size=block.layers[0].kernel_size[0],
                 padding=block.layers[0]._padding,
                 stride=block.layers[0].strides[0],
+                dilation=block.layers[0].dilation_rate[0],
             )
         return outputs, outputs_length
 
@@ -331,6 +334,7 @@ class Conv1dSubsampling(Layer):
                     filter_size=block.layers[0].kernel_size[0],
                     padding=block.layers[0]._padding,
                     stride=block.layers[0].strides[0],
+                    dilation=block.layers[0].dilation_rate[0],
                 )
                 for length in (maxlen, outputs_length)
             )

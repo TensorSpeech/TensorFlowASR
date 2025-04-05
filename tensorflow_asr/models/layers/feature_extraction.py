@@ -313,8 +313,9 @@ class FeatureExtraction(Layer):
         signals, signals_length = inputs
         mask = tf.sequence_mask(signals_length, maxlen=(tf.shape(signals)[1] + self.padding), dtype=tf.bool)
         nsamples = tf.reduce_sum(tf.cast(mask, tf.int32), axis=1)
-        nframes = tf.map_fn(fn=self.get_nframes, elems=nsamples, fn_output_signature=tf.TensorSpec(shape=(), dtype=tf.int32))
-        padded_nframes = self.get_nframes(tf.shape(signals, tf.int32)[1])
+        # nframes = tf.map_fn(fn=self.get_nframes, elems=nsamples, fn_output_signature=tf.TensorSpec(shape=(), dtype=tf.int32))
+        nframes = self.get_nframes(nsamples)
+        padded_nframes = self.get_nframes(tf.shape(signals, tf.int32)[1] + self.padding)
         return tf.sequence_mask(nframes, maxlen=padded_nframes, dtype=tf.bool), None
 
     def compute_output_shape(self, input_shape):

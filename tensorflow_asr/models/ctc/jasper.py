@@ -16,6 +16,7 @@ from tensorflow_asr import keras
 from tensorflow_asr.models.base_layer import Layer
 from tensorflow_asr.models.ctc.base_ctc import CtcModel
 from tensorflow_asr.models.encoders.jasper import JasperEncoder
+from tensorflow_asr.models.layers.convolution import Conv1D
 
 
 @keras.utils.register_keras_serializable(package=__name__)
@@ -29,7 +30,7 @@ class JasperDecoder(Layer):
         **kwargs,
     ):
         super().__init__(**kwargs)
-        self.vocab = keras.layers.Conv1D(
+        self.vocab = Conv1D(
             filters=vocab_size,
             kernel_size=1,
             strides=1,
