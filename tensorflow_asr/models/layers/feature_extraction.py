@@ -51,7 +51,6 @@ class FeatureExtraction(Layer):
         normalize_min_max=False,
         padding=0,
         augmentation_config={},
-        dtype=tf.float32,  # use float32 for better accuracy and ensure loss convergence
         **kwargs,
     ):
         """
@@ -98,7 +97,7 @@ class FeatureExtraction(Layer):
         """
         assert feature_type in asdict(FEATURE_TYPES()).values(), f"feature_type must be in {asdict(FEATURE_TYPES()).values()}"
 
-        super().__init__(name=feature_type, dtype=dtype, **kwargs)
+        super().__init__(name=feature_type, **kwargs)
         self.sample_rate = sample_rate
 
         self.frame_ms = frame_ms
