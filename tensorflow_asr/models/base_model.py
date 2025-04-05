@@ -235,6 +235,113 @@ class BaseModel(keras.Model, TensorFlowTrainer):
 
     # ------------------------------------ FIT ----------------------------------- #
 
+    def _make_function(self, step_function):
+        @tf.autograph.experimental.do_not_convert
+        def one_step_on_data(data):
+            """Runs a single training step on a batch of data."""
+            outputs = self.distribute_strategy.run(step_function, args=(data,))
+            outputs = reduce_per_replica(
+                outputs,
+                self.distribute_strategy,
+                reduction="auto",
+            )
+            return outputs
+
+        if not self.run_eagerly:
+            one_step_on_data = tf.function(
+                one_step_on_data,
+                reduce_retracing=True,
+                jit_compile=self.jit_compile,
+            )
+
+        @tf.autograph.experimental.do_not_convert
+        def multi_step_on_iterator(iterator):
+            if self.steps_per_execution == 1:
+                return tf.experimental.Optional.from_value(one_step_on_data(iterator.get_next()))
+
+            # the spec is set lazily during the tracing of `tf.while_loop`
+            empty_outputs = tf.experimental.Optional.empty(None)
+
+            def cond(execution_step, optional_outputs, next_optional_inputs):
+                return tf.logical_and(
+                    tf.less(execution_step, self.steps_per_execution),
+                    next_optional_inputs.has_value(),
+                )
+
+            def inner_body(execution_step, optional_outputs, next_optional_inputs):
+                def has_next():
+                    next_optional_outputs = tf.experimental.Optional.from_value(one_step_on_data(next_optional_inputs.get_value()))
+                    empty_outputs._element_spec = next_optional_outputs.element_spec
+                    return next_optional_outputs
+
+                def no_has_next():
+                    optional_outputs._element_spec = empty_outputs._element_spec
+                    return optional_outputs
+
+                next_optional_outputs = tf.cond(
+                    tf.logical_and(
+                        tf.less(execution_step, self.steps_per_execution),
+                        next_optional_inputs.has_value(),
+                    ),
+                    has_next,
+                    no_has_next,
+                )
+
+                return (
+                    execution_step + 1,
+                    next_optional_outputs,
+                    # We don't want to iterate if we have reached
+                    # `steps_per_execution` steps
+                    tf.cond(
+                        tf.less(execution_step + 1, self.steps_per_execution),
+                        lambda: iterator.get_next_as_optional(),
+                        lambda: next_optional_inputs,
+                    ),
+                )
+
+            def body(execution_step, optional_outputs, next_optional_inputs):
+                for _ in range(
+                    min(
+                        self.unrolled_steps_per_execution,
+                        self.steps_per_execution,
+                    )
+                ):
+                    execution_step, optional_outputs, next_optional_inputs = inner_body(
+                        execution_step,
+                        optional_outputs,
+                        next_optional_inputs,
+                    )
+
+                return (execution_step, optional_outputs, next_optional_inputs)
+
+            execution_step = tf.constant(0)
+            next_optional_inputs = iterator.get_next_as_optional()
+
+            # Run the while loop
+            _, final_optional_outputs, _ = tf.while_loop(
+                cond,
+                body,
+                loop_vars=[execution_step, empty_outputs, next_optional_inputs],
+            )
+            final_optional_outputs._element_spec = empty_outputs.element_spec
+            return final_optional_outputs
+
+        if not self.run_eagerly:
+            multi_step_on_iterator = tf.function(multi_step_on_iterator, reduce_retracing=True)
+
+        def function(iterator):
+            if isinstance(iterator, (tf.data.Iterator, tf.distribute.DistributedIterator)) and self.steps_per_execution > 1:
+                opt_outputs = multi_step_on_iterator(iterator)
+                if not opt_outputs.has_value():
+                    raise StopIteration
+                return opt_outputs.get_value()
+
+            for step, data in zip(range(self.steps_per_execution), iterator):
+                outputs = one_step_on_data(data)
+            return outputs
+
+        return function
+
     def make_train_function(self, force=False):
         if self.train_function is not None and not force:
             return self.train_function
