@@ -41,7 +41,7 @@ class FeatureExtraction(Layer):
         preemphasis=0.97,
         pad_end=True,
         use_librosa_like_stft=False,
-        output_floor=1e-6,
+        epsilon=1e-6,
         lower_edge_hertz=0.0,
         upper_edge_hertz=8000.0,
         log_base="e",  # "10", "e"
@@ -74,8 +74,8 @@ class FeatureExtraction(Layer):
             Whether to pad the end of `signals` with zeros when framing produces a frame that lies partially past its end, by default True
         use_librosa_like_stft : bool, optional
             Use librosa like stft, by default False
-        output_floor : _type_, optional
-            Minimum output value, by default 1e-10
+        epsilon : float, optional
+            Epsilon value to avoid log(0.0) causes Inf, by default 1e-6
         lower_edge_hertz : float, optional
             The lowest frequency of the feature analysis, by default 125.0
         upper_edge_hertz : float, optional
@@ -117,8 +117,8 @@ class FeatureExtraction(Layer):
         self.use_librosa_like_stft = use_librosa_like_stft
 
         # fmt: off
-        self.output_floor = output_floor
-        assert self.output_floor >= math_util.large_compatible_negative_number(self.dtype), "output_floor must be larger than the minimum value of the dtype to avoid Inf or NaN" # pylint: disable=line-too-long
+        self.epsilon = epsilon
+        assert self.epsilon > 1e-9 and self.epsilon <= 0.001, "epsilon must be in (1e-9, 0.001]"
         # fmt: on
 
         self.lower_edge_hertz = lower_edge_hertz
@@ -164,7 +164,7 @@ class FeatureExtraction(Layer):
     def normalize_signal(self, signal):
         if not self._normalize_signal:
             return signal
-        gain = 1.0 / (tf.reduce_max(tf.abs(signal), axis=1, keepdims=True) + 1e-9)
+        gain = 1.0 / (tf.reduce_max(tf.abs(signal), axis=1, keepdims=True) + self.epsilon)
         return signal * gain
 
     def preemphasis_signal(self, signal):
@@ -179,11 +179,11 @@ class FeatureExtraction(Layer):
     def normalize_audio_features(self, audio_feature):
         if self._normalize_zscore:
             mean = tf.reduce_mean(audio_feature, axis=1, keepdims=True)
-            stddev = tf.sqrt(tf.math.reduce_variance(audio_feature, axis=1, keepdims=True) + 1e-9)
+            stddev = tf.sqrt(tf.math.reduce_variance(audio_feature, axis=1, keepdims=True) + self.epsilon)
             return tf.divide(tf.subtract(audio_feature, mean), stddev)
         if self._normalize_min_max:
             if self.feature_type.startswith("log_") or self.feature_type == FEATURE_TYPES.SPECTROGRAM:
-                min_value = self.logarithm(self.output_floor)
+                min_value = self.logarithm(self.epsilon)
             else:
                 min_value = tf.reduce_min(audio_feature, axis=1, keepdims=True)
             return (audio_feature - min_value) / (tf.reduce_max(audio_feature, axis=1, keepdims=True) - min_value)
@@ -212,9 +212,10 @@ class FeatureExtraction(Layer):
         return fft_features
 
     def logarithm(self, S):
+        S += self.epsilon
         if self.log_base == "10":
-            return math_util.log10(tf.maximum(S, self.output_floor))
-        return tf.math.log(tf.maximum(S, self.output_floor))
+            return math_util.log10(S)
+        return tf.math.log(S)
 
     def log_mel_spectrogram(self, signal):
         S = self.stft(signal)

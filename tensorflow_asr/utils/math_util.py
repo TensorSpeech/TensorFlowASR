@@ -16,6 +16,7 @@ import math
 from typing import Union
 
 import numpy as np
+from keras.src import backend
 
 from tensorflow_asr import tf
 from tensorflow_asr.utils import shape_util
@@ -239,9 +240,28 @@ def masked_fill(
 def large_compatible_negative_number(
     tensor_type,
 ):
-    if tensor_type == tf.float16:
+    dtype = backend.standardize_dtype(tensor_type)
+    if dtype == "float16":
         return tf.float16.min
     return -1e9
+
+
+def large_compatible_positive_number(
+    tensor_type,
+):
+    dtype = backend.standardize_dtype(tensor_type)
+    if dtype == "float16":
+        return tf.float16.max
+    return 1e9
+
+
+def compatible_epsilon(
+    tensor_type,
+):
+    dtype = backend.standardize_dtype(tensor_type)
+    if dtype == "float16":
+        return 1e-6
+    return 1e-9
 
 
 def apply_mask(

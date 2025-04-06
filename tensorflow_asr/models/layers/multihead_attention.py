@@ -19,6 +19,7 @@ from keras.src import backend
 from keras.src.layers.attention import multi_head_attention as mha_module
 
 from tensorflow_asr import keras, tf
+from tensorflow_asr.models.layers.general import Dropout, Softmax
 from tensorflow_asr.models.layers.memory import Memory
 from tensorflow_asr.utils import shape_util
 
@@ -281,6 +282,29 @@ class MultiHeadAttention(keras.layers.MultiHeadAttention):
             )
         self._precomputed_output_shape = self.compute_output_shape(input_shape)
         return super().build(query_shape, value_shape, key_shape)
+
+    def _build_attention(self, rank):
+        """Builds multi-head dot-product attention computations.
+
+        This function builds attributes necessary for `_compute_attention` to
+        customize attention computation to replace the default dot-product
+        attention.
+
+        Args:
+            rank: the rank of query, key, value tensors.
+        """
+        if self._attention_axes is None:
+            self._attention_axes = tuple(range(1, rank - 2))
+        else:
+            self._attention_axes = tuple(self._attention_axes)
+        (
+            self._dot_product_equation,
+            self._combine_equation,
+            attn_scores_rank,
+        ) = mha_module._build_attention_equation(rank, attn_axes=self._attention_axes)
+        norm_axes = tuple(range(attn_scores_rank - len(self._attention_axes), attn_scores_rank))
+        self._softmax = Softmax(axis=norm_axes, dtype=self.dtype_policy)
+        self._dropout_layer = Dropout(rate=self._dropout, dtype=self.dtype_policy, seed=self.seed)
 
     def get_initial_state(self, batch_size: int):
         if self._memory is None:
