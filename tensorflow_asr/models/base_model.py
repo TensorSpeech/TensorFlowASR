@@ -42,7 +42,7 @@ class BaseModel(keras.Model, TensorFlowTrainer):
     def tokenizer(self, tokenizer: Tokenizer):
         self._tokenizer = tokenizer
 
-    def summary(self, line_length=127, expand_nested=True, show_trainable=True, **kwargs):
+    def summary(self, line_length=100, expand_nested=True, show_trainable=True, **kwargs):
         super().summary(line_length=line_length, expand_nested=expand_nested, show_trainable=show_trainable, **kwargs)
 
     def save(self, filepath, overwrite=True, zipped=None, **kwargs):

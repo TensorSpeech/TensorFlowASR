@@ -711,5 +711,5 @@ class ConformerEncoder(keras.Model):
         with tf.name_scope(f"{self.name}_call_next"):
             return self((features, features_length), initial_state=previous_encoder_states, training=False, return_states=True)
 
-    # def compute_mask(self, inputs, mask=None):
-    #     return self.conv_subsampling.compute_mask(inputs, mask=mask)
+    def compute_mask(self, inputs, mask=None):
+        return self.conv_subsampling.compute_mask(inputs, mask=mask)
