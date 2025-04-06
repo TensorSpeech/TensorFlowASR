@@ -33,7 +33,7 @@ class BaseLoss(keras.losses.Loss):
         logit_length = tf.cast(y_pred.logits_length, tf.int32)
         labels = tf.cast(y_true.labels, tf.int32)
         label_length = tf.cast(y_true.labels_length, tf.int32)
-        logit_length = tf.where(tf.greater(label_length, logit_length), label_length, logit_length)  # pad logit_length to label_length
+        logit_length = tf.where(tf.less(logit_length, label_length), label_length, logit_length)  # pad logit_length to label_length
         return y_pred.logits, logit_length, labels, label_length
 
     def get_config(self):

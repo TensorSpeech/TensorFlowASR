@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import contextlib
+import logging
 import os
 import re
 import tempfile
@@ -24,6 +25,7 @@ import yaml
 from tensorflow_asr import tf
 
 ENABLE_PATH_PREPROCESS = True
+logger = logging.getLogger(__name__)
 
 
 def load_yaml(
@@ -136,3 +138,10 @@ def read_file(
             yield tmp.name
     else:
         yield filepath
+
+
+def clean_dir(dirpath: str):
+    path = preprocess_paths(dirpath, isdir=True)
+    logger.info(f"Cleaning up {path}")
+    if tf.io.gfile.exists(path):
+        tf.io.gfile.rmtree(path)

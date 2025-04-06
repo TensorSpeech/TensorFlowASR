@@ -44,6 +44,8 @@ from tensorflow.python.util import deprecation  # pylint: disable = no-name-in-m
 
 tf.get_logger().setLevel(TF_LOG_LEVEL)
 deprecation._PRINT_DEPRECATION_WARNINGS = False  # comment this line to print deprecation warnings
+if DEBUG:
+    tf.debugging.enable_check_numerics()
 
 
 KERAS_SRC = "keras.src" if version.parse(tf.version.VERSION) >= version.parse("2.13.0") else "keras"

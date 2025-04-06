@@ -373,7 +373,14 @@ class MultiHeadAttention(keras.layers.MultiHeadAttention):
         if return_states:
             query, key, value, states = self._with_memory(query, key, value, initial_state, training)
 
-        attention_output, attention_scores = self._compute_attention(query, key, value, attention_mask, training)
+        attention_output, attention_scores = self._compute_attention(
+            query,
+            key,
+            value,
+            attention_mask,
+            training,
+            return_attention_scores,
+        )
         attention_output = self._output_dense(attention_output)
 
         # Set mask on output if needed

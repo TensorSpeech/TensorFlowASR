@@ -39,7 +39,11 @@ def main(
     ga_steps: int = None,
     verbose: int = 1,
     repodir: str = os.getcwd(),
+    clean: bool = False,
 ):
+    if clean:
+        file_util.clean_dir(modeldir)
+
     keras.backend.clear_session()
     env_util.setup_seed()
     strategy = env_util.setup_strategy(device_type=device_type, devices=devices, tpu_address=tpu_address)

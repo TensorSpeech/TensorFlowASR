@@ -59,7 +59,12 @@ class FFModule(keras.Model):
         super().__init__(name=name, **kwargs)
         assert norm_position in ("pre", "post", "none")
         self.pre_norm = (
-            keras.layers.LayerNormalization(name="ln", gamma_regularizer=kernel_regularizer, beta_regularizer=kernel_regularizer, dtype=self.dtype)
+            keras.layers.LayerNormalization(
+                name="ln",
+                gamma_regularizer=kernel_regularizer,
+                beta_regularizer=kernel_regularizer,
+                dtype=self.dtype,
+            )
             if norm_position == "pre"
             else Identity(name="preiden" if norm_position == "none" else "iden", dtype=self.dtype)
         )
@@ -81,7 +86,12 @@ class FFModule(keras.Model):
         )
         self.do2 = Dropout(rate=dropout, name="dropout_2", dtype=self.dtype)
         self.post_norm = (
-            keras.layers.LayerNormalization(name="ln", gamma_regularizer=kernel_regularizer, beta_regularizer=kernel_regularizer, dtype=self.dtype)
+            keras.layers.LayerNormalization(
+                name="ln",
+                gamma_regularizer=kernel_regularizer,
+                beta_regularizer=kernel_regularizer,
+                dtype=self.dtype,
+            )
             if norm_position == "post"
             else Identity(name="postiden" if norm_position == "none" else "iden", dtype=self.dtype)
         )
@@ -138,7 +148,12 @@ class MHSAModule(keras.Model):
         assert norm_position in ("pre", "post", "none")
         assert mha_type in ("relmha", "mha")
         self.pre_norm = (
-            keras.layers.LayerNormalization(name="ln", gamma_regularizer=kernel_regularizer, beta_regularizer=kernel_regularizer, dtype=self.dtype)
+            keras.layers.LayerNormalization(
+                name="ln",
+                gamma_regularizer=kernel_regularizer,
+                beta_regularizer=kernel_regularizer,
+                dtype=self.dtype,
+            )
             if norm_position == "pre"
             else Identity(name="preiden" if norm_position == "none" else "iden", dtype=self.dtype)
         )
@@ -176,7 +191,12 @@ class MHSAModule(keras.Model):
             )
         self.do = Dropout(dropout, name="dropout", dtype=self.dtype)
         self.post_norm = (
-            keras.layers.LayerNormalization(name="ln", gamma_regularizer=kernel_regularizer, beta_regularizer=kernel_regularizer, dtype=self.dtype)
+            keras.layers.LayerNormalization(
+                name="ln",
+                gamma_regularizer=kernel_regularizer,
+                beta_regularizer=kernel_regularizer,
+                dtype=self.dtype,
+            )
             if norm_position == "post"
             else Identity(name="postiden" if norm_position == "none" else "iden", dtype=self.dtype)
         )
@@ -260,7 +280,12 @@ class ConvModule(keras.Model):
         assert norm_position in ("pre", "post", "none")
         assert dw_norm_type in ("batch", "layer")
         self.pre_norm = (
-            keras.layers.LayerNormalization(name="ln", gamma_regularizer=kernel_regularizer, beta_regularizer=kernel_regularizer, dtype=self.dtype)
+            keras.layers.LayerNormalization(
+                name="ln",
+                gamma_regularizer=kernel_regularizer,
+                beta_regularizer=kernel_regularizer,
+                dtype=self.dtype,
+            )
             if norm_position == "pre"
             else Identity(name="preiden" if norm_position == "none" else "iden", dtype=self.dtype)
         )
@@ -326,7 +351,12 @@ class ConvModule(keras.Model):
         )
         self.do = Dropout(rate=dropout, name="dropout", dtype=self.dtype)
         self.post_norm = (
-            keras.layers.LayerNormalization(name="ln", gamma_regularizer=kernel_regularizer, beta_regularizer=kernel_regularizer, dtype=self.dtype)
+            keras.layers.LayerNormalization(
+                name="ln",
+                gamma_regularizer=kernel_regularizer,
+                beta_regularizer=kernel_regularizer,
+                dtype=self.dtype,
+            )
             if norm_position == "post"
             else Identity(name="postiden" if norm_position == "none" else "iden", dtype=self.dtype)
         )
@@ -390,7 +420,12 @@ class ConformerBlock(keras.Model):
         super().__init__(name=name, **kwargs)
         assert block_norm_position in ("pre", "post", "none")
         self.pre_norm = (
-            keras.layers.LayerNormalization(name="ln", gamma_regularizer=kernel_regularizer, beta_regularizer=kernel_regularizer, dtype=self.dtype)
+            keras.layers.LayerNormalization(
+                name="ln",
+                gamma_regularizer=kernel_regularizer,
+                beta_regularizer=kernel_regularizer,
+                dtype=self.dtype,
+            )
             if block_norm_position == "pre"
             else Identity(name="preiden" if block_norm_position == "none" else "iden", dtype=self.dtype)
         )
@@ -452,7 +487,12 @@ class ConformerBlock(keras.Model):
             dtype=self.dtype,
         )
         self.post_norm = (
-            keras.layers.LayerNormalization(name="ln", gamma_regularizer=kernel_regularizer, beta_regularizer=kernel_regularizer, dtype=self.dtype)
+            keras.layers.LayerNormalization(
+                name="ln",
+                gamma_regularizer=kernel_regularizer,
+                beta_regularizer=kernel_regularizer,
+                dtype=self.dtype,
+            )
             if block_norm_position == "post"
             else Identity(name="postiden" if block_norm_position == "none" else "iden", dtype=self.dtype)
         )
@@ -671,5 +711,5 @@ class ConformerEncoder(keras.Model):
         with tf.name_scope(f"{self.name}_call_next"):
             return self((features, features_length), initial_state=previous_encoder_states, training=False, return_states=True)
 
-    def compute_mask(self, inputs, mask=None):
-        return self.conv_subsampling.compute_mask(inputs, mask=mask)
+    # def compute_mask(self, inputs, mask=None):
+    #     return self.conv_subsampling.compute_mask(inputs, mask=mask)

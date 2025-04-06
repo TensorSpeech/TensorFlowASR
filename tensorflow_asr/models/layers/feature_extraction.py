@@ -41,11 +41,11 @@ class FeatureExtraction(Layer):
         preemphasis=0.97,
         pad_end=True,
         use_librosa_like_stft=False,
-        output_floor=1e-10,
+        output_floor=1e-6,
         lower_edge_hertz=0.0,
         upper_edge_hertz=8000.0,
         log_base="e",  # "10", "e"
-        nfft=None,
+        nfft=512,
         normalize_signal=False,
         normalize_zscore=False,
         normalize_min_max=False,
@@ -116,7 +116,10 @@ class FeatureExtraction(Layer):
 
         self.use_librosa_like_stft = use_librosa_like_stft
 
+        # fmt: off
         self.output_floor = output_floor
+        assert self.output_floor >= math_util.large_compatible_negative_number(self.dtype), "output_floor must be larger than the minimum value of the dtype to avoid Inf or NaN" # pylint: disable=line-too-long
+        # fmt: on
 
         self.lower_edge_hertz = lower_edge_hertz
         self.upper_edge_hertz = upper_edge_hertz

@@ -236,7 +236,7 @@ def masked_fill(
     return tf.where(mask, tensor, values)
 
 
-def large_compatible_negative(
+def large_compatible_negative_number(
     tensor_type,
 ):
     if tensor_type == tf.float16:
