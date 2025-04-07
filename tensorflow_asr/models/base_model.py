@@ -252,21 +252,6 @@ class BaseModel(keras.Model, TensorFlowTrainer):
                 reduction="auto",
             )
             return outputs
-            # data = next(iterator)
-            # outputs, gradients = self.distribute_strategy.run(self.train_step_ga, args=(data, None))
-            # for _ in range(1, self.ga.total_steps):
-            #     try:
-            #         data = next(iterator)
-            #         outputs, gradients = self.distribute_strategy.run(self.train_step_ga, args=(data, gradients))
-            #     except StopIteration:
-            #         break
-            # self.distribute_strategy.run(self._apply_gradients, args=(gradients,))
-            # outputs = reduce_per_replica(
-            #     outputs,
-            #     self.distribute_strategy,
-            #     reduction="auto",
-            # )
-            # return outputs
 
         if not self.run_eagerly:
             one_ga_step_on_data = tf.function(
