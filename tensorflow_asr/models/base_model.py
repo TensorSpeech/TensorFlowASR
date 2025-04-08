@@ -15,6 +15,7 @@
 
 # import importlib
 import logging
+import typing
 
 from keras.src import tree
 from keras.src.backend.tensorflow.trainer import TensorFlowTrainer, reduce_per_replica
@@ -30,6 +31,8 @@ logger = logging.getLogger(__name__)
 
 
 class BaseModel(keras.Model, TensorFlowTrainer):
+    optimizer: typing.Union[keras.optimizers.Optimizer, keras.optimizers.LossScaleOptimizer]
+
     def __init__(self, speech_config: dict, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.feature_extraction = FeatureExtraction(**speech_config)
@@ -176,7 +179,7 @@ class BaseModel(keras.Model, TensorFlowTrainer):
     def _apply_gradients(self, gradients):
         if self.gradn is not None:
             gradients = self.gradn(step=self.optimizer.iterations, gradients=gradients)
-        self.optimizer.apply_gradients(zip(gradients, self.trainable_weights))
+        self.optimizer.apply(gradients, self.trainable_weights)
 
     def train_step(self, data):
         gradients = self._train_step(data)
