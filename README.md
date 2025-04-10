@@ -151,7 +151,7 @@ See [examples](./examples/) for some predefined ASR models and results
 
 ## Features Extraction
 
-See [features_extraction](./tensorflow_asr/featurizers/README.md)
+See [features_extraction](./tensorflow_asr/features/README.md)
 
 ## Augmentations
 
