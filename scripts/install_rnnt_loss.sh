@@ -12,11 +12,13 @@ TF_VERSION=$(python3 -c "import tensorflow as tf; print(tf.__version__)")
 if [ ! -d warp-transducer ]; then
     git clone --depth 1 https://github.com/nglehuy/warp-transducer.git
     cd $PROJECT_DIR/externals/warp-transducer/tensorflow_binding
-    git clone --depth 1 --branch v$TF_VERSION https://github.com/tensorflow/tensorflow.git
+    if [ ! -d tensorflow ]; then
+      git clone --depth 1 --branch v$TF_VERSION https://github.com/tensorflow/tensorflow.git
+    fi
     cd ../../
 fi
 
-TENSORFLOW_SRC_PATH="$PROJECT_DIR/externals/warp-transducer/tensorflow_binding/tensorflow"
+export TENSORFLOW_SRC_PATH="$PROJECT_DIR/externals/warp-transducer/tensorflow_binding/tensorflow"
 
 rm -rf $PROJECT_DIR/externals/warp-transducer/build
 mkdir -p $PROJECT_DIR/externals/warp-transducer/build

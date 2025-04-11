@@ -13,14 +13,16 @@
 # limitations under the License.
 """ http://arxiv.org/abs/1811.06621 """
 
+from keras.src import backend
+
 from tensorflow_asr import keras, tf
-from tensorflow_asr.models.base_layer import Layer, Reshape
+from tensorflow_asr.models.base_layer import Reshape
 from tensorflow_asr.models.layers.subsampling import TimeReduction
-from tensorflow_asr.utils import layer_util, math_util
+from tensorflow_asr.utils import env_util, layer_util, math_util
 
 
 @keras.utils.register_keras_serializable(package=__name__)
-class RnnTransducerBlock(Layer):
+class RnnTransducerBlock(keras.Model):
     def __init__(
         self,
         reduction_position: str = "pre",
@@ -47,10 +49,11 @@ class RnnTransducerBlock(Layer):
             zero_output_for_mask=True,
             kernel_regularizer=kernel_regularizer,
             bias_regularizer=bias_regularizer,
+            use_cudnn=env_util.TF_CUDNN,
             dtype=self.dtype,
         )
         self.ln = (
-            keras.layers.LayerNormalization(name="ln", gamma_regularizer=kernel_regularizer, beta_regularizer=bias_regularizer, dtype=self.dtype)
+            keras.layers.LayerNormalization(name="ln", gamma_regularizer=kernel_regularizer, beta_regularizer=kernel_regularizer, dtype=self.dtype)
             if layer_norm
             else None
         )
@@ -103,7 +106,7 @@ class RnnTransducerBlock(Layer):
                 outputs,
                 training=False,
                 initial_state=tf.unstack(previous_encoder_states, axis=0),
-                mask=getattr(inputs, "_keras_mask", None),
+                mask=backend.get_keras_mask(inputs),
             )
             new_states = tf.stack(_states, axis=0)
             if self.ln is not None:
@@ -123,7 +126,7 @@ class RnnTransducerBlock(Layer):
 
 
 @keras.utils.register_keras_serializable(package=__name__)
-class RnnTransducerEncoder(Layer):
+class RnnTransducerEncoder(keras.Model):
     def __init__(
         self,
         reduction_positions: list = ["pre", "pre", "pre", "pre", "pre", "pre", "pre", "pre"],
@@ -175,11 +178,11 @@ class RnnTransducerEncoder(Layer):
         return tf.transpose(tf.stack(states, axis=0), perm=[2, 0, 1, 3])
 
     def call(self, inputs, training=False):
-        outputs, outputs_length, caching = inputs
+        outputs, outputs_length = inputs
         outputs, outputs_length = self.reshape((outputs, outputs_length))
         for block in self.blocks:
             outputs, outputs_length = block((outputs, outputs_length), training=training)
-        return outputs, outputs_length, caching
+        return outputs, outputs_length
 
     def call_next(self, features, features_length, previous_encoder_states, *args, **kwargs):
         """
@@ -205,15 +208,15 @@ class RnnTransducerEncoder(Layer):
             return outputs, outputs_length, tf.transpose(tf.stack(new_states, axis=0), perm=[2, 0, 1, 3])
 
     def compute_mask(self, inputs, mask=None):
-        outputs, outputs_length, caching = inputs
+        outputs, outputs_length = inputs
         maxlen = tf.shape(outputs)[1]
         maxlen, outputs_length = (math_util.get_reduced_length(length, self.time_reduction_factor) for length in (maxlen, outputs_length))
         mask = tf.sequence_mask(outputs_length, maxlen=maxlen, dtype=tf.bool)
-        return mask, None, getattr(caching, "_keras_mask", None)
+        return mask, None
 
     def compute_output_shape(self, input_shape):
-        *output_shape, caching_shape = input_shape
+        output_shape = input_shape
         output_shape = self.reshape.compute_output_shape(output_shape)
         for block in self.blocks:
             output_shape = block.compute_output_shape(output_shape)
-        return *output_shape, caching_shape
+        return output_shape

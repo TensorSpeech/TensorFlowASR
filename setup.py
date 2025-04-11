@@ -39,10 +39,9 @@ with open("requirements.txt", "r", encoding="utf-8") as fr:
 with open("README.md", "r", encoding="utf-8") as fh:
     long_description = fh.read()
 
-
 setup(
     name="TensorFlowASR",
-    version="2.1.0",
+    version="3.0.0",
     author="Huy Le Nguyen",
     author_email="nlhuy.cs.16@gmail.com",
     description="Almost State-of-the-art Automatic Speech Recognition using Tensorflow 2",
@@ -62,5 +61,5 @@ setup(
         "License :: OSI Approved :: Apache Software License",
         "Topic :: Software Development :: Libraries :: Python Modules",
     ],
-    python_requires=">=3.6, <4",
+    python_requires=">=3.8, <4",
 )

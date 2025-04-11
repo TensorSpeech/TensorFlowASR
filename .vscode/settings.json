@@ -1,37 +1,31 @@
 {
-    "[python]": {
-        "editor.defaultFormatter": "ms-python.black-formatter"
-    },
-    "autoDocstring.docstringFormat": "numpy",
-    "black-formatter.args": [
-        "--config",
-        "${workspaceFolder}/pyproject.toml"
-    ],
-    "black-formatter.path": [
-        "${interpreter}",
-        "-m",
-        "black"
-    ],
-    "editor.codeActionsOnSave": {
-        "source.fixAll": "explicit",
-        "source.organizeImports": "explicit"
-    },
-    "editor.formatOnSave": true,
-    "isort.args": [
-        "--settings-file",
-        "${workspaceFolder}/pyproject.toml"
-    ],
-    "pylint.args": [
-        "--rcfile=${workspaceFolder}/.pylintrc"
-    ],
-    "pylint.path": [
-        "${interpreter}",
-        "-m",
-        "pylint"
-    ],
-    "python.analysis.fixAll": [
-        "source.unusedImports",
-        "source.convertImportFormat"
-    ],
-    "python.analysis.importFormat": "absolute"
+  "[python]": {
+    "editor.defaultFormatter": "ms-python.black-formatter",
+    "editor.tabSize": 4
+  },
+  "[markdown]": {
+    "editor.tabSize": 2,
+    "editor.indentSize": 2,
+    "editor.detectIndentation": false
+  },
+  "[json]": {
+    "editor.tabSize": 2
+  },
+  "[yaml]": {
+    "editor.tabSize": 2
+  },
+  "autoDocstring.docstringFormat": "numpy",
+  "black-formatter.args": ["--config", "${workspaceFolder}/pyproject.toml"],
+  "black-formatter.path": ["${interpreter}", "-m", "black"],
+  "editor.codeActionsOnSave": {
+    "source.fixAll": "explicit",
+    "source.organizeImports": "explicit"
+  },
+  "editor.formatOnSave": true,
+  "isort.args": ["--settings-file", "${workspaceFolder}/pyproject.toml"],
+  "pylint.args": ["--rcfile=${workspaceFolder}/.pylintrc"],
+  "pylint.path": ["${interpreter}", "-m", "pylint"],
+  "python.analysis.fixAll": ["source.unusedImports", "source.convertImportFormat"],
+  "python.analysis.importFormat": "absolute",
+  "markdown.extension.list.indentationSize": "inherit"
 }

@@ -61,18 +61,18 @@
 # Where `predictions` and `predictions_length` are the label prepanded by blank and its length for training *Transducer*
 
 import json
+import logging
 import os
 from dataclasses import asdict, dataclass
 
 import numpy as np
-import tqdm
 
 from tensorflow_asr import schemas, tf
 from tensorflow_asr.configs import Config, DatasetConfig
 from tensorflow_asr.tokenizers import Tokenizer
 from tensorflow_asr.utils import data_util, feature_util, file_util, math_util
 
-logger = tf.get_logger()
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -96,17 +96,14 @@ def get(
     raise ValueError(f"dataset_type must in {asdict(ASR_DATASER_TYPES()).values()}")
 
 
-def get_global_shape(
+def get_training_shape(
     config: Config,
-    strategy,
-    *datasets,
+    strategy: tf.distribute.Strategy,
+    *datasets: "ASRDataset",
     batch_size: int = None,
-    ga_steps: int = None,
 ):
     batch_size = (batch_size or config.learning_config.running_config.batch_size) * strategy.num_replicas_in_sync
-    ds_batch_size = batch_size
-    if ga_steps is not None and ga_steps > 1:
-        ds_batch_size *= ga_steps
+    train_batch_size = eval_batch_size = batch_size
 
     max_input_length, max_label_length = 0, 0
     for dset in datasets:
@@ -118,27 +115,25 @@ def get_global_shape(
     input_shape = [max_input_length]
     prediction_shape = [max_label_length + 1] if max_label_length else [None]
     label_shape = [max_label_length]
-    padded_shapes = (
-        schemas.TrainInput(
+    padded_shapes = schemas.TrainData(
+        inputs=schemas.TrainInput(
             inputs=tf.TensorShape(input_shape),
             inputs_length=tf.TensorShape([]),
             predictions=tf.TensorShape(prediction_shape),
             predictions_length=tf.TensorShape([]),
         ),
-        schemas.TrainLabel(
+        labels=schemas.TrainLabel(
             labels=tf.TensorShape(label_shape),
             labels_length=tf.TensorShape([]),
         ),
     )
 
-    return dict(
-        ds_batch_size=ds_batch_size,
+    model_shapes = dict(
         batch_size=batch_size,
         input_shape=input_shape,
         prediction_shape=prediction_shape,
-        label_shape=label_shape,
-        padded_shapes=padded_shapes,
     )
+    return model_shapes, train_batch_size, eval_batch_size, padded_shapes
 
 
 BUFFER_SIZE = 100
@@ -178,6 +173,7 @@ class BaseDataset:
         self.total_steps = None  # for better training visualization
         self.metadata = metadata
         self.sample_rate = sample_rate
+        self.use_ga = False
         self.name = name
 
     def parse(self, *args, **kwargs):
@@ -229,12 +225,14 @@ class ASRDataset(BaseDataset):
     # -------------------------------- metadata -------------------------------------
 
     def compute_metadata(self):
+        from tqdm import tqdm  # pylint: disable=import-outside-toplevel
+
         self.max_input_length = 0 if self.max_input_length is None else self.max_input_length
         self.max_label_length = 0 if self.max_label_length is None else self.max_label_length
         if self.max_input_length > 0 and self.max_label_length > 0:
             return  # already computed
         self.read_entries()
-        for _, duration, transcript in tqdm.tqdm(self.entries, desc=f"Computing metadata for entries in {self.stage} dataset"):
+        for _, duration, transcript in tqdm(self.entries, desc=f"Computing metadata for entries in {self.stage} dataset"):
             input_length = math_util.get_nsamples(duration, self.sample_rate)
             label = self.tokenizer.tokenize(transcript).numpy()
             label_length = len(label)
@@ -313,22 +311,19 @@ class ASRDataset(BaseDataset):
             yield bytes(path, "utf-8"), audio, bytes(transcript, "utf-8")
 
     def _process_item(self, path: tf.Tensor, audio: tf.Tensor, transcript: tf.Tensor):
-        inputs = data_util.read_raw_audio(audio)
-        inputs_length = tf.shape(inputs)[0]
+        with tf.device("/CPU:0"):
+            inputs = data_util.read_raw_audio(audio)
+            inputs_length = tf.shape(inputs, out_type=tf.int32)[0]
 
-        labels = self.tokenizer.tokenize(transcript)
-        labels_length = tf.shape(labels, out_type=tf.int32)[0]
+            labels = self.tokenizer.tokenize(transcript)
+            labels_length = tf.shape(labels, out_type=tf.int32)[0]
 
-        predictions = self.tokenizer.prepand_blank(labels)
-        predictions_length = tf.shape(predictions, out_type=tf.int32)[0]
+            predictions = self.tokenizer.prepand_blank(labels)
+            predictions_length = tf.shape(predictions, out_type=tf.int32)[0]
 
-        return path, inputs, inputs_length, labels, labels_length, predictions, predictions_length
+            return path, inputs, inputs_length, labels, labels_length, predictions, predictions_length
 
-    def parse(self, path: tf.Tensor, audio: tf.Tensor, transcript: tf.Tensor):
-        """
-        Returns:
-            path, features, input_lengths, labels, label_lengths, pred_inp
-        """
+    def parse(self, path: tf.Tensor, audio: tf.Tensor, transcript: tf.Tensor) -> schemas.TrainData:
         (
             _,
             inputs,
@@ -338,35 +333,40 @@ class ASRDataset(BaseDataset):
             predictions,
             predictions_length,
         ) = self._process_item(path=path, audio=audio, transcript=transcript)
-        return (
-            schemas.TrainInput(inputs=inputs, inputs_length=inputs_length, predictions=predictions, predictions_length=predictions_length),
-            schemas.TrainLabel(labels=labels, labels_length=labels_length),
+        return schemas.TrainData(
+            inputs=schemas.TrainInput(inputs=inputs, inputs_length=inputs_length, predictions=predictions, predictions_length=predictions_length),
+            labels=schemas.TrainLabel(labels=labels, labels_length=labels_length),
         )
 
     # -------------------------------- CREATION -------------------------------------
 
-    def process(self, dataset: tf.data.Dataset, batch_size: int, padded_shapes=None):
+    def process(
+        self,
+        dataset: tf.data.Dataset,
+        batch_size: int,
+        ga_steps: int = 1,
+        padded_shapes=None,
+    ):
+        dataset = dataset.map(self.parse, num_parallel_calls=AUTOTUNE, deterministic=False)
+
         if self.cache:
             dataset = dataset.cache()  # cache original (unchanged data)
 
-        dataset = dataset.map(self.parse, num_parallel_calls=AUTOTUNE, deterministic=False)
-        self.total_steps = math_util.get_num_batches(self.num_entries, batch_size, drop_remainders=self.drop_remainder)
-
         if self.shuffle:
-            dataset = dataset.shuffle(self.buffer_size or self.num_entries, reshuffle_each_iteration=True)
+            dataset = dataset.shuffle(max(self.buffer_size or self.num_entries, batch_size * 2), reshuffle_each_iteration=True)
 
-        if self.indefinite and self.total_steps:
+        if self.indefinite and hasattr(self, "total_steps") and self.total_steps:
             dataset = dataset.repeat()
 
         if padded_shapes is None:
-            padded_shapes = (
-                schemas.TrainInput(
+            padded_shapes = schemas.TrainData(
+                inputs=schemas.TrainInput(
                     inputs=tf.TensorShape([self.max_input_length]),
                     inputs_length=tf.TensorShape([]),
                     predictions=tf.TensorShape([self.max_label_length + 1 if self.max_label_length else None]),
                     predictions_length=tf.TensorShape([]),
                 ),
-                schemas.TrainLabel(
+                labels=schemas.TrainLabel(
                     labels=tf.TensorShape([self.max_label_length]),
                     labels_length=tf.TensorShape([]),
                 ),
@@ -376,18 +376,29 @@ class ASRDataset(BaseDataset):
         dataset = dataset.padded_batch(
             batch_size=batch_size,
             padded_shapes=padded_shapes,
-            padding_values=(
-                schemas.TrainInput(inputs=0.0, inputs_length=0, predictions=self.tokenizer.blank, predictions_length=0),
-                schemas.TrainLabel(labels=self.tokenizer.blank, labels_length=0),
+            padding_values=schemas.TrainData(
+                inputs=schemas.TrainInput(inputs=0.0, inputs_length=0, predictions=self.tokenizer.blank, predictions_length=0),
+                labels=schemas.TrainLabel(labels=self.tokenizer.blank, labels_length=0),
             ),
             drop_remainder=self.drop_remainder,
         )
 
+        # only apply for training dataset, eval and test dataset should not use GA
+        if ga_steps > 1 and self.stage == "train":
+            self.use_ga = True
+
         # PREFETCH to improve speed of input length
         dataset = dataset.prefetch(AUTOTUNE)
+
+        # Update metadata
+        if hasattr(self, "num_entries") and self.num_entries > 0:
+            self.total_steps = math_util.get_num_batches(self.num_entries, batch_size, drop_remainders=self.drop_remainder)
+            if self.use_ga:
+                self.total_steps = math_util.get_num_batches(self.total_steps, ga_steps, drop_remainders=False)
+
         return dataset
 
-    def create(self, batch_size: int, padded_shapes=None):
+    def create(self, batch_size: int, ga_steps: int = 1, padded_shapes=None):
         if not self.enabled:
             return None
         self.read_entries()
@@ -398,7 +409,7 @@ class ASRDataset(BaseDataset):
             output_types=(tf.string, tf.string, tf.string),
             output_shapes=(tf.TensorShape([]), tf.TensorShape([]), tf.TensorShape([])),
         )
-        return self.process(dataset, batch_size, padded_shapes=padded_shapes)
+        return self.process(dataset, batch_size, ga_steps=ga_steps, padded_shapes=padded_shapes)
 
 
 class ASRTFRecordDataset(ASRDataset):
@@ -498,7 +509,7 @@ class ASRTFRecordDataset(ASRDataset):
         example = tf.io.parse_single_example(record, feature_description)
         return super().parse(**example)
 
-    def create(self, batch_size: int, padded_shapes=None):
+    def create(self, batch_size: int, ga_steps: int = 1, padded_shapes=None):
         if not self.enabled:
             return None
         have_data = self.create_tfrecords()
@@ -514,7 +525,7 @@ class ASRTFRecordDataset(ASRDataset):
             files_ds, compression_type=self.compression_type, buffer_size=self.tfrecords_buffer_size, num_parallel_reads=AUTOTUNE
         )
 
-        return self.process(dataset, batch_size, padded_shapes=padded_shapes)
+        return self.process(dataset, batch_size, ga_steps=ga_steps, padded_shapes=padded_shapes)
 
 
 class ASRSliceDataset(ASRDataset):
@@ -528,7 +539,7 @@ class ASRSliceDataset(ASRDataset):
         )
         return record[0], audio, record[2]
 
-    def create(self, batch_size: int, padded_shapes=None):
+    def create(self, batch_size: int, ga_steps: int = 1, padded_shapes=None):
         if not self.enabled:
             return None
         self.read_entries()
@@ -542,4 +553,4 @@ class ASRSliceDataset(ASRDataset):
         dataset = dataset.with_options(options)
         dataset = dataset.map(self.load, num_parallel_calls=AUTOTUNE, deterministic=False)
 
-        return self.process(dataset, batch_size, padded_shapes=padded_shapes)
+        return self.process(dataset, batch_size, ga_steps=ga_steps, padded_shapes=padded_shapes)

@@ -76,7 +76,7 @@ class FreqMasking(AugmentationMethod):
             mval = get_mask_value(spectrogram, mask_value=self.mask_value)
             F = tf.convert_to_tensor(self.mask_factor, dtype=tf.int32)
             for _ in range(self.num_masks):
-                prob = tf.random.uniform(shape=[], minval=0, maxval=1, dtype=tf.float32)
+                prob = tf.random.uniform(shape=[], minval=0, maxval=1, dtype=spectrogram.dtype)
                 do_apply = tf.where(tf.less_equal(prob, self.prob), tf.constant(1, tf.int32), tf.constant(0, tf.int32))
                 f = tf.random.uniform(shape=[], minval=0, maxval=F, dtype=tf.int32)
                 f = do_apply * tf.minimum(f, frequency_length)
@@ -126,7 +126,7 @@ class TimeMasking(AugmentationMethod):
             mval = get_mask_value(spectrogram, mask_value=self.mask_value)
             T = tf.cast(tf.floor(tf.cast(spectrogram_length, dtype=spectrogram.dtype) * self.p_upperbound), dtype=tf.int32)
             for _ in range(self.num_masks):
-                prob = tf.random.uniform(shape=[], minval=0, maxval=1, dtype=tf.float32)
+                prob = tf.random.uniform(shape=[], minval=0, maxval=1, dtype=spectrogram.dtype)
                 do_apply = tf.where(tf.less_equal(prob, self.prob), tf.constant(1, tf.int32), tf.constant(0, tf.int32))
                 t = tf.random.uniform(shape=[], minval=0, maxval=T, dtype=tf.int32)
                 t = do_apply * tf.minimum(t, spectrogram_length)

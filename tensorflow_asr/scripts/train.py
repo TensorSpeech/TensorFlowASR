@@ -13,15 +13,15 @@
 # limitations under the License.
 
 import json
+import logging
 import os
 
-from tensorflow_asr import callbacks, datasets, keras, tf, tokenizers  # import to aid logging messages
+from tensorflow_asr import callbacks, datasets, keras, tokenizers  # import to aid logging messages
 from tensorflow_asr.configs import Config
 from tensorflow_asr.models.base_model import BaseModel
-from tensorflow_asr.utils import cli_util, env_util, file_util
+from tensorflow_asr.utils import cli_util, env_util, file_util, keras_util
 
-env_util.setup_logging()
-logger = tf.get_logger()
+logger = logging.getLogger(__name__)
 
 
 def main(
@@ -32,14 +32,21 @@ def main(
     bs: int = None,
     spx: int = 1,
     devices: list = None,
+    tpu_address: str = None,
+    device_type: str = "gpu",
     mxp: str = "none",
     jit_compile: bool = False,
     ga_steps: int = None,
-    repodir: str = os.path.realpath(os.path.join(os.path.dirname(__file__), "..")),
+    verbose: int = 1,
+    repodir: str = os.getcwd(),
+    clean: bool = False,
 ):
+    if clean:
+        file_util.clean_dir(modeldir)
+
     keras.backend.clear_session()
     env_util.setup_seed()
-    strategy = env_util.setup_strategy(devices)
+    strategy = env_util.setup_strategy(device_type=device_type, devices=devices, tpu_address=tpu_address)
     env_util.setup_mxp(mxp=mxp)
 
     config = Config(config_path, training=True, repodir=repodir, datadir=datadir, modeldir=modeldir)
@@ -57,26 +64,26 @@ def main(
         dataset_type=dataset_type,
     )
 
-    shapes = datasets.get_global_shape(
+    model_shapes, train_batch_size, eval_batch_size, padded_shapes = datasets.get_training_shape(
         config,
         strategy,
         train_dataset,
         eval_dataset,
         batch_size=bs or config.learning_config.batch_size,
-        ga_steps=ga_steps or config.learning_config.ga_steps,
     )
+    ga_steps = ga_steps or config.learning_config.ga_steps or 1
 
-    train_data_loader = train_dataset.create(shapes["ds_batch_size"], padded_shapes=shapes["padded_shapes"])
+    train_data_loader = train_dataset.create(train_batch_size, ga_steps=ga_steps, padded_shapes=padded_shapes)
     logger.info(f"train_data_loader.element_spec = {json.dumps(train_data_loader.element_spec, indent=2, default=str)}")
 
-    eval_data_loader = eval_dataset.create(shapes["ds_batch_size"], padded_shapes=shapes["padded_shapes"])
+    eval_data_loader = eval_dataset.create(eval_batch_size, padded_shapes=padded_shapes)
     if eval_data_loader:
         logger.info(f"eval_data_loader.element_spec = {json.dumps(eval_data_loader.element_spec, indent=2, default=str)}")
 
     with strategy.scope():
-        model: BaseModel = keras.models.model_from_config(config.model_config)
+        model: BaseModel = keras_util.model_from_config(config.model_config)
         model.tokenizer = tokenizer
-        output_shapes = model.make(**shapes)
+        output_shapes = model.make(**model_shapes)
         if config.learning_config.pretrained:
             model.load_weights(
                 config.learning_config.pretrained,
@@ -88,22 +95,20 @@ def main(
             output_shapes=output_shapes,
             steps_per_execution=spx,
             jit_compile=jit_compile,
-            mxp=mxp,
             ga_steps=ga_steps or config.learning_config.ga_steps,
             gwn_config=config.learning_config.gwn_config,
             gradn_config=config.learning_config.gradn_config,
         )
         model.summary()
-
-    model.fit(
-        train_data_loader,
-        epochs=config.learning_config.num_epochs,
-        verbose=1,
-        validation_data=eval_data_loader,
-        callbacks=callbacks.deserialize(config.learning_config.callbacks),
-        steps_per_epoch=train_dataset.total_steps,
-        validation_steps=eval_dataset.total_steps if eval_data_loader else None,
-    )
+        model.fit(
+            train_data_loader,
+            epochs=config.learning_config.num_epochs,
+            verbose=verbose,
+            validation_data=eval_data_loader,
+            callbacks=callbacks.deserialize(config.learning_config.callbacks),
+            steps_per_epoch=train_dataset.total_steps,
+            validation_steps=eval_dataset.total_steps if eval_data_loader else None,
+        )
 
 
 if __name__ == "__main__":

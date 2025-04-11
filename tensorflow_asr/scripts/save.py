@@ -19,8 +19,6 @@ from tensorflow_asr.configs import Config
 from tensorflow_asr.models.base_model import BaseModel
 from tensorflow_asr.utils import cli_util, env_util, file_util
 
-env_util.setup_logging()
-
 
 def main(
     config_path: str,
@@ -28,7 +26,7 @@ def main(
     h5: str = None,
     bs: int = 2,
     save_format: str = "h5",
-    repodir: str = os.path.realpath(os.path.join(os.path.dirname(__file__), "..")),
+    repodir: str = os.getcwd(),
 ):
     assert output
     keras.backend.clear_session()
@@ -37,7 +35,7 @@ def main(
     config = Config(config_path, training=False, repodir=repodir)
     tokenizer = tokenizers.get(config)
 
-    model: BaseModel = keras.models.model_from_config(config.model_config)
+    model: BaseModel = keras.Model.from_config(config.model_config)
     model.tokenizer = tokenizer
     model.make(batch_size=bs)
     if h5 and tf.io.gfile.exists(h5):

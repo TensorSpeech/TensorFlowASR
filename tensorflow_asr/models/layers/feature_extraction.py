@@ -41,11 +41,11 @@ class FeatureExtraction(Layer):
         preemphasis=0.97,
         pad_end=True,
         use_librosa_like_stft=False,
-        output_floor=1e-10,
+        epsilon=1e-6,
         lower_edge_hertz=0.0,
         upper_edge_hertz=8000.0,
         log_base="e",  # "10", "e"
-        nfft=None,
+        nfft=512,
         normalize_signal=False,
         normalize_zscore=False,
         normalize_min_max=False,
@@ -74,8 +74,8 @@ class FeatureExtraction(Layer):
             Whether to pad the end of `signals` with zeros when framing produces a frame that lies partially past its end, by default True
         use_librosa_like_stft : bool, optional
             Use librosa like stft, by default False
-        output_floor : _type_, optional
-            Minimum output value, by default 1e-10
+        epsilon : float, optional
+            Epsilon value to avoid log(0.0) causes Inf, by default 1e-6
         lower_edge_hertz : float, optional
             The lowest frequency of the feature analysis, by default 125.0
         upper_edge_hertz : float, optional
@@ -116,7 +116,10 @@ class FeatureExtraction(Layer):
 
         self.use_librosa_like_stft = use_librosa_like_stft
 
-        self.output_floor = output_floor
+        # fmt: off
+        self.epsilon = epsilon
+        assert self.epsilon > 1e-9 and self.epsilon <= 0.001, "epsilon must be in (1e-9, 0.001]"
+        # fmt: on
 
         self.lower_edge_hertz = lower_edge_hertz
         self.upper_edge_hertz = upper_edge_hertz
@@ -135,10 +138,33 @@ class FeatureExtraction(Layer):
 
     # ---------------------------------- signals --------------------------------- #
 
+    def get_signal_chunk_size_and_step(self, nframes):
+        """
+        This will ensure the "fft of chunked signal" is the same with "fft of whole signal"
+        The features are extracted by windowing the signal by length and strides
+        The chunk size is the size of the windowed signal,
+            which is (nframes - 1) * frame_step + frame_length
+        The next chunk will start at the position of the next frame,
+            which is nframes + 1 "steps", so we need to move nframes "steps" to get the next chunk
+
+        Parameters
+        ----------
+        nframes : int
+            Number of target frames of the chunk signals will result in
+
+        Returns
+        -------
+        (chunk_size, chunk_step)
+            Size of the chunk signals and the step to move to the next chunk
+        """
+        chunk_size = (nframes - 1) * self.frame_step + self.frame_length
+        chunk_step = nframes * self.frame_step
+        return chunk_size, chunk_step
+
     def normalize_signal(self, signal):
         if not self._normalize_signal:
             return signal
-        gain = 1.0 / (tf.reduce_max(tf.abs(signal), axis=-1) + 1e-9)
+        gain = 1.0 / (tf.reduce_max(tf.abs(signal), axis=1, keepdims=True) + self.epsilon)
         return signal * gain
 
     def preemphasis_signal(self, signal):
@@ -153,18 +179,20 @@ class FeatureExtraction(Layer):
     def normalize_audio_features(self, audio_feature):
         if self._normalize_zscore:
             mean = tf.reduce_mean(audio_feature, axis=1, keepdims=True)
-            stddev = tf.sqrt(tf.math.reduce_variance(audio_feature, axis=1, keepdims=True) + 1e-9)
+            stddev = tf.sqrt(tf.math.reduce_variance(audio_feature, axis=1, keepdims=True) + self.epsilon)
             return tf.divide(tf.subtract(audio_feature, mean), stddev)
         if self._normalize_min_max:
             if self.feature_type.startswith("log_") or self.feature_type == FEATURE_TYPES.SPECTROGRAM:
-                min_value = self.logarithm(self.output_floor)
+                min_value = self.logarithm(self.epsilon)
             else:
                 min_value = tf.reduce_min(audio_feature, axis=1, keepdims=True)
             return (audio_feature - min_value) / (tf.reduce_max(audio_feature, axis=1, keepdims=True) - min_value)
         return audio_feature
 
     def stft(self, signal):
-        signal = tf.cast(signal, tf.float32)
+        orig_dtype = signal.dtype
+        if orig_dtype in (tf.float16, tf.bfloat16):
+            signal = tf.cast(signal, tf.float32)
         if self.use_librosa_like_stft:
             # signal = tf.pad(signal, [[self.nfft // 2, self.nfft // 2]], mode="REFLECT")
             window = tf.signal.hann_window(self.frame_length, periodic=True)
@@ -179,13 +207,15 @@ class FeatureExtraction(Layer):
                 tf.signal.stft(signal, frame_length=self.frame_length, frame_step=self.frame_step, fft_length=self.nfft, pad_end=self.pad_end)
             )
         fft_features = tf.square(fft_features)
-        fft_features = tf.cast(fft_features, self.dtype)
+        if orig_dtype in (tf.float16, tf.bfloat16):
+            fft_features = tf.cast(fft_features, orig_dtype)
         return fft_features
 
     def logarithm(self, S):
+        S += self.epsilon
         if self.log_base == "10":
-            return math_util.log10(tf.maximum(S, self.output_floor))
-        return tf.math.log(tf.maximum(S, self.output_floor))
+            return math_util.log10(S)
+        return tf.math.log(S)
 
     def log_mel_spectrogram(self, signal):
         S = self.stft(signal)
@@ -195,6 +225,7 @@ class FeatureExtraction(Layer):
             sample_rate=self.sample_rate,
             lower_edge_hertz=self.lower_edge_hertz,
             upper_edge_hertz=self.upper_edge_hertz,
+            dtype=S.dtype,
         )
         mel_spectrogram = tf.matmul(S, linear_to_weight_matrix)
         return self.logarithm(mel_spectrogram)
@@ -285,8 +316,9 @@ class FeatureExtraction(Layer):
         signals, signals_length = inputs
         mask = tf.sequence_mask(signals_length, maxlen=(tf.shape(signals)[1] + self.padding), dtype=tf.bool)
         nsamples = tf.reduce_sum(tf.cast(mask, tf.int32), axis=1)
-        nframes = tf.map_fn(fn=self.get_nframes, elems=nsamples, fn_output_signature=tf.TensorSpec(shape=(), dtype=tf.int32))
-        padded_nframes = self.get_nframes(tf.shape(signals, tf.int32)[1])
+        # nframes = tf.map_fn(fn=self.get_nframes, elems=nsamples, fn_output_signature=tf.TensorSpec(shape=(), dtype=tf.int32))
+        nframes = self.get_nframes(nsamples)
+        padded_nframes = self.get_nframes(tf.shape(signals, tf.int32)[1] + self.padding)
         return tf.sequence_mask(nframes, maxlen=padded_nframes, dtype=tf.bool), None
 
     def compute_output_shape(self, input_shape):
