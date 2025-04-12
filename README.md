@@ -75,30 +75,42 @@ For training and testing, you should use `git clone` for installing necessary pa
 
 **NOTE ONLY FOR APPLE SILICON**: TensorFlowASR requires python >= 3.12
 
+See [./requirements.txt](./requirements.txt) for extra dependencies that are needed to match tensorflow with kaggle/colab on gpu/tpu
+
 ### Installing from source (recommended)
 
 ```bash
 git clone https://github.com/TensorSpeech/TensorFlowASR.git
 cd TensorFlowASR
-pip3 install ".[linux,and-cuda]" # or ".[apple]"
+pip3 install -e ".[tf218]" # or ".[tf218cuda]" if using GPU
 ```
 
 For anaconda3:
 
 ```bash
-conda create -y -n tfasr tensorflow-gpu python=3.8 # tensorflow if using CPU, this makes sure conda install all dependencies for tensorflow
+conda create -y -n tfasr python=3.11 # tensorflow if using CPU, this makes sure conda install all dependencies for tensorflow
 conda activate tfasr
-pip install -U tensorflow-gpu # upgrade to latest version of tensorflow
 git clone https://github.com/TensorSpeech/TensorFlowASR.git
 cd TensorFlowASR
-pip3 install ".[linux,and-cuda]" # or ".[apple]"
+pip3 install -e ".[tf218]"
+```
+
+For **kaggle**:
+
+```bash
+pip3 install -e ".[kaggle,tf218]"
+```
+
+For **colab with TPUs**:
+
+```bash
+pip3 install -e ".[tf218tpu]" -f https://storage.googleapis.com/libtpu-tf-releases/index.html
 ```
 
 ### Installing via PyPi
 
 ```bash
-# Tensorflow 2.x (with 2.x >= 2.3)
-pip3 install "TensorFlowASR[linux,and-cuda]" # or "TensorFlowASR[apple]"
+pip3 install "TensorFlowASR[tf218]"
 ```
 
 ### Installing for development
@@ -106,7 +118,7 @@ pip3 install "TensorFlowASR[linux,and-cuda]" # or "TensorFlowASR[apple]"
 ```bash
 git clone https://github.com/TensorSpeech/TensorFlowASR.git
 cd TensorFlowASR
-pip3 install -e ".[apple,dev]" # or .[linux,dev] or .[linux,and-cuda,dev]
+pip3 install -e ".[apple,dev]"
 ```
 
 ### Running in a container
@@ -114,7 +126,6 @@ pip3 install -e ".[apple,dev]" # or .[linux,dev] or .[linux,and-cuda,dev]
 ```bash
 docker-compose up -d
 ```
-
 
 
 ## Training & Testing Tutorial

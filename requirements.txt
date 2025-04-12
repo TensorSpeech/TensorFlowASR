@@ -22,7 +22,7 @@ tensorflow-text~=2.18.0
 # extra=tf218tpu
 tensorflow~=2.18.0
 tensorflow-text~=2.18.0
-tensorflow-tpu~=2.18.0 -f https://storage.googleapis.com/libtpu-tf-releases/index.html
+tensorflow-tpu~=2.18.0
 
 # extra=tf218cuda
 tensorflow[and-cuda]~=2.18.0
