@@ -1,0 +1,2 @@
+tensorflow[and-cuda]~=2.18.0
+tensorflow-text~=2.18.0
