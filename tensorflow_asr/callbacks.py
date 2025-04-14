@@ -279,14 +279,15 @@ class EarlyStopping(keras.callbacks.EarlyStopping):
 
 
 @keras.utils.register_keras_serializable(package=__name__)
-class KaggleModelBackupAndRestore(keras.callbacks.Callback):
+class KaggleModelBackupAndRestore(BackupAndRestore):
     def __init__(
         self,
         model_handle: str,
         model_dir: str,
         save_freq="epoch",
     ):
-        super().__init__()
+        backup_dir = os.path.join(model_dir, "states")
+        super().__init__(backup_dir, save_freq, False)
 
         try:
             import kagglehub  # pylint: disable=import-outside-toplevel,unused-import
@@ -310,23 +311,7 @@ class KaggleModelBackupAndRestore(keras.callbacks.Callback):
         self._last_batch_seen = 0
         self._current_epoch = 0
 
-    def _should_save_on_batch(self, batch):
-        """Handles batch-level saving logic, supports steps_per_execution."""
-        if self.save_freq == "epoch":
-            return False
-        if batch <= self._last_batch_seen:  # New epoch.
-            add_batches = batch + 1  # batches are zero-indexed.
-        else:
-            add_batches = batch - self._last_batch_seen
-        self._batches_seen_since_last_saving += add_batches
-        self._last_batch_seen = batch
-
-        if self._batches_seen_since_last_saving >= self.save_freq:
-            self._batches_seen_since_last_saving = 0
-            return True
-        return False
-
-    def _restore(self):
+    def _restore_kaggle(self):
         from kagglehub.exceptions import KaggleApiHTTPError  # pylint: disable=import-outside-toplevel
 
         os.environ["TQDM_DISABLE"] = "1"
@@ -361,7 +346,7 @@ class KaggleModelBackupAndRestore(keras.callbacks.Callback):
         finally:
             os.environ["TQDM_DISABLE"] = ""
 
-    def _backup(self, logs, notes: str):
+    def _backup_kaggle(self, logs, notes: str):
         logs = logs or {}
         loss = logs.get("loss")
         if loss is not None:
@@ -370,17 +355,20 @@ class KaggleModelBackupAndRestore(keras.callbacks.Callback):
         self._api.model_upload(handle=self._model_handle, local_model_dir=self._model_dir, version_notes=notes, ignore_patterns=[".DS_Store"])
 
     def on_train_begin(self, logs=None):
-        self._restore()
+        self._restore_kaggle()
+        super().on_train_begin(logs)
 
     def on_epoch_end(self, epoch, logs=None):
         self._current_epoch = epoch + 1
         self._last_batch_seen = 0
         if self.save_freq == "epoch":
-            self._backup(logs, notes=f"Backed up model at epoch {self._current_epoch}")
+            self._save_model()
+            self._backup_kaggle(logs, notes=f"Backed up model at epoch {self._current_epoch}")
 
     def on_train_batch_end(self, batch, logs=None):
         if self._should_save_on_batch(batch):
-            self._backup(logs, notes=f"Backed up model at batch {batch}")
+            self._save_model()
+            self._backup_kaggle(logs, notes=f"Backed up model at batch {batch}")
 
     def get_config(self):
         return {
