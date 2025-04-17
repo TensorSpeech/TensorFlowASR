@@ -16,8 +16,9 @@ import argparse
 import os
 
 import librosa
-from tensorflow_asr import keras
 import tqdm
+
+from tensorflow_asr import keras
 
 # example usage: python create_mls_trans.py -dataset-home /mnt/datasets/mls --language polish --opus
 
@@ -69,7 +70,7 @@ def make_alphabet_file(filepath, chars_list, lang):
         outfile.write("# end of file")
 
 
-if __name__ == "__main__":
+def main():
     ap = argparse.ArgumentParser(description="Download and prepare MLS dataset in a given language")
     ap.add_argument(
         "--dataset-home", "-d", default=None, required=False, help="Path to home directory to download and prepare dataset. Default to ~/.keras"
@@ -92,3 +93,7 @@ if __name__ == "__main__":
         prepare_split(dataset_dir=dataset_dir, split=split, opus=args.opus)
 
     make_alphabet_file(os.path.join(dataset_dir, "alphabet.txt"), chars, args.language)
+
+
+if __name__ == "__main__":
+    main()

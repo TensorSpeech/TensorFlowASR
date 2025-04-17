@@ -1,10 +1,9 @@
-# Tokenizers
-
 - [Tokenizers](#tokenizers)
   - [1. Character Tokenizer](#1-character-tokenizer)
   - [2. Wordpiece Tokenizer](#2-wordpiece-tokenizer)
   - [3. Sentencepiece Tokenizer](#3-sentencepiece-tokenizer)
 
+# Tokenizers
 
 ## 1. Character Tokenizer
 

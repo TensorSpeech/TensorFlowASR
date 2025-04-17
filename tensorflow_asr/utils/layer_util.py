@@ -12,7 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from typing import List
+
 from tensorflow_asr import keras, tf
+from tensorflow_asr.models.layers.convolution import Conv1D, Conv2D
 
 
 def get_rnn(
@@ -31,18 +34,18 @@ def get_conv(
 ):
     assert conv_type in ["conv1d", "conv2d"]
     if conv_type == "conv1d":
-        return keras.layers.Conv1D
-    return keras.layers.Conv2D
+        return Conv1D
+    return Conv2D
 
 
 def add_gwn(
-    trainable_weights: list,
+    trainable_weights: List[tf.Variable],
     stddev: float = 1.0,
 ):
     original_weights = []
     for weight in trainable_weights:
         noise = tf.stop_gradient(tf.random.normal(mean=0.0, stddev=stddev, shape=weight.shape, dtype=weight.dtype))
-        original_weights.append(weight.value())
+        original_weights.append(weight)
         weight.assign_add(noise)
     return original_weights
 

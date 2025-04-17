@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from tensorflow_asr import keras, tf
+from tensorflow_asr import keras
 from tensorflow_asr.models.base_layer import Layer
 from tensorflow_asr.models.ctc.base_ctc import CtcModel
 from tensorflow_asr.models.encoders.transformer import TransformerEncoder
@@ -38,7 +38,7 @@ class TransformerDecoder(Layer):
         )
 
     def call(self, inputs, training=False):
-        logits, logits_length = inputs
+        logits, logits_length, *_ = inputs
         logits = self.vocab(logits, training=training)
         return logits, logits_length
 
@@ -74,6 +74,10 @@ class Transformer(CtcModel):
         encoder_pwffn_activation: str = "relu",
         encoder_dropout: float = 0.1,
         encoder_memory_length: int = None,
+        encoder_history_size: int = None,
+        encoder_chunk_size: int = None,
+        encoder_mha_causal: bool = False,
+        encoder_flash_attention: bool = False,
         encoder_trainable: bool = True,
         decoder_trainable: bool = True,
         kernel_regularizer=None,
@@ -100,35 +104,18 @@ class Transformer(CtcModel):
                 pwffn_activation=encoder_pwffn_activation,
                 dropout=encoder_dropout,
                 memory_length=encoder_memory_length,
+                history_size=encoder_history_size,
+                chunk_size=encoder_chunk_size,
+                relmha_causal=encoder_mha_causal,
+                flash_attention=encoder_flash_attention,
                 kernel_regularizer=kernel_regularizer,
                 bias_regularizer=bias_regularizer,
                 trainable=encoder_trainable,
                 name="encoder",
             ),
-            decoder=TransformerDecoder(
-                vocab_size=vocab_size,
-                kernel_regularizer=kernel_regularizer,
-                bias_regularizer=bias_regularizer,
-                trainable=decoder_trainable,
-                name="decoder",
-            ),
+            decoder=TransformerDecoder(vocab_size=vocab_size, trainable=decoder_trainable, name="decoder"),
             name=name,
             **kwargs,
         )
         self.dmodel = encoder_dmodel
         self.time_reduction_factor = self.encoder.time_reduction_factor
-
-    def reset_caching(self):
-        return self.encoder.reset_caching(self._batch_size)
-
-    def make(self, input_shape=[None], prediction_shape=[None], batch_size=None, **kwargs):
-        self._batch_size = int(batch_size / self.distribute_strategy.num_replicas_in_sync)
-        caching = (
-            None
-            if self.encoder._memory_length is None
-            else [
-                keras.Input(shape=[self.encoder._memory_length, self.encoder._dmodel], batch_size=batch_size, dtype=tf.float32)
-                for _ in range(self.encoder._num_blocks)
-            ]
-        )
-        return super().make(input_shape, prediction_shape, batch_size, caching, **kwargs)

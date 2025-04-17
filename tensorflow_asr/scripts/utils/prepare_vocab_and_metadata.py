@@ -13,21 +13,21 @@
 # limitations under the License.
 
 
+import logging
 import os
 
-from tensorflow_asr import tf, tokenizers
+from tensorflow_asr import tokenizers
 from tensorflow_asr.configs import Config
 from tensorflow_asr.datasets import ASRDataset
-from tensorflow_asr.utils import cli_util, env_util
+from tensorflow_asr.utils import cli_util
 
-env_util.setup_logging()
-logger = tf.get_logger()
+logger = logging.getLogger(__name__)
 
 
 def main(
     config_path: str,
     datadir: str,
-    repodir: str = os.path.realpath(os.path.join(os.path.dirname(__file__), "..")),
+    repodir: str = os.getcwd(),
 ):
     config = Config(config_path, repodir=repodir, datadir=datadir)
     if not config.decoder_config.vocabulary:

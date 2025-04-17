@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import codecs
+import logging
 import multiprocessing
 import os
 import unicodedata
@@ -26,7 +27,7 @@ from tensorflow_asr import tf
 from tensorflow_asr.configs import Config, DecoderConfig
 from tensorflow_asr.utils import file_util
 
-logger = tf.get_logger()
+logger = logging.getLogger(__name__)
 
 
 @dataclass

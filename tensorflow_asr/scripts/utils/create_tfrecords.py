@@ -24,7 +24,7 @@ def main(
     config_path: str,
     datadir: str,
     modes: List[str],
-    repodir: str = os.path.realpath(os.path.join(os.path.dirname(__file__), "..")),
+    repodir: str = os.getcwd(),
 ):
     config = Config(config_path, repodir=repodir, datadir=datadir)
     tokenizer = tokenizers.get(config=config)

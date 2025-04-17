@@ -1,4 +1,4 @@
-FROM tensorflow/tensorflow:2.3.2-gpu
+FROM tensorflow/tensorflow:2.18.0-gpu
 
 RUN apt-get update \
     && apt-get upgrade -y \
@@ -9,8 +9,8 @@ RUN apt-get update \
 RUN apt clean && apt-get clean
 
 # Install dependencies
-COPY requirements.txt /
-RUN pip --no-cache-dir install -r /requirements.txt
+COPY requirements*.txt /
+RUN pip --no-cache-dir install -r /requirements.txt -r /requirements.cuda.txt
 
 # Install rnnt_loss
 COPY scripts /scripts
@@ -21,4 +21,4 @@ RUN if [ "$install_rnnt_loss" = "true" ] ; \
     && ./scripts/install_rnnt_loss.sh \
     else echo 'Using pure TensorFlow'; fi
 
-RUN echo "export LD_LIBRARY_PATH=/usr/local/cuda-10.2/lib64${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}" >> /root/.bashrc
+RUN echo "export LD_LIBRARY_PATH=/usr/local/cuda/lib64${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}" >> /root/.bashrc

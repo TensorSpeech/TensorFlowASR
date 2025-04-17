@@ -16,12 +16,15 @@
 
 import collections
 
+from keras.src import backend
+
 from tensorflow_asr import keras, schemas, tf
 from tensorflow_asr.losses.rnnt_loss import RnntLoss
 from tensorflow_asr.models.base_layer import Layer
 from tensorflow_asr.models.base_model import BaseModel
 from tensorflow_asr.models.layers.embedding import Embedding, OneHotBlank
-from tensorflow_asr.utils import layer_util, shape_util
+from tensorflow_asr.models.layers.general import Activation
+from tensorflow_asr.utils import env_util, layer_util, shape_util
 
 Hypothesis = collections.namedtuple("Hypothesis", ("index", "prediction", "states"))
 
@@ -47,6 +50,8 @@ class TransducerPrediction(Layer):
         projection_units: int = 0,
         kernel_regularizer=None,
         bias_regularizer=None,
+        activity_regularizer=None,
+        recurrent_regularizer=None,
         name="transducer_prediction",
         **kwargs,
     ):
@@ -58,12 +63,11 @@ class TransducerPrediction(Layer):
             else OneHotBlank(blank=blank, depth=vocab_size, name=label_encoder_mode, dtype=self.dtype)
         )
         # Initialize rnn layers
-        RnnClass = layer_util.get_rnn(rnn_type)
         self.rnns = []
         self.lns = []
         self.projections = []
         for i in range(num_rnns):
-            rnn = RnnClass(
+            rnn = layer_util.get_rnn(rnn_type)(
                 units=rnn_units,
                 return_sequences=True,
                 name=f"{rnn_type}_{i}",
@@ -73,11 +77,14 @@ class TransducerPrediction(Layer):
                 zero_output_for_mask=True,
                 kernel_regularizer=kernel_regularizer,
                 bias_regularizer=bias_regularizer,
+                activity_regularizer=activity_regularizer,
+                recurrent_regularizer=recurrent_regularizer,
+                use_cudnn=env_util.TF_CUDNN,
                 dtype=self.dtype,
             )
             ln = (
                 keras.layers.LayerNormalization(
-                    name=f"ln_{i}", gamma_regularizer=kernel_regularizer, beta_regularizer=bias_regularizer, dtype=self.dtype
+                    name=f"ln_{i}", gamma_regularizer=kernel_regularizer, beta_regularizer=kernel_regularizer, dtype=self.dtype
                 )
                 if layer_norm
                 else None
@@ -88,6 +95,7 @@ class TransducerPrediction(Layer):
                     name=f"projection_{i}",
                     kernel_regularizer=kernel_regularizer,
                     bias_regularizer=bias_regularizer,
+                    activity_regularizer=activity_regularizer,
                     dtype=self.dtype,
                 )
                 if projection_units > 0
@@ -174,8 +182,8 @@ class TransducerJointMerge(Layer):
 
     def compute_mask(self, inputs, mask=None):
         enc_out, pred_out = inputs
-        enc_mask = mask[0] if mask else getattr(enc_out, "_keras_mask", None)  # BT
-        pred_mask = mask[1] if mask else getattr(pred_out, "_keras_mask", None)  # BU
+        enc_mask = mask[0] if mask else backend.get_keras_mask(enc_out)  # BT
+        pred_mask = mask[1] if mask else backend.get_keras_mask(pred_out)  # BU
         auto_mask = None
         if enc_mask is not None:
             auto_mask = enc_mask[:, :, tf.newaxis]  # BT1
@@ -215,6 +223,7 @@ class TransducerJoint(Layer):
         joint_mode: str = "add",
         kernel_regularizer=None,
         bias_regularizer=None,
+        activity_regularizer=None,
         name="tranducer_joint",
         **kwargs,
     ):
@@ -230,21 +239,23 @@ class TransducerJoint(Layer):
                 name="enc",
                 kernel_regularizer=kernel_regularizer,
                 bias_regularizer=bias_regularizer,
+                activity_regularizer=activity_regularizer,
                 dtype=self.dtype,
             )
         if self.prejoint_prediction_linear:
             self.ffn_pred = keras.layers.Dense(
                 joint_dim,
-                use_bias=False,
                 name="pred",
                 kernel_regularizer=kernel_regularizer,
+                bias_regularizer=bias_regularizer,
+                activity_regularizer=activity_regularizer,
                 dtype=self.dtype,
             )
 
         self.joint = TransducerJointMerge(joint_mode=joint_mode, name="merge", dtype=self.dtype)
 
         activation = activation.lower()
-        self.activation = keras.layers.Activation(activation, name=activation, dtype=self.dtype)
+        self.activation = Activation(activation, name=activation, dtype=self.dtype)
 
         if self.postjoint_linear:
             self.ffn = keras.layers.Dense(
@@ -252,6 +263,7 @@ class TransducerJoint(Layer):
                 name="ffn",
                 kernel_regularizer=kernel_regularizer,
                 bias_regularizer=bias_regularizer,
+                activity_regularizer=activity_regularizer,
                 dtype=self.dtype,
             )
 
@@ -260,6 +272,7 @@ class TransducerJoint(Layer):
             name="vocab",
             kernel_regularizer=kernel_regularizer,
             bias_regularizer=bias_regularizer,
+            activity_regularizer=activity_regularizer,
             dtype=self.dtype,
         )
 
@@ -316,6 +329,8 @@ class Transducer(BaseModel):
         postjoint_linear: bool = False,
         kernel_regularizer=None,
         bias_regularizer=None,
+        activity_regularizer=None,
+        recurrent_regularizer=None,
         name="transducer",
         **kwargs,
     ):
@@ -336,6 +351,8 @@ class Transducer(BaseModel):
             projection_units=prediction_projection_units,
             kernel_regularizer=kernel_regularizer,
             bias_regularizer=bias_regularizer,
+            activity_regularizer=activity_regularizer,
+            recurrent_regularizer=recurrent_regularizer,
             trainable=prediction_trainable,
             name="prediction",
             dtype=self.dtype,
@@ -350,6 +367,7 @@ class Transducer(BaseModel):
             joint_mode=joint_mode,
             kernel_regularizer=kernel_regularizer,
             bias_regularizer=bias_regularizer,
+            activity_regularizer=activity_regularizer,
             trainable=joint_trainable,
             name="joint",
             dtype=self.dtype,
@@ -358,7 +376,7 @@ class Transducer(BaseModel):
 
     def compile(self, optimizer, output_shapes=None, **kwargs):
         loss = RnntLoss(blank=self.blank, output_shapes=output_shapes, name="rnnt_loss")
-        return super().compile(loss, optimizer, **kwargs)
+        return super().compile(loss=loss, optimizer=optimizer, **kwargs)
 
     def apply_gwn(self):
         if self.gwn_config:
@@ -406,14 +424,13 @@ class Transducer(BaseModel):
                 )
 
     def call(self, inputs: schemas.TrainInput, training=False):
-        features, features_length = self.feature_extraction((inputs["inputs"], inputs["inputs_length"]), training=training)
-        enc, logits_length, caching = self.encoder((features, features_length, inputs.get("caching")), training=training)
-        pred, _ = self.predict_net((inputs["predictions"], inputs["predictions_length"]), training=training)
+        features, features_length = self.feature_extraction((inputs.inputs, inputs.inputs_length), training=training)
+        enc, logits_length, *_ = self.encoder((features, features_length), training=training)
+        pred, *_ = self.predict_net((inputs.predictions, inputs.predictions_length), training=training)
         logits = self.joint_net((enc, pred), training=training)
         return schemas.TrainOutput(
             logits=logits,
             logits_length=logits_length,
-            caching=caching,
         )
 
     def call_next(
@@ -1061,4 +1078,5 @@ class Transducer(BaseModel):
     #         y_hat_prediction = tf.gather_nd(prediction, y_hat_score_index)
     #         y_hat_states = tf.gather_nd(B.states.stack(), y_hat_score_index)
 
+    #         return Hypothesis(index=y_hat_index, prediction=y_hat_prediction, states=y_hat_states)
     #         return Hypothesis(index=y_hat_index, prediction=y_hat_prediction, states=y_hat_states)

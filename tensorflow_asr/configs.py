@@ -13,12 +13,12 @@
 # limitations under the License.
 
 import json
+import logging
 from typing import Union
 
-from tensorflow_asr import tf
 from tensorflow_asr.utils import file_util
 
-logger = tf.get_logger()
+logger = logging.getLogger(__name__)
 
 
 class DecoderConfig:

@@ -10,8 +10,8 @@ model_config:
       frame_ms: 25
       stride_ms: 10
       nfft: 512
-      num_feature_bins: 80
-      feature_type: log_mel_spectrogram
+      num_feature_bins: 160
+      feature_type: spectrogram
       augmentation_config:
         feature_augment:
           time_masking:
@@ -30,7 +30,6 @@ model_config:
     conv_strides: [ [ 2, 2 ], [ 1, 2 ] ]
     conv_filters: [ 32, 32 ]
     conv_activation: relu
-    conv_dropout: 0.2
     conv_padding: same
     conv_initializer: he_uniform
     rnn_nlayers: 5
@@ -40,12 +39,11 @@ model_config:
     rnn_unroll: False
     rnn_rowconv: 0
     rnn_rowconv_activation: relu
-    rnn_dropout: 0.3
-    rnn_initializer: glorot_uniform
+    rnn_dropout: 0.5
     fc_nlayers: 1
     fc_units: 1024
     fc_activation: relu
-    fc_dropout: 0.3
+    fc_dropout: 0.5
     fc_initializer: he_uniform
     blank: 0
     vocab_size: {{decoder_config.vocabsize}}
@@ -57,22 +55,19 @@ model_config:
       class_name: l2
       config:
         l2: 0.0005
-    initializer: glorot_uniform
 
 learning_config:
   optimizer_config:
-    class_name: Custom>SGD
+    class_name: Adam
     config:
       learning_rate:
-        class_name: PolynomialDecay
+        class_name: ExponentialDecay
+        module: keras.src.optimizers.schedules.learning_rate_schedule
         config:
-          initial_learning_rate: 0.001
-          decay_steps: 10000 # around 5 epochs with batch size 16 and 8 tpus
-          end_learning_rate: 0.0001
-          power: 0.5
-          cycle: False
-      momentum: 0.9
-      nesterov: True
+          initial_learning_rate: 0.0001
+          decay_steps: 5000
+          decay_rate: 0.9
+          staircase: True
 
   gwn_config: null
 
@@ -83,11 +78,9 @@ learning_config:
   num_epochs: 450
 
   callbacks:
-    - class_name: tensorflow_asr.callbacks>TerminateOnNaN
-      config: {}
     - class_name: tensorflow_asr.callbacks>ModelCheckpoint
       config:
-        filepath: {{modeldir}}/checkpoints/{epoch:02d}.h5
+        filepath: {{modeldir}}/checkpoints/{epoch:02d}.weights.h5
         save_best_only: False
         save_weights_only: True
         save_freq: epoch

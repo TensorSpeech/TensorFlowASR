@@ -13,14 +13,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import logging
+
 import jiwer
-from tqdm import tqdm
 
 from tensorflow_asr import tf
 from tensorflow_asr.models.base_model import BaseModel
 from tensorflow_asr.utils import file_util, math_util
 
-logger = tf.get_logger()
+logger = logging.getLogger(__name__)
 
 
 def evaluate_hypotheses(filepath: str):
@@ -38,6 +39,8 @@ def evaluate_hypotheses(filepath: str):
         {"greedy": {wer, cer, mer, wil, wip}, "beam": {wer, cer, mer, wil, wip}}
         The results are original, NOT multiplied with 100.
     """
+    from tqdm import tqdm  # pylint: disable=import-outside-toplevel
+
     logger.info(f"Reading file {filepath} ...")
     reference, greedy_hypothesis, beam_hypothesis = [], [], []
     with file_util.read_file(filepath) as path:
