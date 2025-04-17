@@ -1,3 +1,2 @@
-tensorflow~=2.18.0
 tensorflow-text~=2.18.0
 tensorflow-tpu~=2.18.0
