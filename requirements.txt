@@ -12,5 +12,3 @@ keras-nightly>=3.9.0.dev # https://github.com/keras-team/keras/issues/20568#issu
 cached_property~=2.0.1
 ipywidgets~=8.1.5
 kagglehub~=0.3.6
-tensorflow~=2.18.0
-tensorflow-text~=2.18.0
