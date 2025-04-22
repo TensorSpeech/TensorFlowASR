@@ -45,7 +45,7 @@ class BaseModel(keras.Model, TensorFlowTrainer):
     def tokenizer(self, tokenizer: Tokenizer):
         self._tokenizer = tokenizer
 
-    def summary(self, line_length=100, expand_nested=True, show_trainable=True, **kwargs):
+    def summary(self, line_length=120, expand_nested=True, show_trainable=True, **kwargs):
         super().summary(line_length=line_length, expand_nested=expand_nested, show_trainable=show_trainable, **kwargs)
 
     def save(self, filepath, overwrite=True, zipped=None, **kwargs):
@@ -187,7 +187,7 @@ class BaseModel(keras.Model, TensorFlowTrainer):
         metrics = self.get_metrics_result()
         return metrics
 
-    def train_step_ga(self, data_buffer):
+    def train_step_ga(self, data_buffer):  # avoid merge_call error as "Such behaviors are not yet supported"
         first_data, *rest_data = data_buffer
         gradients = self._train_step(first_data)
         for data in rest_data:
@@ -237,6 +237,32 @@ class BaseModel(keras.Model, TensorFlowTrainer):
         }
 
     # ------------------------------------ FIT ----------------------------------- #
+
+    def _make_function(self, step_function):
+        @tf.autograph.experimental.do_not_convert
+        def one_step_on_data(data):
+            """Runs a single training step on a batch of data."""
+            outputs = self.distribute_strategy.run(step_function, args=(data,))
+            outputs = reduce_per_replica(
+                outputs,
+                self.distribute_strategy,
+                reduction="auto",
+            )
+            return outputs
+
+        if not self.run_eagerly:
+            one_step_on_data = tf.function(
+                one_step_on_data,
+                reduce_retracing=True,
+                jit_compile=self.jit_compile,
+            )
+
+        def function(iterator):
+            for step, data in zip(range(self.steps_per_execution), iterator):
+                outputs = one_step_on_data(data)
+            return outputs
+
+        return function
 
     def make_train_function(self, force=False):
         if self.train_function is not None and not force:
