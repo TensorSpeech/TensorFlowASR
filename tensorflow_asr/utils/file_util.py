@@ -119,8 +119,9 @@ def save_file(
     filepath: str,
 ):
     if is_cloud_path(filepath):
-        _, ext = os.path.splitext(filepath)
-        with tempfile.NamedTemporaryFile(suffix=ext) as tmp:
+        _, *ext = os.path.basename(filepath).split(".")
+        suffix = "." + ".".join(ext)
+        with tempfile.NamedTemporaryFile(suffix=suffix) as tmp:
             yield tmp.name
             tf.io.gfile.copy(tmp.name, filepath, overwrite=True)
     else:
@@ -132,8 +133,9 @@ def read_file(
     filepath: str,
 ):
     if is_cloud_path(filepath):
-        _, ext = os.path.splitext(filepath)
-        with tempfile.NamedTemporaryFile(suffix=ext) as tmp:
+        _, *ext = os.path.basename(filepath).split(".")
+        suffix = "." + ".".join(ext)
+        with tempfile.NamedTemporaryFile(suffix=suffix) as tmp:
             tf.io.gfile.copy(filepath, tmp.name, overwrite=True)
             yield tmp.name
     else:
