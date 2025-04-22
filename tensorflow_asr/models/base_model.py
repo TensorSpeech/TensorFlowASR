@@ -112,7 +112,8 @@ class BaseModel(keras.Model, TensorFlowTrainer):
         optimizer = keras.optimizers.get(optimizer)
         if isinstance(ga_steps, int) and ga_steps > 1:
             self.use_ga = True
-            self.ga = GradientAccumulator(ga_steps=ga_steps)
+            self.ga = GradientAccumulator(ga_steps=ga_steps, optimizer=optimizer)
+            self.ga.build(self.trainable_weights)
             kwargs["steps_per_execution"] = 1
             logger.info(f"Using gradient accumulation with accumulate steps = {ga_steps}")
         else:
@@ -187,13 +188,14 @@ class BaseModel(keras.Model, TensorFlowTrainer):
         metrics = self.get_metrics_result()
         return metrics
 
-    def train_step_ga(self, data_buffer):  # avoid merge_call error as "Such behaviors are not yet supported"
-        first_data, *rest_data = data_buffer
-        gradients = self._train_step(first_data)
-        for data in rest_data:
-            next_gradients = self._train_step(data)
-            gradients = self.ga.accumulate(gradients, next_gradients)
-        self._apply_gradients(gradients)
+    def train_step_ga(self, data, do_apply=None):  # avoid merge_call error as "Such behaviors are not yet supported"
+        gradients = self._train_step(data)
+        if do_apply is None:
+            self.ga.accumulate(gradients, self.trainable_weights)
+        else:
+            gradients = self.ga.gradients(gradients, self.trainable_weights)
+            self._apply_gradients(gradients)
+            self.ga.reset()
         metrics = self.get_metrics_result()
         return metrics
 
@@ -273,8 +275,8 @@ class BaseModel(keras.Model, TensorFlowTrainer):
             return self.train_function
 
         @tf.autograph.experimental.do_not_convert
-        def one_ga_step_on_data(data_buffer):
-            outputs = self.distribute_strategy.run(self.train_step_ga, args=(data_buffer,))
+        def one_ga_step_on_data(data, do_apply=None):
+            outputs = self.distribute_strategy.run(self.train_step_ga, args=(data, do_apply))
             outputs = reduce_per_replica(
                 outputs,
                 self.distribute_strategy,
@@ -290,10 +292,12 @@ class BaseModel(keras.Model, TensorFlowTrainer):
             )
 
         def function(iterator):
-            data_buffer = []
-            for _, data in zip(range(self.ga.total_steps), iterator):
-                data_buffer.append(data)
-            return one_ga_step_on_data(data_buffer)
+            for step, data in zip(range(self.ga.total_steps), iterator):
+                if step >= self.ga.total_steps - 1:
+                    outputs = one_ga_step_on_data(data, True)
+                else:
+                    outputs = one_ga_step_on_data(data)
+            return outputs
 
         self.train_function = function
         return self.train_function
