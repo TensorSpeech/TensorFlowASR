@@ -21,7 +21,7 @@ from datetime import datetime, timezone
 from typing import List, Union
 
 TF_LOG_LEVEL = os.getenv("TF_LOG_LEVEL", "warning").upper()
-TF_SOFT_PLACEMENT = os.getenv("TF_SOFT_PLACEMENT", "true").upper() == "TRUE"
+TF_SOFT_PLACEMENT = os.getenv("TF_SOFT_PLACEMENT", "false").lower() == "true"
 TF_ENABLE_CHECK_NUMERIC = os.getenv("TF_ENABLE_CHECK_NUMERIC", "false").lower() == "true"
 TF_CUDNN = os.getenv("TF_CUDNN", "auto").lower()
 TF_CUDNN = "auto" if TF_CUDNN == "auto" else TF_CUDNN == "true"
