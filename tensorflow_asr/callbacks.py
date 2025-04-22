@@ -14,6 +14,7 @@
 
 import logging
 import os
+import shutil
 from http import HTTPStatus
 
 import numpy as np
@@ -290,6 +291,7 @@ class KaggleModelBackupAndRestore(BackupAndRestore):
         super().__init__(backup_dir, save_freq, False)
 
         try:
+            os.environ["TQDM_DISABLE"] = "1"
             import kagglehub  # pylint: disable=import-outside-toplevel,unused-import
 
             logging.getLogger("kagglehub").disabled = True
@@ -314,8 +316,6 @@ class KaggleModelBackupAndRestore(BackupAndRestore):
     def _restore_kaggle(self):
         from kagglehub.exceptions import KaggleApiHTTPError  # pylint: disable=import-outside-toplevel
 
-        os.environ["TQDM_DISABLE"] = "1"
-
         try:
             cached_path = self._api.model_download(handle=self._model_handle, force_download=True)
             logger.info(f"Restoring model from '{cached_path}'...")
@@ -335,16 +335,14 @@ class KaggleModelBackupAndRestore(BackupAndRestore):
                     logger.info(f"Model '{self._model_handle}' does not have any version. Skipping restore...")
                     return
                 cached_path = os.path.join(cached_path, str(latest_version))
-            else:
-                cached_path = os.path.join(cached_path, "*")
-            os.system(f"cp -rf {cached_path} {self._model_dir}")
+            shutil.copytree(cached_path, self._model_dir, ignore_dangling_symlinks=True, dirs_exist_ok=True)
+            shutil.rmtree(cached_path)
+            logger.info(f"Model restored to '{self._model_dir}'")
         except KaggleApiHTTPError as e:
             if e.response is not None and (e.response.status_code in (HTTPStatus.NOT_FOUND, HTTPStatus.FORBIDDEN)):
                 logger.info(
                     f"Model '{self._model_handle}' does not exist or access is forbidden. It will be auto-create on saving. Skipping restore..."
                 )
-        finally:
-            os.environ["TQDM_DISABLE"] = ""
 
     def _backup_kaggle(self, logs, notes: str):
         logs = logs or {}
