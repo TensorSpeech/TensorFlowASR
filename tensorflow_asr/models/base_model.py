@@ -168,9 +168,6 @@ class BaseModel(keras.Model, TensorFlowTrainer):
                 sample_weight=tf.shape(tree.flatten(x)[0])[0],
             )
 
-            if self.use_ga:  # sum of gradients so the loss must be divided
-                loss = loss / self.ga.total_steps
-
             if self.optimizer is not None:
                 loss = self.optimizer.scale_loss(loss)
 
