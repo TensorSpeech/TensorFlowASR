@@ -31,7 +31,7 @@ model_config:
         filters: [176, 176]
         kernels: [3, 3]
         strides: [2, 2]
-        paddings: ["same", "same"]
+        paddings: ["causal", "causal"]
         norms: ["batch", "batch"]
         activations: ["swish", "swish"]
     encoder_ffm_residual_factor: 0.5
@@ -48,7 +48,7 @@ model_config:
     encoder_mhsam_use_attention_bias: True
     encoder_kernel_size: 31
     encoder_dropout: 0.1
-    encoder_padding: same
+    encoder_padding: causal
     encoder_memory_length: null
     blank: 0
     vocab_size: {{decoder_config.vocabsize}}
