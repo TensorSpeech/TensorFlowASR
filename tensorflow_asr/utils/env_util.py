@@ -72,11 +72,13 @@ def setup_gpu(
 
 def setup_tpu(
     tpu_address=None,
+    tpu_vm: bool = False,
 ):
     # might cause performance penalty if ops fallback to cpu, see https://cloud.google.com/tpu/docs/tensorflow-ops
     tf.config.set_soft_device_placement(DEBUG)
     resolver = tf.distribute.cluster_resolver.TPUClusterResolver(tpu=tpu_address)
-    tf.config.experimental_connect_to_cluster(resolver)
+    if not tpu_vm:
+        tf.config.experimental_connect_to_cluster(resolver)
     tf.tpu.experimental.initialize_tpu_system(resolver)
     logger.info(f"Run on TPU {tpu_address}")
     logger.info(f"All devices: {tf.config.list_logical_devices('TPU')}")
@@ -87,9 +89,10 @@ def setup_strategy(
     device_type: str,
     devices: List[int] = None,
     tpu_address: str = None,
+    tpu_vm: bool = False,
 ):
     if device_type.lower() == "tpu":
-        return setup_tpu(tpu_address)
+        return setup_tpu(tpu_address, tpu_vm)
     if device_type.lower() == "gpu":
         return setup_gpu(devices)
     return tf.distribute.get_strategy()

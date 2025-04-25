@@ -33,6 +33,7 @@ def main(
     spx: int = 1,
     devices: list = None,
     tpu_address: str = None,
+    tpu_vm: bool = False,
     device_type: str = "gpu",
     mxp: str = "none",
     jit_compile: bool = False,
@@ -46,7 +47,7 @@ def main(
 
     keras.backend.clear_session()
     env_util.setup_seed()
-    strategy = env_util.setup_strategy(device_type=device_type, devices=devices, tpu_address=tpu_address)
+    strategy = env_util.setup_strategy(device_type=device_type, devices=devices, tpu_address=tpu_address, tpu_vm=tpu_vm)
     env_util.setup_mxp(mxp=mxp)
 
     config = Config(config_path, training=True, repodir=repodir, datadir=datadir, modeldir=modeldir)
