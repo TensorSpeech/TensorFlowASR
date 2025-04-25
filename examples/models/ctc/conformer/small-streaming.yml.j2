@@ -1,6 +1,9 @@
 {% import "examples/configs/librispeech/sentencepiece/sp.256.yml.j2" as decoder_config with context %}
 {{decoder_config}}
 
+{% import "examples/configs/librispeech/train-tpu.yml.j2" as data_config with context %}
+{{data_config}}
+
 model_config:
   class_name: tensorflow_asr.models.ctc.conformer>Conformer
   config:
@@ -22,7 +25,7 @@ model_config:
             mask_value: 0
           freq_masking:
             prob: 1.0
-            num_masks: 2
+            num_masks: 1
             mask_factor: 27
             mask_value: 0
     encoder_subsampling:
@@ -69,7 +72,7 @@ learning_config:
         config:
           dmodel: 176
           warmup_steps: 10000
-          max_lr: null
+          max_lr: 0.05/(176**0.5)
           min_lr: null
           scale: 2.0
       beta_1: 0.9
@@ -96,11 +99,6 @@ learning_config:
         save_best_only: False
         save_weights_only: True
         save_freq: epoch
-    - class_name: tensorflow_asr.callbacks>BackupAndRestore
-      config:
-        backup_dir: {{modeldir}}/states
-        save_freq: epoch
-        delete_checkpoint: False
     - class_name: tensorflow_asr.callbacks>TensorBoard
       config:
         log_dir: {{modeldir}}/tensorboard
@@ -110,3 +108,8 @@ learning_config:
         write_steps_per_second: False
         update_freq: batch
         profile_batch: 0
+    - class_name: tensorflow_asr.callbacks>KaggleModelBackupAndRestore
+      config:
+        model_handle: lordh9072/tfasr-conformer-ctc/tensorFlow2/v3-small-streaming
+        model_dir: {{modeldir}}
+        save_freq: epoch

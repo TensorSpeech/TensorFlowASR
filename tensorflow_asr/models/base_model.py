@@ -119,6 +119,7 @@ class BaseModel(keras.Model, TensorFlowTrainer):
         else:
             self.use_ga = False
         self.gwn_config = gwn_config
+        self.gradn_step = gradn_config.pop("step", None) if gradn_config and gradn_config.get("step") else None
         self.gradn = keras.regularizers.get(gradn_config) if gradn_config else None
         self.distribute_reduction_method = "mean"
         self.tfasr_loss = loss
@@ -175,8 +176,13 @@ class BaseModel(keras.Model, TensorFlowTrainer):
         return gradients
 
     def _apply_gradients(self, gradients):
-        if self.gradn is not None:
-            gradients = self.gradn(step=self.optimizer.iterations, gradients=gradients)
+        if self.gradn_step is not None:
+            if self.gradn is not None:
+                gradients = tf.cond(
+                    tf.greater_equal(self.optimizer.iterations, self.gradn_step),
+                    lambda: self.gradn(step=self.optimizer.iterations, gradients=gradients),
+                    lambda: gradients,
+                )
         self.optimizer.apply(gradients, self.trainable_weights)
 
     def train_step(self, data):
