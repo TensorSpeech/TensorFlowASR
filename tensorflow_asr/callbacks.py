@@ -229,10 +229,11 @@ class BackupAndRestore(keras.callbacks.BackupAndRestore):
         self,
         backup_dir,
         save_freq="epoch",
+        double_checkpoint=True,
         delete_checkpoint=False,
     ):
         backup_dir = file_util.preprocess_paths(backup_dir, isdir=True)
-        super().__init__(backup_dir, save_freq, delete_checkpoint)
+        super().__init__(backup_dir=backup_dir, save_freq=save_freq, double_checkpoint=double_checkpoint, delete_checkpoint=delete_checkpoint)
 
     def get_config(self):
         return {
@@ -288,13 +289,14 @@ class KaggleModelBackupAndRestore(BackupAndRestore):
         save_freq="epoch",
     ):
         backup_dir = os.path.join(model_dir, "states")
-        super().__init__(backup_dir, save_freq, False)
+        super().__init__(backup_dir, save_freq=save_freq, double_checkpoint=True, delete_checkpoint=False)
 
         try:
             os.environ["TQDM_DISABLE"] = "1"
             import kagglehub  # pylint: disable=import-outside-toplevel,unused-import
 
             logging.getLogger("kagglehub").disabled = True
+            logging.getLogger("kagglehub.models").disabled = True
             self._api = kagglehub  # use option 2,3 to authenticate kaggle: https://github.com/Kaggle/kagglehub?tab=readme-ov-file#option-2-read-credentials-from-environment-variables pylint: disable=line-too-long
         except ImportError as e:
             raise ImportError("Kaggle library is not installed. Please install it via `pip install '.[kaggle]'`.") from e
@@ -314,6 +316,9 @@ class KaggleModelBackupAndRestore(BackupAndRestore):
         self._current_epoch = 0
 
     def _restore_kaggle(self):
+        if os.path.exists(self._weights_path) and os.path.exists(self._training_metadata_path):
+            return
+
         from kagglehub.exceptions import KaggleApiHTTPError  # pylint: disable=import-outside-toplevel
 
         try:
