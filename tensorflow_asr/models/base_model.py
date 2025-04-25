@@ -25,7 +25,7 @@ from tensorflow_asr import keras, schemas, tf
 from tensorflow_asr.models.layers.feature_extraction import FeatureExtraction
 from tensorflow_asr.optimizers.accumulation import GradientAccumulator
 from tensorflow_asr.tokenizers import Tokenizer
-from tensorflow_asr.utils import file_util, shape_util
+from tensorflow_asr.utils import file_util, math_util, shape_util
 
 logger = logging.getLogger(__name__)
 
@@ -119,8 +119,7 @@ class BaseModel(keras.Model, TensorFlowTrainer):
         else:
             self.use_ga = False
         self.gwn_config = gwn_config
-        self.gradn_step = gradn_config.pop("step", None) if gradn_config and gradn_config.get("step") else None
-        self.gradn = keras.regularizers.get(gradn_config) if gradn_config else None
+        self.gradn_config = gradn_config
         self.distribute_reduction_method = "mean"
         self.tfasr_loss = loss
         super().compile(optimizer=optimizer, run_eagerly=run_eagerly, **kwargs)
@@ -176,13 +175,12 @@ class BaseModel(keras.Model, TensorFlowTrainer):
         return gradients
 
     def _apply_gradients(self, gradients):
-        if self.gradn_step is not None:
-            if self.gradn is not None:
-                gradients = tf.cond(
-                    tf.greater_equal(self.optimizer.iterations, self.gradn_step),
-                    lambda: self.gradn(step=self.optimizer.iterations, gradients=gradients),
-                    lambda: gradients,
-                )
+        if self.gradn_config is not None:
+            gradients = tf.cond(
+                tf.greater_equal(self.optimizer.iterations, self.gradn_config["step"]),
+                lambda: math_util.add_gauss_noise(gradients, stddev=self.gradn_config["stddev"]),
+                lambda: gradients,
+            )
         self.optimizer.apply(gradients, self.trainable_weights)
 
     def train_step(self, data):

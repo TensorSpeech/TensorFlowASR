@@ -362,3 +362,10 @@ def next_power_of_two(
     x: int,
 ):
     return 1 if x == 0 else 2 ** math.ceil(math.log2(x))
+
+
+def add_gauss_noise(
+    data,
+    stddev: float = 0.075,
+):
+    return tf.nest.map_structure(lambda x: tf.add(x, tf.random.normal(shape=tf.shape(x), mean=0.0, stddev=stddev, dtype=x.dtype)), data)
