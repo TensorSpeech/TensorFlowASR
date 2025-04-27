@@ -6,6 +6,8 @@ from tensorflow_asr.callbacks import KaggleModelBackupAndRestore
 
 def test_kaggle_model_backup_and_restore():
     model_handle = os.getenv("TEST_MODEL_HANDLE")
+    if not model_handle:
+        return
     with tempfile.TemporaryDirectory() as temp_dir:
         os.environ["KAGGLEHUB_CACHE"] = os.path.join(temp_dir, "cache")
         os.makedirs(os.environ["KAGGLEHUB_CACHE"], exist_ok=True)
