@@ -47,7 +47,7 @@ def evaluate_hypotheses(filepath: str):
         with tf.io.gfile.GFile(path, "r") as openfile:
             lines = openfile.read().splitlines()
             lines = lines[1:]  # skip header
-            for eachline in tqdm(lines):
+            for eachline in tqdm(lines, disable=False):
                 _, groundtruth, greedy, beamsearch = eachline.split("\t")
                 reference.append(groundtruth)
                 greedy_hypothesis.append(greedy)

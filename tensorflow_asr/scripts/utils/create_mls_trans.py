@@ -16,7 +16,6 @@ import argparse
 import os
 
 import librosa
-import tqdm
 
 from tensorflow_asr import keras
 
@@ -40,9 +39,11 @@ def prepare_split(dataset_dir, split, opus=False):
     extension = ".opus" if opus else ".flac"
     transcripts = []
 
+    from tqdm.auto import tqdm
+
     # Make paths absolute, get durations and read chars to form alphabet later on
     with open(transcripts_infile, "r", encoding="utf8") as infile:
-        for line in tqdm.tqdm(infile.readlines(), desc=f"Reading from {transcripts_infile}..."):
+        for line in tqdm(infile.readlines(), desc=f"Reading from {transcripts_infile}...", disable=False):
             file_id, transcript = line.strip().split("\t")
             speaker_id, book_id, _ = file_id.split("_")
             audio_path = os.path.join(audio_home, speaker_id, book_id, f"{file_id}{extension}")
@@ -55,7 +56,7 @@ def prepare_split(dataset_dir, split, opus=False):
     # Write transcripts to file
     with open(transcripts_outfile, "w", encoding="utf8") as outfile:
         outfile.write("PATH\tDURATION\tTRANSCRIPT\n")
-        for t in tqdm.tqdm(transcripts, desc=f"Writing to {transcripts_outfile}"):
+        for t in tqdm(transcripts, desc=f"Writing to {transcripts_outfile}", disable=False):
             outfile.write(t)
 
 

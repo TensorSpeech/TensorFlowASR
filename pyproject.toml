@@ -4,3 +4,16 @@ line-length = 150
 [tool.isort]
 profile = "black"
 line_length = 150
+
+[tool.pytest.ini_options]
+minversion = "6.0"
+log_cli = true
+log_cli_level = "WARNING"
+log_format = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+log_cli_date_format = "%Y-%m-%d %H:%M:%S"
+testpaths = "tests"
+python_files = "test_*.py"
+addopts = "-s --durations=0"
+filterwarnings = ["error", "ignore::UserWarning", "ignore::DeprecationWarning"]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "session"

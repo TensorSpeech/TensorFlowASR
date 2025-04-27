@@ -293,11 +293,15 @@ class KaggleModelBackupAndRestore(BackupAndRestore):
 
         try:
             os.environ["TQDM_DISABLE"] = "1"
+            os.environ["DISABLE_KAGGLE_CACHE"] = "true"
+
             import kagglehub  # pylint: disable=import-outside-toplevel,unused-import
 
             logging.getLogger("kagglehub").disabled = True
-            logging.getLogger("kagglehub.models").disabled = True
+            logging.getLogger("kagglehub").handlers.clear()
+
             self._api = kagglehub  # use option 2,3 to authenticate kaggle: https://github.com/Kaggle/kagglehub?tab=readme-ov-file#option-2-read-credentials-from-environment-variables pylint: disable=line-too-long
+
         except ImportError as e:
             raise ImportError("Kaggle library is not installed. Please install it via `pip install '.[kaggle]'`.") from e
 

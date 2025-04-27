@@ -232,7 +232,7 @@ class ASRDataset(BaseDataset):
         if self.max_input_length > 0 and self.max_label_length > 0:
             return  # already computed
         self.read_entries()
-        for _, duration, transcript in tqdm(self.entries, desc=f"Computing metadata for entries in {self.stage} dataset"):
+        for _, duration, transcript in tqdm(self.entries, desc=f"Computing metadata for entries in {self.stage} dataset", disable=False):
             input_length = math_util.get_nsamples(duration, self.sample_rate)
             label = self.tokenizer.tokenize(transcript).numpy()
             label_length = len(label)

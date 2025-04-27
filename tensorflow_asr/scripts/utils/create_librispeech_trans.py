@@ -17,7 +17,6 @@ import os
 import unicodedata
 
 import librosa
-from tqdm.auto import tqdm
 
 from tensorflow_asr.utils import cli_util, file_util
 
@@ -33,7 +32,9 @@ def main(
 
     text_files = glob.glob(os.path.join(directory, "**", "*.txt"), recursive=True)
 
-    for text_file in tqdm(text_files, desc="[Loading]"):
+    from tqdm.auto import tqdm
+
+    for text_file in tqdm(text_files, desc="[Loading]", disable=False):
         current_dir = os.path.dirname(text_file)
         with open(text_file, "r", encoding="utf-8") as txt:
             lines = txt.read().splitlines()
