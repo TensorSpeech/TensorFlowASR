@@ -16,6 +16,8 @@ import json
 import logging
 import os
 
+os.environ["TQDM_DISABLE"] = "1"
+
 from tensorflow_asr import callbacks, datasets, keras, tokenizers  # import to aid logging messages
 from tensorflow_asr.configs import Config
 from tensorflow_asr.models.base_model import BaseModel
@@ -27,8 +29,9 @@ logger = logging.getLogger(__name__)
 def main(
     config_path: str,
     modeldir: str,
-    dataset_type: str,
     datadir: str,
+    dataset_type: str,
+    dataset_cache: bool = False,
     bs: int = None,
     spx: int = 1,
     devices: list = None,
@@ -41,6 +44,7 @@ def main(
     verbose: int = 1,
     repodir: str = os.getcwd(),
     clean: bool = False,
+    **kwargs,
 ):
     if clean:
         file_util.clean_dir(modeldir)
@@ -50,7 +54,7 @@ def main(
     strategy = env_util.setup_strategy(device_type=device_type, devices=devices, tpu_address=tpu_address, tpu_vm=tpu_vm)
     env_util.setup_mxp(mxp=mxp)
 
-    config = Config(config_path, training=True, repodir=repodir, datadir=datadir, modeldir=modeldir)
+    config = Config(config_path, training=True, repodir=repodir, datadir=datadir, modeldir=modeldir, **kwargs)
 
     tokenizer = tokenizers.get(config)
 
@@ -58,14 +62,16 @@ def main(
         tokenizer=tokenizer,
         dataset_config=config.data_config.train_dataset_config,
         dataset_type=dataset_type,
+        dataset_cache=dataset_cache,
     )
     eval_dataset = datasets.get(
         tokenizer=tokenizer,
         dataset_config=config.data_config.eval_dataset_config,
         dataset_type=dataset_type,
+        dataset_cache=dataset_cache,
     )
 
-    model_shapes, train_batch_size, eval_batch_size, padded_shapes = datasets.get_training_shape(
+    model_shapes, batch_size, padded_shapes = datasets.get_global_shape(
         config,
         strategy,
         train_dataset,
@@ -74,10 +80,10 @@ def main(
     )
     ga_steps = ga_steps or config.learning_config.ga_steps or 1
 
-    train_data_loader = train_dataset.create(train_batch_size, ga_steps=ga_steps, padded_shapes=padded_shapes)
+    train_data_loader = train_dataset.create(batch_size, ga_steps=ga_steps, padded_shapes=padded_shapes)
     logger.info(f"train_data_loader.element_spec = {json.dumps(train_data_loader.element_spec, indent=2, default=str)}")
 
-    eval_data_loader = eval_dataset.create(eval_batch_size, padded_shapes=padded_shapes)
+    eval_data_loader = eval_dataset.create(batch_size, padded_shapes=padded_shapes)
     if eval_data_loader:
         logger.info(f"eval_data_loader.element_spec = {json.dumps(eval_data_loader.element_spec, indent=2, default=str)}")
 
@@ -87,7 +93,7 @@ def main(
         output_shapes = model.make(**model_shapes)
         if config.learning_config.pretrained:
             model.load_weights(
-                config.learning_config.pretrained,
+                file_util.preprocess_paths(config.learning_config.pretrained),
                 by_name=file_util.is_hdf5_filepath(config.learning_config.pretrained),
                 skip_mismatch=True,
             )

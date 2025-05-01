@@ -1,9 +1,3 @@
-{% import "examples/configs/librispeech/sentencepiece/sp.yml.j2" as decoder_config with context %}
-{{decoder_config}}
-
-{% import "examples/configs/librispeech/train-tpu.yml.j2" as data_config with context %}
-{{data_config}}
-
 model_config:
   class_name: tensorflow_asr.models.transducer.conformer>Conformer
   config:
@@ -120,6 +114,6 @@ learning_config:
         profile_batch: 0
     - class_name: tensorflow_asr.callbacks>KaggleModelBackupAndRestore
       config:
-        model_handle: lordh9072/tfasr-conformer-transducer/tensorFlow2/v3-small
+        model_handle: {{kaggle_model_handle}}
         model_dir: {{modeldir}}
         save_freq: epoch

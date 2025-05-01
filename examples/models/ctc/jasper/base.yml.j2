@@ -1,6 +1,3 @@
-{% import "examples/configs/librispeech/characters/char.yml.j2" as decoder_config with context %}
-{{decoder_config}}
-
 model_config:
   class_name: tensorflow_asr.models.ctc.jasper>Jasper
   config:
@@ -66,11 +63,6 @@ learning_config:
         save_best_only: False
         save_weights_only: True
         save_freq: epoch
-    - class_name: tensorflow_asr.callbacks>BackupAndRestore
-      config:
-        backup_dir: {{modeldir}}/states
-        save_freq: epoch
-        delete_checkpoint: False
     - class_name: tensorflow_asr.callbacks>TensorBoard
       config:
         log_dir: {{modeldir}}/tensorboard
@@ -80,4 +72,9 @@ learning_config:
         write_steps_per_second: False
         update_freq: batch
         profile_batch: 0
+    - class_name: tensorflow_asr.callbacks>KaggleModelBackupAndRestore
+      config:
+        model_handle: {{kaggle_model_handle}}
+        model_dir: {{modeldir}}
+        save_freq: epoch
 

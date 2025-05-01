@@ -25,6 +25,7 @@ def main(
     datadir: str,
     modes: List[str],
     repodir: str = os.getcwd(),
+    dataset_type: str = "tfrecord",
 ):
     config = Config(config_path, repodir=repodir, datadir=datadir)
     tokenizer = tokenizers.get(config=config)
@@ -32,7 +33,7 @@ def main(
         dat = datasets.get(
             tokenizer=tokenizer,
             dataset_config=getattr(config.data_config, f"{mode}_dataset_config"),
-            dataset_type="tfrecord",
+            dataset_type=dataset_type,
         )
         dat.create_tfrecords()
 

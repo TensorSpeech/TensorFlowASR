@@ -1,5 +1,5 @@
 {% set vocabsize = 1000 %}
-{% set vocabprefix = repodir ~ "/examples/configs/librispeech/wordpiece/train_" ~ vocabsize ~ "_whitespace" %}
+{% set vocabprefix = repodir ~ "/examples/datasets/librispeech/wordpiece/train_" ~ vocabsize ~ "_whitespace" %}
 {% set metadata = vocabprefix ~ ".metadata.json" %}
 
 decoder_config:
@@ -19,7 +19,6 @@ decoder_config:
     - "<unk>"
   normalization_form: NFKC
   num_iterations: 4
-  train_files:
-    - {{datadir}}/train-clean-100/transcripts.tsv
-    - {{datadir}}/train-clean-360/transcripts.tsv
-    - {{datadir}}/train-other-500/transcripts.tsv
+
+{% import "examples/datasets/librispeech/config.yml.j2" as data_config with context %}
+{{data_config}}

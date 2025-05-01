@@ -120,7 +120,7 @@ class BaseModel(keras.Model, TensorFlowTrainer):
             self.use_ga = False
         self.gwn_config = gwn_config
         self.gradn_config = gradn_config
-        self.distribute_reduction_method = "mean"
+        self.distribute_reduction_method = "auto"
         self.tfasr_loss = loss
         super().compile(optimizer=optimizer, run_eagerly=run_eagerly, **kwargs)
 
@@ -163,9 +163,17 @@ class BaseModel(keras.Model, TensorFlowTrainer):
                 sample_weight=sample_weight,
                 training=True,
             )
+            # loss is in shape [B]
+            # reduce_mean on all replicas = (sum_loss1 / B + ... + sum_lossN / B) / N = (sum_loss1 + ... + sum_lossN) / (B * N)
+            # (B * N) also total count of samples across all replicas of current batch
+            # (sum_loss1 + ... + sum_lossN) is the total loss summed over all replicas of current batch, so the total number of loss = (B * N)
+            # B = mini_batch_size * ga_steps
+            # reduce_first = sum_loss1 / B
+            # => reduce_mean has the same effect as reduce_first
+            # the loss already divided by num_replicas for gradients reduce_sum when using _compute_loss, so unscale it
             self._loss_tracker.update_state(
                 loss_module.unscale_loss_for_distribution(loss),
-                sample_weight=tf.shape(tree.flatten(x)[0])[0],
+                sample_weight=tf.shape(tree.flatten(x)[0])[0],  # this is the count, which = B
             )
 
             if self.optimizer is not None:
@@ -249,7 +257,7 @@ class BaseModel(keras.Model, TensorFlowTrainer):
             outputs = reduce_per_replica(
                 outputs,
                 self.distribute_strategy,
-                reduction="auto",
+                reduction=self.distribute_reduction_method,
             )
             return outputs
 
@@ -281,7 +289,7 @@ class BaseModel(keras.Model, TensorFlowTrainer):
             outputs = reduce_per_replica(
                 outputs,
                 self.distribute_strategy,
-                reduction="auto",
+                reduction=self.distribute_reduction_method,
             )
             return outputs
 

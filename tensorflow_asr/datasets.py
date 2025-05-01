@@ -68,8 +68,8 @@ from dataclasses import asdict, dataclass
 import numpy as np
 
 from tensorflow_asr import schemas, tf
+from tensorflow_asr.abstracts import AbstractDataset, AbstractTokenizer
 from tensorflow_asr.configs import Config, DatasetConfig
-from tensorflow_asr.tokenizers import Tokenizer
 from tensorflow_asr.utils import data_util, feature_util, file_util, math_util
 
 logger = logging.getLogger(__name__)
@@ -80,13 +80,16 @@ class ASR_DATASER_TYPES:
     TFRECORD: str = "tfrecord"
     SLICE: str = "slice"
     GENERATOR: str = "generator"
+    HUGGINGFACE: str = "huggingface"
 
 
 def get(
-    tokenizer: Tokenizer,
+    tokenizer: AbstractTokenizer,
     dataset_config: DatasetConfig,
     dataset_type: str,
+    dataset_cache: bool = False,
 ):
+    dataset_config.cache = dataset_cache
     if dataset_type == ASR_DATASER_TYPES.TFRECORD:
         return ASRTFRecordDataset(tokenizer=tokenizer, **vars(dataset_config))
     if dataset_type == ASR_DATASER_TYPES.SLICE:
@@ -96,14 +99,13 @@ def get(
     raise ValueError(f"dataset_type must in {asdict(ASR_DATASER_TYPES()).values()}")
 
 
-def get_training_shape(
+def get_global_shape(
     config: Config,
     strategy: tf.distribute.Strategy,
     *datasets: "ASRDataset",
     batch_size: int = None,
 ):
     batch_size = (batch_size or config.learning_config.running_config.batch_size) * strategy.num_replicas_in_sync
-    train_batch_size = eval_batch_size = batch_size
 
     max_input_length, max_label_length = 0, 0
     for dset in datasets:
@@ -133,7 +135,7 @@ def get_training_shape(
         input_shape=input_shape,
         prediction_shape=prediction_shape,
     )
-    return model_shapes, train_batch_size, eval_batch_size, padded_shapes
+    return model_shapes, batch_size, padded_shapes
 
 
 BUFFER_SIZE = 100
@@ -142,24 +144,29 @@ TFRECORD_SHARDS = 16
 AUTOTUNE = int(os.environ.get("AUTOTUNE") or tf.data.AUTOTUNE)
 
 
-class BaseDataset:
-    """Based dataset for all models"""
-
+class ASRDataset(AbstractDataset):
     def __init__(
         self,
+        stage: str,
+        tokenizer: AbstractTokenizer,
         data_paths: list,
+        tfrecords_dir: str = None,
+        tfrecords_shards: int = TFRECORD_SHARDS,
+        tfrecords_buffer_size: int = TFRECORD_BUFFER_SIZE,
+        tfrecords_compression_type: str = "GZIP",
+        item_mapping: dict = None,
         cache: bool = False,
         shuffle: bool = False,
-        buffer_size: int = BUFFER_SIZE,
-        indefinite: bool = False,
+        indefinite: bool = True,
         drop_remainder: bool = True,
         enabled: bool = True,
         metadata: str = None,
+        buffer_size: int = BUFFER_SIZE,
         sample_rate: int = 16000,
-        stage: str = "train",
         name: str = "",
         **kwargs,
     ):
+        self.tokenizer = tokenizer
         self.data_paths = data_paths or []
         if not isinstance(self.data_paths, list):
             raise ValueError("data_paths must be a list of string paths")
@@ -174,50 +181,19 @@ class BaseDataset:
         self.metadata = metadata
         self.sample_rate = sample_rate
         self.use_ga = False
-        self.name = name
+        self.name = name or stage
+        self.tfrecords_dir = tfrecords_dir
+        if tfrecords_shards <= 0:
+            raise ValueError("tfrecords_shards must be positive")
+        self.tfrecords_shards = tfrecords_shards
+        self.tfrecords_buffer_size = tfrecords_buffer_size
+        self.tfrecords_compression_type = tfrecords_compression_type
+        self.item_mapping = item_mapping or {}
 
-    def parse(self, *args, **kwargs):
-        raise NotImplementedError()
+        for key, value in kwargs.items():
+            setattr(self, key, value)
 
-    def create(self, batch_size):
-        raise NotImplementedError()
-
-
-class ASRDataset(BaseDataset):
-    """Dataset for ASR using Generator"""
-
-    def __init__(
-        self,
-        stage: str,
-        tokenizer: Tokenizer,
-        data_paths: list,
-        cache: bool = False,
-        shuffle: bool = False,
-        indefinite: bool = True,
-        drop_remainder: bool = True,
-        enabled: bool = True,
-        metadata: str = None,
-        buffer_size: int = BUFFER_SIZE,
-        sample_rate: int = 16000,
-        name: str = "",
-        **kwargs,
-    ):
-        super().__init__(
-            data_paths=data_paths,
-            cache=cache,
-            shuffle=shuffle,
-            stage=stage,
-            buffer_size=buffer_size,
-            drop_remainder=drop_remainder,
-            enabled=enabled,
-            metadata=metadata,
-            indefinite=indefinite,
-            sample_rate=sample_rate,
-            name=name,
-            **kwargs,
-        )
         self.entries = []
-        self.tokenizer = tokenizer
         self.max_input_length = None
         self.max_label_length = None
         self.load_metadata()
@@ -225,12 +201,13 @@ class ASRDataset(BaseDataset):
     # -------------------------------- metadata -------------------------------------
 
     def compute_metadata(self):
+        if not self.tokenizer.initialized:
+            raise ValueError("Tokenizer must be initialized before computing metadata")
+
         from tqdm import tqdm  # pylint: disable=import-outside-toplevel
 
         self.max_input_length = 0 if self.max_input_length is None else self.max_input_length
         self.max_label_length = 0 if self.max_label_length is None else self.max_label_length
-        if self.max_input_length > 0 and self.max_label_length > 0:
-            return  # already computed
         self.read_entries()
         for _, duration, transcript in tqdm(self.entries, desc=f"Computing metadata for entries in {self.stage} dataset", disable=False):
             input_length = math_util.get_nsamples(duration, self.sample_rate)
@@ -302,6 +279,10 @@ class ASRDataset(BaseDataset):
             np.random.shuffle(self.entries)  # Mix transcripts.tsv
         self.total_steps = len(self.entries)
         self.num_entries = self.total_steps
+
+    def vocab_generator(self):
+        for *_, transcript in self.entries:
+            yield transcript
 
     # -------------------------------- LOAD AND PREPROCESS -------------------------------------
 
@@ -401,6 +382,8 @@ class ASRDataset(BaseDataset):
     def create(self, batch_size: int, ga_steps: int = 1, padded_shapes=None):
         if not self.enabled:
             return None
+        if not self.tokenizer.initialized:
+            return None
         self.read_entries()
         if not self.total_steps or self.total_steps == 0:
             return None
@@ -415,54 +398,10 @@ class ASRDataset(BaseDataset):
 class ASRTFRecordDataset(ASRDataset):
     """Dataset for ASR using TFRecords"""
 
-    def __init__(
-        self,
-        data_paths: list,
-        tfrecords_dir: str,
-        tokenizer: Tokenizer,
-        stage: str,
-        tfrecords_shards: int = TFRECORD_SHARDS,
-        cache: bool = False,
-        shuffle: bool = False,
-        enabled: bool = True,
-        metadata: str = None,
-        indefinite: bool = True,
-        drop_remainder: bool = True,
-        buffer_size: int = BUFFER_SIZE,
-        tfrecords_buffer_size: int = TFRECORD_BUFFER_SIZE,
-        compression_type: str = "GZIP",
-        sample_rate: int = 16000,
-        name: str = "",
-        **kwargs,
-    ):
-        super().__init__(
-            stage=stage,
-            tokenizer=tokenizer,
-            data_paths=data_paths,
-            cache=cache,
-            shuffle=shuffle,
-            buffer_size=buffer_size,
-            drop_remainder=drop_remainder,
-            enabled=enabled,
-            metadata=metadata,
-            indefinite=indefinite,
-            sample_rate=sample_rate,
-            name=name,
-            **kwargs,
-        )
-        if not self.stage:
-            raise ValueError("stage must be defined, either 'train', 'eval' or 'test'")
-        self.tfrecords_dir = tfrecords_dir
-        if tfrecords_shards <= 0:
-            raise ValueError("tfrecords_shards must be positive")
-        self.tfrecords_shards = tfrecords_shards
-        self.tfrecords_buffer_size = tfrecords_buffer_size
-        self.compression_type = compression_type
-
     def write_tfrecord_file(self, splitted_entries: tuple):
         shard_path, entries = splitted_entries
         logger.info(f"Processing {shard_path} ...")
-        with tf.io.TFRecordWriter(shard_path, options=tf.io.TFRecordOptions(compression_type=self.compression_type)) as writer:
+        with tf.io.TFRecordWriter(shard_path, options=tf.io.TFRecordOptions(compression_type=self.tfrecords_compression_type)) as writer:
             for path, _, transcript in entries:
                 audio = data_util.load_and_convert_to_wav(path, sample_rate=self.sample_rate).numpy()
                 feature = dict(
@@ -512,6 +451,8 @@ class ASRTFRecordDataset(ASRDataset):
     def create(self, batch_size: int, ga_steps: int = 1, padded_shapes=None):
         if not self.enabled:
             return None
+        if not self.tokenizer.initialized:
+            return None
         have_data = self.create_tfrecords()
         if not have_data:
             return None
@@ -522,7 +463,10 @@ class ASRTFRecordDataset(ASRDataset):
         ignore_order.deterministic = False
         files_ds = files_ds.with_options(ignore_order)
         dataset = tf.data.TFRecordDataset(
-            files_ds, compression_type=self.compression_type, buffer_size=self.tfrecords_buffer_size, num_parallel_reads=AUTOTUNE
+            files_ds,
+            compression_type=self.tfrecords_compression_type,
+            buffer_size=self.tfrecords_buffer_size,
+            num_parallel_reads=AUTOTUNE,
         )
 
         return self.process(dataset, batch_size, ga_steps=ga_steps, padded_shapes=padded_shapes)
@@ -541,6 +485,8 @@ class ASRSliceDataset(ASRDataset):
 
     def create(self, batch_size: int, ga_steps: int = 1, padded_shapes=None):
         if not self.enabled:
+            return None
+        if not self.tokenizer.initialized:
             return None
         self.read_entries()
         if not self.total_steps or self.total_steps == 0:

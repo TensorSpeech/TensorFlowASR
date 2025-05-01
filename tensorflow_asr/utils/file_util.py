@@ -16,7 +16,9 @@ import contextlib
 import logging
 import os
 import re
+import tarfile
 import tempfile
+import zipfile
 from typing import List, Union
 
 import jinja2
@@ -147,3 +149,18 @@ def clean_dir(dirpath: str):
     logger.info(f"Cleaning up {path}")
     if tf.io.gfile.exists(path):
         tf.io.gfile.rmtree(path)
+
+
+def extract_file(
+    filepath: str,
+    extractpath: str,
+):
+    if filepath.endswith(".tar.gz") or filepath.endswith(".tgz") or filepath.endswith(".tar"):
+        with tarfile.open(filepath, "r:gz") as tar:
+            tar.extractall(path=os.path.realpath(extractpath))
+        return
+    if filepath.endswith(".zip"):
+        with zipfile.ZipFile(filepath, "r") as zip_ref:
+            zip_ref.extractall(os.path.realpath(extractpath))
+        return
+    raise ValueError(f"Unsupported file format: {filepath}")

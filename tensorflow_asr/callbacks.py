@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import importlib
 import logging
 import os
 import shutil
@@ -284,23 +285,19 @@ class EarlyStopping(keras.callbacks.EarlyStopping):
 class KaggleModelBackupAndRestore(BackupAndRestore):
     def __init__(
         self,
-        model_handle: str,
         model_dir: str,
+        model_handle: str = None,
         save_freq="epoch",
     ):
         backup_dir = os.path.join(model_dir, "states")
         super().__init__(backup_dir, save_freq=save_freq, double_checkpoint=True, delete_checkpoint=False)
 
         try:
-            os.environ["TQDM_DISABLE"] = "1"
-            os.environ["DISABLE_KAGGLE_CACHE"] = "true"
-
-            import kagglehub  # pylint: disable=import-outside-toplevel,unused-import
+            # use option 2,3 to authenticate kaggle: https://github.com/Kaggle/kagglehub?tab=readme-ov-file#option-2-read-credentials-from-environment-variables pylint: disable=line-too-long
+            self._api = importlib.import_module("kagglehub")
 
             logging.getLogger("kagglehub").disabled = True
             logging.getLogger("kagglehub").handlers.clear()
-
-            self._api = kagglehub  # use option 2,3 to authenticate kaggle: https://github.com/Kaggle/kagglehub?tab=readme-ov-file#option-2-read-credentials-from-environment-variables pylint: disable=line-too-long
 
         except ImportError as e:
             raise ImportError("Kaggle library is not installed. Please install it via `pip install '.[kaggle]'`.") from e
@@ -320,6 +317,9 @@ class KaggleModelBackupAndRestore(BackupAndRestore):
         self._current_epoch = 0
 
     def _restore_kaggle(self):
+        if not self._model_handle:
+            return
+
         if os.path.exists(self._weights_path) and os.path.exists(self._training_metadata_path):
             return
 
@@ -347,6 +347,7 @@ class KaggleModelBackupAndRestore(BackupAndRestore):
             shutil.copytree(cached_path, self._model_dir, ignore_dangling_symlinks=True, dirs_exist_ok=True)
             shutil.rmtree(cached_path)
             logger.info(f"Model restored to '{self._model_dir}'")
+
         except KaggleApiHTTPError as e:
             if e.response is not None and (e.response.status_code in (HTTPStatus.NOT_FOUND, HTTPStatus.FORBIDDEN)):
                 logger.info(
@@ -354,6 +355,8 @@ class KaggleModelBackupAndRestore(BackupAndRestore):
                 )
 
     def _backup_kaggle(self, logs, notes: str):
+        if not self._model_handle:
+            return
         logs = logs or {}
         loss = logs.get("loss")
         if loss is not None:

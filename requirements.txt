@@ -13,3 +13,4 @@ cached_property~=2.0.1
 ipywidgets~=8.1.5
 ipython<9.0.0
 kagglehub~=0.3.6
+datasets~=3.5.1

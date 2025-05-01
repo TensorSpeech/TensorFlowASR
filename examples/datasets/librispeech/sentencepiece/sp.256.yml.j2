@@ -1,5 +1,5 @@
 {% set vocabsize = 256 %}
-{% set vocabprefix = repodir ~ "/examples/configs/librispeech/sentencepiece/train_bpe_" ~ vocabsize %}
+{% set vocabprefix = repodir ~ "/examples/datasets/librispeech/sentencepiece/train_bpe_" ~ vocabsize %}
 {% set metadata = vocabprefix ~ ".metadata.json" %}
 
 decoder_config:
@@ -25,7 +25,6 @@ decoder_config:
   max_sentence_length: 1048576
   character_coverage: 1.0
   keep_whitespace: False
-  train_files:
-    - {{datadir}}/train-clean-100/transcripts.tsv
-    - {{datadir}}/train-clean-360/transcripts.tsv
-    - {{datadir}}/train-other-500/transcripts.tsv
+
+{% import "examples/datasets/librispeech/config.yml.j2" as data_config with context %}
+{{data_config}}
