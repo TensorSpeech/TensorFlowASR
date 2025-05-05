@@ -48,6 +48,7 @@ def main(
     batch_size = bs
 
     tokenizer = tokenizers.get(config)
+    tokenizer.make()
 
     model: BaseModel = keras.Model.from_config(config.model_config)
     model.tokenizer = tokenizer

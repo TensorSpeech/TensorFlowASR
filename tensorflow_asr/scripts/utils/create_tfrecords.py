@@ -29,6 +29,7 @@ def main(
 ):
     config = Config(config_path, repodir=repodir, datadir=datadir)
     tokenizer = tokenizers.get(config=config)
+    tokenizer.make()
     for mode in modes:
         dat = datasets.get(
             tokenizer=tokenizer,

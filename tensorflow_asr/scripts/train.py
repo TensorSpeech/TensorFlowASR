@@ -57,6 +57,7 @@ def main(
     config = Config(config_path, training=True, repodir=repodir, datadir=datadir, modeldir=modeldir, **kwargs)
 
     tokenizer = tokenizers.get(config)
+    tokenizer.make()
 
     train_dataset = datasets.get(
         tokenizer=tokenizer,
