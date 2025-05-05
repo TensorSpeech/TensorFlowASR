@@ -321,6 +321,7 @@ class KaggleModelBackupAndRestore(BackupAndRestore):
             return
 
         if os.path.exists(self._weights_path) and os.path.exists(self._training_metadata_path):
+            logger.info(f"Backup and restore from '{self.backup_dir}'...")
             return
 
         from kagglehub.exceptions import KaggleApiHTTPError  # pylint: disable=import-outside-toplevel
