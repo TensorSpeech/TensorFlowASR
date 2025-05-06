@@ -26,6 +26,7 @@ class AbstractTokenizer(ABC):
 
 class AbstractDataset(ABC):
     name: str
+    num_entries: int
 
     @abstractmethod
     def generator(self) -> typing.Generator:

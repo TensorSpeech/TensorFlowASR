@@ -102,7 +102,12 @@ class Tokenizer(AbstractTokenizer):
         from tqdm import tqdm
 
         for dataset in datasets:
-            for text in tqdm(dataset.vocab_generator(), desc=f"Building vocabulary in dataset {dataset.name}", disable=False):
+            for text in tqdm(
+                dataset.vocab_generator(),
+                total=dataset.num_entries,
+                desc=f"Building vocabulary in dataset {dataset.name}",
+                disable=False,
+            ):
                 data = self.normalize_text(text, self.decoder_config).numpy()
                 yield data
 
