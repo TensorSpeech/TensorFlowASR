@@ -281,6 +281,7 @@ class ASRDataset(AbstractDataset):
         self.num_entries = self.total_steps
 
     def vocab_generator(self):
+        self.read_entries()
         for *_, transcript in self.entries:
             yield transcript
 
