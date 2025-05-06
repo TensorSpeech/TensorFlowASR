@@ -102,6 +102,7 @@ class Tokenizer(AbstractTokenizer):
         from tqdm import tqdm
 
         for dataset in datasets:
+            dataset.read_entries()
             for text in tqdm(
                 dataset.vocab_generator(),
                 total=dataset.num_entries,

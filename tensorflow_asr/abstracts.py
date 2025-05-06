@@ -29,6 +29,10 @@ class AbstractDataset(ABC):
     num_entries: int
 
     @abstractmethod
+    def read_entries(self):
+        pass
+
+    @abstractmethod
     def generator(self) -> typing.Generator:
         pass
 
