@@ -27,4 +27,7 @@ dev)
     python3 -m pip install -r requirements.dev.txt
     python3 -m pip install -e .
 ;;
+install)
+    python3 -m pip install -e .
+;;
 esac

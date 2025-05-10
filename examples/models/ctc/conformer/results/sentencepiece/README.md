@@ -1,6 +1,6 @@
 **Table of Contents**
 - [LibriSpeech](#librispeech)
-  - [I. Small + SentencePiece 1k](#i-small--sentencepiece-1k)
+  - [I. Small + SentencePiece 256](#i-small--sentencepiece-256)
     - [Training](#training)
       - [1. Epoch Loss](#1-epoch-loss)
       - [2. Batch Loss](#2-batch-loss)
@@ -8,7 +8,7 @@
     - [Pretrained Model](#pretrained-model)
     - [Results](#results)
 - [VietBud500](#vietbud500)
-  - [I. Small + SentencePiece 1k](#i-small--sentencepiece-1k-1)
+  - [I. Small + SentencePiece 256](#i-small--sentencepiece-256-1)
     - [Training](#training-1)
       - [1. Epoch Loss](#1-epoch-loss-1)
       - [2. Batch Loss](#2-batch-loss-1)
@@ -19,7 +19,7 @@
 
 # LibriSpeech
 
-## I. Small + SentencePiece 1k
+## I. Small + SentencePiece 256
 
 | Category          | Description                                                |
 | :---------------- | :--------------------------------------------------------- |
@@ -27,8 +27,8 @@
 | Tensorflow        | **2.18.0**                                                 |
 | Device            | Google Cloud TPUs v4-8                                     |
 | Mixed Precision   | strict                                                     |
-| Global Batch Size | 4 * 4 * 8 = 128 (as 4 TPUs, 8 Gradient Accumulation Steps) |
-| Max Epochs        | 300                                                        |
+| Global Batch Size | 8 * 4 * 8 = 256 (as 4 TPUs, 8 Gradient Accumulation Steps) |
+| Max Epochs        | 450                                                        |
 
 
 ### Training
@@ -57,22 +57,8 @@
   {
     "epoch": 157,
     "test-clean": {
-      "greedy": {
-        "wer": 0.0629184418746196,
-        "cer": 0.025361417966113735,
-        "mer": 0.06252717134486344,
-        "wil": 0.10999272148964301,
-        "wip": 0.890007278510357
-      }
     },
     "test-other": {
-      "greedy": {
-        "wer": 0.14261696884015054,
-        "cer": 0.06683946941977871,
-        "mer": 0.14061028442267848,
-        "wil": 0.23920137462664237,
-        "wip": 0.7607986253733576
-      }
     }
   }
 ]
@@ -80,7 +66,7 @@
 
 # VietBud500
 
-## I. Small + SentencePiece 1k
+## I. Small + SentencePiece 256
 
 | Category          | Description                                                |
 | :---------------- | :--------------------------------------------------------- |
@@ -89,7 +75,7 @@
 | Device            | Google Cloud TPUs v4-8                                     |
 | Mixed Precision   | strict                                                     |
 | Global Batch Size | 8 * 4 * 8 = 256 (as 4 TPUs, 8 Gradient Accumulation Steps) |
-| Max Epochs        | 300                                                        |
+| Max Epochs        | 450                                                        |
 
 ### Training
 
