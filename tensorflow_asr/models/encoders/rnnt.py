@@ -13,6 +13,8 @@
 # limitations under the License.
 """ http://arxiv.org/abs/1811.06621 """
 
+import typing
+
 from keras.src import backend
 
 from tensorflow_asr import keras, tf
@@ -40,7 +42,7 @@ class RnnTransducerBlock(keras.Model):
         assert reduction_position in ["post", "pre"], "reduction_position must be 'post' or 'pre'"
         self._reduction_position = reduction_position
         self.reduction = TimeReduction(reduction_factor, name="reduction", dtype=self.dtype) if reduction_factor > 0 else None
-        self.rnn = layer_util.get_rnn(rnn_type)(
+        self.rnn: typing.Union[keras.layers.GRU, keras.layers.LSTM, keras.layers.SimpleRNN] = layer_util.get_rnn(rnn_type)(
             units=rnn_units,
             return_sequences=True,
             name=rnn_type,
@@ -147,7 +149,7 @@ class RnnTransducerEncoder(keras.Model):
         self.reshape = Reshape(name="reshape", dtype=self.dtype)
 
         self.time_reduction_factor = 1
-        self.blocks = []
+        self.blocks: typing.List[RnnTransducerBlock] = []
         for i in range(nlayers):
             block = RnnTransducerBlock(
                 reduction_position=reduction_positions[i],
@@ -174,7 +176,7 @@ class RnnTransducerEncoder(keras.Model):
         """
         states = []
         for block in self.blocks:
-            states.append(tf.stack(block.rnn.get_initial_state(tf.zeros([batch_size, 1, 1], dtype=self.dtype)), axis=0))
+            states.append(tf.stack(block.rnn.get_initial_state(batch_size=batch_size), axis=0))
         return tf.transpose(tf.stack(states, axis=0), perm=[2, 0, 1, 3])
 
     def call(self, inputs, training=False):

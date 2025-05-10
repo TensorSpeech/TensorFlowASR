@@ -394,6 +394,8 @@ class MultiHeadAttention(keras.layers.MultiHeadAttention):
         # `value` = [B, S, N, H]
         value = self._value_dense(value)
 
+        states = None
+
         if return_states:
             query, key, value, states = self._with_memory(query, key, value, initial_state, training)
 
@@ -416,7 +418,7 @@ class MultiHeadAttention(keras.layers.MultiHeadAttention):
                 return attention_output, states, attention_scores
             return attention_output, attention_scores
 
-        if return_states:
+        if return_states and states is not None:
             return attention_output, states
         return (attention_output,)
 
@@ -634,6 +636,8 @@ class MultiHeadRelativeAttention(MultiHeadAttention):
         # `position` = [B, R, N, H]
         position = self._relpe_dense(relpe)
 
+        states = None
+
         if return_states:
             query, key, value, states = self._with_memory(query, key, value, initial_state, training)
 
@@ -658,6 +662,6 @@ class MultiHeadRelativeAttention(MultiHeadAttention):
                 return attention_output, states, attention_scores
             return attention_output, attention_scores
 
-        if return_states:
+        if return_states and states is not None:
             return attention_output, states
         return (attention_output,)

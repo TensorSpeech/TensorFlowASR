@@ -145,3 +145,6 @@ class Conformer(CtcModel):
         )
         self.dmodel = encoder_dmodel
         self.time_reduction_factor = self.encoder.conv_subsampling.time_reduction_factor
+
+    def get_initial_encoder_states(self, batch_size=1):
+        return self.encoder.get_initial_state(batch_size)

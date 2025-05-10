@@ -242,9 +242,9 @@ class BaseModel(keras.Model, TensorFlowTrainer):
         _tokens = self.recognize(inputs=inputs).tokens
         _beam_tokens = self.recognize_beam(inputs=inputs).tokens
         return {
-            "_tokens": _tokens,
-            "_beam_tokens": _beam_tokens,
-            "_labels": y_true.labels,
+            "tokens": _tokens,
+            "beam_tokens": _beam_tokens,
+            "labels": y_true.labels,
         }
 
     # ------------------------------------ FIT ----------------------------------- #
@@ -317,10 +317,10 @@ class BaseModel(keras.Model, TensorFlowTrainer):
         return tf.ones([batch_size, 1], dtype=tf.int32) * self.tokenizer.blank
 
     def get_initial_encoder_states(self, batch_size=1):
-        return tf.zeros([], dtype=self.dtype)
+        return None
 
     def get_initial_decoder_states(self, batch_size=1):
-        return tf.zeros([], dtype=self.dtype)
+        return None
 
     def recognize(self, inputs: schemas.PredictInput, **kwargs) -> schemas.PredictOutput:
         """Greedy decoding function that used in self.predict_step"""

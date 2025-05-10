@@ -100,13 +100,9 @@ class PredictLogger(keras.callbacks.Callback):
         if logs is None:
             return
 
-        predictions = logs.pop("outputs", None)
-        if predictions is None:
-            return
-
-        transcripts = self.model.tokenizer.detokenize(predictions.pop("_tokens"))
-        beam_transcripts = self.model.tokenizer.detokenize(predictions.pop("_beam_tokens"))
-        targets = self.model.tokenizer.detokenize(predictions.pop("_labels"))
+        transcripts = self.model.tokenizer.detokenize(logs.pop("tokens"))
+        beam_transcripts = self.model.tokenizer.detokenize(logs.pop("beam_tokens"))
+        targets = self.model.tokenizer.detokenize(logs.pop("labels"))
 
         for i, item in enumerate(zip(targets.numpy(), transcripts.numpy(), beam_transcripts.numpy()), start=self.index):
             groundtruth, greedy, beam = [x.decode("utf-8") for x in item]

@@ -17,11 +17,11 @@ import json
 import logging
 import os
 
-from tensorflow_asr import datasets, keras, tf, tokenizers  # import to aid logging messages
+from tensorflow_asr import datasets, tf, tokenizers  # import to aid logging messages
 from tensorflow_asr.callbacks import PredictLogger
 from tensorflow_asr.configs import Config
 from tensorflow_asr.models.base_model import BaseModel
-from tensorflow_asr.utils import app_util, cli_util, env_util, file_util
+from tensorflow_asr.utils import app_util, cli_util, env_util, file_util, keras_util
 
 logger = logging.getLogger(__name__)
 
@@ -50,10 +50,12 @@ def main(
     tokenizer = tokenizers.get(config)
     tokenizer.make()
 
-    model: BaseModel = keras.Model.from_config(config.model_config)
+    logger.info(f"Configs: {str(config)}")
+
+    model: BaseModel = keras_util.model_from_config(config.model_config)
     model.tokenizer = tokenizer
     model.make(batch_size=batch_size)
-    model.load_weights(h5, by_name=file_util.is_hdf5_filepath(h5), skip_mismatch=False)
+    model.load_weights(h5, skip_mismatch=False)
     model.jit_compile = jit_compile
     model.summary()
 

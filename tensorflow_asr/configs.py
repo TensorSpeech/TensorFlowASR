@@ -118,7 +118,6 @@ class Config:
         self.learning_config = LearningConfig(config.pop("learning_config", {})) if training else None
         for k, v in config.items():
             setattr(self, k, v)
-        logger.info(str(self))
 
     def __str__(self) -> str:
         def default(x):

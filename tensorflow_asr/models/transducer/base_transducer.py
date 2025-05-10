@@ -15,6 +15,7 @@
 """ https://arxiv.org/pdf/1811.06621.pdf """
 
 import collections
+import typing
 
 from keras.src import backend
 
@@ -63,7 +64,7 @@ class TransducerPrediction(Layer):
             else OneHotBlank(blank=blank, depth=vocab_size, name=label_encoder_mode, dtype=self.dtype)
         )
         # Initialize rnn layers
-        self.rnns = []
+        self.rnns: typing.List[typing.Union[keras.layers.GRU, keras.layers.LSTM, keras.layers.SimpleRNN]] = []
         self.lns = []
         self.projections = []
         for i in range(num_rnns):
@@ -116,7 +117,7 @@ class TransducerPrediction(Layer):
         """
         states = []
         for rnn in self.rnns:
-            states.append(tf.stack(rnn.get_initial_state(tf.zeros([batch_size, 1, 1], dtype=self.dtype)), axis=0))
+            states.append(tf.stack(rnn.get_initial_state(batch_size=batch_size), axis=0))
         return tf.transpose(tf.stack(states, axis=0), perm=[2, 0, 1, 3])
 
     def call(self, inputs, training=False):
@@ -463,7 +464,7 @@ class Transducer(BaseModel):
             return ytu, new_states
 
     def get_initial_encoder_states(self, batch_size=1):
-        return tf.zeros([], dtype=self.dtype)
+        return None
 
     def get_initial_decoder_states(self, batch_size=1):
         return self.predict_net.get_initial_state(batch_size)

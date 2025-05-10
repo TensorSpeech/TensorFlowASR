@@ -663,6 +663,9 @@ class ConformerEncoder(keras.Model):
         else:
             self.content_attention_bias, self.positional_attention_bias = None, None
 
+    def get_initial_state(self, batch_size: int):
+        return [block.get_initial_state(batch_size) for block in self.conformer_blocks]
+
     def call(
         self,
         inputs,

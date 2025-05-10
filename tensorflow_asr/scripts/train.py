@@ -72,6 +72,8 @@ def main(
         dataset_cache=dataset_cache,
     )
 
+    logger.info(f"Configs: {str(config)}")
+
     model_shapes, batch_size, padded_shapes = datasets.get_global_shape(
         config,
         strategy,

@@ -241,10 +241,10 @@ class RnnBlock(Layer):
 
     def get_initial_state(self, batch_size: int):
         if self._bidirectional:
-            states = self.rnn.forward_layer.get_initial_state(tf.zeros([batch_size, 1, 1], dtype=self.dtype))
-            states += self.rnn.backward_layer.get_initial_state(tf.zeros([batch_size, 1, 1], dtype=self.dtype))
+            states = self.rnn.forward_layer.get_initial_state(batch_size)
+            states += self.rnn.backward_layer.get_initial_state(batch_size)
         else:
-            states = self.rnn.get_initial_state(tf.zeros([batch_size, 1, 1], dtype=self.dtype))
+            states = self.rnn.get_initial_state(batch_size=batch_size)
         return states
 
     def call(self, inputs, training=False):

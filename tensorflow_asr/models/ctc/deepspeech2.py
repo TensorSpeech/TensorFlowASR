@@ -127,4 +127,4 @@ class DeepSpeech2(CtcModel):
         return self.encoder.get_initial_state(batch_size)
 
     def get_initial_decoder_states(self, batch_size=1):
-        return tf.zeros([], dtype=self.dtype)
+        return None
