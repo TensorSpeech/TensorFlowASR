@@ -45,8 +45,7 @@ class ConformerDecoder(Layer):
         return logits, logits_length, None
 
     def call_next(self, logits, logits_length, *args, **kwargs):
-        outputs, outputs_length = self((logits, logits_length), training=False)
-        return outputs, outputs_length, None
+        return self((logits, logits_length), training=False)
 
     def compute_output_shape(self, input_shape):
         logits_shape, logits_length_shape = input_shape
