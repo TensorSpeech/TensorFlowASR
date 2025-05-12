@@ -198,10 +198,28 @@ class ModelCheckpoint(keras.callbacks.ModelCheckpoint):
         mode="auto",
         save_freq="epoch",
         initial_value_threshold=None,
+        keep_checkpoints=5,
     ):
         filepath = file_util.preprocess_paths(filepath)
         self._mode = mode
+        self._keep_checkpoints = keep_checkpoints
         super().__init__(filepath, monitor, verbose, save_best_only, save_weights_only, mode, save_freq, initial_value_threshold)
+
+    def _delete_obsolete_checkpoint(self, epoch, batch=None, logs=None):
+        for ep in range(int(epoch) - self._keep_checkpoints):
+            filepath = self._get_file_path(epoch=ep, batch=batch, logs=logs)
+            if tf.io.gfile.exists(filepath):
+                tf.io.gfile.remove(filepath)
+
+    def on_train_batch_end(self, batch, logs=None):
+        super().on_train_batch_end(batch, logs)
+        if self._should_save_on_batch(batch):
+            self._delete_obsolete_checkpoint(self._current_epoch, batch, logs)
+
+    def on_epoch_end(self, epoch, logs=None):
+        super().on_epoch_end(epoch, logs)
+        if self.save_freq == "epoch":
+            self._delete_obsolete_checkpoint(epoch, None, logs)
 
     def get_config(self):
         return {
@@ -213,6 +231,7 @@ class ModelCheckpoint(keras.callbacks.ModelCheckpoint):
             "mode": self._mode,
             "save_freq": self.save_freq,
             "initial_value_threshold": self.best,
+            "keep_checkpoints": self._keep_checkpoints,
         }
 
     @classmethod
