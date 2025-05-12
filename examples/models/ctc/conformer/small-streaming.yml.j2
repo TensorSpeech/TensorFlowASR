@@ -9,19 +9,7 @@ model_config:
       nfft: 512
       num_feature_bins: 80
       feature_type: log_mel_spectrogram
-      augmentation_config:
-        feature_augment:
-          time_masking:
-            prob: 0.5
-            num_masks: 5
-            mask_factor: -1 # whole utterance
-            p_upperbound: 0.05
-            mask_value: 0
-          freq_masking:
-            prob: 0.5
-            num_masks: 1
-            mask_factor: 27
-            mask_value: 0
+      augmentation_config: null
     encoder_subsampling:
       class_name: tensorflow_asr.models.layers.subsampling>Conv2dSubsampling
       config:
