@@ -1,23 +1,16 @@
 **Table of Contents**
-- [LibriSpeech](#librispeech)
+- [\[English\] LibriSpeech](#english-librispeech)
   - [I. Small + SentencePiece 1k](#i-small--sentencepiece-1k)
-    - [Training](#training)
-      - [1. Epoch Loss](#1-epoch-loss)
-      - [2. Batch Loss](#2-batch-loss)
-      - [3. Learning Rate](#3-learning-rate)
-    - [Pretrained Model](#pretrained-model)
+    - [Config](#config)
     - [Results](#results)
-- [VietBud500](#vietbud500)
-  - [I. Small + SentencePiece 1k](#i-small--sentencepiece-1k-1)
-    - [Training](#training-1)
-      - [1. Epoch Loss](#1-epoch-loss-1)
-      - [2. Batch Loss](#2-batch-loss-1)
-      - [3. Learning Rate](#3-learning-rate-1)
-    - [Pretrained Model](#pretrained-model-1)
+- [\[Vietnamese\] VietBud500](#vietnamese-vietbud500)
+  - [II. Small + Streaming + SentencePiece 1k](#ii-small--streaming--sentencepiece-1k)
+    - [Config](#config-1)
     - [Results](#results-1)
 
+<!-- ----------------------------------------------------- EN ------------------------------------------------------ -->
 
-# LibriSpeech
+# [English] LibriSpeech
 
 ## I. Small + SentencePiece 1k
 
@@ -30,89 +23,56 @@
 | Global Batch Size | 4 * 4 * 8 = 128 (as 4 TPUs, 8 Gradient Accumulation Steps) |
 | Max Epochs        | 300                                                        |
 
+### Config
 
-### Training
-
-#### 1. Epoch Loss
-
-![Epoch Loss](./figs/)
-
-#### 2. Batch Loss
-
-![Batch Loss](./figs/)
-
-#### 3. Learning Rate
-
-![Learning Rate](./figs/)
-
-### Pretrained Model
-
-[Link]()
+```jinja2
+{% import "examples/datasets/librispeech/sentencepiece/sp.yml.j2" as decoder_config with context %}
+{{decoder_config}}
+{% import "examples/models/transducer/conformer/small.yml.j2" as config with context %}
+{{config}}
+```
 
 ### Results
 
+| Epoch | Dataset    | decoding | wer      | cer      | mer      | wil      | wip      |
+| :---- | :--------- | :------- | :------- | :------- | :------- | :------- | :------- |
+| 157   | test-clean | greedy   | 0.062918 | 0.025361 | 0.062527 | 0.109992 | 0.890007 |
+| 157   | test-other | greedy   | 0.142616 | 0.066839 | 0.140610 | 0.239201 | 0.760798 |
 
-```json
-[
-  {
-    "epoch": 157,
-    "test-clean": {
-      "greedy": {
-        "wer": 0.0629184418746196,
-        "cer": 0.025361417966113735,
-        "mer": 0.06252717134486344,
-        "wil": 0.10999272148964301,
-        "wip": 0.890007278510357
-      }
-    },
-    "test-other": {
-      "greedy": {
-        "wer": 0.14261696884015054,
-        "cer": 0.06683946941977871,
-        "mer": 0.14061028442267848,
-        "wil": 0.23920137462664237,
-        "wip": 0.7607986253733576
-      }
-    }
-  }
-]
-```
+<!-- ----------------------------------------------------- VN ------------------------------------------------------ -->
 
-# VietBud500
+# [Vietnamese] VietBud500
 
-## I. Small + SentencePiece 1k
+## II. Small + Streaming + SentencePiece 1k
 
 | Category          | Description                                                |
 | :---------------- | :--------------------------------------------------------- |
-| Config            | [small.yml.j2](../../small.yml.j2)                         |
+| Config            | [small-streaming.yml.j2](../../small-streaming.yml.j2)     |
 | Tensorflow        | **2.18.0**                                                 |
 | Device            | Google Cloud TPUs v4-8                                     |
 | Mixed Precision   | strict                                                     |
 | Global Batch Size | 8 * 4 * 8 = 256 (as 4 TPUs, 8 Gradient Accumulation Steps) |
 | Max Epochs        | 300                                                        |
 
-### Training
+### Config
 
-#### 1. Epoch Loss
-
-![Epoch Loss](./figs/)
-
-#### 2. Batch Loss
-
-![Batch Loss](./figs/)
-
-#### 3. Learning Rate
-
-![Learning Rate](./figs/)
-
-### Pretrained Model
-
-[Link]()
+```jinja2
+{% import "examples/datasets/vietbud500/sentencepiece/sp.yml.j2" as decoder_config with context %}
+{{decoder_config}}
+{% import "examples/models/transducer/conformer/small-streaming.yml.j2" as config with context %}
+{{config}}
+```
 
 ### Results
 
-```json
-[
+| Training      | Image                                                           |
+| :------------ | :-------------------------------------------------------------- |
+| Epoch Loss    | ![Epoch Loss](./figs/vietbud500-small-streaming-epoch-loss.svg) |
+| Batch Loss    | ![Batch Loss](./figs/vietbud500-small-streaming-batch-loss.svg) |
+| Learning Rate | ![Learning Rate](./figs/vietbud500-small-streaming-lr.svg)      |
 
-]
-```
+| Epoch | decoding | wer      | cer      | mer     | wil      | wip      |
+| :---- | :------- | :------- | :------- | :------ | :------- | :------- |
+| 52    | greedy   | 0.053723 | 0.034548 | 0.05362 | 0.086421 | 0.913579 |
+
+**Pretrained Model**: [Link](https://www.kaggle.com/models/lordh9072/tfasr-vietbud500-conformer-transducer/tensorFlow2/small-streaming)

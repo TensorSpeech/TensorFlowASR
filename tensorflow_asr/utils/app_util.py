@@ -39,6 +39,7 @@ def evaluate_hypotheses(filepath: str):
         {"greedy": {wer, cer, mer, wil, wip}, "beam": {wer, cer, mer, wil, wip}}
         The results are original, NOT multiplied with 100.
     """
+    import pandas as pd  # pylint: disable=import-outside-toplevel
     from tqdm import tqdm  # pylint: disable=import-outside-toplevel
 
     logger.info(f"Reading file {filepath} ...")
@@ -77,8 +78,8 @@ def evaluate_hypotheses(filepath: str):
             "wip": beam_wordoutput.wip,
         },
     }
-
-    return outputs
+    df = pd.DataFrame.from_dict(outputs, orient="index")
+    return df
 
 
 def convert_tflite(

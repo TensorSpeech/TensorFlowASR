@@ -13,7 +13,6 @@
 # limitations under the License.
 
 
-import json
 import logging
 import os
 
@@ -86,7 +85,7 @@ def main(
                 )
 
         evaluation_outputs = app_util.evaluate_hypotheses(output)
-        logger.info(json.dumps(evaluation_outputs, indent=2))
+        logger.info(f"Results:\n{evaluation_outputs.to_markdown()}")
 
 
 if __name__ == "__main__":
