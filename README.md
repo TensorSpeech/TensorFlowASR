@@ -31,10 +31,6 @@ TensorFlowASR implements some automatic speech recognition architectures such as
   - [Baselines](#baselines)
   - [Publications](#publications)
 - [Installation](#installation)
-  - [Installing from source (recommended)](#installing-from-source-recommended)
-  - [Installing via PyPi](#installing-via-pypi)
-  - [Installing for development](#installing-for-development)
-  - [Running in a container](#running-in-a-container)
 - [Training \& Testing Tutorial](#training--testing-tutorial)
 - [Features Extraction](#features-extraction)
 - [Augmentations](#augmentations)
@@ -79,45 +75,13 @@ For training and testing, you should use `git clone` for installing necessary pa
 
 See the `requirements.[extra].txt` files for extra dependencies
 
-### Installing from source (recommended)
-
 ```bash
 git clone https://github.com/TensorSpeech/TensorFlowASR.git
 cd TensorFlowASR
-pip3 install -e . # or ".[cuda]" if using GPU
+./setup.sh [apple|tpu|gpu] [dev]
 ```
 
-For **anaconda3**:
-
-```bash
-conda create -y -n tfasr python=3.11 # tensorflow if using CPU, this makes sure conda install all dependencies for tensorflow
-conda activate tfasr
-git clone https://github.com/TensorSpeech/TensorFlowASR.git
-cd TensorFlowASR
-pip3 install -e . # or ".[cuda]" if using GPU
-```
-
-For **colab with TPUs**:
-
-```bash
-pip3 install -e ".[tpu]" -f https://storage.googleapis.com/libtpu-tf-releases/index.html
-```
-
-### Installing via PyPi
-
-```bash
-pip3 install "TensorFlowASR" # or "TensorFlowASR[cuda]" if using GPU
-```
-
-### Installing for development
-
-```bash
-git clone https://github.com/TensorSpeech/TensorFlowASR.git
-cd TensorFlowASR
-pip3 install -e ".[apple,dev]"
-```
-
-### Running in a container
+**Running in a container**
 
 ```bash
 docker-compose up -d
