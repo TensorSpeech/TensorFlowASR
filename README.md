@@ -147,7 +147,7 @@ See [tflite_convertion](./docs/tutorials/tflite.md)
 
 ## Pretrained Models
 
-Go to [drive](https://drive.google.com/drive/folders/1BD0AK30n8hc-yR28C5FW3LqzZxtLOQfl?usp=sharing)
+See the results on each example folder, e.g. [./examples/models//transducer/conformer/results/sentencepiece/README.md](./examples/models//transducer/conformer/results/sentencepiece/README.md)
 
 ## Corpus Sources
 
@@ -165,6 +165,7 @@ Go to [drive](https://drive.google.com/drive/folders/1BD0AK30n8hc-yR28C5FW3LqzZx
 | Vivos                                  | [https://ailab.hcmus.edu.vn/vivos](https://www.kaggle.com/datasets/kynthesis/vivos-vietnamese-speech-corpus-for-asr) | 15h       |
 | InfoRe Technology 1                    | [InfoRe1 (passwd: BroughtToYouByInfoRe)](https://files.huylenguyen.com/datasets/infore/25hours.zip)                  | 25h       |
 | InfoRe Technology 2 (used in VLSP2019) | [InfoRe2 (passwd: BroughtToYouByInfoRe)](https://files.huylenguyen.com/datasets/infore/audiobooks.zip)               | 415h      |
+| VieitBud500                            | [https://huggingface.co/datasets/linhtran92/viet_bud500](https://huggingface.co/datasets/linhtran92/viet_bud500)     | 500h      |
 
 ## How to contribute
 

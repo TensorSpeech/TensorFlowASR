@@ -317,10 +317,10 @@ class BaseModel(keras.Model, TensorFlowTrainer):
         return tf.ones([batch_size, 1], dtype=tf.int32) * self.tokenizer.blank
 
     def get_initial_encoder_states(self, batch_size=1):
-        return None
+        return []
 
     def get_initial_decoder_states(self, batch_size=1):
-        return None
+        return []
 
     def recognize(self, inputs: schemas.PredictInput, **kwargs) -> schemas.PredictOutput:
         """Greedy decoding function that used in self.predict_step"""
@@ -351,8 +351,8 @@ class BaseModel(keras.Model, TensorFlowTrainer):
             inputs=tf.TensorSpec([batch_size, None], dtype=tf.float32),
             inputs_length=tf.TensorSpec([batch_size], dtype=tf.int32),
             previous_tokens=tf.TensorSpec.from_tensor(self.get_initial_tokens(batch_size)),
-            previous_encoder_states=tf.TensorSpec.from_tensor(self.get_initial_encoder_states(batch_size)),
-            previous_decoder_states=tf.TensorSpec.from_tensor(self.get_initial_decoder_states(batch_size)),
+            previous_encoder_states=tf.nest.map_structure(tf.TensorSpec.from_tensor, self.get_initial_encoder_states(batch_size)),
+            previous_decoder_states=tf.nest.map_structure(tf.TensorSpec.from_tensor, self.get_initial_decoder_states(batch_size)),
         )
 
         return tf.function(

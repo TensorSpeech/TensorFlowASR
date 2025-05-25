@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" https://arxiv.org/pdf/1811.06621.pdf """
+"""https://arxiv.org/pdf/1811.06621.pdf"""
 
 import collections
 import typing
@@ -464,7 +464,7 @@ class Transducer(BaseModel):
             return ytu, new_states
 
     def get_initial_encoder_states(self, batch_size=1):
-        return None
+        return []
 
     def get_initial_decoder_states(self, batch_size=1):
         return self.predict_net.get_initial_state(batch_size)

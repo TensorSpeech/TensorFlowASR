@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" http://arxiv.org/abs/2005.08100 """
+"""http://arxiv.org/abs/2005.08100"""
 
 from tensorflow_asr import keras, tf
 from tensorflow_asr.models.activations.glu import GLU
@@ -21,6 +21,7 @@ from tensorflow_asr.models.layers.general import Activation, Dropout, Identity
 from tensorflow_asr.models.layers.multihead_attention import MultiHeadAttention, MultiHeadRelativeAttention
 from tensorflow_asr.models.layers.positional_encoding import RelativeSinusoidalPositionalEncoding, SinusoidalPositionalEncoding
 from tensorflow_asr.models.layers.residual import Residual
+from tensorflow_asr.utils import data_util
 
 L2 = keras.regularizers.l2(1e-6)
 
@@ -664,7 +665,9 @@ class ConformerEncoder(keras.Model):
             self.content_attention_bias, self.positional_attention_bias = None, None
 
     def get_initial_state(self, batch_size: int):
-        return [block.get_initial_state(batch_size) for block in self.conformer_blocks]
+        states = [block.get_initial_state(batch_size) for block in self.conformer_blocks]
+        states = [s for s in states if s is not None]
+        return states
 
     def call(
         self,
@@ -684,7 +687,7 @@ class ConformerEncoder(keras.Model):
                 (outputs, relative_position_encoding),
                 content_attention_bias=self.content_attention_bias,
                 positional_attention_bias=self.positional_attention_bias,
-                initial_state=None if initial_state is None else initial_state[i],
+                initial_state=data_util.get(initial_state, i, None),
                 training=training,
                 use_causal_mask=self._use_attention_causal_mask,
                 use_auto_mask=self._use_attention_auto_mask,

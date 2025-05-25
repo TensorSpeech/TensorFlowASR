@@ -10,14 +10,15 @@
 
 ## I. Small + SentencePiece 1k
 
-| Category          | Description                                                |
-| :---------------- | :--------------------------------------------------------- |
-| Config            | [small.yml.j2](../../small.yml.j2)                         |
-| Tensorflow        | **2.18.0**                                                 |
-| Device            | Google Cloud TPUs v4-8                                     |
-| Mixed Precision   | strict                                                     |
-| Global Batch Size | 4 * 4 * 8 = 128 (as 4 TPUs, 8 Gradient Accumulation Steps) |
-| Max Epochs        | 300                                                        |
+| Category          | Description                                                                                     |
+| :---------------- | :---------------------------------------------------------------------------------------------- |
+| Config            | [small.yml.j2](../../small.yml.j2)                                                              |
+| Tensorflow        | **2.18.0**                                                                                      |
+| Device            | Google Cloud TPUs v4-8                                                                          |
+| Mixed Precision   | strict                                                                                          |
+| Global Batch Size | 4 * 4 * 8 = 128 (as 4 TPUs, 8 Gradient Accumulation Steps)                                      |
+| Max Epochs        | 300                                                                                             |
+| Pretrained        | [Link](https://www.kaggle.com/models/lordh9072/tfasr-conformer-transducer/tensorFlow2/v3-small) |
 
 **Config:**
 
@@ -37,14 +38,15 @@
 
 ## II. Small + Streaming + SentencePiece 1k
 
-| Category          | Description                                                |
-| :---------------- | :--------------------------------------------------------- |
-| Config            | [small-streaming.yml.j2](../../small-streaming.yml.j2)     |
-| Tensorflow        | **2.18.0**                                                 |
-| Device            | Google Cloud TPUs v4-8                                     |
-| Mixed Precision   | strict                                                     |
-| Global Batch Size | 4 * 4 * 8 = 128 (as 4 TPUs, 8 Gradient Accumulation Steps) |
-| Max Epochs        | 300                                                        |
+| Category          | Description                                                                                               |
+| :---------------- | :-------------------------------------------------------------------------------------------------------- |
+| Config            | [small-streaming.yml.j2](../../small-streaming.yml.j2)                                                    |
+| Tensorflow        | **2.18.0**                                                                                                |
+| Device            | Google Cloud TPUs v4-8                                                                                    |
+| Mixed Precision   | strict                                                                                                    |
+| Global Batch Size | 4 * 4 * 8 = 128 (as 4 TPUs, 8 Gradient Accumulation Steps)                                                |
+| Max Epochs        | 300                                                                                                       |
+| Pretrained        | [Link](https://www.kaggle.com/models/lordh9072/tfasr-conformer-transducer/tensorFlow2/v3-small-streaming) |
 
 **Config:**
 
@@ -57,10 +59,10 @@
 
 **Results:**
 
-| Epoch | Dataset    | decoding | wer      | cer       | mer      | wil      | wip      |
-| :---- | :--------- | :------- | :------- | :-------- | :------- | :------- | :------- |
-| 45    | test-clean | greedy   | 0.110564 | 0.0460022 | 0.109064 | 0.186109 | 0.813891 |
-| 45    | test-other | greedy   | 0.267772 | 0.139369  | 0.260952 | 0.417361 | 0.582639 |
+| Epoch | Dataset    | decoding | wer       | cer       | mer       | wil      | wip      |
+| :---- | :--------- | :------- | :-------- | :-------- | :-------- | :------- | :------- |
+| 45    | test-clean | greedy   | 0.0797322 | 0.0312862 | 0.0790049 | 0.137228 | 0.862772 |
+| 45    | test-other | greedy   | 0.211872  | 0.104173  | 0.207305  | 0.341269 | 0.658731 |
 
 <!-- ----------------------------------------------------- VN ------------------------------------------------------ -->
 
@@ -68,14 +70,15 @@
 
 ## I. Small + Streaming + SentencePiece 1k
 
-| Category          | Description                                                |
-| :---------------- | :--------------------------------------------------------- |
-| Config            | [small-streaming.yml.j2](../../small-streaming.yml.j2)     |
-| Tensorflow        | **2.18.0**                                                 |
-| Device            | Google Cloud TPUs v4-8                                     |
-| Mixed Precision   | strict                                                     |
-| Global Batch Size | 8 * 4 * 8 = 256 (as 4 TPUs, 8 Gradient Accumulation Steps) |
-| Max Epochs        | 300                                                        |
+| Category          | Description                                                                                                       |
+| :---------------- | :---------------------------------------------------------------------------------------------------------------- |
+| Config            | [small-streaming.yml.j2](../../small-streaming.yml.j2)                                                            |
+| Tensorflow        | **2.18.0**                                                                                                        |
+| Device            | Google Cloud TPUs v4-8                                                                                            |
+| Mixed Precision   | strict                                                                                                            |
+| Global Batch Size | 8 * 4 * 8 = 256 (as 4 TPUs, 8 Gradient Accumulation Steps)                                                        |
+| Max Epochs        | 300                                                                                                               |
+| Pretrained        | [Link](https://www.kaggle.com/models/lordh9072/tfasr-vietbud500-conformer-transducer/tensorFlow2/small-streaming) |
 
 **Config:**
 
@@ -110,5 +113,3 @@
 | Epoch | decoding | wer      | cer      | mer     | wil      | wip      |
 | :---- | :------- | :------- | :------- | :------ | :------- | :------- |
 | 52    | greedy   | 0.053723 | 0.034548 | 0.05362 | 0.086421 | 0.913579 |
-
-**Pretrained Model**: [Link](https://www.kaggle.com/models/lordh9072/tfasr-vietbud500-conformer-transducer/tensorFlow2/small-streaming)

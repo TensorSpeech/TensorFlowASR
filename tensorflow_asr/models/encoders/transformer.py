@@ -20,6 +20,7 @@ from tensorflow_asr.models.layers.multihead_attention import MultiHeadAttention,
 from tensorflow_asr.models.layers.positional_encoding import RelativeSinusoidalPositionalEncoding, SinusoidalPositionalEncoding
 from tensorflow_asr.models.layers.residual import Residual
 from tensorflow_asr.models.layers.subsampling import Conv1dSubsampling, Conv2dSubsampling, VggSubsampling
+from tensorflow_asr.utils import data_util
 
 
 @keras.utils.register_keras_serializable(package=__name__)
@@ -330,7 +331,7 @@ class TransformerEncoder(keras.Model):
                 [outputs, relative_position_encoding],
                 content_attention_bias=self.content_attention_bias,
                 positional_attention_bias=self.positional_attention_bias,
-                initial_state=None if initial_state is None else initial_state[i],
+                initial_state=data_util.get(initial_state, i, None),
                 training=training,
                 use_causal_mask=self._use_attention_causal_mask,
                 use_auto_mask=self._use_attention_auto_mask,

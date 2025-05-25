@@ -12,12 +12,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import logging
 import os
 
 from tensorflow_asr import keras, tf, tokenizers  # import to aid logging messages
 from tensorflow_asr.configs import Config
 from tensorflow_asr.models.base_model import BaseModel
-from tensorflow_asr.utils import app_util, cli_util, env_util, file_util
+from tensorflow_asr.utils import app_util, cli_util, env_util, keras_util
+
+logger = logging.getLogger(__name__)
 
 
 def main(
@@ -36,11 +39,13 @@ def main(
     tokenizer = tokenizers.get(config)
     tokenizer.make()
 
-    model: BaseModel = keras.Model.from_config(config.model_config)
+    logger.info(f"Configs: {str(config)}")
+
+    model: BaseModel = keras_util.model_from_config(config.model_config)
     model.tokenizer = tokenizer
     model.make(batch_size=bs)
     if h5 and tf.io.gfile.exists(h5):
-        model.load_weights(h5, by_name=file_util.is_hdf5_filepath(h5))
+        model.load_weights(h5, skip_mismatch=False)
     model.summary()
 
     app_util.convert_tflite(model=model, output=output, batch_size=bs, beam_width=beam_width)

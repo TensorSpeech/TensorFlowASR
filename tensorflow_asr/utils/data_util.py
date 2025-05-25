@@ -40,6 +40,8 @@ def get(
     path: str,
     default: Any = None,
 ):
+    path = str(path)
+
     def _reduce_fn(d, key):
         if isinstance(d, dict):
             return d.get(key, default)

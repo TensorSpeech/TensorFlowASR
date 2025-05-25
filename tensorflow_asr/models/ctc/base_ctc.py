@@ -92,10 +92,10 @@ class CtcModel(BaseModel):
         return outputs, outputs_length, next_encoder_states, next_decoder_states
 
     def get_initial_encoder_states(self, batch_size=1):
-        return None
+        return []
 
     def get_initial_decoder_states(self, batch_size=1):
-        return None
+        return []
 
     # -------------------------------- GREEDY -------------------------------------
 
