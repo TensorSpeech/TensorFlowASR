@@ -167,7 +167,7 @@ See the results on each example folder, e.g. [./examples/models//transducer/conf
 | Vivos                                  | [https://ailab.hcmus.edu.vn/vivos](https://www.kaggle.com/datasets/kynthesis/vivos-vietnamese-speech-corpus-for-asr) | 15h       |
 | InfoRe Technology 1                    | [InfoRe1 (passwd: BroughtToYouByInfoRe)](https://files.huylenguyen.com/datasets/infore/25hours.zip)                  | 25h       |
 | InfoRe Technology 2 (used in VLSP2019) | [InfoRe2 (passwd: BroughtToYouByInfoRe)](https://files.huylenguyen.com/datasets/infore/audiobooks.zip)               | 415h      |
-| VieitBud500                            | [https://huggingface.co/datasets/linhtran92/viet_bud500](https://huggingface.co/datasets/linhtran92/viet_bud500)     | 500h      |
+| VietBud500                             | [https://huggingface.co/datasets/linhtran92/viet_bud500](https://huggingface.co/datasets/linhtran92/viet_bud500)     | 500h      |
 
 ## How to contribute
 
