@@ -60,6 +60,8 @@ TensorFlowASR implements some automatic speech recognition architectures such as
 
 - **Conformer Transducer** (Reference: [https://arxiv.org/abs/2005.08100](https://arxiv.org/abs/2005.08100))
   See [examples/models/transducer/conformer](./examples/models/transducer/conformer)
+- **Streaming Conformer** (Reference: [http://arxiv.org/abs/2010.11395](http://arxiv.org/abs/2010.11395))
+  See [examples/models/transducer/conformer](./examples/models/transducer/conformer)
 - **ContextNet** (Reference: [http://arxiv.org/abs/2005.03191](http://arxiv.org/abs/2005.03191))
   See [examples/models/transducer/contextnet](./examples/models/transducer/contextnet)
 - **RNN Transducer** (Reference: [https://arxiv.org/abs/1811.06621](https://arxiv.org/abs/1811.06621))
