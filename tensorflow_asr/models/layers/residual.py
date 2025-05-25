@@ -35,7 +35,7 @@ class Residual(Layer):
         name="residual",
         **kwargs,
     ):
-        super().__init__(name=name, **kwargs)
+        super().__init__(name=name, trainable=False, **kwargs)
         self._factor = factor
         self._initializer = initializer
         self._regularizer = regularizer
@@ -52,12 +52,12 @@ class Residual(Layer):
             )
         else:
             assert isinstance(self._factor, (int, float))
-            self._alpha = tf.convert_to_tensor(self._factor, dtype=self.compute_dtype)
+            self._alpha = self._factor
         return super().build(input_shape)
 
     def call(self, inputs):
         x, residual_x = inputs
-        alpha = tf.cast(self._alpha, residual_x.dtype)
+        alpha = tf.cast(tf.convert_to_tensor(self._alpha, dtype=self.dtype), residual_x.dtype)
         x = x + alpha * residual_x
         return x
 

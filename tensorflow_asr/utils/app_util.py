@@ -13,14 +13,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import logging
+
 import jiwer
-from tqdm import tqdm
 
 from tensorflow_asr import tf
 from tensorflow_asr.models.base_model import BaseModel
 from tensorflow_asr.utils import file_util, math_util
 
-logger = tf.get_logger()
+logger = logging.getLogger(__name__)
 
 
 def evaluate_hypotheses(filepath: str):
@@ -38,13 +39,16 @@ def evaluate_hypotheses(filepath: str):
         {"greedy": {wer, cer, mer, wil, wip}, "beam": {wer, cer, mer, wil, wip}}
         The results are original, NOT multiplied with 100.
     """
+    import pandas as pd  # pylint: disable=import-outside-toplevel
+    from tqdm import tqdm  # pylint: disable=import-outside-toplevel
+
     logger.info(f"Reading file {filepath} ...")
     reference, greedy_hypothesis, beam_hypothesis = [], [], []
     with file_util.read_file(filepath) as path:
         with tf.io.gfile.GFile(path, "r") as openfile:
             lines = openfile.read().splitlines()
             lines = lines[1:]  # skip header
-            for eachline in tqdm(lines):
+            for eachline in tqdm(lines, disable=False):
                 _, groundtruth, greedy, beamsearch = eachline.split("\t")
                 reference.append(groundtruth)
                 greedy_hypothesis.append(greedy)
@@ -74,8 +78,8 @@ def evaluate_hypotheses(filepath: str):
             "wip": beam_wordoutput.wip,
         },
     }
-
-    return outputs
+    df = pd.DataFrame.from_dict(outputs, orient="index")
+    return df
 
 
 def convert_tflite(

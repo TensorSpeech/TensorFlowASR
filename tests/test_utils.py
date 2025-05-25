@@ -27,3 +27,9 @@ def test_dataset():
     ds = ds.repeat(3)
     ds = ds.batch(batch, drop_remainder=True)
     print(list(ds.as_numpy_iterator()))
+
+
+def test_split_batch():
+    a = tf.ones((12, 2, 4), tf.float32)
+    b = math_util.split_tensor_by_ga(a, 4, 3)
+    print(b)

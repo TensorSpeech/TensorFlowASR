@@ -11,14 +11,14 @@
 ## Conversion
 
 ```bash
-python3 examples/tflite.py \
+tensorflow_asr tflite \
     --config-path=/path/to/config.yml.j2 \
     --h5=/path/to/weight.h5 \
     --bs=1 \ # Batch size
     --beam-width=0 \ # Beam width, set >0 to enable beam search
     --output=/path/to/output.tflite
 ## See others params
-python examples/tflite.py --help
+tensorflow_asr tflite --help
 ```
 
 ## Inference

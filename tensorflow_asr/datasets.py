@@ -61,18 +61,18 @@
 # Where `predictions` and `predictions_length` are the label prepanded by blank and its length for training *Transducer*
 
 import json
+import logging
 import os
 from dataclasses import asdict, dataclass
 
 import numpy as np
-import tqdm
 
 from tensorflow_asr import schemas, tf
+from tensorflow_asr.abstracts import AbstractDataset, AbstractTokenizer
 from tensorflow_asr.configs import Config, DatasetConfig
-from tensorflow_asr.tokenizers import Tokenizer
 from tensorflow_asr.utils import data_util, feature_util, file_util, math_util
 
-logger = tf.get_logger()
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -80,13 +80,16 @@ class ASR_DATASER_TYPES:
     TFRECORD: str = "tfrecord"
     SLICE: str = "slice"
     GENERATOR: str = "generator"
+    HUGGINGFACE: str = "huggingface"
 
 
 def get(
-    tokenizer: Tokenizer,
+    tokenizer: AbstractTokenizer,
     dataset_config: DatasetConfig,
     dataset_type: str,
+    dataset_cache: bool = False,
 ):
+    dataset_config.cache = dataset_cache
     if dataset_type == ASR_DATASER_TYPES.TFRECORD:
         return ASRTFRecordDataset(tokenizer=tokenizer, **vars(dataset_config))
     if dataset_type == ASR_DATASER_TYPES.SLICE:
@@ -98,15 +101,11 @@ def get(
 
 def get_global_shape(
     config: Config,
-    strategy,
-    *datasets,
+    strategy: tf.distribute.Strategy,
+    *datasets: "ASRDataset",
     batch_size: int = None,
-    ga_steps: int = None,
 ):
     batch_size = (batch_size or config.learning_config.running_config.batch_size) * strategy.num_replicas_in_sync
-    ds_batch_size = batch_size
-    if ga_steps is not None and ga_steps > 1:
-        ds_batch_size *= ga_steps
 
     max_input_length, max_label_length = 0, 0
     for dset in datasets:
@@ -118,27 +117,25 @@ def get_global_shape(
     input_shape = [max_input_length]
     prediction_shape = [max_label_length + 1] if max_label_length else [None]
     label_shape = [max_label_length]
-    padded_shapes = (
-        schemas.TrainInput(
+    padded_shapes = schemas.TrainData(
+        inputs=schemas.TrainInput(
             inputs=tf.TensorShape(input_shape),
             inputs_length=tf.TensorShape([]),
             predictions=tf.TensorShape(prediction_shape),
             predictions_length=tf.TensorShape([]),
         ),
-        schemas.TrainLabel(
+        labels=schemas.TrainLabel(
             labels=tf.TensorShape(label_shape),
             labels_length=tf.TensorShape([]),
         ),
     )
 
-    return dict(
-        ds_batch_size=ds_batch_size,
+    model_shapes = dict(
         batch_size=batch_size,
         input_shape=input_shape,
         prediction_shape=prediction_shape,
-        label_shape=label_shape,
-        padded_shapes=padded_shapes,
     )
+    return model_shapes, batch_size, padded_shapes
 
 
 BUFFER_SIZE = 100
@@ -147,24 +144,29 @@ TFRECORD_SHARDS = 16
 AUTOTUNE = int(os.environ.get("AUTOTUNE") or tf.data.AUTOTUNE)
 
 
-class BaseDataset:
-    """Based dataset for all models"""
-
+class ASRDataset(AbstractDataset):
     def __init__(
         self,
+        stage: str,
+        tokenizer: AbstractTokenizer,
         data_paths: list,
+        tfrecords_dir: str = None,
+        tfrecords_shards: int = TFRECORD_SHARDS,
+        tfrecords_buffer_size: int = TFRECORD_BUFFER_SIZE,
+        tfrecords_compression_type: str = "GZIP",
+        item_mapping: dict = None,
         cache: bool = False,
         shuffle: bool = False,
-        buffer_size: int = BUFFER_SIZE,
-        indefinite: bool = False,
+        indefinite: bool = True,
         drop_remainder: bool = True,
         enabled: bool = True,
         metadata: str = None,
+        buffer_size: int = BUFFER_SIZE,
         sample_rate: int = 16000,
-        stage: str = "train",
         name: str = "",
         **kwargs,
     ):
+        self.tokenizer = tokenizer
         self.data_paths = data_paths or []
         if not isinstance(self.data_paths, list):
             raise ValueError("data_paths must be a list of string paths")
@@ -178,50 +180,20 @@ class BaseDataset:
         self.total_steps = None  # for better training visualization
         self.metadata = metadata
         self.sample_rate = sample_rate
-        self.name = name
+        self.use_ga = False
+        self.name = name or stage
+        self.tfrecords_dir = tfrecords_dir
+        if tfrecords_shards <= 0:
+            raise ValueError("tfrecords_shards must be positive")
+        self.tfrecords_shards = tfrecords_shards
+        self.tfrecords_buffer_size = tfrecords_buffer_size
+        self.tfrecords_compression_type = tfrecords_compression_type
+        self.item_mapping = item_mapping or {}
 
-    def parse(self, *args, **kwargs):
-        raise NotImplementedError()
+        for key, value in kwargs.items():
+            setattr(self, key, value)
 
-    def create(self, batch_size):
-        raise NotImplementedError()
-
-
-class ASRDataset(BaseDataset):
-    """Dataset for ASR using Generator"""
-
-    def __init__(
-        self,
-        stage: str,
-        tokenizer: Tokenizer,
-        data_paths: list,
-        cache: bool = False,
-        shuffle: bool = False,
-        indefinite: bool = True,
-        drop_remainder: bool = True,
-        enabled: bool = True,
-        metadata: str = None,
-        buffer_size: int = BUFFER_SIZE,
-        sample_rate: int = 16000,
-        name: str = "",
-        **kwargs,
-    ):
-        super().__init__(
-            data_paths=data_paths,
-            cache=cache,
-            shuffle=shuffle,
-            stage=stage,
-            buffer_size=buffer_size,
-            drop_remainder=drop_remainder,
-            enabled=enabled,
-            metadata=metadata,
-            indefinite=indefinite,
-            sample_rate=sample_rate,
-            name=name,
-            **kwargs,
-        )
         self.entries = []
-        self.tokenizer = tokenizer
         self.max_input_length = None
         self.max_label_length = None
         self.load_metadata()
@@ -229,12 +201,15 @@ class ASRDataset(BaseDataset):
     # -------------------------------- metadata -------------------------------------
 
     def compute_metadata(self):
+        if not self.tokenizer.initialized:
+            raise ValueError("Tokenizer must be initialized before computing metadata")
+
+        from tqdm import tqdm  # pylint: disable=import-outside-toplevel
+
         self.max_input_length = 0 if self.max_input_length is None else self.max_input_length
         self.max_label_length = 0 if self.max_label_length is None else self.max_label_length
-        if self.max_input_length > 0 and self.max_label_length > 0:
-            return  # already computed
         self.read_entries()
-        for _, duration, transcript in tqdm.tqdm(self.entries, desc=f"Computing metadata for entries in {self.stage} dataset"):
+        for _, duration, transcript in tqdm(self.entries, desc=f"Computing metadata for entries in {self.stage} dataset", disable=False):
             input_length = math_util.get_nsamples(duration, self.sample_rate)
             label = self.tokenizer.tokenize(transcript).numpy()
             label_length = len(label)
@@ -305,6 +280,10 @@ class ASRDataset(BaseDataset):
         self.total_steps = len(self.entries)
         self.num_entries = self.total_steps
 
+    def vocab_generator(self):
+        for *_, transcript in self.entries:
+            yield transcript
+
     # -------------------------------- LOAD AND PREPROCESS -------------------------------------
 
     def generator(self):
@@ -313,22 +292,19 @@ class ASRDataset(BaseDataset):
             yield bytes(path, "utf-8"), audio, bytes(transcript, "utf-8")
 
     def _process_item(self, path: tf.Tensor, audio: tf.Tensor, transcript: tf.Tensor):
-        inputs = data_util.read_raw_audio(audio)
-        inputs_length = tf.shape(inputs)[0]
+        with tf.device("/CPU:0"):
+            inputs = data_util.read_raw_audio(audio)
+            inputs_length = tf.shape(inputs, out_type=tf.int32)[0]
 
-        labels = self.tokenizer.tokenize(transcript)
-        labels_length = tf.shape(labels, out_type=tf.int32)[0]
+            labels = self.tokenizer.tokenize(transcript)
+            labels_length = tf.shape(labels, out_type=tf.int32)[0]
 
-        predictions = self.tokenizer.prepand_blank(labels)
-        predictions_length = tf.shape(predictions, out_type=tf.int32)[0]
+            predictions = self.tokenizer.prepand_blank(labels)
+            predictions_length = tf.shape(predictions, out_type=tf.int32)[0]
 
-        return path, inputs, inputs_length, labels, labels_length, predictions, predictions_length
+            return path, inputs, inputs_length, labels, labels_length, predictions, predictions_length
 
-    def parse(self, path: tf.Tensor, audio: tf.Tensor, transcript: tf.Tensor):
-        """
-        Returns:
-            path, features, input_lengths, labels, label_lengths, pred_inp
-        """
+    def parse(self, path: tf.Tensor, audio: tf.Tensor, transcript: tf.Tensor) -> schemas.TrainData:
         (
             _,
             inputs,
@@ -338,35 +314,40 @@ class ASRDataset(BaseDataset):
             predictions,
             predictions_length,
         ) = self._process_item(path=path, audio=audio, transcript=transcript)
-        return (
-            schemas.TrainInput(inputs=inputs, inputs_length=inputs_length, predictions=predictions, predictions_length=predictions_length),
-            schemas.TrainLabel(labels=labels, labels_length=labels_length),
+        return schemas.TrainData(
+            inputs=schemas.TrainInput(inputs=inputs, inputs_length=inputs_length, predictions=predictions, predictions_length=predictions_length),
+            labels=schemas.TrainLabel(labels=labels, labels_length=labels_length),
         )
 
     # -------------------------------- CREATION -------------------------------------
 
-    def process(self, dataset: tf.data.Dataset, batch_size: int, padded_shapes=None):
+    def process(
+        self,
+        dataset: tf.data.Dataset,
+        batch_size: int,
+        ga_steps: int = 1,
+        padded_shapes=None,
+    ):
+        dataset = dataset.map(self.parse, num_parallel_calls=AUTOTUNE, deterministic=False)
+
         if self.cache:
             dataset = dataset.cache()  # cache original (unchanged data)
 
-        dataset = dataset.map(self.parse, num_parallel_calls=AUTOTUNE, deterministic=False)
-        self.total_steps = math_util.get_num_batches(self.num_entries, batch_size, drop_remainders=self.drop_remainder)
-
         if self.shuffle:
-            dataset = dataset.shuffle(self.buffer_size or self.num_entries, reshuffle_each_iteration=True)
+            dataset = dataset.shuffle(max(self.buffer_size or self.num_entries, batch_size * 2), reshuffle_each_iteration=True)
 
-        if self.indefinite and self.total_steps:
+        if self.indefinite and hasattr(self, "total_steps") and self.total_steps:
             dataset = dataset.repeat()
 
         if padded_shapes is None:
-            padded_shapes = (
-                schemas.TrainInput(
+            padded_shapes = schemas.TrainData(
+                inputs=schemas.TrainInput(
                     inputs=tf.TensorShape([self.max_input_length]),
                     inputs_length=tf.TensorShape([]),
                     predictions=tf.TensorShape([self.max_label_length + 1 if self.max_label_length else None]),
                     predictions_length=tf.TensorShape([]),
                 ),
-                schemas.TrainLabel(
+                labels=schemas.TrainLabel(
                     labels=tf.TensorShape([self.max_label_length]),
                     labels_length=tf.TensorShape([]),
                 ),
@@ -376,19 +357,32 @@ class ASRDataset(BaseDataset):
         dataset = dataset.padded_batch(
             batch_size=batch_size,
             padded_shapes=padded_shapes,
-            padding_values=(
-                schemas.TrainInput(inputs=0.0, inputs_length=0, predictions=self.tokenizer.blank, predictions_length=0),
-                schemas.TrainLabel(labels=self.tokenizer.blank, labels_length=0),
+            padding_values=schemas.TrainData(
+                inputs=schemas.TrainInput(inputs=0.0, inputs_length=0, predictions=self.tokenizer.blank, predictions_length=0),
+                labels=schemas.TrainLabel(labels=self.tokenizer.blank, labels_length=0),
             ),
             drop_remainder=self.drop_remainder,
         )
 
+        # only apply for training dataset, eval and test dataset should not use GA
+        if ga_steps > 1 and self.stage == "train":
+            self.use_ga = True
+
         # PREFETCH to improve speed of input length
         dataset = dataset.prefetch(AUTOTUNE)
+
+        # Update metadata
+        if hasattr(self, "num_entries") and self.num_entries > 0:
+            self.total_steps = math_util.get_num_batches(self.num_entries, batch_size, drop_remainders=self.drop_remainder)
+            if self.use_ga:
+                self.total_steps = math_util.get_num_batches(self.total_steps, ga_steps, drop_remainders=False)
+
         return dataset
 
-    def create(self, batch_size: int, padded_shapes=None):
+    def create(self, batch_size: int, ga_steps: int = 1, padded_shapes=None):
         if not self.enabled:
+            return None
+        if not self.tokenizer.initialized:
             return None
         self.read_entries()
         if not self.total_steps or self.total_steps == 0:
@@ -398,60 +392,16 @@ class ASRDataset(BaseDataset):
             output_types=(tf.string, tf.string, tf.string),
             output_shapes=(tf.TensorShape([]), tf.TensorShape([]), tf.TensorShape([])),
         )
-        return self.process(dataset, batch_size, padded_shapes=padded_shapes)
+        return self.process(dataset, batch_size, ga_steps=ga_steps, padded_shapes=padded_shapes)
 
 
 class ASRTFRecordDataset(ASRDataset):
     """Dataset for ASR using TFRecords"""
 
-    def __init__(
-        self,
-        data_paths: list,
-        tfrecords_dir: str,
-        tokenizer: Tokenizer,
-        stage: str,
-        tfrecords_shards: int = TFRECORD_SHARDS,
-        cache: bool = False,
-        shuffle: bool = False,
-        enabled: bool = True,
-        metadata: str = None,
-        indefinite: bool = True,
-        drop_remainder: bool = True,
-        buffer_size: int = BUFFER_SIZE,
-        tfrecords_buffer_size: int = TFRECORD_BUFFER_SIZE,
-        compression_type: str = "GZIP",
-        sample_rate: int = 16000,
-        name: str = "",
-        **kwargs,
-    ):
-        super().__init__(
-            stage=stage,
-            tokenizer=tokenizer,
-            data_paths=data_paths,
-            cache=cache,
-            shuffle=shuffle,
-            buffer_size=buffer_size,
-            drop_remainder=drop_remainder,
-            enabled=enabled,
-            metadata=metadata,
-            indefinite=indefinite,
-            sample_rate=sample_rate,
-            name=name,
-            **kwargs,
-        )
-        if not self.stage:
-            raise ValueError("stage must be defined, either 'train', 'eval' or 'test'")
-        self.tfrecords_dir = tfrecords_dir
-        if tfrecords_shards <= 0:
-            raise ValueError("tfrecords_shards must be positive")
-        self.tfrecords_shards = tfrecords_shards
-        self.tfrecords_buffer_size = tfrecords_buffer_size
-        self.compression_type = compression_type
-
     def write_tfrecord_file(self, splitted_entries: tuple):
         shard_path, entries = splitted_entries
         logger.info(f"Processing {shard_path} ...")
-        with tf.io.TFRecordWriter(shard_path, options=tf.io.TFRecordOptions(compression_type=self.compression_type)) as writer:
+        with tf.io.TFRecordWriter(shard_path, options=tf.io.TFRecordOptions(compression_type=self.tfrecords_compression_type)) as writer:
             for path, _, transcript in entries:
                 audio = data_util.load_and_convert_to_wav(path, sample_rate=self.sample_rate).numpy()
                 feature = dict(
@@ -498,8 +448,10 @@ class ASRTFRecordDataset(ASRDataset):
         example = tf.io.parse_single_example(record, feature_description)
         return super().parse(**example)
 
-    def create(self, batch_size: int, padded_shapes=None):
+    def create(self, batch_size: int, ga_steps: int = 1, padded_shapes=None):
         if not self.enabled:
+            return None
+        if not self.tokenizer.initialized:
             return None
         have_data = self.create_tfrecords()
         if not have_data:
@@ -511,10 +463,13 @@ class ASRTFRecordDataset(ASRDataset):
         ignore_order.deterministic = False
         files_ds = files_ds.with_options(ignore_order)
         dataset = tf.data.TFRecordDataset(
-            files_ds, compression_type=self.compression_type, buffer_size=self.tfrecords_buffer_size, num_parallel_reads=AUTOTUNE
+            files_ds,
+            compression_type=self.tfrecords_compression_type,
+            buffer_size=self.tfrecords_buffer_size,
+            num_parallel_reads=AUTOTUNE,
         )
 
-        return self.process(dataset, batch_size, padded_shapes=padded_shapes)
+        return self.process(dataset, batch_size, ga_steps=ga_steps, padded_shapes=padded_shapes)
 
 
 class ASRSliceDataset(ASRDataset):
@@ -528,8 +483,10 @@ class ASRSliceDataset(ASRDataset):
         )
         return record[0], audio, record[2]
 
-    def create(self, batch_size: int, padded_shapes=None):
+    def create(self, batch_size: int, ga_steps: int = 1, padded_shapes=None):
         if not self.enabled:
+            return None
+        if not self.tokenizer.initialized:
             return None
         self.read_entries()
         if not self.total_steps or self.total_steps == 0:
@@ -542,4 +499,4 @@ class ASRSliceDataset(ASRDataset):
         dataset = dataset.with_options(options)
         dataset = dataset.map(self.load, num_parallel_calls=AUTOTUNE, deterministic=False)
 
-        return self.process(dataset, batch_size, padded_shapes=padded_shapes)
+        return self.process(dataset, batch_size, ga_steps=ga_steps, padded_shapes=padded_shapes)

@@ -12,37 +12,29 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from collections import defaultdict
-from typing import List
+import glob
+import os
 
 from setuptools import find_packages, setup
 
+install_requires = []
+extras_requires = {}
 
-def parse_requirements(lines: List[str]):
-    _extras_requires = defaultdict(list)
-    extra = "requires"
-    for line in lines:
-        line = line.strip()
-        if line.startswith("# extra="):
-            extra = line.split("=")[1].strip()
-            continue
-        if line and line[0] != "#":
-            lib_package = line.split("#")[0].strip()  # split comments
-            _extras_requires[extra].append(lib_package)
-    _install_requires = _extras_requires.pop("requires")
-    return _install_requires, _extras_requires
-
-
-with open("requirements.txt", "r", encoding="utf-8") as fr:
-    install_requires, extras_requires = parse_requirements(fr.readlines())
+for req_file in glob.glob("requirements*.txt", recursive=False):
+    name = os.path.basename(req_file).split(".")
+    extra = name[1] if len(name) > 2 else None
+    with open(req_file, "r", encoding="utf-8") as fr:
+        if not extra:
+            install_requires = fr.readlines()
+        else:
+            extras_requires[extra] = fr.readlines()
 
 with open("README.md", "r", encoding="utf-8") as fh:
     long_description = fh.read()
 
-
 setup(
     name="TensorFlowASR",
-    version="2.1.0",
+    version="3.0.0",
     author="Huy Le Nguyen",
     author_email="nlhuy.cs.16@gmail.com",
     description="Almost State-of-the-art Automatic Speech Recognition using Tensorflow 2",
@@ -62,5 +54,5 @@ setup(
         "License :: OSI Approved :: Apache Software License",
         "Topic :: Software Development :: Libraries :: Python Modules",
     ],
-    python_requires=">=3.6, <4",
+    python_requires=">=3.8, <4",
 )

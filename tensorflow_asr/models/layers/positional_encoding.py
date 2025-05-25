@@ -15,6 +15,7 @@
 
 from tensorflow_asr import keras, tf
 from tensorflow_asr.models.base_layer import Layer
+from tensorflow_asr.models.layers.general import Dropout
 from tensorflow_asr.utils import shape_util
 
 
@@ -60,8 +61,8 @@ class SinusoidalPositionalEncoding(Layer):
         interleave=False,
         **kwargs,
     ):
-        super().__init__(**kwargs)
-        self.do = keras.layers.Dropout(dropout, dtype=self.dtype, name="dropout")
+        super().__init__(trainable=False, **kwargs)
+        self.do = Dropout(dropout, dtype=self.dtype, name="dropout")
         self._scale = scale
         self._interleave = interleave
 
@@ -78,7 +79,7 @@ class SinusoidalPositionalEncoding(Layer):
             interleave=self._interleave,
             dtype=outputs.dtype,
         )
-        pe *= tf.sequence_mask(outputs_length, maxlen=length, dtype=pe.dtype)
+        pe *= tf.expand_dims(tf.sequence_mask(outputs_length, maxlen=length, dtype=pe.dtype), axis=-1)
         pe = self.do(pe, training=training)
         outputs += pe
         return outputs, pe

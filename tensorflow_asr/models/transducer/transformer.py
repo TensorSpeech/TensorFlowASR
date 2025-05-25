@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from tensorflow_asr import keras, tf
+from tensorflow_asr import keras
 from tensorflow_asr.models.encoders.transformer import TransformerEncoder
 from tensorflow_asr.models.transducer.base_transducer import Transducer
 
@@ -39,6 +39,10 @@ class Transformer(Transducer):
         encoder_pwffn_activation: str = "relu",
         encoder_dropout: float = 0.1,
         encoder_memory_length: int = None,
+        encoder_history_size: int = None,
+        encoder_chunk_size: int = None,
+        encoder_mha_causal: bool = False,
+        encoder_flash_attention: bool = False,
         encoder_trainable: bool = True,
         prediction_label_encode_mode: str = "embedding",
         prediction_embed_dim: int = 512,
@@ -80,6 +84,10 @@ class Transformer(Transducer):
                 pwffn_activation=encoder_pwffn_activation,
                 dropout=encoder_dropout,
                 memory_length=encoder_memory_length,
+                history_size=encoder_history_size,
+                chunk_size=encoder_chunk_size,
+                relmha_causal=encoder_mha_causal,
+                flash_attention=encoder_flash_attention,
                 kernel_regularizer=kernel_regularizer,
                 bias_regularizer=bias_regularizer,
                 trainable=encoder_trainable,
@@ -111,17 +119,3 @@ class Transformer(Transducer):
         )
         self.dmodel = encoder_dmodel
         self.time_reduction_factor = self.encoder.time_reduction_factor
-
-    def reset_caching(self):
-        return self.encoder.reset_caching(self._per_replica_batch_size)
-
-    def make(self, input_shape=[None], prediction_shape=[None], batch_size=None, **kwargs):
-        caching = (
-            None
-            if self.encoder._memory_length is None
-            else [
-                keras.Input(shape=[self.encoder._memory_length, self.encoder._dmodel], batch_size=batch_size, dtype=tf.float32)
-                for _ in range(self.encoder._num_blocks)
-            ]
-        )
-        return super().make(input_shape, prediction_shape, batch_size, caching, **kwargs)

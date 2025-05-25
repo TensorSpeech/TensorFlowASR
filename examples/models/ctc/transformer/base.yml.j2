@@ -1,6 +1,3 @@
-{% import "examples/configs/librispeech/sentencepiece/sp.256.yml.j2" as decoder_config with context %}
-{{decoder_config}}
-
 model_config:
   class_name: tensorflow_asr.models.ctc.transformer>Transformer
   config:
@@ -9,6 +6,7 @@ model_config:
       sample_rate: 16000
       frame_ms: 25
       stride_ms: 10
+      nfft: 512
       num_feature_bins: 80
       feature_type: log_mel_spectrogram
       augmentation_config:
@@ -20,7 +18,7 @@ model_config:
             p_upperbound: 0.05
           freq_masking:
             prob: 1.0
-            num_masks: 1
+            num_masks: 2
             mask_factor: 27
     encoder_subsampling:
       type: conv2d
@@ -50,14 +48,10 @@ model_config:
       class_name: l2
       config:
         l2: 1e-6
-    bias_regularizer:
-      class_name: l2
-      config:
-        l2: 1e-6
 
 learning_config:
   optimizer_config:
-    class_name: Custom>Adam
+    class_name: Adam
     config:
       learning_rate:
         class_name: tensorflow_asr.optimizers.schedules>TransformerSchedule
@@ -83,15 +77,10 @@ learning_config:
       config: {}
     - class_name: tensorflow_asr.callbacks>ModelCheckpoint
       config:
-        filepath: {{modeldir}}/checkpoints/{epoch:02d}.h5
+        filepath: {{modeldir}}/checkpoints/{epoch:02d}.weights.h5
         save_best_only: False
         save_weights_only: True
         save_freq: epoch
-    - class_name: tensorflow_asr.callbacks>BackupAndRestore
-      config:
-        backup_dir: {{modeldir}}/states
-        save_freq: epoch
-        delete_checkpoint: False
     - class_name: tensorflow_asr.callbacks>TensorBoard
       config:
         log_dir: {{modeldir}}/tensorboard
@@ -101,3 +90,8 @@ learning_config:
         write_steps_per_second: False
         update_freq: batch
         profile_batch: 0
+    - class_name: tensorflow_asr.callbacks>KaggleModelBackupAndRestore
+      config:
+        model_handle: {{kaggle_model_handle}}
+        model_dir: {{modeldir}}
+        save_freq: epoch

@@ -12,8 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import tensorflow as tf
+
 from tensorflow_asr import keras
-from tensorflow_asr.models.base_layer import Layer, Reshape
+from tensorflow_asr.models.base_layer import Reshape
+from tensorflow_asr.models.layers.convolution import Conv1D
+from tensorflow_asr.models.layers.general import Dropout
 from tensorflow_asr.utils import math_util
 
 
@@ -32,7 +36,7 @@ class JasperSubBlock(keras.layers.Layer):
         **kwargs,
     ):
         super().__init__(**kwargs)
-        self.conv1d = keras.layers.Conv1D(
+        self.conv1d = Conv1D(
             filters=channels,
             kernel_size=kernels,
             strides=strides,
@@ -44,10 +48,14 @@ class JasperSubBlock(keras.layers.Layer):
             dtype=self.dtype,
         )
         self.bn = keras.layers.BatchNormalization(
-            name="bn", gamma_regularizer=kernel_regularizer, beta_regularizer=bias_regularizer, dtype=self.dtype
+            name="bn",
+            gamma_regularizer=kernel_regularizer,
+            beta_regularizer=kernel_regularizer,
+            synchronized=True,
+            dtype=self.dtype,
         )
         self.relu = keras.layers.ReLU(name="relu", dtype=self.dtype)
-        self.do = keras.layers.Dropout(dropout, name="dropout", dtype=self.dtype)
+        self.do = Dropout(dropout, name="dropout", dtype=self.dtype)
         self.reduction_factor = strides
 
     def call(self, inputs, training=False):
@@ -57,6 +65,9 @@ class JasperSubBlock(keras.layers.Layer):
         outputs = self.relu(outputs, training=training)
         outputs = self.do(outputs, training=training)
         return outputs
+
+    def compute_output_shape(self, input_shape):
+        return self.conv1d.compute_output_shape(input_shape)
 
 
 @keras.utils.register_keras_serializable(package=__name__)
@@ -70,7 +81,7 @@ class JasperResidual(keras.layers.Layer):
         **kwargs,
     ):
         super().__init__(**kwargs)
-        self.pointwise_conv1d = keras.layers.Conv1D(
+        self.pointwise_conv1d = Conv1D(
             filters=channels,
             kernel_size=1,
             strides=1,
@@ -81,13 +92,20 @@ class JasperResidual(keras.layers.Layer):
             dtype=self.dtype,
         )
         self.bn = keras.layers.BatchNormalization(
-            name="bn", gamma_regularizer=kernel_regularizer, beta_regularizer=bias_regularizer, dtype=self.dtype
+            name="bn",
+            gamma_regularizer=kernel_regularizer,
+            beta_regularizer=kernel_regularizer,
+            synchronized=True,
+            dtype=self.dtype,
         )
 
     def call(self, inputs, training=False):
         outputs = self.pointwise_conv1d(inputs, training=training)
         outputs = self.bn(outputs, training=training)
         return outputs
+
+    def compute_output_shape(self, input_shape):
+        return self.pointwise_conv1d.compute_output_shape(input_shape)
 
 
 @keras.utils.register_keras_serializable(package=__name__)
@@ -201,9 +219,15 @@ class JasperBlock(keras.layers.Layer):
             outputs = self.subblock_residual([outputs, [inputs]], training=training)
         return outputs, residuals
 
+    def compute_output_shape(self, input_shape):
+        output_shape, residuals_shape = input_shape
+        for subblock in self.subblocks:
+            output_shape = subblock.compute_output_shape(output_shape)
+        return output_shape, residuals_shape
+
 
 @keras.utils.register_keras_serializable(package=__name__)
-class JasperEncoder(Layer):
+class JasperEncoder(keras.Model):
     def __init__(
         self,
         dense: bool = False,
@@ -296,7 +320,7 @@ class JasperEncoder(Layer):
         self.time_reduction_factor *= self.third_additional_block.reduction_factor
 
     def call(self, inputs, training=False):
-        outputs, outputs_length, caching = inputs
+        outputs, outputs_length = inputs
         outputs, outputs_length = self.reshape((outputs, outputs_length))
         outputs = self.first_additional_block(outputs, training=training)
 
@@ -307,12 +331,29 @@ class JasperEncoder(Layer):
         outputs = self.second_additional_block(outputs, training=training)
         outputs = self.third_additional_block(outputs, training=training)
         outputs_length = math_util.get_reduced_length(outputs_length, self.time_reduction_factor)
-        return outputs, outputs_length, caching
+        return outputs, outputs_length
+
+    def call_next(self, features, features_length, previous_encoder_states, *args, **kwargs):
+        """
+        Recognize function for encoder network from previous encoder states
+
+        Parameters
+        ----------
+        features : tf.Tensor, shape [B, T, F, C]
+        features_length : tf.Tensor, shape [B]
+        previous_encoder_states : tf.Tensor, shape [B, nlayers, nstates, rnn_units] -> [nlayers, nstates, B, rnn_units]
+
+        Returns
+        -------
+        Tuple[tf.Tensor, tf.Tensor, tf.Tensor], shape ([B, T, dmodel], [B], [nlayers, nstates, B, rnn_units] -> [B, nlayers, nstates, rnn_units])
+        """
+        with tf.name_scope(f"{self.name}_call_next"):
+            return self.call((features, features_length), training=False)
 
     def compute_output_shape(self, input_shape):
-        inputs_shape, inputs_length_shape, caching_shape = input_shape
+        inputs_shape, inputs_length_shape = input_shape
         outputs_time = None if inputs_shape[1] is None else math_util.legacy_get_reduced_length(inputs_shape[1], self.time_reduction_factor)
         outputs_batch = inputs_shape[0]
         outputs_size = self.third_additional_block.conv1d.filters
         outputs_shape = [outputs_batch, outputs_time, outputs_size]
-        return tuple(outputs_shape), tuple(inputs_length_shape), caching_shape
+        return tuple(outputs_shape), tuple(inputs_length_shape)

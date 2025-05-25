@@ -1,0 +1,59 @@
+data_config:  
+  train_dataset_config:
+    enabled: True
+    sample_rate: 16000
+    data_paths:
+      - {{datadir}}/train-clean-100/transcripts.tsv
+      - {{datadir}}/train-clean-360/transcripts.tsv
+      - {{datadir}}/train-other-500/transcripts.tsv
+    tfrecords_dir: {{datadir}}/tfrecords
+    tfrecords_shards: 32
+    shuffle: True
+    cache: False
+    buffer_size: 1024
+    drop_remainder: True
+    stage: train
+    metadata: {{metadata}}
+    indefinite: True
+
+  eval_dataset_config:
+    enabled: True
+    sample_rate: 16000
+    data_paths:
+      - {{datadir}}/dev-clean/transcripts.tsv
+      - {{datadir}}/dev-other/transcripts.tsv
+    tfrecords_dir: {{datadir}}/tfrecords
+    buffer_size: 1024
+    tfrecords_shards: 2
+    shuffle: True
+    cache: False
+    drop_remainder: True
+    stage: eval
+    metadata: {{metadata}}
+    indefinite: True
+
+  test_dataset_configs:
+    - name: test-clean
+      enabled: True
+      sample_rate: 16000
+      data_paths:
+        - {{datadir}}/test-clean/transcripts.tsv
+      tfrecords_dir: {{datadir}}/tfrecords
+      shuffle: False
+      cache: False
+      buffer_size: null
+      drop_remainder: False
+      stage: test
+      indefinite: False
+    - name: test-other
+      enabled: True
+      sample_rate: 16000
+      data_paths:
+        - {{datadir}}/test-other/transcripts.tsv
+      tfrecords_dir: {{datadir}}/tfrecords
+      shuffle: False
+      cache: False
+      buffer_size: null
+      drop_remainder: False
+      stage: test
+      indefinite: False

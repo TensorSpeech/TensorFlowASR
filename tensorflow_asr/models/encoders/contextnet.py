@@ -17,6 +17,7 @@ from typing import List
 
 from tensorflow_asr import keras, tf
 from tensorflow_asr.models.base_layer import Layer, Reshape
+from tensorflow_asr.models.layers.convolution import SeparableConv1D
 from tensorflow_asr.utils import math_util
 
 L2 = keras.regularizers.l2(1e-6)
@@ -50,7 +51,7 @@ class ConvModule(Layer):
     ):
         super().__init__(**kwargs)
         self.strides = strides
-        self.conv = keras.layers.SeparableConv1D(
+        self.conv = SeparableConv1D(
             filters=filters,
             kernel_size=kernel_size,
             strides=strides,
@@ -62,7 +63,11 @@ class ConvModule(Layer):
             dtype=self.dtype,
         )
         self.bn = keras.layers.BatchNormalization(
-            name="bn", gamma_regularizer=kernel_regularizer, beta_regularizer=bias_regularizer, dtype=self.dtype
+            name="bn",
+            gamma_regularizer=kernel_regularizer,
+            beta_regularizer=kernel_regularizer,
+            synchronized=True,
+            dtype=self.dtype,
         )
         self.activation = get_activation(activation)
 
@@ -70,7 +75,11 @@ class ConvModule(Layer):
         outputs, outputs_length = inputs
         outputs = self.conv(outputs, training=training)
         outputs_length = math_util.conv_output_length(
-            outputs_length, filter_size=self.conv.kernel_size[0], padding=self.conv.padding, stride=self.conv.strides[0]
+            outputs_length,
+            filter_size=self.conv.kernel_size[0],
+            padding=self.conv._padding,
+            stride=self.conv.strides[0],
+            dilation=self.conv.dilation_rate[0],
         )
         outputs = self.bn(outputs, training=training)
         outputs = self.activation(outputs)
@@ -80,7 +89,13 @@ class ConvModule(Layer):
         outputs, outputs_length = inputs
         maxlen = tf.shape(outputs)[1]
         maxlen, outputs_length = (
-            math_util.conv_output_length(length, filter_size=self.conv.kernel_size[0], padding=self.conv.padding, stride=self.conv.strides[0])
+            math_util.conv_output_length(
+                length,
+                filter_size=self.conv.kernel_size[0],
+                padding=self.conv._padding,
+                stride=self.conv.strides[0],
+                dilation=self.conv.dilation_rate[0],
+            )
             for length in (maxlen, outputs_length)
         )
         mask = tf.sequence_mask(outputs_length, maxlen=maxlen, dtype=tf.bool)
@@ -156,7 +171,7 @@ class SEModule(Layer):
 
 
 @keras.utils.register_keras_serializable(package=__name__)
-class ConvBlock(Layer):
+class ConvBlock(keras.Model):
     def __init__(
         self,
         nlayers: int = 3,
@@ -259,7 +274,7 @@ class ConvBlock(Layer):
 
 
 @keras.utils.register_keras_serializable(package=__name__)
-class ContextNetEncoder(Layer):
+class ContextNetEncoder(keras.Model):
     def __init__(
         self,
         blocks: List[dict] = [],
@@ -289,11 +304,11 @@ class ContextNetEncoder(Layer):
         self.dmodel = self.blocks[-1].dmodel
 
     def call(self, inputs, training=False):
-        outputs, outputs_length, caching = inputs
+        outputs, outputs_length = inputs
         outputs, outputs_length = self.reshape((outputs, outputs_length))
         for block in self.blocks:
             outputs, outputs_length = block((outputs, outputs_length), training=training)
-        return outputs, outputs_length, caching
+        return outputs, outputs_length
 
     def call_next(self, features, features_length, *args, **kwargs):
         """
@@ -310,19 +325,17 @@ class ContextNetEncoder(Layer):
             Outputs, outputs_length, new_states
         """
         with tf.name_scope(f"{self.name}_call_next"):
-            outputs, outputs_length, _ = self.call((features, features_length, None), training=False)
-            return outputs, outputs_length, None
+            return self.call((features, features_length), training=False)
 
     def compute_mask(self, inputs, mask=None):
-        outputs, outputs_length, caching = inputs
+        outputs, outputs_length = inputs
         maxlen = tf.shape(outputs)[1]
         maxlen, outputs_length = (math_util.get_reduced_length(length, self.time_reduction_factor) for length in (maxlen, outputs_length))
         mask = tf.sequence_mask(outputs_length, maxlen=maxlen, dtype=tf.bool)
-        return mask, None, getattr(caching, "_keras_mask", None)
+        return mask, None
 
     def compute_output_shape(self, input_shape):
-        *output_shape, caching_shape = input_shape
-        output_shape = self.reshape.compute_output_shape(output_shape)
+        output_shape = self.reshape.compute_output_shape(input_shape)
         for block in self.blocks:
             output_shape = block.compute_output_shape(output_shape)
-        return *output_shape, caching_shape
+        return output_shape

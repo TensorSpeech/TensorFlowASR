@@ -16,6 +16,8 @@ import typing
 
 from tensorflow_asr import keras, tf
 from tensorflow_asr.models.base_layer import Layer
+from tensorflow_asr.models.layers.convolution import Conv1D, Conv2D
+from tensorflow_asr.models.layers.general import Activation
 from tensorflow_asr.utils import math_util, shape_util
 
 
@@ -67,7 +69,7 @@ class VggSubsampling(Layer):
         **kwargs,
     ):
         super().__init__(name=name, **kwargs)
-        self.conv1 = keras.layers.Conv2D(
+        self.conv1 = Conv2D(
             filters=filters[0],
             kernel_size=kernel_size,
             strides=1,
@@ -78,7 +80,7 @@ class VggSubsampling(Layer):
             activation=activation,
             dtype=self.dtype,
         )
-        self.conv2 = keras.layers.Conv2D(
+        self.conv2 = Conv2D(
             filters=filters[0],
             kernel_size=kernel_size,
             strides=1,
@@ -89,8 +91,8 @@ class VggSubsampling(Layer):
             activation=activation,
             dtype=self.dtype,
         )
-        self.maxpool1 = keras.layers.MaxPool2D(pool_size=pool_size, strides=strides, padding=padding, dtype=self.dtype, name="maxpool_1")
-        self.conv3 = keras.layers.Conv2D(
+        self.maxpool1 = keras.layers.MaxPool2D(pool_size=pool_size, strides=strides, padding="same", dtype=self.dtype, name="maxpool_1")
+        self.conv3 = Conv2D(
             filters=filters[1],
             kernel_size=kernel_size,
             strides=1,
@@ -101,7 +103,7 @@ class VggSubsampling(Layer):
             activation=activation,
             dtype=self.dtype,
         )
-        self.conv4 = keras.layers.Conv2D(
+        self.conv4 = Conv2D(
             filters=filters[1],
             kernel_size=kernel_size,
             strides=1,
@@ -112,7 +114,7 @@ class VggSubsampling(Layer):
             activation=activation,
             dtype=self.dtype,
         )
-        self.maxpool2 = keras.layers.MaxPool2D(pool_size=pool_size, strides=strides, padding=padding, dtype=self.dtype, name="maxpool_2")
+        self.maxpool2 = keras.layers.MaxPool2D(pool_size=pool_size, strides=strides, padding="same", dtype=self.dtype, name="maxpool_2")
         self.time_reduction_factor = self.maxpool1.pool_size[0] * self.maxpool2.pool_size[0]
 
     def call(self, inputs, training=False):
@@ -134,7 +136,12 @@ class VggSubsampling(Layer):
         maxlen = tf.shape(outputs)[1]
         for pool in (self.maxpool1, self.maxpool2):
             maxlen, outputs_length = (
-                math_util.conv_output_length(length, pool.pool_size[0], padding=pool.padding, stride=pool.strides[0])
+                math_util.conv_output_length(
+                    length,
+                    pool.pool_size[0],
+                    padding=pool.padding,
+                    stride=pool.strides[0],
+                )
                 for length in (maxlen, outputs_length)
             )
         mask = tf.sequence_mask(outputs_length, maxlen=maxlen, dtype=tf.bool)
@@ -174,7 +181,7 @@ class Conv2dSubsampling(Layer):
         for i in range(len(filters)):
             subblock = keras.Sequential(name=f"block_{i}")
             subblock.add(
-                keras.layers.Conv2D(
+                Conv2D(
                     filters=filters[i],
                     kernel_size=kernels[i],
                     strides=strides[i],
@@ -190,7 +197,8 @@ class Conv2dSubsampling(Layer):
                     keras.layers.BatchNormalization(
                         name=f"bn_{i}",
                         gamma_regularizer=kernel_regularizer,
-                        beta_regularizer=bias_regularizer,
+                        beta_regularizer=kernel_regularizer,
+                        synchronized=True,
                         dtype=self.dtype,
                     )
                 )
@@ -199,11 +207,11 @@ class Conv2dSubsampling(Layer):
                     keras.layers.LayerNormalization(
                         name=f"ln_{i}",
                         gamma_regularizer=kernel_regularizer,
-                        beta_regularizer=bias_regularizer,
+                        beta_regularizer=kernel_regularizer,
                         dtype=self.dtype,
                     )
                 )
-            subblock.add(keras.layers.Activation(activations[i], name=f"{activations[i]}_{i}", dtype=self.dtype))
+            subblock.add(Activation(activations[i], name=f"{activations[i]}_{i}", dtype=self.dtype))
             self.convs.append(subblock)
             self.time_reduction_factor *= subblock.layers[0].strides[0]
 
@@ -214,8 +222,9 @@ class Conv2dSubsampling(Layer):
             outputs_length = math_util.conv_output_length(
                 outputs_length,
                 filter_size=block.layers[0].kernel_size[0],
-                padding=block.layers[0].padding,
+                padding=block.layers[0]._padding,
                 stride=block.layers[0].strides[0],
+                dilation=block.layers[0].dilation_rate[0],
             )
         outputs = math_util.merge_two_last_dims(outputs)
         return outputs, outputs_length
@@ -226,7 +235,11 @@ class Conv2dSubsampling(Layer):
         for block in self.convs:
             maxlen, outputs_length = (
                 math_util.conv_output_length(
-                    length, filter_size=block.layers[0].kernel_size[0], padding=block.layers[0].padding, stride=block.layers[0].strides[0]
+                    length,
+                    filter_size=block.layers[0].kernel_size[0],
+                    padding=block.layers[0]._padding,
+                    stride=block.layers[0].strides[0],
+                    dilation=block.layers[0].dilation_rate[0],
                 )
                 for length in (maxlen, outputs_length)
             )
@@ -263,7 +276,7 @@ class Conv1dSubsampling(Layer):
         for i in range(len(filters)):
             subblock = keras.Sequential(name=f"block_{i}")
             subblock.add(
-                keras.layers.Conv1D(
+                Conv1D(
                     filters=filters[i],
                     kernel_size=kernels[i],
                     strides=strides[i],
@@ -279,7 +292,8 @@ class Conv1dSubsampling(Layer):
                     keras.layers.BatchNormalization(
                         name=f"bn_{i}",
                         gamma_regularizer=kernel_regularizer,
-                        beta_regularizer=bias_regularizer,
+                        beta_regularizer=kernel_regularizer,
+                        synchronized=True,
                         dtype=self.dtype,
                     )
                 )
@@ -288,11 +302,11 @@ class Conv1dSubsampling(Layer):
                     keras.layers.LayerNormalization(
                         name=f"ln_{i}",
                         gamma_regularizer=kernel_regularizer,
-                        beta_regularizer=bias_regularizer,
+                        beta_regularizer=kernel_regularizer,
                         dtype=self.dtype,
                     )
                 )
-            subblock.add(keras.layers.Activation(activations[i], name=f"{activations[i]}_{i}", dtype=self.dtype))
+            subblock.add(Activation(activations[i], name=f"{activations[i]}_{i}", dtype=self.dtype))
             self.convs.append(subblock)
             self.time_reduction_factor *= subblock.layers[0].strides[0]
 
@@ -304,8 +318,9 @@ class Conv1dSubsampling(Layer):
             outputs_length = math_util.conv_output_length(
                 outputs_length,
                 filter_size=block.layers[0].kernel_size[0],
-                padding=block.layers[0].padding,
+                padding=block.layers[0]._padding,
                 stride=block.layers[0].strides[0],
+                dilation=block.layers[0].dilation_rate[0],
             )
         return outputs, outputs_length
 
@@ -315,7 +330,11 @@ class Conv1dSubsampling(Layer):
         for block in self.convs:
             maxlen, outputs_length = (
                 math_util.conv_output_length(
-                    length, filter_size=block.layers[0].kernel_size[0], padding=block.layers[0].padding, stride=block.layers[0].strides[0]
+                    length,
+                    filter_size=block.layers[0].kernel_size[0],
+                    padding=block.layers[0]._padding,
+                    stride=block.layers[0].strides[0],
+                    dilation=block.layers[0].dilation_rate[0],
                 )
                 for length in (maxlen, outputs_length)
             )

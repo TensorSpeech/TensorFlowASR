@@ -13,15 +13,19 @@
 # limitations under the License.
 
 import importlib
+import logging
+import os
+import shutil
+from http import HTTPStatus
 
 import numpy as np
+from keras.src.saving import serialization_lib
 
 from tensorflow_asr import keras, tf
 from tensorflow_asr.datasets import ASRDataset
 from tensorflow_asr.utils import file_util
-from tensorflow_asr.utils.env_util import KERAS_SRC
 
-serialization_lib = importlib.import_module(f"{KERAS_SRC}.saving.serialization_lib")
+logger = logging.getLogger(__name__)
 
 
 @keras.utils.register_keras_serializable(package=__name__)
@@ -96,13 +100,9 @@ class PredictLogger(keras.callbacks.Callback):
         if logs is None:
             return
 
-        predictions = logs.pop("outputs", None)
-        if predictions is None:
-            return
-
-        transcripts = self.model.tokenizer.detokenize(predictions.pop("_tokens"))
-        beam_transcripts = self.model.tokenizer.detokenize(predictions.pop("_beam_tokens"))
-        targets = self.model.tokenizer.detokenize(predictions.pop("_labels"))
+        transcripts = self.model.tokenizer.detokenize(logs.pop("tokens"))
+        beam_transcripts = self.model.tokenizer.detokenize(logs.pop("beam_tokens"))
+        targets = self.model.tokenizer.detokenize(logs.pop("labels"))
 
         for i, item in enumerate(zip(targets.numpy(), transcripts.numpy(), beam_transcripts.numpy()), start=self.index):
             groundtruth, greedy, beam = [x.decode("utf-8") for x in item]
@@ -191,22 +191,35 @@ class ModelCheckpoint(keras.callbacks.ModelCheckpoint):
     def __init__(
         self,
         filepath,
-        monitor: str = "val_loss",
-        verbose: int = 0,
-        save_best_only: bool = False,
-        save_weights_only: bool = False,
-        mode: str = "auto",
+        monitor="val_loss",
+        verbose=0,
+        save_best_only=False,
+        save_weights_only=False,
+        mode="auto",
         save_freq="epoch",
-        options=None,
         initial_value_threshold=None,
-        **kwargs,
+        keep_checkpoints=5,
     ):
         filepath = file_util.preprocess_paths(filepath)
-        self._org_options = options
-        if options is not None:
-            options = tf.train.CheckpointOptions(**options)
-        super().__init__(filepath, monitor, verbose, save_best_only, save_weights_only, mode, save_freq, options, initial_value_threshold, **kwargs)
         self._mode = mode
+        self._keep_checkpoints = keep_checkpoints
+        super().__init__(filepath, monitor, verbose, save_best_only, save_weights_only, mode, save_freq, initial_value_threshold)
+
+    def _delete_obsolete_checkpoint(self, epoch, batch=None, logs=None):
+        for ep in range(int(epoch) - self._keep_checkpoints):
+            filepath = self._get_file_path(epoch=ep, batch=batch, logs=logs)
+            if tf.io.gfile.exists(filepath):
+                tf.io.gfile.remove(filepath)
+
+    def on_train_batch_end(self, batch, logs=None):
+        super().on_train_batch_end(batch, logs)
+        if self._should_save_on_batch(batch):
+            self._delete_obsolete_checkpoint(self._current_epoch, batch, logs)
+
+    def on_epoch_end(self, epoch, logs=None):
+        super().on_epoch_end(epoch, logs)
+        if self.save_freq == "epoch":
+            self._delete_obsolete_checkpoint(epoch, None, logs)
 
     def get_config(self):
         return {
@@ -217,8 +230,8 @@ class ModelCheckpoint(keras.callbacks.ModelCheckpoint):
             "save_weights_only": self.save_weights_only,
             "mode": self._mode,
             "save_freq": self.save_freq,
-            "options": self._org_options,
             "initial_value_threshold": self.best,
+            "keep_checkpoints": self._keep_checkpoints,
         }
 
     @classmethod
@@ -232,18 +245,17 @@ class BackupAndRestore(keras.callbacks.BackupAndRestore):
         self,
         backup_dir,
         save_freq="epoch",
-        delete_checkpoint=True,
-        save_before_preemption=False,
+        double_checkpoint=True,
+        delete_checkpoint=False,
     ):
         backup_dir = file_util.preprocess_paths(backup_dir, isdir=True)
-        super().__init__(backup_dir, save_freq, delete_checkpoint, save_before_preemption)
+        super().__init__(backup_dir=backup_dir, save_freq=save_freq, double_checkpoint=double_checkpoint, delete_checkpoint=delete_checkpoint)
 
     def get_config(self):
         return {
             "backup_dir": self.backup_dir,
             "save_freq": self.save_freq,
             "delete_checkpoint": self.delete_checkpoint,
-            "save_before_preemption": self.save_before_preemption,
         }
 
     @classmethod
@@ -277,6 +289,118 @@ class EarlyStopping(keras.callbacks.EarlyStopping):
             "baseline": self.baseline,
             "restore_best_weights": self.restore_best_weights,
             "start_from_epoch": self.start_from_epoch,
+        }
+
+    @classmethod
+    def from_config(cls, config):
+        return cls(**config)
+
+
+@keras.utils.register_keras_serializable(package=__name__)
+class KaggleModelBackupAndRestore(BackupAndRestore):
+    def __init__(
+        self,
+        model_dir: str,
+        model_handle: str = None,
+        save_freq="epoch",
+    ):
+        backup_dir = os.path.join(model_dir, "states")
+        super().__init__(backup_dir, save_freq=save_freq, double_checkpoint=True, delete_checkpoint=False)
+
+        try:
+            # use option 2,3 to authenticate kaggle: https://github.com/Kaggle/kagglehub?tab=readme-ov-file#option-2-read-credentials-from-environment-variables pylint: disable=line-too-long
+            self._api = importlib.import_module("kagglehub")
+
+            logging.getLogger("kagglehub").disabled = True
+            logging.getLogger("kagglehub").handlers.clear()
+
+        except ImportError as e:
+            raise ImportError("Kaggle library is not installed. Please install it via `pip install '.[kaggle]'`.") from e
+
+        self._model_handle = model_handle
+        self._model_dir = file_util.preprocess_paths(model_dir, isdir=True)
+        if file_util.is_cloud_path(model_dir):
+            raise ValueError(f"Model dir must be local path for Kaggle backup and restore. Received: {model_dir}")
+        self.save_freq = save_freq
+        if save_freq != "epoch" and not isinstance(save_freq, int):
+            raise ValueError(
+                "Invalid value for argument `save_freq`. " f"Received: save_freq={save_freq}. " "Expected either 'epoch' or an integer value."
+            )
+
+        self._batches_seen_since_last_saving = 0
+        self._last_batch_seen = 0
+        self._current_epoch = 0
+
+    def _restore_kaggle(self):
+        if not self._model_handle:
+            return
+
+        if os.path.exists(self._weights_path) and os.path.exists(self._training_metadata_path):
+            logger.info(f"Backup and restore from '{self.backup_dir}'...")
+            return
+
+        from kagglehub.exceptions import KaggleApiHTTPError  # pylint: disable=import-outside-toplevel
+
+        try:
+            cached_path = self._api.model_download(handle=self._model_handle, force_download=True)
+            logger.info(f"Restoring model from '{cached_path}'...")
+            has_version = False
+            try:
+                has_version = int(os.path.basename(cached_path))
+            except:  # pylint: disable=bare-except
+                pass
+            if not has_version:
+                latest_version = None
+                for x in os.listdir(cached_path):
+                    try:
+                        latest_version = max(filter(None, (latest_version, int(x))))
+                    except:  # pylint: disable=bare-except
+                        pass
+                if not latest_version:
+                    logger.info(f"Model '{self._model_handle}' does not have any version. Skipping restore...")
+                    return
+                cached_path = os.path.join(cached_path, str(latest_version))
+            shutil.copytree(cached_path, self._model_dir, ignore_dangling_symlinks=True, dirs_exist_ok=True)
+            shutil.rmtree(cached_path)
+            logger.info(f"Model restored to '{self._model_dir}'")
+
+        except KaggleApiHTTPError as e:
+            if e.response is not None and (e.response.status_code in (HTTPStatus.NOT_FOUND, HTTPStatus.FORBIDDEN)):
+                logger.info(
+                    f"Model '{self._model_handle}' does not exist or access is forbidden. It will be auto-create on saving. Skipping restore..."
+                )
+
+    def _backup_kaggle(self, logs, notes: str):
+        if not self._model_handle:
+            return
+        logs = logs or {}
+        loss = logs.get("loss")
+        if loss is not None:
+            if np.isnan(loss) or np.isinf(loss):
+                return  # Don't save this epoch if loss is NaN or Inf
+        self._api.model_upload(handle=self._model_handle, local_model_dir=self._model_dir, version_notes=notes, ignore_patterns=[".DS_Store"])
+
+    def on_train_begin(self, logs=None):
+        self._restore_kaggle()
+        super().on_train_begin(logs)
+
+    def on_epoch_end(self, epoch, logs=None):
+        self._current_epoch = epoch + 1
+        self._last_batch_seen = 0
+        if self.save_freq == "epoch":
+            self._save_model()
+            self._backup_kaggle(logs, notes=f"Backed up model at epoch {self._current_epoch}")
+
+    def on_train_batch_end(self, batch, logs=None):
+        if self._should_save_on_batch(batch):
+            self._save_model()
+            self._backup_kaggle(logs, notes=f"Backed up model at batch {batch}")
+
+    def get_config(self):
+        return {
+            "model_handle": self._model_handle,
+            "model_dir": self._model_dir,
+            "save_freq": self.save_freq,
         }
 
     @classmethod

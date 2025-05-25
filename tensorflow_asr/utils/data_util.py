@@ -15,11 +15,11 @@
 # tf.data.Dataset does not work well for namedtuple so we are using dict
 
 import os
+from functools import reduce
+from typing import Any
 
 import librosa
 import tensorflow as tf
-
-TFASR_KERAS_LENGTH = os.getenv("TFASR_KERAS_LENGTH", "True") in ("true", "True", "1")
 
 
 def load_and_convert_to_wav(
@@ -35,13 +35,21 @@ def read_raw_audio(audio: tf.Tensor):
     return tf.reshape(wave, shape=[-1])  # reshape for using tf.signal
 
 
-def set_length(inputs, inputs_length):
-    if TFASR_KERAS_LENGTH:
-        setattr(inputs, "_keras_length", inputs_length)
-    if hasattr(inputs, "_keras_mask"):
-        delattr(inputs, "_keras_mask")
-    return inputs, inputs_length
+def get(
+    obj: dict,
+    path: str,
+    default: Any = None,
+):
+    path = str(path)
 
+    def _reduce_fn(d, key):
+        if isinstance(d, dict):
+            return d.get(key, default)
+        if isinstance(d, list):
+            try:
+                return d[int(key)]
+            except (IndexError, ValueError):
+                return default
+        return default
 
-def get_length(inputs):
-    return getattr(inputs, "_keras_length", None)
+    return reduce(_reduce_fn, path.split("."), obj)

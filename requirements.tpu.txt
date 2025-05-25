@@ -1,0 +1,1 @@
+tensorflow-tpu~=2.18.0

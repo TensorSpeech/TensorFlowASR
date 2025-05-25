@@ -1,0 +1,12 @@
+{
+  "train": {
+    "max_input_length": 256498,
+    "max_label_length": 75,
+    "num_entries": 634158
+  },
+  "eval": {
+    "max_input_length": 117571,
+    "max_label_length": 42,
+    "num_entries": 7500
+  }
+}

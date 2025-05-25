@@ -1,14 +1,18 @@
+- [Testing Tutorial](#testing-tutorial)
+  - [1. Installation](#1-installation)
+  - [2. Prepare transcripts files](#2-prepare-transcripts-files)
+  - [3. Prepare config file](#3-prepare-config-file)
+  - [4. Run testing](#4-run-testing)
+
+
 # Testing Tutorial
 
 These commands are example for librispeech dataset, but we can apply similar to other datasets
 
-## 1. Install packages
-
-If you use google colab, it's recommended to use the tensorflow version pre-installed on the colab itself
+## 1. Installation
 
 ```bash
-pip uninstall -y TensorFlowASR # uninstall for clean install if needed
-pip install ".[tf2.x]"
+./setup.sh [tpu|gpu|cpu] install
 ```
 
 ## 2. Prepare transcripts files
@@ -16,14 +20,14 @@ pip install ".[tf2.x]"
 This is the example for preparing transcript files for librispeech data corpus
 
 ```bash
-python scripts/create_librispeech_trans.py \
+python examples/datasets/librispeech/prepare_transcript.py \
     --directory=/path/to/dataset/test-clean \
     --output=/path/to/dataset/test-clean/transcripts.tsv
 ```
 
 Do the same thing with `test-clean`, `test-other`
 
-For other datasets, you must prepare your own python script like the `scripts/create_librispeech_trans.py`
+For other datasets, please make your own script to prepare the transcript files, take a look at the [`prepare_transcript.py`](../../examples/datasets/librispeech/prepare_transcript.py) file for more reference
 
 ## 3. Prepare config file
 
@@ -33,27 +37,27 @@ Please take a look in some examples for config files in `examples/*/*.yml.j2`
 
 The config file is the same as the config used for training
 
-## 4. [Optional][Required if not exists] Generate vocabulary and metadata
-
-Use the same vocabulary file used in training
-
-```bash
-python scripts/prepare_vocab_and_metadata.py \
-    --config-path=/path/to/config.yml.j2 \
-    --datadir=/path/to/datadir
-```
-
 The inputs, outputs and other options of vocabulary are defined in the config file
 
-## 5. Run testing
+For example:
+
+```jinja2
+{% import "examples/datasets/librispeech/sentencepiece/sp.yml.j2" as decoder_config with context %}
+{{decoder_config}}
+
+{% import "examples/models/transducer/conformer/small.yml.j2" as config with context %}
+{{config}}
+```
+
+## 4. Run testing
 
 ```bash
-python examples/test.py \
+tensorflow_asr test \
 --config-path /path/to/config.yml.j2 \
 --dataset_type slice \
 --datadir /path/to/datadir \
 --outputdir /path/to/modeldir/tests \
 --h5 /path/to/modeldir/weights.h5
 ## See others params
-python examples/test.py --help
+tensorflow_asr test --help
 ```

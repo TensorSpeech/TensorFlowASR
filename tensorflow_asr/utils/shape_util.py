@@ -23,8 +23,8 @@ def shape_list(x, out_type=tf.int32):
 
 
 def shape_list_per_replica(x, per_replica_batch_size):
-    shapes = x.shape.as_list()
-    shapes[0] = int(per_replica_batch_size)
+    _, *rest_shape = x.shape
+    shapes = (int(per_replica_batch_size),) + tuple(rest_shape)
     return shapes
 
 

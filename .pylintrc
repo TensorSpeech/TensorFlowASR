@@ -3,7 +3,7 @@
 # A comma-separated list of package or module names from where C extensions may
 # be loaded. Extensions are loading into the active Python interpreter and may
 # run arbitrary code.
-extension-pkg-allow-list=pydantic,tensorflow
+extension-pkg-allow-list=pydantic
 
 # A comma-separated list of package or module names from where C extensions may
 # be loaded. Extensions are loading into the active Python interpreter and may
@@ -120,6 +120,12 @@ disable=too-few-public-methods,
         consider-using-f-string,
         fixme,
         unused-variable,
+        pointless-string-statement,
+        too-many-lines,
+        abstract-method,
+        too-many-ancestors,
+        import-outside-toplevel,
+        too-many-positional-arguments,
         
 # Enable the message, report, category or checker with the given id(s). You can
 # either give multiple identifier separated by comma (,) or put this option

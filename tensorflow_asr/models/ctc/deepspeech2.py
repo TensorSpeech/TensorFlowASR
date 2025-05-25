@@ -25,22 +25,21 @@ class DeepSpeech2Decoder(Layer):
         vocab_size: int,
         kernel_regularizer=None,
         bias_regularizer=None,
-        initializer=None,
+        initializer="glorot_uniform",
         **kwargs,
     ):
-        super().__init__(**kwargs)
+        super().__init__(dtype=tf.float32, **kwargs)
         self.vocab = keras.layers.Dense(
             vocab_size,
             name="logits",
             kernel_regularizer=kernel_regularizer,
             kernel_initializer=initializer,
             bias_regularizer=bias_regularizer,
-            bias_initializer=initializer,
             dtype=self.dtype,
         )
 
     def call(self, inputs, training=False):
-        logits, logits_length = inputs
+        logits, logits_length, *_ = inputs
         logits = self.vocab(logits, training=training)
         return logits, logits_length
 
@@ -67,7 +66,6 @@ class DeepSpeech2(CtcModel):
         conv_filters: list = [32, 32, 96],
         conv_padding: str = "same",
         conv_activation: str = "relu",
-        conv_dropout: float = 0.1,
         conv_initializer: str = None,
         rnn_nlayers: int = 5,
         rnn_type: str = "lstm",
@@ -86,7 +84,7 @@ class DeepSpeech2(CtcModel):
         name: str = "deepspeech2",
         kernel_regularizer=None,
         bias_regularizer=None,
-        initializer=None,
+        initializer="glorot_uniform",
         **kwargs,
     ):
         super().__init__(
@@ -99,7 +97,6 @@ class DeepSpeech2(CtcModel):
                 conv_filters=conv_filters,
                 conv_padding=conv_padding,
                 conv_activation=conv_activation,
-                conv_dropout=conv_dropout,
                 conv_initializer=conv_initializer,
                 rnn_nlayers=rnn_nlayers,
                 rnn_type=rnn_type,
@@ -120,13 +117,7 @@ class DeepSpeech2(CtcModel):
                 initializer=initializer,
                 name="encoder",
             ),
-            decoder=DeepSpeech2Decoder(
-                vocab_size=vocab_size,
-                kernel_regularizer=kernel_regularizer,
-                bias_regularizer=bias_regularizer,
-                initializer=initializer,
-                name="decoder",
-            ),
+            decoder=DeepSpeech2Decoder(vocab_size=vocab_size, name="decoder"),
             name=name,
             **kwargs,
         )
@@ -136,4 +127,4 @@ class DeepSpeech2(CtcModel):
         return self.encoder.get_initial_state(batch_size)
 
     def get_initial_decoder_states(self, batch_size=1):
-        return tf.zeros([], dtype=self.dtype)
+        return None

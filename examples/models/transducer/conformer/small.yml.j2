@@ -1,6 +1,3 @@
-{% import "examples/configs/librispeech/sentencepiece/sp.yml.j2" as decoder_config with context %}
-{{decoder_config}}
-
 model_config:
   class_name: tensorflow_asr.models.transducer.conformer>Conformer
   config:
@@ -9,6 +6,7 @@ model_config:
       sample_rate: 16000
       frame_ms: 25
       stride_ms: 10
+      nfft: 512
       num_feature_bins: 80
       feature_type: log_mel_spectrogram
       augmentation_config:
@@ -44,8 +42,8 @@ model_config:
     encoder_interleave_relpe: True
     encoder_use_attention_causal_mask: False
     encoder_use_attention_auto_mask: True
-    encoder_mhsam_use_attention_bias: True
-    encoder_kernel_size: 32
+    encoder_mhsam_use_attention_bias: False
+    encoder_kernel_size: 31
     encoder_dropout: 0.1
     encoder_padding: causal
     encoder_memory_length: null
@@ -70,14 +68,10 @@ model_config:
       class_name: l2
       config:
         l2: 1e-6
-    bias_regularizer:
-      class_name: l2
-      config:
-        l2: 1e-6
 
 learning_config:
   optimizer_config:
-    class_name: Custom>Adam
+    class_name: Adam
     config:
       learning_rate:
         class_name: tensorflow_asr.optimizers.schedules>TransformerSchedule
@@ -85,16 +79,14 @@ learning_config:
           dmodel: 144
           warmup_steps: 10000
           max_lr: 0.05/(144**0.5)
-          min_lr: 1e-6
+          min_lr: null
           scale: 2.0
       beta_1: 0.9
       beta_2: 0.98
       epsilon: 1e-9
       weight_decay: 1e-6
 
-  gwn_config:
-    predict_net_step: 20000
-    predict_net_stddev: 0.075
+  gwn_config: null
 
   gradn_config: null
 
@@ -107,15 +99,10 @@ learning_config:
       config: {}
     - class_name: tensorflow_asr.callbacks>ModelCheckpoint
       config:
-        filepath: {{modeldir}}/checkpoints/{epoch:02d}.h5
+        filepath: {{modeldir}}/checkpoints/{epoch:02d}.weights.h5
         save_best_only: False
         save_weights_only: True
         save_freq: epoch
-    - class_name: tensorflow_asr.callbacks>BackupAndRestore
-      config:
-        backup_dir: {{modeldir}}/states
-        save_freq: epoch
-        delete_checkpoint: False
     - class_name: tensorflow_asr.callbacks>TensorBoard
       config:
         log_dir: {{modeldir}}/tensorboard
@@ -125,3 +112,8 @@ learning_config:
         write_steps_per_second: False
         update_freq: batch
         profile_batch: 0
+    - class_name: tensorflow_asr.callbacks>KaggleModelBackupAndRestore
+      config:
+        model_handle: {{kaggle_model_handle}}
+        model_dir: {{modeldir}}
+        save_freq: epoch

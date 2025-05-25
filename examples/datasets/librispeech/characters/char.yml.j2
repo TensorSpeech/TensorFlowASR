@@ -1,0 +1,15 @@
+{% set vocabsize = 29 %}
+{% set vocabprefix = repodir ~ "/examples/datasets/librispeech/characters/english" %}
+{% set metadata = vocabprefix ~ ".metadata.json" %}
+
+decoder_config:
+  type: characters
+  blank_index: 0
+  beam_width: 0
+  norm_score: True
+  lm_config: null
+  vocabulary: {{vocabprefix}}.vocab
+  vocab_size: {{vocabsize}}
+
+{% import "examples/datasets/librispeech/config.yml.j2" as data_config with context %}
+{{data_config}}

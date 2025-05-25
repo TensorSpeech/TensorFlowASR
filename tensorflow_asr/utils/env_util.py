@@ -13,106 +13,89 @@
 # limitations under the License.
 
 import logging
-import logging.handlers
+import os
 import random
 import sys
 import warnings
 from datetime import datetime, timezone
 from typing import List, Union
 
-import keras
-import numpy as np
-import tensorflow as tf
-from packaging import version
-
-KERAS_SRC = "keras.src" if version.parse(tf.version.VERSION) >= version.parse("2.13.0") else "keras"
+TF_LOG_LEVEL = os.getenv("TF_LOG_LEVEL", "warning").upper()
+TF_SOFT_PLACEMENT = os.getenv("TF_SOFT_PLACEMENT", "false").lower() == "true"
+TF_ENABLE_CHECK_NUMERIC = os.getenv("TF_ENABLE_CHECK_NUMERIC", "false").lower() == "true"
+TF_CUDNN = os.getenv("TF_CUDNN", "auto").lower()
+TF_CUDNN = "auto" if TF_CUDNN == "auto" else TF_CUDNN == "true"
+DEBUG = TF_LOG_LEVEL == "DEBUG"
 
 
 def _logging_format_time(self, record, datefmt=None):
     return datetime.fromtimestamp(record.created, timezone.utc).astimezone().isoformat(sep="T", timespec="milliseconds")
 
 
-def setup_logging():
-    logging.basicConfig(level=logging.INFO, format=logging.BASIC_FORMAT, stream=sys.stdout, force=True)
-    logging.Formatter.formatTime = _logging_format_time
-    logging.captureWarnings(True)
-    if not getattr(sys, "ps1", sys.flags.interactive):  # disable propagate in command line
-        logging.getLogger().propagate = False
-        tf.get_logger().propagate = False
-    else:
-        logging.getLogger().propagate = True
-        tf.get_logger().propagate = True
-    warnings.filterwarnings("ignore")
+logging.basicConfig(level=logging.INFO, format=logging.BASIC_FORMAT, stream=sys.stdout, force=True)
+logging.Formatter.formatTime = _logging_format_time
+logging.captureWarnings(True)
+warnings.filterwarnings("ignore")
+
+import keras
+import numpy as np
+import tensorflow as tf
+from packaging import version
+from tensorflow.python.util import deprecation  # pylint: disable = no-name-in-module
+
+tf.get_logger().setLevel(TF_LOG_LEVEL)
+deprecation._PRINT_DEPRECATION_WARNINGS = False  # comment this line to print deprecation warnings
+if TF_ENABLE_CHECK_NUMERIC:
+    tf.debugging.enable_check_numerics()
 
 
-def setup_devices(
+KERAS_SRC = "keras.src" if version.parse(tf.version.VERSION) >= version.parse("2.13.0") else "keras"
+
+logger = logging.getLogger(__name__)
+
+
+def setup_gpu(
     devices: List[int] = None,
-    cpu: bool = False,
 ):
-    """
-    Setting visible devices
-
-    Parameters
-    ----------
-    devices : List[int], optional
-        List of visible devices' indices, by default None
-    cpu : bool, optional
-        Use cpu or not, by default False
-    """
-    if cpu:
-        cpus = tf.config.list_physical_devices("CPU")
-        tf.config.set_visible_devices(cpus, "CPU")
-        tf.config.set_visible_devices([], "GPU")
-        tf.get_logger().info(f"Run on {cpus}")
-        return tf.config.list_logical_devices("CPU")
+    logger.info(f"Using TF_CUDNN={TF_CUDNN}, TF_SOFT_PLACEMENT={TF_SOFT_PLACEMENT}")
+    tf.config.set_soft_device_placement(DEBUG or TF_SOFT_PLACEMENT)
     gpus = tf.config.list_physical_devices("GPU")
-    if gpus:
-        if devices is not None:
-            gpus = [gpus[i] for i in devices]
-            tf.config.set_visible_devices(gpus, "GPU")
-    tf.get_logger().info(f"Run on {gpus}")
-    return tf.config.list_logical_devices("GPU")
+    if not gpus:
+        raise RuntimeError("No GPUs found!")
+    if devices is not None:
+        gpus = [gpus[i] for i in devices]
+    tf.config.set_visible_devices(gpus, "GPU")
+    logger.info("Run on GPU")
+    logger.info(f"All devices: {gpus}")
+    return tf.distribute.MirroredStrategy()
 
 
 def setup_tpu(
     tpu_address=None,
+    tpu_vm: bool = False,
 ):
-    if tpu_address is None:
-        resolver = tf.distribute.cluster_resolver.TPUClusterResolver()
-    else:
-        resolver = tf.distribute.cluster_resolver.TPUClusterResolver(tpu="grpc://" + tpu_address)
-    tf.config.experimental_connect_to_cluster(resolver)
+    # might cause performance penalty if ops fallback to cpu, see https://cloud.google.com/tpu/docs/tensorflow-ops
+    tf.config.set_soft_device_placement(DEBUG)
+    resolver = tf.distribute.cluster_resolver.TPUClusterResolver(tpu=tpu_address)
+    if not tpu_vm:
+        tf.config.experimental_connect_to_cluster(resolver)
     tf.tpu.experimental.initialize_tpu_system(resolver)
+    logger.info(f"Run on TPU {tpu_address}")
+    logger.info(f"All devices: {tf.config.list_logical_devices('TPU')}")
     return tf.distribute.TPUStrategy(resolver)
 
 
 def setup_strategy(
-    devices: List[int],
+    device_type: str,
+    devices: List[int] = None,
     tpu_address: str = None,
+    tpu_vm: bool = False,
 ):
-    """
-    Setting mirrored strategy for training
-
-    Parameters
-    ----------
-    devices : List[int]
-        List of visible devices' indices
-    tpu_address : str, optional
-        An optional custom tpu address, by default None
-
-    Returns
-    -------
-    f.distribute.Strategy
-        TPUStrategy for training on tpus or MirroredStrategy for training on gpus
-    """
-    try:
-        return setup_tpu(tpu_address)
-    except (ValueError, tf.errors.NotFoundError) as e:
-        tf.get_logger().warning(e)
-    available_devices = setup_devices(devices)
-    if len(available_devices) == 1:
-        return tf.distribute.get_strategy()
-    return tf.distribute.MultiWorkerMirroredStrategy()
+    if device_type.lower() == "tpu":
+        return setup_tpu(tpu_address, tpu_vm)
+    if device_type.lower() == "gpu":
+        return setup_gpu(devices)
+    return tf.distribute.get_strategy()
 
 
 def has_devices(
@@ -145,15 +128,20 @@ def setup_mxp(
     if mxp == "strict":
         policy = "mixed_bfloat16" if has_devices("TPU") else "mixed_float16"
         keras.mixed_precision.set_global_policy(policy)
-        tf.get_logger().info(f"USING mixed precision policy {policy}")
+        tf.config.optimizer.set_experimental_options({"auto_mixed_precision": False})
+        logger.info(f"USING mixed precision policy {policy}")
     elif mxp == "strict_auto":
         policy = "mixed_bfloat16" if has_devices("TPU") else "mixed_float16"
         keras.mixed_precision.set_global_policy(policy)
         tf.config.optimizer.set_experimental_options({"auto_mixed_precision": True})
-        tf.get_logger().info(f"USING auto mixed precision policy {policy}")
+        logger.info(f"USING auto mixed precision policy {policy}")
     elif mxp == "auto":
         tf.config.optimizer.set_experimental_options({"auto_mixed_precision": True})
-        tf.get_logger().info("USING auto mixed precision policy")
+        logger.info("USING auto mixed precision policy")
+    else:
+        keras.mixed_precision.set_global_policy("float32")
+        tf.config.optimizer.set_experimental_options({"auto_mixed_precision": False})
+        logger.info("USING float32 precision policy")
 
 
 def setup_seed(
@@ -174,5 +162,4 @@ def setup_seed(
     random.seed(seed)
     np.random.seed(seed)
     tf.random.set_seed(seed)
-    keras.backend.experimental.enable_tf_random_generator()
     keras.utils.set_random_seed(seed)

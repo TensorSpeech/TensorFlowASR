@@ -16,6 +16,7 @@ import math
 from typing import Union
 
 import numpy as np
+from keras.src import backend
 
 from tensorflow_asr import tf
 from tensorflow_asr.utils import shape_util
@@ -43,6 +44,30 @@ def nan_to_zero(
     input_tensor: tf.Tensor,
 ):
     return tf.where(tf.math.is_nan(input_tensor), tf.zeros_like(input_tensor), input_tensor)
+
+
+def nan_to_num(x, nan=0.0, posinf=None, neginf=None):
+    x = tf.convert_to_tensor(x)
+
+    dtype = x.dtype
+    dtype_as_dtype = tf.as_dtype(dtype)
+    if dtype_as_dtype.is_integer or not dtype_as_dtype.is_numeric:
+        return x
+
+    # Replace NaN with `nan`
+    x = tf.where(tf.math.is_nan(x), nan, x)
+
+    # Replace positive infinity with `posinf` or `dtype.max`
+    if posinf is None:
+        posinf = dtype.max
+    x = tf.where(tf.math.is_inf(x) & (x > 0), posinf, x)
+
+    # Replace negative infinity with `neginf` or `dtype.min`
+    if neginf is None:
+        neginf = dtype.min
+    x = tf.where(tf.math.is_inf(x) & (x < 0), neginf, x)
+
+    return x
 
 
 def bytes_to_string(
@@ -212,12 +237,31 @@ def masked_fill(
     return tf.where(mask, tensor, values)
 
 
-def large_compatible_negative(
+def large_compatible_negative_number(
     tensor_type,
 ):
-    if tensor_type == tf.float16:
+    dtype = backend.standardize_dtype(tensor_type)
+    if dtype == "float16":
         return tf.float16.min
     return -1e9
+
+
+def large_compatible_positive_number(
+    tensor_type,
+):
+    dtype = backend.standardize_dtype(tensor_type)
+    if dtype == "float16":
+        return tf.float16.max
+    return 1e9
+
+
+def compatible_epsilon(
+    tensor_type,
+):
+    dtype = backend.standardize_dtype(tensor_type)
+    if dtype == "float16":
+        return 1e-6
+    return 1e-9
 
 
 def apply_mask(
@@ -280,6 +324,25 @@ def slice_batch_tensor(
         return sliced_tensor
 
 
+def split_tensor_by_ga(
+    tensor: tf.Tensor,  # [B, ...]
+    batch_size: int,
+    ga_steps: int,
+):
+    """
+    Parameters
+    ----------
+    tensor : tf.Tensor of shape [B, ...]
+
+    Returns
+    -------
+    tf.Tensor of shape [num_batches, mini_batch_size, ...]
+    """
+    with tf.name_scope("split_tensor_by_ga"):
+        splits = [batch_size] * ga_steps
+        return tf.stack(tf.split(tensor, splits, num=ga_steps, axis=0), axis=0)
+
+
 def compute_time_length(
     tensor: tf.Tensor,
     dtype=tf.int32,
@@ -299,3 +362,10 @@ def next_power_of_two(
     x: int,
 ):
     return 1 if x == 0 else 2 ** math.ceil(math.log2(x))
+
+
+def add_gauss_noise(
+    data,
+    stddev: float = 0.075,
+):
+    return tf.nest.map_structure(lambda x: tf.add(x, tf.random.normal(shape=tf.shape(x), mean=0.0, stddev=stddev, dtype=x.dtype)), data)

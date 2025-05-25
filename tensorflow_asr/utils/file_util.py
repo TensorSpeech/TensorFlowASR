@@ -13,9 +13,12 @@
 # limitations under the License.
 
 import contextlib
+import logging
 import os
 import re
+import tarfile
 import tempfile
+import zipfile
 from typing import List, Union
 
 import jinja2
@@ -24,6 +27,7 @@ import yaml
 from tensorflow_asr import tf
 
 ENABLE_PATH_PREPROCESS = True
+logger = logging.getLogger(__name__)
 
 
 def load_yaml(
@@ -117,8 +121,9 @@ def save_file(
     filepath: str,
 ):
     if is_cloud_path(filepath):
-        _, ext = os.path.splitext(filepath)
-        with tempfile.NamedTemporaryFile(suffix=ext) as tmp:
+        _, *ext = os.path.basename(filepath).split(".")
+        suffix = "." + ".".join(ext)
+        with tempfile.NamedTemporaryFile(suffix=suffix) as tmp:
             yield tmp.name
             tf.io.gfile.copy(tmp.name, filepath, overwrite=True)
     else:
@@ -130,9 +135,32 @@ def read_file(
     filepath: str,
 ):
     if is_cloud_path(filepath):
-        _, ext = os.path.splitext(filepath)
-        with tempfile.NamedTemporaryFile(suffix=ext) as tmp:
+        _, *ext = os.path.basename(filepath).split(".")
+        suffix = "." + ".".join(ext)
+        with tempfile.NamedTemporaryFile(suffix=suffix) as tmp:
             tf.io.gfile.copy(filepath, tmp.name, overwrite=True)
             yield tmp.name
     else:
         yield filepath
+
+
+def clean_dir(dirpath: str):
+    path = preprocess_paths(dirpath, isdir=True)
+    logger.info(f"Cleaning up {path}")
+    if tf.io.gfile.exists(path):
+        tf.io.gfile.rmtree(path)
+
+
+def extract_file(
+    filepath: str,
+    extractpath: str,
+):
+    if filepath.endswith(".tar.gz") or filepath.endswith(".tgz") or filepath.endswith(".tar"):
+        with tarfile.open(filepath, "r:gz") as tar:
+            tar.extractall(path=os.path.realpath(extractpath))
+        return
+    if filepath.endswith(".zip"):
+        with zipfile.ZipFile(filepath, "r") as zip_ref:
+            zip_ref.extractall(os.path.realpath(extractpath))
+        return
+    raise ValueError(f"Unsupported file format: {filepath}")

@@ -13,12 +13,12 @@
 # limitations under the License.
 
 import json
+import logging
 from typing import Union
 
-from tensorflow_asr import tf
 from tensorflow_asr.utils import file_util
 
-logger = tf.get_logger()
+logger = logging.getLogger(__name__)
 
 
 class DecoderConfig:
@@ -42,7 +42,7 @@ class DecoderConfig:
         self.lm_config: dict = config.pop("lm_config", {})
 
         self.model_type: str = config.pop("model_type", "unigram")
-        self.vocabulary: str = file_util.preprocess_paths(config.pop("vocabulary", None))
+        self.vocabulary: str = config.pop("vocabulary", None)
         self.vocab_size: int = config.pop("vocab_size", 1000)
         self.max_token_length: int = config.pop("max_token_length", 50)
         self.max_unique_chars: int = config.pop("max_unique_chars", None)
@@ -53,9 +53,6 @@ class DecoderConfig:
         self.max_sentence_length: int = config.pop("max_sentence_length", 1048576)  # bytes
         self.max_sentencepiece_length: int = config.pop("max_sentencepiece_length", 16)  # bytes
         self.character_coverage: float = config.pop("character_coverage", 1.0)  # 0.9995 for languages with rich character, else 1.0
-
-        self.train_files = config.pop("train_files", [])
-        self.eval_files = config.pop("eval_files", [])
 
         for k, v in config.items():
             setattr(self, k, v)
@@ -98,7 +95,7 @@ class LearningConfig:
     def __init__(self, config: dict = None):
         if not config:
             config = {}
-        self.pretrained = file_util.preprocess_paths(config.pop("pretrained", None))
+        self.pretrained = config.pop("pretrained", None)
         self.optimizer_config: dict = config.pop("optimizer_config", {})
         self.gwn_config = config.pop("gwn_config", None)
         self.gradn_config = config.pop("gradn_config", None)
@@ -121,7 +118,6 @@ class Config:
         self.learning_config = LearningConfig(config.pop("learning_config", {})) if training else None
         for k, v in config.items():
             setattr(self, k, v)
-        logger.info(str(self))
 
     def __str__(self) -> str:
         def default(x):

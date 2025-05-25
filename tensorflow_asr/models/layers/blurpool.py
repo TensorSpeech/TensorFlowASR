@@ -30,10 +30,9 @@ class BlurPool2D(Layer):
         trainable=True,
         name="blurpool2d",
         dtype=None,
-        dynamic=False,
         **kwargs,
     ):
-        super().__init__(trainable, name, dtype, dynamic, **kwargs)
+        super().__init__(trainable=trainable, name=name, dtype=dtype, **kwargs)
         self.filters = filters
         self.kernel_size = kernel_size
         self.strides = strides
@@ -88,10 +87,9 @@ class BlurPool1D(Layer):
         trainable=True,
         name="blurpool1d",
         dtype=None,
-        dynamic=False,
         **kwargs,
     ):
-        super().__init__(trainable, name, dtype, dynamic, **kwargs)
+        super().__init__(trainable=trainable, name=name, dtype=dtype, **kwargs)
         self.filters = filters
         self.kernel_size = kernel_size
         self.strides = strides
