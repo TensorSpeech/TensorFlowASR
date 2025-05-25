@@ -1,5 +1,5 @@
 SoundFile~=0.12.1
-nltk~=3.8.1
+nltk>=3.9.0
 sentencepiece~=0.2.0
 tqdm>=4.67.1
 librosa~=0.10.1
