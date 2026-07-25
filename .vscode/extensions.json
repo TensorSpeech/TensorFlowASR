@@ -1,8 +1,6 @@
 {
     "recommendations": [
-        "ms-python.isort",
-        "ms-python.black-formatter",
-        "ms-python.pylint",
+        "charliermarsh.ruff",
         "ms-python.vscode-pylance",
         "ms-python.python"
     ]

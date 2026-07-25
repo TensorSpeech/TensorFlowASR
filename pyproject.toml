@@ -1,9 +1,125 @@
-[tool.black]
-line-length = 150
+[project]
+name = "TensorFlowASR"
+version = "3.0.0"
+description = "Almost State-of-the-art Automatic Speech Recognition using Tensorflow 2"
+readme = "README.md"
+license = { text = "Apache-2.0" }
+requires-python = ">=3.12,<3.14"
+authors = [{ name = "Huy Le Nguyen", email = "nlhuy.cs.16@gmail.com" }]
+classifiers = [
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Intended Audience :: Science/Research",
+    "Operating System :: POSIX :: Linux",
+    "License :: OSI Approved :: Apache Software License",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+]
+dependencies = [
+    "SoundFile~=0.12.1",
+    "nltk>=3.9.0",
+    "sentencepiece~=0.2.0",
+    "tqdm>=4.67.1",
+    "librosa~=0.10.1",
+    "PyYAML~=6.0.1",
+    "sounddevice~=0.4.6",
+    "jinja2~=3.1.3",
+    "fire>=0.7.0",
+    "jiwer~=3.0.3",
+    # https://github.com/keras-team/keras/issues/20568#issuecomment-2510432421
+    "keras>=3.15.0",
+    "cached_property~=2.0.1",
+    "ipywidgets~=8.1.5",
+    "ipython<9.0.0",
+    "kagglehub~=0.3.6",
+    "datasets~=3.5.1",
+    "tabulate~=0.9.0",
+    "tensorflow~=2.20.0",
+    "tensorflow-text~=2.20.1",
+]
 
-[tool.isort]
-profile = "black"
-line_length = 150
+[project.optional-dependencies]
+cuda = ["tensorflow[and-cuda]~=2.20.0"]
+tpu = ["tensorflow-tpu~=2.20.0"]
+dev = [
+    "pytest>=7.4.1",
+    "ruff>=0.14.0",
+    "matplotlib>=3.7.2",
+    "pydot-ng>=2.0.0",
+    "graphviz>=0.20.1",
+    "pre-commit>=3.7.0",
+    "tf2onnx>=1.16.1",
+    "netron>=8.0.3",
+]
+
+[project.urls]
+Homepage = "https://github.com/TensorSpeech/TensorFlowASR"
+Repository = "https://github.com/TensorSpeech/TensorFlowASR"
+
+[project.scripts]
+tensorflow_asr = "tensorflow_asr.scripts:main"
+
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["tensorflow_asr", "tensorflow_asr.*"]
+
+[tool.uv]
+# `cuda` and `tpu` provide mutually exclusive TensorFlow builds.
+# NOTE: `tensorflow-tpu` ships its own `tensorflow` distribution and overwrites
+# the base one it is installed over. This mirrors the old `setup.sh tpu`
+# behaviour, which uninstalled `tensorflow` and force-installed `tensorflow-tpu`.
+conflicts = [[{ extra = "cuda" }, { extra = "tpu" }]]
+
+# librosa pulls numba in transitively with a very loose numpy constraint. Left
+# alone, uv maximises numpy (2.5.x) and backtracks numba to 0.53.1, whose
+# llvmlite 0.36 sdist hard-fails to build on Python >= 3.10. Holding numba
+# modern caps numpy to a range they actually agree on.
+constraint-dependencies = ["numba>=0.62"]
+
+[tool.semantic_release]
+# Keeps [project].version in step with the git tag
+version_toml = ["pyproject.toml:project.version"]
+tag_format = "v{version}"
+commit_parser = "conventional"
+build_command = "uv build"
+commit_message = "chore(release): v{version} [skip ci]"
+# 3.0.0 is already released; never fall back to 0.x versioning
+allow_zero_version = false
+
+[tool.semantic_release.branches.main]
+match = "main"
+prerelease = false
+
+[tool.semantic_release.changelog]
+mode = "update"
+
+[tool.semantic_release.changelog.default_templates]
+changelog_file = "CHANGELOG.md"
+output_format = "md"
+
+[tool.ruff]
+line-length = 150
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I"]
+ignore = [
+    "E402", # module level import not at top of file
+    "E501", # line too long, handled by the formatter
+    "E701", # multiple statements on one line (colon)
+    "E702", # multiple statements on one line (semicolon)
+    "E731", # lambda assignment
+    "E741", # ambiguous variable name
+    # Previously suppressed via .pylintrc (broad-except, unused-variable).
+    # Drop these two entries to surface the existing findings.
+    "E722", # bare except
+    "F841", # unused local variable
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["tensorflow_asr"]
 
 [tool.pytest.ini_options]
 minversion = "6.0"

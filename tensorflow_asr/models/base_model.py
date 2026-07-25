@@ -25,7 +25,7 @@ from tensorflow_asr import keras, schemas, tf
 from tensorflow_asr.models.layers.feature_extraction import FeatureExtraction
 from tensorflow_asr.optimizers.accumulation import GradientAccumulator
 from tensorflow_asr.tokenizers import Tokenizer
-from tensorflow_asr.utils import file_util, math_util, shape_util
+from tensorflow_asr.utils import file_util, keras_util, math_util, shape_util
 
 logger = logging.getLogger(__name__)
 
@@ -44,6 +44,58 @@ class BaseModel(keras.Model, TensorFlowTrainer):
     @tokenizer.setter
     def tokenizer(self, tokenizer: Tokenizer):
         self._tokenizer = tokenizer
+
+    @property
+    def lm(self):
+        """External language model used for shallow fusion during beam search, `None` if unused"""
+        return getattr(self, "_lm", None)
+
+    def _setattr_hook(self, name, value):
+        # Keep the shallow fusion LM out of keras attribute tracking. It is a frozen, externally
+        # trained model: letting keras adopt it as a sub-layer would pull its weights into this
+        # model's checkpoint, and assigning it after `make()` would raise outright because a built
+        # layer refuses new state. `Layer.__setattr__` calls this hook before it tracks anything,
+        # so stashing the LM here is the only point at which it can be hidden.
+        if name == "lm":
+            object.__setattr__(self, "_lm", value)
+            name, value = "_lm_attached", value is not None
+        return super()._setattr_hook(name, value)
+
+    def make_lm(self, custom_objects=None):
+        """
+        Build the shallow fusion language model from `decoder_config.lm_config`, if one is set.
+
+        The config is a standard keras serialization blob (`class_name` + `config`), so the class
+        only has to be registered with `@keras.utils.register_keras_serializable`. No language
+        model ships with TensorFlowASR -- see
+        `tensorflow_asr.models.decoders.language_model.LanguageModel` for the interface to
+        implement.
+        """
+        lm_config = getattr(getattr(self, "tokenizer", None), "decoder_config", None)
+        lm_config = getattr(lm_config, "lm_config", None)
+        if not lm_config:
+            self.lm = None
+            return None
+        self.lm = keras_util.model_from_config(lm_config, custom_objects=custom_objects)
+        logger.info(f"Loaded shallow fusion language model: {self.lm}")
+        return self.lm
+
+    def get_beam_decoding_kwargs(self) -> dict:
+        """
+        Beam search settings taken from the tokenizer's decoder config.
+
+        Returns an empty dict when `beam_width` is not a positive number, which is the default in
+        every shipped config. Callers treat that as "no beam search", matching what
+        `make_tflite_function` already does with `beam_width=0`.
+        """
+        decoder_config = getattr(getattr(self, "tokenizer", None), "decoder_config", None)
+        beam_width = int(getattr(decoder_config, "beam_width", 0) or 0)
+        if beam_width <= 0:
+            return {}
+        kwargs = {"beam_width": beam_width, "score_norm": bool(getattr(decoder_config, "norm_score", True))}
+        if self.lm is not None:
+            kwargs.update(lm=self.lm, lm_alpha=float(getattr(decoder_config, "lm_alpha", 0.0)))
+        return kwargs
 
     def summary(self, line_length=120, expand_nested=True, show_trainable=True, **kwargs):
         super().summary(line_length=line_length, expand_nested=expand_nested, show_trainable=show_trainable, **kwargs)
@@ -240,7 +292,10 @@ class BaseModel(keras.Model, TensorFlowTrainer):
             previous_decoder_states=self.get_initial_decoder_states(batch_size=batch_size),
         )
         _tokens = self.recognize(inputs=inputs).tokens
-        _beam_tokens = self.recognize_beam(inputs=inputs).tokens
+        # `beam_width: 0` (the default in every shipped config) means no beam search, so the beam
+        # column mirrors the greedy one instead of silently doubling the cost of every evaluation.
+        _beam_kwargs = self.get_beam_decoding_kwargs()
+        _beam_tokens = self.recognize_beam(inputs=inputs, **_beam_kwargs).tokens if _beam_kwargs else _tokens
         return {
             "tokens": _tokens,
             "beam_tokens": _beam_tokens,

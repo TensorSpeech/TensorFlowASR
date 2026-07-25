@@ -43,6 +43,7 @@ def main(
 
     model: BaseModel = keras_util.model_from_config(config.model_config)
     model.tokenizer = tokenizer
+    model.make_lm()  # no-op unless decoder_config.lm_config is set
     model.make(batch_size=bs)
     if h5 and tf.io.gfile.exists(h5):
         model.load_weights(h5, skip_mismatch=False)

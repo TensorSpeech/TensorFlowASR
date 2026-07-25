@@ -323,9 +323,7 @@ class KaggleModelBackupAndRestore(BackupAndRestore):
             raise ValueError(f"Model dir must be local path for Kaggle backup and restore. Received: {model_dir}")
         self.save_freq = save_freq
         if save_freq != "epoch" and not isinstance(save_freq, int):
-            raise ValueError(
-                "Invalid value for argument `save_freq`. " f"Received: save_freq={save_freq}. " "Expected either 'epoch' or an integer value."
-            )
+            raise ValueError(f"Invalid value for argument `save_freq`. Received: save_freq={save_freq}. Expected either 'epoch' or an integer value.")
 
         self._batches_seen_since_last_saving = 0
         self._last_batch_seen = 0

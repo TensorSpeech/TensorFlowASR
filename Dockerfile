@@ -1,4 +1,6 @@
-FROM tensorflow/tensorflow:2.18.0-gpu
+FROM tensorflow/tensorflow:2.20.0-gpu
+
+COPY --from=ghcr.io/astral-sh/uv:0.11 /uv /uvx /bin/
 
 RUN apt-get update \
     && apt-get upgrade -y \
@@ -8,9 +10,20 @@ RUN apt-get update \
 # Clear cache
 RUN apt clean && apt-get clean
 
-# Install dependencies
-COPY requirements*.txt /
-RUN pip --no-cache-dir install -r /requirements.txt -r /requirements.cuda.txt
+WORKDIR /app
+
+# Install into the image's existing interpreter rather than a nested .venv
+ENV UV_PROJECT_ENVIRONMENT=/usr/local \
+    UV_COMPILE_BYTECODE=1 \
+    UV_LINK_MODE=copy
+
+# Install dependencies first so they stay cached across source changes
+COPY pyproject.toml uv.lock README.md ./
+RUN uv sync --frozen --extra cuda --no-install-project
+
+# Install the project itself
+COPY tensorflow_asr ./tensorflow_asr
+RUN uv sync --frozen --extra cuda
 
 # Install rnnt_loss
 COPY scripts /scripts

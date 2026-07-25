@@ -21,6 +21,6 @@ def reduce_per_replica(values, strategy, reduction):
             return strategy.reduce("SUM", v, axis=None)
         if reduction == "mean":
             return strategy.reduce("MEAN", v, axis=None)
-        raise ValueError("`reduction` must be one of " '"first", "mean", "sum", or "auto". ' f"Received: reduction={reduction}.")
+        raise ValueError(f'`reduction` must be one of "first", "mean", "sum", or "auto". Received: reduction={reduction}.')
 
     return tf.nest.map_structure(_reduce, values)

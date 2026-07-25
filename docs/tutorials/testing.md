@@ -12,7 +12,9 @@ These commands are example for librispeech dataset, but we can apply similar to 
 ## 1. Installation
 
 ```bash
-./setup.sh [tpu|gpu|cpu] install
+uv sync                 # CPU / Apple Silicon
+uv sync --extra cuda    # NVIDIA GPU
+uv sync --extra tpu     # TPU
 ```
 
 ## 2. Prepare transcripts files

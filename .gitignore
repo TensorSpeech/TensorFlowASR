@@ -15,3 +15,11 @@ my_train
 .DS_Store
 models/*
 !models/README.md
+
+# uv
+.uv/
+.uv-cache/
+# uv.lock is intentionally committed for reproducible dev/CI environments
+
+# ruff
+.ruff_cache/

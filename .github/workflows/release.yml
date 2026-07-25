@@ -1,0 +1,71 @@
+# Versioning, changelog, GitHub Release and PyPI upload, driven by conventional
+# commit messages. See [tool.semantic_release] in pyproject.toml for the config.
+# https://python-semantic-release.readthedocs.io
+
+name: Release
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      # Needed to push the version bump commit + tag and create the GitHub Release
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # semantic-release needs full history and all tags to work out the
+          # next version
+          fetch-depth: 0
+          ref: ${{ github.ref_name }}
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Set up Python
+        run: uv python install 3.13
+
+      # Bumps the version in pyproject.toml, updates CHANGELOG.md, commits, tags
+      # and creates the GitHub Release. Runs build_command (uv build) on the way.
+      - name: Python Semantic Release
+        id: release
+        uses: python-semantic-release/python-semantic-release@v10.6.1
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Publish to PyPI
+        if: steps.release.outputs.released == 'true'
+        env:
+          UV_PUBLISH_USERNAME: ${{ secrets.PYPI_USERNAME }}
+          UV_PUBLISH_PASSWORD: ${{ secrets.PYPI_PASSWORD }}
+        run: uv publish
+
+      - name: Attach distributions to the GitHub Release
+        if: steps.release.outputs.released == 'true'
+        uses: python-semantic-release/publish-action@v10.6.1
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          tag: ${{ steps.release.outputs.tag }}
+
+      - name: Summary
+        run: |
+          if [ "${{ steps.release.outputs.released }}" = "true" ]; then
+            echo "Released ${{ steps.release.outputs.version }} (\`${{ steps.release.outputs.tag }}\`)" >> "$GITHUB_STEP_SUMMARY"
+            echo "${{ steps.release.outputs.link }}" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "No release: no version-bumping commits since the last tag." >> "$GITHUB_STEP_SUMMARY"
+          fi

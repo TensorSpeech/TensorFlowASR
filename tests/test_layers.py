@@ -8,7 +8,7 @@ import numpy as np
 from tensorflow_asr import tf
 from tensorflow_asr.augmentations.augmentation import Augmentation
 from tensorflow_asr.models.layers.feature_extraction import FeatureExtraction
-from tensorflow_asr.utils import data_util, file_util
+from tensorflow_asr.utils import data_util
 
 # config_path = os.path.join(os.path.dirname(__file__), "..", "examples", "configs", "log_mel_spectrogram.yml.j2")
 # config = file_util.load_yaml(config_path)
