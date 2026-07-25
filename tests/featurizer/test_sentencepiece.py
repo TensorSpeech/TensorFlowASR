@@ -1,136 +1,103 @@
-import os
-import re
+"""
+Tests for `SentencePieceTokenizer` and the dataset pipeline that feeds it.
 
+The previous version of this file targeted an API generation that no longer exists
+(`SpeechFeaturizer`, `SubwordFeaturizer`, `Tokenizer.load_from_file`, `iextract`,
+`ASRSliceTestDataset`, and `ASRSliceDataset(speech_featurizer=..., text_featurizer=...)`), and read
+audio from hard-coded `/data/datasets/LibriSpeech` paths. It is rewritten here against the current
+API and made self-contained: the sentencepiece model ships in `examples/`, and the audio is the
+`tests/test.flac` fixture, so nothing depends on a corpus being mounted.
+"""
+
+import os
+
+import pytest
 import sentencepiece as spm
 
-from tensorflow_asr.datasets import ASRSliceDataset, ASRSliceTestDataset
-from tensorflow_asr.features.speech_featurizers import SpeechFeaturizer
-from tensorflow_asr.tokenizers import SentencePieceTokenizer, SubwordFeaturizer, Tokenizer
+from tensorflow_asr import tf
+from tensorflow_asr.configs import DecoderConfig
+from tensorflow_asr.datasets import ASRSliceDataset
+from tensorflow_asr.tokenizers import SentencePieceTokenizer
+
+REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir, os.pardir))
+SENTENCEPIECE_MODEL = os.path.join(REPO_ROOT, "examples", "datasets", "librispeech", "sentencepiece", "train_8000&960.model")
+AUDIO_FIXTURE = os.path.join(REPO_ROOT, "tests", "test.flac")
+TRANSCRIPT = "this is a test"
 
 
-def test_encoder():
-    # Load model
-    model_path = os.path.join(os.path.abspath(os.path.dirname(__file__)), os.pardir, "vocabularies")
-    sp = spm.SentencePieceProcessor()
-    sp.load(os.path.join(model_path, "sentencepiece_librispeech_960_8000.model"))
-
-    # Encode a dummy sentence
-    sentence = "this is a test"
-    embeding_int = sp.encode_as_ids(sentence)
-    embeding_str = sp.encode_as_pieces(sentence)
-    decoded_int = sp.decode_ids(embeding_int)
-    decoded_str = sp.decode_pieces(embeding_str)
-
-    # Assertions
-    assert sentence == decoded_int, f"Decoded {decoded_int}, expected {sentence}"
-    assert sentence == decoded_str, f"Decoded {decoded_str}, expected {sentence}"
+@pytest.fixture(scope="module")
+def tokenizer():
+    tokenizer = SentencePieceTokenizer(DecoderConfig({"type": "sentencepiece", "vocabulary": SENTENCEPIECE_MODEL, "blank_index": 0}))
+    tokenizer.make()
+    return tokenizer
 
 
-def test_featurizer():
-    config = {
-        "output_path_prefix": "/data/models/asr/conformer_sentencepiece_subword",
-        "model_type": "unigram",
-        "vocab_size": 8000,
-        "blank_at_zero": True,
-        "beam_width": 5,
-        "norm_score": True,
-        "train_files": [
-            "/data/datasets/LibriSpeech/train-clean-100/transcripts.tsv"
-            "/data/datasets/LibriSpeech/train-clean-360/transcripts.tsv"
-            "/data/datasets/LibriSpeech/train-other-500/transcripts.tsv"
-        ],
-    }
-
-    config_speech = {
-        "sample_rate": 16000,
-        "frame_ms": 25,
-        "stride_ms": 10,
-        "num_feature_bins": 80,
-        "feature_type": "log_mel_spectrogram",
-        "preemphasis": 0.97,
-        "normalize_signal": True,
-        "normalize_feature": True,
-        "normalize_per_frame": False,
-    }
-
-    text_featurizer_sentencepiece = SentencePieceTokenizer.load_from_file(config, None)
-    subwords_path = os.path.join(
-        os.path.abspath(os.path.dirname(__file__)), os.pardir, os.pardir, "vocabularies", "librispeech_train_4_1030.subwords"
-    )
-    text_featurizer_subwords = SubwordFeaturizer.load_from_file(config, subwords_path)
-    speech_featurizer = SpeechFeaturizer(config_speech)
-    data_path = os.path.join(os.path.abspath(os.path.dirname(__file__)), "transcripts_librispeech_train_clean_100.tsv")
-
-    def get_data(featurizer: Tokenizer):
-        train_dataset = ASRSliceDataset(
-            data_paths=[data_path],
-            speech_featurizer=speech_featurizer,
-            text_featurizer=featurizer,
-            stage="train",
-            shuffle=False,
-        )
-        train_data = train_dataset.create(1)
-        return next(iter(train_data))
-
-    data_sentencepiece = get_data(text_featurizer_sentencepiece)
-    data_subwords = get_data(text_featurizer_subwords)
-
-    assert len(data_sentencepiece) == len(data_subwords)
-    assert data_sentencepiece[0].shape == data_subwords[0].shape
-    assert data_sentencepiece[0].dtype == data_subwords[0].dtype
+@pytest.fixture
+def transcripts_tsv(tmp_path):
+    """A one-line manifest in the `PATH \\t DURATION \\t TRANSCRIPT` format the datasets expect."""
+    path = tmp_path / "transcripts.tsv"
+    path.write_text(f"PATH\tDURATION\tTRANSCRIPT\n{AUDIO_FIXTURE}\t1.0\t{TRANSCRIPT}\n")
+    return str(path)
 
 
-def test_iextract():
-    config = {
-        "output_path_prefix": "/data/models/asr/conformer_sentencepiece_subword",
-        "model_type": "unigram",
-        "vocab_size": 8000,
-        "blank_at_zero": True,
-        "beam_width": 5,
-        "norm_score": True,
-        "train_files": [
-            "/data/datasets/LibriSpeech/train-clean-100/transcripts.tsv"
-            "/data/datasets/LibriSpeech/train-clean-360/transcripts.tsv"
-            "/data/datasets/LibriSpeech/train-other-500/transcripts.tsv"
-        ],
-    }
+def test_sentencepiece_model_round_trip():
+    """Raw sentencepiece behaviour, independent of any TensorFlowASR wrapper."""
+    processor = spm.SentencePieceProcessor()
+    processor.load(SENTENCEPIECE_MODEL)
 
-    config_speech = {
-        "sample_rate": 16000,
-        "frame_ms": 25,
-        "stride_ms": 10,
-        "num_feature_bins": 80,
-        "feature_type": "log_mel_spectrogram",
-        "preemphasis": 0.97,
-        "normalize_signal": True,
-        "normalize_feature": True,
-        "normalize_per_frame": False,
-    }
+    assert processor.decode_ids(processor.encode_as_ids(TRANSCRIPT)) == TRANSCRIPT
+    assert processor.decode_pieces(processor.encode_as_pieces(TRANSCRIPT)) == TRANSCRIPT
 
-    text_featurizer_sentencepiece = SentencePieceTokenizer.load_from_file(config, None)
-    speech_featurizer = SpeechFeaturizer(config_speech)
-    data_path = os.path.join(os.path.abspath(os.path.dirname(__file__)), "transcripts_librispeech_train_clean_100.tsv")
 
-    train_dataset = ASRSliceTestDataset(
-        data_paths=[data_path],
-        speech_featurizer=speech_featurizer,
-        text_featurizer=text_featurizer_sentencepiece,
+def test_tokenizer_round_trip(tokenizer):
+    assert tokenizer.initialized
+    assert tokenizer.num_classes == 8000
+    assert tokenizer.blank == 0
+
+    indices = tokenizer.tokenize(tf.constant(TRANSCRIPT))
+    assert indices.dtype == tf.int32
+    assert int(tf.size(indices)) > 0
+
+    decoded = tokenizer.detokenize(tf.reshape(indices, [1, -1])).numpy()[0].decode("utf-8")
+    assert decoded == TRANSCRIPT
+
+
+def test_tokenizer_matches_raw_sentencepiece(tokenizer):
+    processor = spm.SentencePieceProcessor()
+    processor.load(SENTENCEPIECE_MODEL)
+    expected = processor.encode_as_ids(TRANSCRIPT)
+    assert tokenizer.tokenize(tf.constant(TRANSCRIPT)).numpy().tolist() == expected
+
+
+def test_dataset_produces_usable_batches(tokenizer, transcripts_tsv):
+    dataset = ASRSliceDataset(
         stage="train",
+        tokenizer=tokenizer,
+        data_paths=[transcripts_tsv],
         shuffle=False,
+        indefinite=False,
+        drop_remainder=False,
     )
-    train_data = train_dataset.create(1)
-    batch = next(iter(train_data))
-    file_paths, features, input_length, labels = batch
-    labels = text_featurizer_sentencepiece.iextract(labels)
-    labels = labels.numpy()[0].decode("utf-8")
+    inputs, labels = next(iter(dataset.create(1)))
 
-    # Open transcript
-    file_path = file_paths[0].numpy().decode("utf-8")
-    file_path = re.sub(r"(?<!\s)-[0-9]{4}.flac", ".trans.txt", file_path)
-    print(file_path)
-    with open(file_path, "r") as f:
-        lines = f.read().splitlines()
-    m = re.search(r"[0-9]+-[0-9]+-[0-9]+\s+([\w\s]+)", lines[0])
-    transcript = m.groups(1)[0].lower()
+    assert inputs.inputs.shape[0] == 1
+    assert int(inputs.inputs_length[0]) == inputs.inputs.shape[1]
+    assert int(labels.labels_length[0]) == int(tf.size(tokenizer.tokenize(tf.constant(TRANSCRIPT))))
+    # the transducer prediction stream is the labels shifted by one and prefixed with blank
+    assert int(inputs.predictions_length[0]) == int(labels.labels_length[0]) + 1
+    assert int(inputs.predictions[0, 0]) == tokenizer.blank
 
-    assert labels == transcript
+
+def test_dataset_labels_detokenize_to_the_transcript(tokenizer, transcripts_tsv):
+    """End to end: manifest -> tokenized labels -> back to the original text."""
+    dataset = ASRSliceDataset(
+        stage="train",
+        tokenizer=tokenizer,
+        data_paths=[transcripts_tsv],
+        shuffle=False,
+        indefinite=False,
+        drop_remainder=False,
+    )
+    _, labels = next(iter(dataset.create(1)))
+    decoded = tokenizer.detokenize(labels.labels).numpy()[0].decode("utf-8")
+    assert decoded == TRANSCRIPT

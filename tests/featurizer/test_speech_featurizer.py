@@ -1,113 +1,138 @@
-# # %%
-# import librosa
-# import librosa.display
-# import matplotlib.pyplot as plt
-# import numpy as np
+"""
+Feature extraction, SpecAugment and chunked (streaming) extraction.
 
-# from tensorflow_asr import tf
-# from tensorflow_asr.augmentations.methods import specaugment
-# from tensorflow_asr.configs import SpeechConfig
-# from tensorflow_asr.features import speech_featurizers
+This was an exploratory script, fully commented out, written against an API that no longer exists:
+`SpeechConfig`, `tensorflow_asr.features.speech_featurizers.SpeechFeaturizer`, `sf.extract()`,
+`sf.speech_config.normalize_per_frame`. All of that is now the `FeatureExtraction` keras layer.
 
-# speech_conf = SpeechConfig(
-#     {
-#         "sample_rate": 16000,
-#         "frame_ms": 25,
-#         "stride_ms": 10,
-#         "feature_type": "log_mel_spectrogram",
-#         "num_feature_bins": 80,
-#         # "compute_energy": True,
-#         # "use_natural_log": False,
-#         # "use_librosa_like_stft": True,
-#         # "fft_overdrive": False,
-#         # "normalize_feature": False,
-#     }
-# )
-# signal = speech_featurizers.read_raw_audio("./test.flac", speech_conf.sample_rate)
+It is uncommented and turned into real tests here. Its most interesting question -- does extracting
+features chunk by chunk give the same answer as extracting them from the whole signal? -- is now
+asserted rather than eyeballed on a plot. The figures it used to `plt.show()` are written through
+`plot_util`, which puts them in `$TFASR_PLOT_DIR` -- `tests/figs/`, set by `tests/conftest.py`.
+"""
 
-# print(f"signal length: {len(signal)}")
-# sf = speech_featurizers.SpeechFeaturizer(speech_conf)
-# ft = sf.extract(signal)
-# freq_mask = specaugment.FreqMasking(prob=1, mask_value="min")
-# ft = freq_mask.augment(ft)
-# time_mask = specaugment.TimeMasking(prob=1, p_upperbound=0.05)
-# ft = time_mask.augment(ft)
-# ft = tf.squeeze(ft, axis=-1)
-# ft = ft.numpy().T
-# print(ft.shape)
+import os
 
-# plt.figure(figsize=(24, 5))
-# ax = plt.gca()
-# ax.set_title("log_mel_spectrogram", fontweight="bold")
-# librosa.display.specshow(ft, cmap="viridis")
-# v1 = np.linspace(ft.min(), ft.max(), 8, endpoint=True)
-# plt.colorbar(pad=0.01, fraction=0.02, ax=ax, format="%.2f", ticks=v1)
-# plt.tight_layout()
-# plt.show()
+import numpy as np
+import pytest
 
-# sf.speech_config.normalize_per_frame = True
-# ft = sf.extract(signal)
-# ft = tf.squeeze(ft, axis=-1)
-# ft = ft.numpy().T
-# print(ft.shape)
+from tensorflow_asr import tf
+from tensorflow_asr.augmentations.methods import specaugment
+from tensorflow_asr.models.layers.feature_extraction import FeatureExtraction
+from tensorflow_asr.utils import data_util, plot_util
 
-# plt.figure(figsize=(24, 5))
-# ax = plt.gca()
-# ax.set_title("log_mel_spectrogram", fontweight="bold")
-# librosa.display.specshow(ft, cmap="viridis")
-# v1 = np.linspace(ft.min(), ft.max(), 8, endpoint=True)
-# plt.colorbar(pad=0.01, fraction=0.02, ax=ax, format="%.2f", ticks=v1)
-# plt.tight_layout()
-# plt.show()
+AUDIO_FILE_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "test.flac")
 
-# print(np.std(ft))
-# print(np.mean(ft))
 
-# nframes = 5
-# chunk_size = (nframes - 1) * sf.speech_config.frame_step + sf.speech_config.frame_length
-# stride = nframes * sf.speech_config.frame_step
-# print(f"With chunk size: {chunk_size} and nfft: {sf.nfft}")
-# signal_length = len(signal)
-# all_ft = None
-# for i in range(int(np.ceil((signal_length - chunk_size) / stride))):  # this ensure the fft shape of chunked signal is the same with whole signal
-#     chunk = signal[i * stride : i * stride + chunk_size]
-#     # cft = sf.power_to_db(sf.stft(chunk))
-#     cft = sf.extract(chunk)
-#     cft = tf.squeeze(cft, axis=-1)
-#     cft = cft.numpy()
-#     if all_ft is None:
-#         all_ft = cft
-#     else:
-#         all_ft = np.concatenate([all_ft, cft], axis=0)
-# all_ft = all_ft.T
-# all_ft = np.pad(all_ft, [[0, 0], [0, ft.shape[-1] - all_ft.shape[-1]]])
-# print(all_ft.shape)
+@pytest.fixture(scope="module")
+def signal():
+    raw = data_util.load_and_convert_to_wav(AUDIO_FILE_PATH)
+    return data_util.read_raw_audio(raw)
 
-# plt.figure(figsize=(24, 5))
-# ax = plt.gca()
-# ax.set_title(f"chunked log_mel_spectrogram", fontweight="bold")
-# librosa.display.specshow(all_ft, cmap="viridis")
-# v1 = np.linspace(all_ft.min(), all_ft.max(), 8, endpoint=True)
-# plt.colorbar(pad=0.01, fraction=0.02, ax=ax, format="%.2f", ticks=v1)
-# plt.tight_layout()
-# plt.show()
 
-# dft = all_ft - ft
+def extract(layer, samples):
+    """Run the layer over a 1-D signal and drop the batch axis."""
+    features, features_length = layer((tf.expand_dims(samples, 0), tf.expand_dims(tf.shape(samples)[0], 0)))
+    return tf.squeeze(features, 0), features_length[0]
 
-# plt.figure(figsize=(24, 5))
-# ax = plt.gca()
-# ax.set_title(f"diff of chunked log_mel_spectrogram with whole log_mel_spectrogram", fontweight="bold")
-# librosa.display.specshow(dft, cmap="viridis")
-# v1 = np.linspace(dft.min(), dft.max(), 8, endpoint=True)
-# plt.colorbar(pad=0.01, fraction=0.02, ax=ax, format="%.2f", ticks=v1)
-# plt.tight_layout()
-# plt.show()
 
-# plt.figure(figsize=(24, 5))
-# ax = plt.gca()
-# ax.set_title(f"RMSE of chunked log_mel_spectrogram with whole log_mel_spectrogram", fontweight="bold")
-# plt.plot(np.sqrt(np.mean(dft**2, axis=0)))
-# plt.tight_layout()
-# plt.show()
+def as_image(features):
+    """[T, num_feature_bins, 1] -> [num_feature_bins, T], the orientation the plots expect."""
+    return np.squeeze(features.numpy() if isinstance(features, tf.Tensor) else features).T
 
-# # %%
+
+def test_extracts_log_mel_spectrogram(signal):
+    layer = FeatureExtraction(feature_type="log_mel_spectrogram", preemphasis=0.0)
+    features, length = extract(layer, signal)
+
+    assert features.shape[1] == layer.num_feature_bins
+    assert features.shape[2] == 1
+    assert int(length) == features.shape[0]
+    assert bool(tf.reduce_all(tf.math.is_finite(features)))
+
+    path = plot_util.plotmesh(as_image(features), title="log_mel_spectrogram")
+    assert os.path.getsize(path) > 0
+
+
+@pytest.mark.parametrize("mask_value", ["zero", "min"])
+def test_specaugment_masks_features(signal, mask_value):
+    layer = FeatureExtraction(feature_type="log_mel_spectrogram", preemphasis=0.0)
+    features, length = extract(layer, signal)
+
+    masked, _ = specaugment.FreqMasking(prob=1.0, num_masks=2, mask_factor=27, mask_value=mask_value).augment((features, length))
+    masked, _ = specaugment.TimeMasking(prob=1.0, num_masks=2, p_upperbound=0.05, mask_value=mask_value).augment((masked, length))
+
+    assert masked.shape == features.shape
+    assert not np.allclose(masked.numpy(), features.numpy()), "masking at prob=1.0 changed nothing"
+    if mask_value == "zero":
+        assert (masked.numpy() == 0).any()
+    else:
+        # masking with "min" can never introduce a value below the original minimum
+        assert masked.numpy().min() >= features.numpy().min() - 1e-5
+
+    path = plot_util.plotmesh(as_image(masked), title=f"specaugment_{mask_value}")
+    assert os.path.getsize(path) > 0
+
+
+def test_normalization_options(signal):
+    """`normalize_per_frame` is gone; z-score and min-max are what the layer offers now."""
+    common = dict(feature_type="log_mel_spectrogram", preemphasis=0.0)
+    plain, _ = extract(FeatureExtraction(**common), signal)
+    zscore, _ = extract(FeatureExtraction(**common, normalize_zscore=True), signal)
+    min_max, _ = extract(FeatureExtraction(**common, normalize_min_max=True), signal)
+
+    assert zscore.shape == plain.shape == min_max.shape
+    assert np.isclose(zscore.numpy().mean(), 0.0, atol=1e-4)
+    assert np.isclose(zscore.numpy().std(), 1.0, atol=1e-4)
+    assert np.isclose(min_max.numpy().max(), 1.0, atol=1e-4)
+    assert min_max.numpy().min() >= -1.0
+
+
+@pytest.mark.parametrize("nframes", [1, 5, 10])
+def test_chunked_extraction_matches_whole_signal(signal, nframes):
+    """
+    Streaming inference feeds the layer one chunk at a time, so chunked features must agree with
+    the features of the whole signal.
+
+    `get_signal_chunk_size_and_step` sizes the chunks so each yields exactly `nframes` frames, but
+    that only holds with `pad_end=False` -- otherwise every chunk is zero-padded to a whole frame
+    and produces extra ones. Preemphasis is off for the same reason: it reads one sample back, so
+    it would differ across a chunk boundary.
+    """
+    layer = FeatureExtraction(feature_type="log_mel_spectrogram", preemphasis=0.0, pad_end=False)
+    whole, _ = extract(layer, signal)
+    whole = whole.numpy()
+
+    chunk_size, chunk_step = layer.get_signal_chunk_size_and_step(nframes)
+    assert chunk_size == (nframes - 1) * layer.frame_step + layer.frame_length
+
+    chunks = []
+    start = 0
+    while start + chunk_size <= int(signal.shape[0]):
+        chunk_features, _ = extract(layer, signal[start : start + chunk_size])
+        assert chunk_features.shape[0] == nframes, "chunk did not yield exactly nframes frames"
+        chunks.append(chunk_features.numpy())
+        start += chunk_step
+
+    chunked = np.concatenate(chunks, axis=0)
+    compared = min(len(chunked), len(whole))
+    assert compared > 0
+    # only the tail shorter than one chunk is dropped
+    assert 0 <= len(whole) - compared <= nframes
+
+    difference = chunked[:compared] - whole[:compared]
+    assert np.abs(difference).max() < 1e-3, f"chunked extraction drifted by {np.abs(difference).max()}"
+
+    plot_util.plotmesh(as_image(difference), title=f"chunked_minus_whole_{nframes}")
+    rmse = np.sqrt(np.mean(np.squeeze(difference) ** 2, axis=-1))
+    path = plot_util.plotline(rmse, title=f"chunked_rmse_{nframes}")
+    assert os.path.getsize(path) > 0
+
+
+def test_chunked_extraction_with_pad_end_produces_extra_frames(signal):
+    """The counterpart of the note above: with `pad_end=True` the chunk sizing no longer holds."""
+    nframes = 5
+    layer = FeatureExtraction(feature_type="log_mel_spectrogram", preemphasis=0.0, pad_end=True)
+    chunk_size, _ = layer.get_signal_chunk_size_and_step(nframes)
+    chunk_features, _ = extract(layer, signal[:chunk_size])
+    assert chunk_features.shape[0] > nframes
