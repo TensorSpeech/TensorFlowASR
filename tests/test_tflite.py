@@ -8,8 +8,9 @@ the TFLite Flex delegate is available the result is then loaded into an interpre
 invoked. Nothing is mocked -- a model that cannot be traced, or whose graph the converter
 rejects, fails here.
 
-The interpreter tests skip when Flex is missing (it is absent from the macOS arm64 wheel);
-the conversion tests always run, so no architecture goes unverified.
+The interpreter tests skip only where the TFLite Flex delegate is unavailable -- TensorFlow 2.20
+dropped it from the pip wheel, see the note on `app_util.convert_tflite`. The conversion tests
+always run, so no architecture goes unverified even then.
 
 The models are shrunk to a few thousand parameters (8-unit layers, one block) because this
 exercises graph *structure*, not accuracy. That keeps the whole file at roughly a minute
@@ -21,6 +22,7 @@ means a stale entry fails the run, so a marker cannot outlive the bug it documen
 """
 
 import os
+import re
 
 import numpy as np
 import pytest
@@ -331,19 +333,59 @@ def invoke(tflite_model: bytes, signal: np.ndarray, blank=0):
     Returns the interpreter's output tensors in signature order.
     """
     runner = _make_interpreter(tflite_model)
-    input_details = runner.get_input_details()
-    output_details = runner.get_output_details()
 
-    runner.resize_tensor_input(input_details[0]["index"], signal.shape, strict=True)
+    # The converter does not preserve signature order, so inputs are located by their descriptors
+    # rather than position -- index 0 is a state tensor for some architectures. The audio is the
+    # only input with a dynamic dimension (its length is unknown at export), and `inputs_length`
+    # the only rank-1 integer. Everything else is a token tensor (integral, seeded with `blank`) or
+    # a carried state (floating point, seeded with zeros). Note rank and dtype alone are not enough:
+    # a beam export also has a rank-2 float input, `previous_beam_scores` of shape [B, W].
+    def only(details, predicate, description):
+        matches = [d for d in details if predicate(d)]
+        assert len(matches) == 1, f"expected exactly one {description} input, got {len(matches)}: {[d['name'] for d in matches]}"
+        return matches[0]
+
+    def is_signal(detail):
+        return np.issubdtype(detail["dtype"], np.floating) and -1 in list(detail["shape_signature"])
+
+    def is_length(detail):
+        return np.issubdtype(detail["dtype"], np.integer) and len(detail["shape"]) == 1
+
+    signal_input = only(runner.get_input_details(), is_signal, "dynamically shaped float (audio)")
+    runner.resize_tensor_input(signal_input["index"], signal.shape, strict=True)
     runner.allocate_tensors()
-    runner.set_tensor(input_details[0]["index"], signal)
-    runner.set_tensor(input_details[1]["index"], np.array([signal.shape[1]], dtype=np.int32))
-    for detail in input_details[2:]:
-        fill = blank if detail["index"] == input_details[2]["index"] else 0
+
+    details = runner.get_input_details()  # descriptors are rebuilt by the resize
+    signal_input = only(details, is_signal, "dynamically shaped float (audio)")
+    length_input = only(details, is_length, "rank-1 integer (inputs_length)")
+
+    runner.set_tensor(signal_input["index"], signal)
+    runner.set_tensor(length_input["index"], np.array([signal.shape[1]], dtype=length_input["dtype"]))
+    for detail in details:
+        if detail["index"] in (signal_input["index"], length_input["index"]):
+            continue
+        fill = blank if np.issubdtype(detail["dtype"], np.integer) else 0
         runner.set_tensor(detail["index"], np.full(detail["shape"], fill, dtype=detail["dtype"]))
 
     runner.invoke()
-    return [runner.get_tensor(detail["index"]) for detail in output_details]
+
+    # `get_output_details()` is not in signature order either -- freezing variables to constants
+    # renames the outputs to `StatefulPartitionedCall:N` and returns them shuffled, where N is the
+    # true position. Unfrozen graphs use `Identity` / `Identity_N`. Sort on whichever suffix is
+    # present so callers can rely on position; the transcript assertion downstream is the guard
+    # that catches it if a future naming scheme defeats this.
+    def signature_position(detail):
+        name = detail["name"]
+        head, _, tail = name.rpartition(":")
+        if head and tail.isdigit():
+            return int(tail)
+        match = re.fullmatch(r"Identity(?:_(\d+))?", name)
+        if match:
+            return int(match.group(1) or 0)
+        return len(name)  # unrecognised: keep a stable order rather than crashing
+
+    ordered = sorted(runner.get_output_details(), key=signature_position)
+    return [runner.get_tensor(detail["index"]) for detail in ordered]
 
 
 @pytest.mark.parametrize("name", [_maybe_xfail(name) for name in BUILDERS])
@@ -411,21 +453,54 @@ def test_conversion_honours_batch_size(name, tokenizer, batch_size):
 @pytest.mark.usefixtures("flex_delegate")
 @pytest.mark.parametrize("name", [_maybe_xfail(name) for name in BUILDERS])
 def test_converted_model_runs_in_interpreter(name, tokenizer, signal):
-    """Load the flatbuffer into an interpreter, invoke it, and check the output contract."""
+    """
+    Load the flatbuffer into an interpreter, invoke it, and check the output contract.
+
+    Only `transcript` and `tokens` are positionally guaranteed. Fields the model returns as None
+    are dropped from the flatbuffer entirely -- CTC has no `next_tokens`, being non-autoregressive
+    -- so anything past index 1 differs per architecture and is checked by dtype instead.
+    """
     tflite_model = convert(build_model(name, tokenizer), batch_size=1, beam_width=0)
     outputs = invoke(tflite_model, signal)
 
-    # transcript, tokens, next_tokens, then optional encoder/decoder states
-    assert len(outputs) >= 3, f"expected at least transcript/tokens/next_tokens, got {len(outputs)}"
-    transcript, tokens, next_tokens = outputs[0], outputs[1], outputs[2]
+    assert len(outputs) >= 2, f"expected at least transcript and tokens, got {len(outputs)}"
+    transcript, tokens = outputs[0], outputs[1]
+
     assert transcript.dtype == object or transcript.dtype.type is np.bytes_, f"transcript dtype {transcript.dtype}"
-    assert tokens.dtype == np.int32 and next_tokens.dtype == np.int32
+    assert transcript.size == 1, f"one transcript per utterance at batch size 1, got {transcript.shape}"
+    assert isinstance(transcript.reshape(-1)[0].decode(), str), "transcript did not decode as text"
+
+    assert tokens.dtype == np.int32, f"tokens dtype {tokens.dtype}"
     assert tokens.ndim == 2 and tokens.shape[0] == 1, f"tokens shape {tokens.shape}"
     assert np.all(tokens >= 0) and np.all(tokens < tokenizer.num_classes), "decoded a token outside the vocabulary"
 
+    # every remaining output is either a token tensor or a carried state, never something else
+    for index, output in enumerate(outputs[2:], start=2):
+        assert np.issubdtype(output.dtype, np.integer) or np.issubdtype(output.dtype, np.floating), (
+            f"output {index} has unexpected dtype {output.dtype}"
+        )
+        assert np.all(np.isfinite(output)) if np.issubdtype(output.dtype, np.floating) else True
+
+
+# Architectures whose *beam* export converts but cannot be invoked. Unlike KNOWN_BROKEN these
+# convert cleanly, so only the interpreter test is affected.
+BEAM_INTERPRETER_BROKEN = {}
+"""
+Architectures whose *beam* export converts but cannot be invoked.
+
+Empty. It held `transducer.RnnTransducer` until `convert_tflite` began freezing variables to
+constants explicitly -- the converter's own pass was giving up on the beam graph and leaving the
+LSTM kernels as unassigned resource variables inside the decoding `WHILE`.
+"""
+
+
+def _maybe_xfail_beam_interpreter(name):
+    reason = BEAM_INTERPRETER_BROKEN.get(name) or KNOWN_BROKEN.get(name)
+    return pytest.param(name, marks=pytest.mark.xfail(strict=True, reason=reason)) if reason else name
+
 
 @pytest.mark.usefixtures("flex_delegate")
-@pytest.mark.parametrize("name", [_maybe_xfail(name) for name in TRANSDUCERS])
+@pytest.mark.parametrize("name", [_maybe_xfail_beam_interpreter(name) for name in TRANSDUCERS])
 def test_converted_beam_model_runs_in_interpreter(name, tokenizer, signal):
     """The beam-search export must also survive an actual interpreter run."""
     tflite_model = convert(build_model(name, tokenizer), batch_size=1, beam_width=2)

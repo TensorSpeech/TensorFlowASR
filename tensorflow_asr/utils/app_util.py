@@ -16,6 +16,7 @@
 import logging
 
 import jiwer
+from tensorflow.python.framework import convert_to_constants
 
 from tensorflow_asr import tf
 from tensorflow_asr.models.base_model import BaseModel
@@ -148,6 +149,9 @@ def convert_tflite(
       `org.tensorflow:tensorflow-lite-select-tf-ops`.
     * `tests/test_tflite.py` skips its interpreter tests when the delegate is missing and still
       runs every conversion test, so the coverage loss is limited to executing the flatbuffer.
+    * Conversion must run with no GPU visible. Keras selects the fused LSTM kernel whenever one is
+      *visible* -- placement does not matter -- and it converts to a `CudnnRNNV3` custom op that no
+      interpreter can resolve. `tests/conftest.py` hides accelerators for this reason.
     """
     if not math_util.is_power_of_two(model.feature_extraction.nfft):
         logger.error("NFFT must be power of 2 for TFLite conversion")
@@ -159,7 +163,17 @@ def convert_tflite(
             raise ValueError("NFFT must be power of 2 for TFLite conversion")
 
     concrete_func = model.make_tflite_function(batch_size=batch_size, beam_width=beam_width).get_concrete_function()
-    converter = tf.lite.TFLiteConverter.from_concrete_functions([concrete_func], trackable_obj=model)
+
+    # Freeze the weights to constants before handing the graph over. `from_concrete_functions` does
+    # this itself, but its pass gives up on large graphs: beam search over a recurrent encoder left
+    # the LSTM kernels as `VAR_HANDLE` inputs to the decoding `WHILE` with no `ASSIGN_VARIABLE`
+    # anywhere, so invoking died on `read_variable.cc: variable != nullptr was not true`. Greedy
+    # over the same model froze fine, and each beam output added individually was fine -- only the
+    # full set tipped it over, which is what a size threshold looks like rather than a bad op.
+    # `lower_control_flow=False` keeps the while loops intact instead of unrolling them.
+    frozen_func = convert_to_constants.convert_variables_to_constants_v2(concrete_func, lower_control_flow=False)
+
+    converter = tf.lite.TFLiteConverter.from_concrete_functions([frozen_func], trackable_obj=model)
     converter.target_spec.supported_ops = [
         tf.lite.OpsSet.TFLITE_BUILTINS,  # enable TensorFlow Lite ops.
         tf.lite.OpsSet.SELECT_TF_OPS,  # enable TensorFlow ops.

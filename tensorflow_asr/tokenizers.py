@@ -210,6 +210,9 @@ class CharTokenizer(Tokenizer):
             tf.lookup.KeyValueTensorInitializer(keys=self.indices, values=self.tokens, key_dtype=tf.int32, value_dtype=tf.string),
             default_value=self.tokens[self.blank],
         )
+        # Constant equivalent of `self.detokenizer`, used by `detokenize` so the exported graph
+        # holds no lookup resource -- see the comment there.
+        self.vocabulary = tf.constant(self.tokens, dtype=tf.string)
         self.upoints = tf.strings.unicode_decode(self.tokens, "UTF-8").to_tensor(shape=[None, 1])
         self.initialized = True
 
@@ -240,10 +243,24 @@ class CharTokenizer(Tokenizer):
 
         Returns:
             transcripts: tf.Tensor of dtype tf.string with dim [B]
+
+        Notes:
+            Deliberately gathers from a constant rather than calling `self.detokenizer.lookup`.
+            A `StaticHashTable` is resource-backed, and TFLite cannot bind that resource: the
+            converter fails to serialize the table initializer and the exported flatbuffer ends
+            up with an unbound `Placeholder` of dtype `resource`, so every `invoke()` raises
+            "You must feed a value for placeholder tensor 'Placeholder' with dtype resource".
+            Since `make_tflite_function` calls this to produce the in-graph transcript, that made
+            every exported model impossible to run. A constant gather is arithmetically identical
+            and folds into the graph. `self.detokenizer` is kept for callers outside the export
+            path; do not reintroduce it here.
         """
         indices = self.normalize_indices(indices)
         # indices = tf.ragged.boolean_mask(indices, tf.not_equal(indices, self.blank))
-        tokens = self.detokenizer.lookup(indices)
+        # mirror the table's out-of-range behaviour, which returned its default value
+        in_range = tf.logical_and(tf.greater_equal(indices, 0), tf.less(indices, self.num_classes))
+        tokens = tf.gather(self.vocabulary, tf.clip_by_value(indices, 0, self.num_classes - 1))
+        tokens = tf.where(in_range, tokens, tf.constant(self.tokens[self.blank], dtype=tf.string))
         tokens = tf.strings.reduce_join(tokens, axis=-1)
         tokens = self.normalize_text(tokens, self.decoder_config)
         return tokens
