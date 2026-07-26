@@ -273,8 +273,9 @@ class MultiHeadAttention(keras.layers.MultiHeadAttention):
     def build(self, input_shape):
         query_shape, key_shape, value_shape, *_ = input_shape
         if self._memory_length is not None:
+            # `dmodel` is the *input* width: the memory caches hidden states before the qkv
+            # projections, per Transformer-XL eq. (3) -- see `_with_memory`.
             self._memory = Memory(
-                batch_size=query_shape[0],
                 memory_length=self._memory_length,
                 dmodel=query_shape[-1],
                 name="memory",
@@ -314,19 +315,68 @@ class MultiHeadAttention(keras.layers.MultiHeadAttention):
             "value": self._memory.get_initial_state(batch_size),
         }
 
-    def _with_memory(self, query, key, value, initial_state=None, training=False):
-        if self._memory is None or initial_state is None:
-            return query, key, value, initial_state
+    def _with_memory(self, key, value, initial_state=None, training=False, key_mask=None, value_mask=None):
+        """
+        Prepend the cached previous-segment hidden states to the keys and values.
 
-        new_key, new_key_memory = self._memory(key, memories=initial_state.get("key"), training=training)
-        new_value, new_value_memory = self._memory(value, memories=initial_state.get("value"), training=training)
+        Transformer-XL eq. (3), http://arxiv.org/abs/1901.02860::
+
+            h~ = [SG(h_prev) o h_cur]
+            q  = h_cur W_q          <- query stays on the current segment
+            k  = h~ W_k ,  v = h~ W_v
+
+        So this must run on the hidden states *before* the qkv projections: the memory holds
+        `h`, shape [B, M, dmodel], and the projections are applied to the concatenation. The
+        query is deliberately not passed in -- extending it would make the layer emit M extra
+        output frames.
+
+        Returns the extended key/value, the new memory, and the validity mask of the memory
+        block alone ([B, M]), which the caller needs to widen the attention mask.
+        """
+        if self._memory is None or initial_state is None:
+            return key, value, initial_state, None
+
+        # The caller strips keras masks before this point; put them back so the memory records
+        # which of the current frames are padding rather than assuming all of them are real.
+        if key_mask is not None:
+            backend.set_keras_mask(key, key_mask)
+        if value_mask is not None:
+            backend.set_keras_mask(value, value_mask)
+
+        previous_key, previous_value = initial_state.get("key"), initial_state.get("value")
+        memory_mask = backend.get_keras_mask(previous_value)
+
+        new_key, new_key_memory = self._memory(key, memories=previous_key, training=training)
+        new_value, new_value_memory = self._memory(value, memories=previous_value, training=training)
 
         new_states = {
             "key": new_key_memory,
             "value": new_value_memory,
         }
 
-        return query, new_key, new_value, new_states
+        return new_key, new_value, new_states, memory_mask
+
+    def _widen_attention_mask(self, attention_mask, memory_mask):
+        """
+        Grow an attention mask along the key axis to cover the prepended memory.
+
+        The mask is computed against the unextended value, so its key axis is L while the
+        scores are now L+M wide. Masks that are query-side only ([B, T, 1]) broadcast and are
+        left alone; anything wider -- a causal, streaming or value mask -- has the memory's own
+        validity prepended.
+
+        Building the causal mask against the extended value instead would be wrong: keras
+        derives it from `row >= col`, which hides the memory, whereas a query at position i may
+        attend to every cached frame plus keys up to i, i.e. `row + M >= col`. Prepending gives
+        exactly that.
+        """
+        if attention_mask is None or memory_mask is None:
+            return attention_mask
+        if attention_mask.shape[-1] == 1:
+            return attention_mask  # query-side only; broadcasts over any key length
+        memory_mask = tf.cast(memory_mask, attention_mask.dtype)
+        memory_mask = tf.repeat(tf.expand_dims(memory_mask, axis=-2), tf.shape(attention_mask)[-2], axis=-2)
+        return tf.concat([memory_mask, attention_mask], axis=-1)
 
     def _compute_attention_mask(
         self,
@@ -368,6 +418,8 @@ class MultiHeadAttention(keras.layers.MultiHeadAttention):
         # Delete the masks because the masks are handled at the level of the
         # layer
         query_mask = backend.get_keras_mask(query)
+        key_keras_mask = backend.get_keras_mask(key)
+        value_keras_mask = backend.get_keras_mask(value)
         backend.set_keras_mask(query, None)
         backend.set_keras_mask(value, None)
         backend.set_keras_mask(key, None)
@@ -383,21 +435,28 @@ class MultiHeadAttention(keras.layers.MultiHeadAttention):
                 use_causal_mask=use_causal_mask,
             )
 
+        states = None
+
+        # Memory is prepended to the hidden states *before* the projections, so the mask above
+        # is one segment wide while the keys are about to become memory + segment wide.
+        if return_states:
+            key, value, states, memory_mask = self._with_memory(
+                key, value, initial_state, training, key_mask=key_keras_mask, value_mask=value_keras_mask
+            )
+            attention_mask = self._widen_attention_mask(attention_mask, memory_mask)
+            backend.set_keras_mask(key, None)
+            backend.set_keras_mask(value, None)
+
         #   N = `num_attention_heads`
         #   H = `size_per_head`
         # `query` = [B, T, N ,H]
         query = self._query_dense(query)
 
-        # `key` = [B, S, N, H]
+        # `key` = [B, M + S, N, H]
         key = self._key_dense(key)
 
-        # `value` = [B, S, N, H]
+        # `value` = [B, M + S, N, H]
         value = self._value_dense(value)
-
-        states = None
-
-        if return_states:
-            query, key, value, states = self._with_memory(query, key, value, initial_state, training)
 
         attention_output, attention_scores = self._compute_attention(
             query,
@@ -607,6 +666,8 @@ class MultiHeadRelativeAttention(MultiHeadAttention):
         # Delete the masks because the masks are handled at the level of the
         # layer
         query_mask = backend.get_keras_mask(query)
+        key_keras_mask = backend.get_keras_mask(key)
+        value_keras_mask = backend.get_keras_mask(value)
         backend.set_keras_mask(query, None)
         backend.set_keras_mask(value, None)
         backend.set_keras_mask(key, None)
@@ -622,24 +683,32 @@ class MultiHeadRelativeAttention(MultiHeadAttention):
                 use_causal_mask=use_causal_mask,
             )
 
+        states = None
+
+        # Memory is prepended to the hidden states *before* the projections, so the mask above
+        # is one segment wide while the keys are about to become memory + segment wide. The
+        # relative positional encoding already spans `memory_length + length`.
+        if return_states:
+            key, value, states, memory_mask = self._with_memory(
+                key, value, initial_state, training, key_mask=key_keras_mask, value_mask=value_keras_mask
+            )
+            attention_mask = self._widen_attention_mask(attention_mask, memory_mask)
+            backend.set_keras_mask(key, None)
+            backend.set_keras_mask(value, None)
+
         #   N = `num_attention_heads`
         #   H = `size_per_head`
         # `query` = [B, T, N ,H]
         query = self._query_dense(query)
 
-        # `key` = [B, S, N, H]
+        # `key` = [B, M + S, N, H]
         key = self._key_dense(key)
 
-        # `value` = [B, S, N, H]
+        # `value` = [B, M + S, N, H]
         value = self._value_dense(value)
 
         # `position` = [B, R, N, H]
         position = self._relpe_dense(relpe)
-
-        states = None
-
-        if return_states:
-            query, key, value, states = self._with_memory(query, key, value, initial_state, training)
 
         attention_output, attention_scores = self._compute_attention(
             query,
