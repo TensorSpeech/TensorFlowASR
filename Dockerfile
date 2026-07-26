@@ -1,4 +1,4 @@
-FROM tensorflow/tensorflow:2.20.0-gpu
+FROM tensorflow/tensorflow:2.19.0-gpu
 
 COPY --from=ghcr.io/astral-sh/uv:0.11 /uv /uvx /bin/
 

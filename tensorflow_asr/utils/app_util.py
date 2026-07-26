@@ -101,6 +101,53 @@ def convert_tflite(
     -------
     bytes
         The converted TFLite model.
+
+    Notes
+    -----
+    **The exported model needs the TFLite Flex delegate at runtime, and TensorFlow 2.20 dropped
+    it from the pip wheel.** Conversion keeps working on 2.20 -- only inference breaks, with::
+
+        RuntimeError: Select TensorFlow op(s), included in the given model, is(are) not
+        supported by this interpreter. Make sure you apply/link the Flex delegate before
+        inference.
+
+    `SELECT_TF_OPS` below is not optional for these models. A `ctc.Conformer` export contains 12
+    ops that have no TFLite builtin equivalent, in three groups that are all structural:
+
+    * control flow -- `FlexTensorListReserve/SetItem/Stack`, `FlexPlaceholder`, `FlexRoll`, from
+      the `tf.while_loop` in the greedy and beam decoders
+    * text -- `FlexNormalizeUTF8`, `FlexStringLower`, `FlexStringStrip`, `FlexStaticRegexReplace`,
+      `FlexReduceJoin`, `FlexLookupTableFindV2`, from `tokenizer.detokenize` producing the
+      in-graph transcript
+    * decoding -- `FlexCTCGreedyDecoder`
+
+    Dropping to `TFLITE_BUILTINS` alone would mean giving up the in-graph transcript and
+    rewriting both decoders without `while_loop`, so it is not a realistic trade.
+
+    Verified availability of the delegate (macOS arm64 unless noted)::
+
+        tensorflow 2.18.0                works
+        tensorflow 2.19.x                works
+        tensorflow 2.20.0                MISSING
+        tensorflow 2.20.0 (Linux x86_64) MISSING
+        tf-nightly 2.22.0-dev            MISSING
+        ai-edge-litert 2.1.6             MISSING
+
+    The mechanism is a build-configuration change, not a packaging accident:
+    `tflite::AcquireFlexDelegate()` is a weak symbol that the real delegate overrides. Up to 2.19
+    `libtensorflow_cc` carries ~151 `tflite::flex::` symbols and a strong definition; on 2.20 it
+    carries zero and only the weak stub, which returns null and produces the error above. Note
+    this contradicts https://ai.google.dev/edge/litert/conversion/tensorflow/ops_select, which
+    still says select ops ship with the TensorFlow pip package.
+
+    Consequences for callers:
+
+    * A flatbuffer produced by 2.20 loads fine in a 2.18/2.19 interpreter, so conversion and
+      execution can be split across environments if the project ever moves back to 2.20.
+    * On Android the delegate is a dependency, not a build flag:
+      `org.tensorflow:tensorflow-lite-select-tf-ops`.
+    * `tests/test_tflite.py` skips its interpreter tests when the delegate is missing and still
+      runs every conversion test, so the coverage loss is limited to executing the flatbuffer.
     """
     if not math_util.is_power_of_two(model.feature_extraction.nfft):
         logger.error("NFFT must be power of 2 for TFLite conversion")
