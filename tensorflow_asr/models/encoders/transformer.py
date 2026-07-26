@@ -184,7 +184,9 @@ class TransformerBlock(keras.Model):
         outputs = self.norm2(outputs, training=training) if self._norm_position == "post" else outputs
         outputs = self.residual2([original_outputs, outputs], training=training)
         if return_states:
-            return (outputs,) + states
+            # `states` comes from starred unpacking above, so it is a list; concatenating it to
+            # a tuple raises. It is empty when the attention has no memory to carry.
+            return (outputs,) + tuple(states)
         return (outputs,)
 
     def compute_output_shape(self, input_shape):
@@ -359,7 +361,7 @@ class TransformerEncoder(keras.Model):
             Outputs, outputs_length, new_states
         """
         with tf.name_scope(f"{self.name}_call_next"):
-            return self.call((features, features_length), initial_state=previous_encoder_states, training=False)
+            return self.call((features, features_length), initial_state=previous_encoder_states, training=False, return_states=True)
 
     def compute_mask(self, inputs, mask=None):
         return self.subsampling.compute_mask(inputs, mask=mask)

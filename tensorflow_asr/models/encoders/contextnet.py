@@ -325,7 +325,8 @@ class ContextNetEncoder(keras.Model):
             Outputs, outputs_length, new_states
         """
         with tf.name_scope(f"{self.name}_call_next"):
-            return self.call((features, features_length), training=False)
+            outputs, outputs_length = self.call((features, features_length), training=False)
+            return outputs, outputs_length, None  # contextnet is stateless, but callers unpack three
 
     def compute_mask(self, inputs, mask=None):
         outputs, outputs_length = inputs

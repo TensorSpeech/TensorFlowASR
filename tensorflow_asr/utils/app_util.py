@@ -84,10 +84,24 @@ def evaluate_hypotheses(filepath: str):
 
 def convert_tflite(
     model: BaseModel,
-    output: str,
+    output: str = None,
     batch_size: int = 1,
     beam_width: int = 0,
-):
+) -> bytes:
+    """
+    Convert a model to TFLite and return the flatbuffer.
+
+    Parameters
+    ----------
+    output : str, optional
+        Where to write the converted model. When None, the model is only returned and
+        nothing is written to disk -- useful for callers that just want the bytes.
+
+    Returns
+    -------
+    bytes
+        The converted TFLite model.
+    """
     if not math_util.is_power_of_two(model.feature_extraction.nfft):
         logger.error("NFFT must be power of 2 for TFLite conversion")
         overwrite_nfft = input("Do you want to overwrite nfft to the nearest power of 2? (y/n): ")
@@ -106,6 +120,9 @@ def convert_tflite(
     converter.allow_custom_ops = True
     tflite_model = converter.convert()
 
-    output = file_util.preprocess_paths(output)
-    with open(output, "wb") as tflite_out:
-        tflite_out.write(tflite_model)
+    if output is not None:
+        output = file_util.preprocess_paths(output)
+        with open(output, "wb") as tflite_out:
+            tflite_out.write(tflite_model)
+
+    return tflite_model

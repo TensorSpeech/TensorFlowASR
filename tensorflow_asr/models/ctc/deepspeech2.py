@@ -127,4 +127,6 @@ class DeepSpeech2(CtcModel):
         return self.encoder.get_initial_state(batch_size)
 
     def get_initial_decoder_states(self, batch_size=1):
-        return None
+        # the decoder is stateless; return [] rather than None so `make_tflite_function` can
+        # map `tf.TensorSpec.from_tensor` over it, which rejects None
+        return []
