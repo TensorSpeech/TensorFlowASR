@@ -40,11 +40,27 @@ class TrainData(typing.NamedTuple):
 
 
 class PredictInput(typing.NamedTuple):
+    """
+    Inputs of one decoding step.
+
+    The `beam_*` fields let streaming beam search continue the whole beam across chunks instead
+    of collapsing it to the single best hypothesis. They are optional: greedy decoding leaves
+    them None and its exported signature is unaffected. Supply all three or none -- they are the
+    per-hypothesis score, last emitted token and prediction-network state, with the beam folded
+    into the batch axis of the last one exactly as `recognize_beam` keeps it internally.
+    """
+
     inputs: tf.Tensor
     inputs_length: tf.Tensor
     previous_tokens: typing.Optional[tf.Tensor] = None
     previous_encoder_states: typing.Optional[tf.Tensor] = None
     previous_decoder_states: typing.Optional[tf.Tensor] = None
+    # Default to an empty structure rather than None: `tf.nest` flattens () to nothing, so a
+    # greedy export's signature is byte-for-byte what it was before beam state existed, whereas a
+    # None leaf makes `tf.function` reject the signature outright.
+    previous_beam_scores: typing.Any = ()  # [B, W]
+    previous_beam_last_tokens: typing.Any = ()  # [B, W]
+    previous_beam_states: typing.Any = ()  # [B * W, ...]
 
 
 class PredictOutput(typing.NamedTuple):
@@ -52,6 +68,9 @@ class PredictOutput(typing.NamedTuple):
     next_tokens: tf.Tensor
     next_encoder_states: typing.Optional[tf.Tensor] = None
     next_decoder_states: typing.Optional[tf.Tensor] = None
+    next_beam_scores: typing.Any = ()  # [B, W]
+    next_beam_last_tokens: typing.Any = ()  # [B, W]
+    next_beam_states: typing.Any = ()  # [B * W, ...]
 
 
 class PredictOutputWithTranscript(typing.NamedTuple):
@@ -60,3 +79,6 @@ class PredictOutputWithTranscript(typing.NamedTuple):
     next_tokens: tf.Tensor
     next_encoder_states: typing.Optional[tf.Tensor] = None
     next_decoder_states: typing.Optional[tf.Tensor] = None
+    next_beam_scores: typing.Any = ()
+    next_beam_last_tokens: typing.Any = ()
+    next_beam_states: typing.Any = ()

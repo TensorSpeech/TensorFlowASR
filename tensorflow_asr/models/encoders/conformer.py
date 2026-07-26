@@ -18,6 +18,7 @@ from tensorflow_asr import keras, tf
 from tensorflow_asr.models.activations.glu import GLU
 from tensorflow_asr.models.layers.convolution import Conv1D, DepthwiseConv1D
 from tensorflow_asr.models.layers.general import Activation, Dropout, Identity
+from tensorflow_asr.models.layers.memory import Memory
 from tensorflow_asr.models.layers.multihead_attention import MultiHeadAttention, MultiHeadRelativeAttention
 from tensorflow_asr.models.layers.positional_encoding import RelativeSinusoidalPositionalEncoding, SinusoidalPositionalEncoding
 from tensorflow_asr.models.layers.residual import Residual
@@ -136,6 +137,7 @@ class MHSAModule(keras.Model):
         flash_attention=None,
         norm_position="pre",
         memory_length=None,
+        memory_mode="hidden",
         history_size=None,
         chunk_size=None,
         use_attention_bias=False,
@@ -165,6 +167,7 @@ class MHSAModule(keras.Model):
                 key_dim=head_size,
                 output_shape=dmodel,
                 memory_length=memory_length,
+                memory_mode=memory_mode,
                 history_size=history_size,
                 chunk_size=chunk_size,
                 flash_attention=flash_attention,
@@ -181,6 +184,7 @@ class MHSAModule(keras.Model):
                 key_dim=head_size,
                 output_shape=dmodel,
                 memory_length=memory_length,
+                memory_mode=memory_mode,
                 history_size=history_size,
                 chunk_size=chunk_size,
                 flash_attention=flash_attention,
@@ -323,6 +327,21 @@ class ConvModule(keras.Model):
                 bias_regularizer=bias_regularizer,
                 dtype=self.dtype,
             )
+        # Left context for the depthwise convolution, carried between chunks as part of the
+        # encoder state. `causal` padding left-pads `kernel_size - 1` zeros and then convolves
+        # `valid`; streaming has to substitute the previous chunk's frames for those zeros or the
+        # first `kernel_size - 1` outputs of every chunk are computed against a false silence.
+        self._state_length = (kernel_size - 1) if (padding == "causal" and kernel_size > 1) else 0
+        self.memory = (
+            Memory(
+                memory_length=self._state_length,
+                dmodel=scale_factor * input_dim // 2,  # glu halves pw_conv_1's width
+                name="memory",
+                dtype=self.dtype,
+            )
+            if self._state_length > 0
+            else None
+        )
         self.dw_norm = (
             keras.layers.BatchNormalization(
                 name="dw_bn",
@@ -363,18 +382,34 @@ class ConvModule(keras.Model):
         )
         self.residual = Residual(factor=residual_factor, regularizer=bias_regularizer, name="residual", dtype=self.dtype)
 
-    def call(self, inputs, training=False):
+    def get_initial_state(self, batch_size: int):
+        return None if self.memory is None else self.memory.get_initial_state(batch_size)
+
+    def call(self, inputs, initial_state=None, training=False, return_states=False):
         outputs = self.pre_norm(inputs, training=training)
         outputs = self.pw_conv_1(outputs, training=training)
         outputs = self.glu(outputs, training=training)
-        outputs = self.dw_conv(outputs, training=training)
+
+        states = None
+        if self.memory is not None and initial_state is not None:
+            # Prepend the cached frames, convolve, then drop the outputs belonging to them. The
+            # causal pad still lands in front of the cache, so only the discarded rows see it.
+            outputs, states = self.memory(outputs, memories=initial_state, training=training)
+            outputs = self.dw_conv(outputs, training=training)
+            outputs = outputs[:, self._state_length :]
+        else:
+            outputs = self.dw_conv(outputs, training=training)
+
         outputs = self.dw_norm(outputs, training=training)
         outputs = self.swish(outputs, training=training)
         outputs = self.pw_conv_2(outputs, training=training)
         outputs = self.do(outputs, training=training)
         outputs = self.post_norm(outputs, training=training)
         outputs = self.residual((inputs, outputs), training=training)
-        return outputs
+        # always a list, so the caller can `outputs, *states = ...` without iterating a tensor
+        if return_states:
+            return [outputs, states]
+        return [outputs]
 
 
 @keras.utils.register_keras_serializable(package=__name__)
@@ -410,6 +445,7 @@ class ConformerBlock(keras.Model):
         module_norm_position="pre",
         block_norm_position="post",
         memory_length=None,
+        memory_mode="hidden",
         history_size=None,
         chunk_size=None,
         kernel_regularizer=L2,
@@ -452,6 +488,7 @@ class ConformerBlock(keras.Model):
             relmha_causal=mhsam_causal,
             norm_position=module_norm_position,
             memory_length=memory_length,
+            memory_mode=memory_mode,
             history_size=history_size,
             chunk_size=chunk_size,
             flash_attention=mhsam_flash_attention,
@@ -499,7 +536,22 @@ class ConformerBlock(keras.Model):
         )
 
     def get_initial_state(self, batch_size: int):
-        return self.mhsam.get_initial_state(batch_size)
+        """
+        The block's streaming state: the attention memory plus the convolution's left context.
+
+        Both are needed for chunked inference to match a single pass -- attention alone leaves the
+        depthwise convolution padding each chunk with zeros. Keys are omitted rather than set to
+        None when a sub-module has no state, so the structure stays traceable by
+        `tf.nest.map_structure` in `make_tflite_function`.
+        """
+        state = {}
+        attention_state = self.mhsam.get_initial_state(batch_size)
+        if attention_state is not None:
+            state["attention"] = attention_state
+        convolution_state = self.convm.get_initial_state(batch_size)
+        if convolution_state is not None:
+            state["convolution"] = convolution_state
+        return state or None
 
     def call(
         self,
@@ -514,24 +566,35 @@ class ConformerBlock(keras.Model):
         return_states=False,
     ):
         _inputs, relative_position_encoding = inputs
+        initial_state = initial_state or {}
         outputs = self.pre_norm(_inputs, training=training)
         outputs = self.ffm1(outputs, training=training)
-        outputs, *states = self.mhsam(
+        outputs, *attention_states = self.mhsam(
             [outputs, relative_position_encoding],
             content_attention_bias=content_attention_bias,
             positional_attention_bias=positional_attention_bias,
-            initial_state=initial_state,
+            initial_state=initial_state.get("attention"),
             training=training,
             attention_mask=attention_mask,
             use_causal_mask=use_causal_mask,
             use_auto_mask=use_auto_mask,
             return_states=return_states,
         )
-        outputs = self.convm(outputs, training=training)
+        outputs, *convolution_states = self.convm(
+            outputs,
+            initial_state=initial_state.get("convolution"),
+            training=training,
+            return_states=return_states,
+        )
         outputs = self.ffm2(outputs, training=training)
         outputs = self.post_norm(outputs, training=training)
         if return_states:
-            return [outputs] + states
+            state = {}
+            if attention_states and attention_states[0] is not None:
+                state["attention"] = attention_states[0]
+            if convolution_states and convolution_states[0] is not None:
+                state["convolution"] = convolution_states[0]
+            return [outputs, state] if state else [outputs]
         return [outputs]
 
 
@@ -564,6 +627,7 @@ class ConformerEncoder(keras.Model):
         module_norm_position="pre",
         block_norm_position="post",
         memory_length=None,
+        memory_mode="hidden",
         history_size=None,
         chunk_size=None,
         kernel_regularizer=L2,
@@ -633,6 +697,7 @@ class ConformerEncoder(keras.Model):
                 module_norm_position=module_norm_position,
                 block_norm_position=block_norm_position,
                 memory_length=memory_length,
+                memory_mode=memory_mode,
                 history_size=history_size,
                 chunk_size=chunk_size,
                 kernel_regularizer=kernel_regularizer,
@@ -665,9 +730,22 @@ class ConformerEncoder(keras.Model):
             self.content_attention_bias, self.positional_attention_bias = None, None
 
     def get_initial_state(self, batch_size: int):
-        states = [block.get_initial_state(batch_size) for block in self.conformer_blocks]
-        states = [s for s in states if s is not None]
-        return states
+        """
+        The encoder's streaming state: the subsampling's left context plus one entry per block.
+
+        Keyed rather than positional because the subsampling sits outside the block stack, and
+        empty entries are omitted so `tf.nest.map_structure` in `make_tflite_function` never meets
+        a None.
+        """
+        state = {}
+        subsampling_state = self.conv_subsampling.get_initial_state(batch_size)
+        if subsampling_state is not None:
+            state["subsampling"] = subsampling_state
+        blocks = [block.get_initial_state(batch_size) for block in self.conformer_blocks]
+        blocks = [block for block in blocks if block is not None]
+        if blocks:
+            state["blocks"] = blocks
+        return state or None
 
     def call(
         self,
@@ -677,27 +755,41 @@ class ConformerEncoder(keras.Model):
         return_states=False,
     ):
         outputs, outputs_length = inputs
-        outputs, outputs_length = self.conv_subsampling((outputs, outputs_length), training=training)
+        initial_state = initial_state or {}
+        outputs, outputs_length, *subsampling_states = self.conv_subsampling(
+            (outputs, outputs_length),
+            initial_state=initial_state.get("subsampling"),
+            training=training,
+            return_states=return_states,
+        )
         outputs = self.linear(outputs, training=training)
         outputs = self.do(outputs, training=training)
         outputs, relative_position_encoding = self.relpe((outputs, outputs_length), training=training)
-        states = None if self._memory_length is None else []
+        block_initial_states = initial_state.get("blocks")
+        block_states = []
         for i, cblock in enumerate(self.conformer_blocks):
             outputs, *_states = cblock(
                 (outputs, relative_position_encoding),
                 content_attention_bias=self.content_attention_bias,
                 positional_attention_bias=self.positional_attention_bias,
-                initial_state=data_util.get(initial_state, i, None),
+                initial_state=data_util.get(block_initial_states, i, None),
                 training=training,
                 use_causal_mask=self._use_attention_causal_mask,
                 use_auto_mask=self._use_attention_auto_mask,
                 return_states=return_states,
             )
-            if not states:
+            # guard on the block's own output, not the accumulator -- a shared accumulator starts
+            # empty and is falsy, so testing it skipped every block and no memory was ever returned
+            if not _states:
                 continue
-            states.extend(_states)
+            block_states.extend(_states)
         if return_states:
-            return outputs, outputs_length, states
+            state = {}
+            if subsampling_states and subsampling_states[0] is not None:
+                state["subsampling"] = subsampling_states[0]
+            if block_states:
+                state["blocks"] = block_states
+            return outputs, outputs_length, (state or None)
         return outputs, outputs_length
 
     def call_next(self, features, features_length, previous_encoder_states, *args, **kwargs):

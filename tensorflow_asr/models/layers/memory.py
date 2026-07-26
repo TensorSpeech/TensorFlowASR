@@ -16,7 +16,7 @@ from keras.src import backend
 
 from tensorflow_asr import keras, tf
 from tensorflow_asr.models.base_layer import Layer
-from tensorflow_asr.utils import math_util
+from tensorflow_asr.utils import math_util, shape_util
 
 
 def _create_num_masked(tensor_mask):
@@ -35,6 +35,11 @@ class Memory(Layer):
     This layer `call` method will do 2 things:
         1. prepend memory hidden states to inputs -> new_inputs
         2. concatenating memory and inputs, then slice to memory length -> new_memory
+
+    The cached tensor is always `[B, memory_length, *feature_shape]`, but `feature_shape` is
+    free: `dmodel` may be a single width for pre-projection hidden states ([B, M, dmodel]) or a
+    tuple for already-projected keys and values ([B, M, num_heads, head_size]). Everything below
+    slices along the time axis only, so it is agnostic to how many trailing axes there are.
     """
 
     def __init__(self, memory_length, dmodel, **kwargs):
@@ -42,16 +47,19 @@ class Memory(Layer):
         assert memory_length > 0, "memory_length must be integer"
         self.memory_length = memory_length
         self.dmodel = dmodel
+        self.feature_shape = tuple(dmodel) if isinstance(dmodel, (list, tuple)) else (dmodel,)
 
     def _get_inputs(self, inputs, default_mask_value=1):
         inputs_mask = backend.get_keras_mask(inputs)
         if inputs_mask is None:
-            batch_size, max_length, *_ = tf.shape(inputs)
+            # index the shape rather than unpacking it: `a, b, *_ = tf.shape(x)` iterates a
+            # symbolic tensor, which is fine eagerly but raises inside a tf.function
+            batch_size, max_length = shape_util.shape_list(inputs)[:2]
             inputs_mask = tf.cast(tf.ones((batch_size, max_length), dtype=tf.int32) * default_mask_value, dtype=tf.bool)
         return inputs, inputs_mask
 
     def get_initial_state(self, batch_size: int):
-        memory = tf.zeros(shape=(batch_size, self.memory_length, self.dmodel), dtype=self.dtype)
+        memory = tf.zeros(shape=(batch_size, self.memory_length, *self.feature_shape), dtype=self.dtype)
         backend.set_keras_mask(memory, tf.zeros(shape=(batch_size, self.memory_length), dtype=tf.bool))
         return memory
 
@@ -67,19 +75,13 @@ class Memory(Layer):
         new_inputs = tf.concat([memory, inputs], 1)  # prepend memory and inputs
         new_inputs_mask = tf.concat([memory_mask, inputs_mask], 1)
         new_inputs._keras_mask = new_inputs_mask  # pylint: disable=protected-access
-        # create new_memory by slicing new_inputs to memory length
-        new_memory = tf.slice(
-            new_inputs,
-            begin=[0, tf.shape(new_inputs)[1] - self.memory_length, 0],
-            size=[-1, self.memory_length, -1],
-        )
-        new_memory_mask = tf.slice(
-            new_inputs_mask,
-            begin=[0, tf.shape(new_inputs_mask)[1] - self.memory_length],
-            size=[-1, self.memory_length],
-        )
+        # create new_memory by keeping the newest `memory_length` frames -- the tail of
+        # [memory; inputs], so the oldest fall out. Slicing from the end keeps this independent
+        # of how many feature axes trail the time axis (dmodel, or num_heads x head_size).
+        new_memory = new_inputs[:, -self.memory_length :]
+        new_memory_mask = new_inputs_mask[:, -self.memory_length :]
         new_memory._keras_mask = new_memory_mask  # pylint: disable=protected-access
         return new_inputs, new_memory
 
     def compute_output_shape(self, input_shape):
-        return input_shape, (input_shape[0], self.memory_length, self.dmodel)
+        return input_shape, (input_shape[0], self.memory_length, *self.feature_shape)

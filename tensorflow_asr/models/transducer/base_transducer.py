@@ -975,19 +975,41 @@ class Transducer(BaseModel):
 
             # The beam is folded into the batch axis, so the prediction and joint networks are
             # called once for all B * W hypotheses -- the "batch operations" of [1]
-            states = _tile_to_beam(inputs.previous_decoder_states, beam)  # [B * W, num_rnns, nstates, state_size]
+            # A carried beam resumes all W hypotheses; otherwise the beam starts from the single
+            # greedy state. Streaming without this collapses the beam to width one at every chunk
+            # boundary, so each chunk re-explores from one hypothesis instead of W.
+            # `()` is the "absent" marker (see schemas.PredictInput) -- a tensor is always present
+            resumed = not isinstance(inputs.previous_beam_scores, (list, tuple)) and inputs.previous_beam_scores is not None
+            if resumed:
+                states = inputs.previous_beam_states  # [B * W, num_rnns, nstates, state_size]
+                last_tokens = inputs.previous_beam_last_tokens  # [B, W]
+                scores = inputs.previous_beam_scores  # [B, W]
+            else:
+                states = _tile_to_beam(inputs.previous_decoder_states, beam)
+                last_tokens = tf.tile(inputs.previous_tokens, [1, beam])  # [B, W]
+                # Only the first hypothesis is alive initially, otherwise the first expansion would
+                # select the same best token W times over W identical hypotheses
+                scores = tf.concat(
+                    [tf.zeros([batch_size, 1], dtype=tf.float32), tf.fill([batch_size, beam - 1], neg_inf)], axis=1
+                )  # [B, W]
             # Shallow fusion state, threaded through the beam exactly like the prediction network
             # state. With no LM, a scalar placeholder keeps the loop signature uniform.
             lm_states = _tile_to_beam(lm.get_initial_state(batch_size) if lm is not None else tf.zeros([batch_size, 1]), beam)
-            last_tokens = tf.tile(inputs.previous_tokens, [1, beam])  # [B, W]
-            # Only the first hypothesis is alive initially, otherwise the first expansion would
-            # select the same best token W times over W identical hypotheses
-            scores = tf.concat([tf.zeros([batch_size, 1], dtype=tf.float32), tf.fill([batch_size, beam - 1], neg_inf)], axis=1)  # [B, W]
             frame_indices = tf.zeros([batch_size, beam], dtype=tf.int32)  # t of each hypothesis
             num_expansions = tf.zeros([batch_size, beam], dtype=tf.int32)  # labels emitted on the current frame
             tokens = tf.ones([batch_size, beam, max_tokens], dtype=tf.int32) * self.blank
             tokens_length = tf.zeros([batch_size, beam], dtype=tf.int32)  # u of each hypothesis
-            hashes = tf.zeros([batch_size, beam], dtype=tf.int64)
+            if resumed:
+                # A resumed beam starts each chunk with an empty transcript, so every hypothesis
+                # would hash to the same value and the recombination step -- which drops the later
+                # of any two hypotheses sharing a hash -- would collapse the carried beam back to a
+                # single slot, silently undoing the carry. Seeding one distinct hash per slot keeps
+                # them apart. It is the conservative choice: hypotheses whose histories really did
+                # converge before the boundary stay separate rather than merging, which costs a
+                # little beam diversity but can never merge two genuinely different histories.
+                hashes = tf.tile(tf.reshape(tf.range(beam, dtype=tf.int64), [1, beam]), [batch_size, 1])
+            else:
+                hashes = tf.zeros([batch_size, beam], dtype=tf.int64)
 
             # The set of completed hypotheses, `F` in [2], kept outside the beam. Only the best
             # element of `F` is ever returned, so a running argmax is equivalent to materialising
@@ -1206,6 +1228,13 @@ class Transducer(BaseModel):
                 next_tokens=tf.reshape(final_last_tokens, [batch_size, 1]),
                 next_encoder_states=next_encoder_states,
                 next_decoder_states=final_states,
+                # The whole beam, so the next chunk can continue all W hypotheses. `scores` is
+                # rebased on the best hypothesis: the absolute log-probability grows without bound
+                # over a long stream and only the differences between hypotheses matter, so
+                # subtracting the maximum keeps the numbers bounded without changing any ranking.
+                next_beam_scores=scores - tf.reduce_max(scores, axis=1, keepdims=True),
+                next_beam_last_tokens=last_tokens,
+                next_beam_states=states,
             )
 
     # def _perform_beam_search_batch(

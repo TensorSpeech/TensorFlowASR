@@ -244,3 +244,170 @@ def test_encoder_without_memory_is_unchanged():
 
     assert states is None
     assert int(outputs_length[0]) == outputs.shape[1]
+
+
+# --------------------------------------------------------------------------- kv cache mode
+
+
+def kv_block(memory_mode, memory_length=LENGTH, seed=7):
+    """A block with identical weights across modes, so outputs are directly comparable."""
+    tf.keras.utils.set_random_seed(seed)
+    return TransformerBlock(
+        dmodel=DMODEL,
+        dff=16,
+        num_heads=NUM_HEADS,
+        head_size=HEAD_SIZE,
+        memory_length=memory_length,
+        memory_mode=memory_mode,
+        name="b",
+    )
+
+
+def run_two_segments(block, first, second, encoding):
+    block([first, encoding], training=False)  # build
+    _, states = block([first, encoding], training=False, use_auto_mask=False, initial_state=block.get_initial_state(BATCH), return_states=True)
+    outputs, _ = block([second, encoding], training=False, use_auto_mask=False, initial_state=states, return_states=True)
+    return outputs, states
+
+
+def test_kv_cache_matches_hidden_state_cache_exactly():
+    """
+    The reason a kv cache is safe here: the projections are per position, so
+
+        W_k([h_mem ; h_cur]) == [W_k(h_mem) ; W_k(h_cur)]
+
+    Caching the projections is therefore a pure compute optimisation, not an approximation --
+    *while the weights are frozen*. Given identical weights the two modes must agree to the bit,
+    not merely to a tolerance. See `test_kv_cache_diverges_after_a_weight_update` for the limit
+    of that guarantee.
+    """
+    first, second = tf.random.normal([BATCH, LENGTH, DMODEL]), tf.random.normal([BATCH, LENGTH, DMODEL])
+    encoding = relative_encoding(second, LENGTH)
+
+    hidden, _ = run_two_segments(kv_block("hidden"), first, second, encoding)
+    kv, _ = run_two_segments(kv_block("kv"), first, second, encoding)
+
+    assert np.array_equal(hidden.numpy(), kv.numpy()), (
+        f"kv cache diverged from the hidden-state cache by {np.abs(hidden.numpy() - kv.numpy()).max():.3e}"
+    )
+
+
+def test_kv_cache_stores_projected_heads():
+    """`hidden` caches [B, M, dmodel]; `kv` caches [B, M, num_heads, head_size]."""
+    first, second = tf.random.normal([BATCH, LENGTH, DMODEL]), tf.random.normal([BATCH, LENGTH, DMODEL])
+    encoding = relative_encoding(second, LENGTH)
+
+    _, hidden_states = run_two_segments(kv_block("hidden"), first, second, encoding)
+    _, kv_states = run_two_segments(kv_block("kv"), first, second, encoding)
+
+    for name in ("key", "value"):
+        assert tuple(hidden_states[name].shape) == (BATCH, LENGTH, DMODEL)
+        assert tuple(kv_states[name].shape) == (BATCH, LENGTH, NUM_HEADS, HEAD_SIZE)
+
+
+def test_kv_cache_reproduces_the_full_sequence():
+    """Segment-level recurrence must still hold in kv mode, not just match the other mode."""
+    block = kv_block("kv")
+    first, second = tf.random.normal([BATCH, LENGTH, DMODEL]), tf.random.normal([BATCH, LENGTH, DMODEL])
+    whole = tf.concat([first, second], axis=1)
+    block([whole, relative_encoding(whole, 0)], training=False)
+
+    full = block([whole, relative_encoding(whole, 0)], training=False, use_auto_mask=False)[0]
+    streamed, _ = run_two_segments(block, first, second, relative_encoding(second, LENGTH))
+
+    assert np.allclose(streamed.numpy(), full[:, LENGTH:, :].numpy(), atol=1e-4)
+
+
+@pytest.mark.parametrize("memory_mode", ["hidden", "kv"])
+def test_encoder_supports_both_memory_modes(memory_mode):
+    memory_length = 6
+    encoder = TransformerEncoder(
+        subsampling=subsampling_config(),
+        num_blocks=2,
+        dmodel=DMODEL,
+        dff=16,
+        num_heads=NUM_HEADS,
+        head_size=HEAD_SIZE,
+        memory_length=memory_length,
+        memory_mode=memory_mode,
+    )
+    features, features_length = tf.random.normal([1, 40, 40, 1]), tf.constant([40], tf.int32)
+    encoder((features, features_length), training=False)
+
+    _, _, states = encoder.call_next(features, features_length, encoder.get_initial_state(1))
+    tensors = tf.nest.flatten(states)
+
+    assert tensors, "no states returned"
+    expected = (1, memory_length, DMODEL) if memory_mode == "hidden" else (1, memory_length, NUM_HEADS, HEAD_SIZE)
+    assert all(tuple(tensor.shape) == expected for tensor in tensors)
+
+
+def test_unknown_memory_mode_is_rejected():
+    from tensorflow_asr.models.layers.multihead_attention import MultiHeadAttention
+
+    with pytest.raises(ValueError, match="memory_mode must in"):
+        MultiHeadAttention(num_heads=NUM_HEADS, key_dim=HEAD_SIZE, memory_length=4, memory_mode="kvcache")
+
+
+def test_memory_cache_is_detached_in_both_modes():
+    """
+    `SG(.)` must hold whichever form the cache takes, or a training-time recurrence would
+    backpropagate into the previous segment.
+    """
+    first, second = tf.random.normal([BATCH, LENGTH, DMODEL]), tf.random.normal([BATCH, LENGTH, DMODEL])
+    encoding = relative_encoding(second, LENGTH)
+
+    for memory_mode in ("hidden", "kv"):
+        block = kv_block(memory_mode)
+        block([first, encoding], training=False)
+        _, states = block(
+            [first, encoding],
+            training=False,
+            use_auto_mask=False,
+            initial_state=block.get_initial_state(BATCH),
+            return_states=True,
+        )
+        cache = {name: tf.Variable(value) for name, value in states.items()}
+
+        with tf.GradientTape(persistent=True) as tape:
+            outputs, _ = block([second, encoding], training=True, use_auto_mask=False, initial_state=cache, return_states=True)
+            loss = tf.reduce_sum(outputs)
+
+        for name, variable in cache.items():
+            assert tape.gradient(loss, variable) is None, f"{memory_mode} leaked a gradient into the {name} cache"
+
+
+def test_kv_cache_diverges_after_a_weight_update():
+    """
+    The boundary of the kv/hidden equivalence, and why "kv" is an inference mode.
+
+    `hidden` re-projects the cached `h` with whatever W_k/W_v are current, so it always reflects
+    the latest weights. `kv` replays projections frozen at the time the segment was cached. With
+    the weights fixed -- inference -- the two coincide exactly. Once the weights move between
+    segments, as they do during training, they cannot: Transformer-XL caches `h`, so `hidden` is
+    the faithful choice for a training-time recurrence.
+
+    This test asserts the divergence deliberately. If it ever starts passing as "equal", the
+    projections have stopped being applied per segment and the caching story needs revisiting.
+    """
+    first, second = tf.random.normal([BATCH, LENGTH, DMODEL]), tf.random.normal([BATCH, LENGTH, DMODEL])
+    encoding = relative_encoding(second, LENGTH)
+    outputs = {}
+
+    for memory_mode in ("hidden", "kv"):
+        block = kv_block(memory_mode)
+        block([first, encoding], training=False)
+        _, states = block(
+            [first, encoding],
+            training=False,
+            use_auto_mask=False,
+            initial_state=block.get_initial_state(BATCH),
+            return_states=True,
+        )
+        # stand in for an optimizer step landing between the two segments
+        for weight in block.trainable_weights:
+            weight.assign_add(tf.fill(tf.shape(weight), tf.constant(0.05, weight.dtype)))
+        outputs[memory_mode], _ = block([second, encoding], training=False, use_auto_mask=False, initial_state=states, return_states=True)
+
+    difference = np.abs(outputs["hidden"].numpy() - outputs["kv"].numpy()).max()
+    assert difference > 1e-3, f"expected the modes to diverge once the weights moved, got {difference:.3e}"

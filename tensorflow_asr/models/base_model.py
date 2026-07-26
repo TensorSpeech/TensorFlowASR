@@ -377,6 +377,28 @@ class BaseModel(keras.Model, TensorFlowTrainer):
     def get_initial_decoder_states(self, batch_size=1):
         return []
 
+    def get_initial_beam_state(self, batch_size=1, beam_width=1):
+        """
+        Starting state for a streaming beam: per-hypothesis score, last token and decoder state.
+
+        Only the first hypothesis is alive, matching how `recognize_beam` seeds itself -- with W
+        identical live hypotheses the first expansion would pick the same best token W times.
+        Returns `(scores [B, W], last_tokens [B, W], states [B * W, ...])`.
+        """
+        scores = tf.concat(
+            [tf.zeros([batch_size, 1], dtype=tf.float32), tf.fill([batch_size, beam_width - 1], tf.constant(-1e9, tf.float32))],
+            axis=1,
+        )
+        last_tokens = tf.tile(self.get_initial_tokens(batch_size), [1, beam_width])
+        states = tf.nest.map_structure(
+            lambda state: tf.reshape(
+                tf.tile(tf.expand_dims(state, axis=1), [1, beam_width, *([1] * (len(state.shape) - 1))]),
+                [batch_size * beam_width, *state.shape[1:]],
+            ),
+            self.get_initial_decoder_states(batch_size),
+        )
+        return scores, last_tokens, states
+
     def recognize(self, inputs: schemas.PredictInput, **kwargs) -> schemas.PredictOutput:
         """Greedy decoding function that used in self.predict_step"""
         raise NotImplementedError()
@@ -400,6 +422,20 @@ class BaseModel(keras.Model, TensorFlowTrainer):
                 next_tokens=outputs.next_tokens,
                 next_encoder_states=outputs.next_encoder_states,
                 next_decoder_states=outputs.next_decoder_states,
+                next_beam_scores=outputs.next_beam_scores,
+                next_beam_last_tokens=outputs.next_beam_last_tokens,
+                next_beam_states=outputs.next_beam_states,
+            )
+
+        beam_signature = {}
+        if beam_width > 0:
+            # Only the beam export carries these, so a greedy signature is byte-for-byte what it
+            # was before streaming beam search existed.
+            beam_scores, beam_last_tokens, beam_states = self.get_initial_beam_state(batch_size, beam_width)
+            beam_signature = dict(
+                previous_beam_scores=tf.TensorSpec.from_tensor(beam_scores),
+                previous_beam_last_tokens=tf.TensorSpec.from_tensor(beam_last_tokens),
+                previous_beam_states=tf.nest.map_structure(tf.TensorSpec.from_tensor, beam_states),
             )
 
         input_signature = schemas.PredictInput(
@@ -408,6 +444,7 @@ class BaseModel(keras.Model, TensorFlowTrainer):
             previous_tokens=tf.TensorSpec.from_tensor(self.get_initial_tokens(batch_size)),
             previous_encoder_states=tf.nest.map_structure(tf.TensorSpec.from_tensor, self.get_initial_encoder_states(batch_size)),
             previous_decoder_states=tf.nest.map_structure(tf.TensorSpec.from_tensor, self.get_initial_decoder_states(batch_size)),
+            **beam_signature,
         )
 
         return tf.function(
