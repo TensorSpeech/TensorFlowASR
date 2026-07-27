@@ -83,6 +83,71 @@ def evaluate_hypotheses(filepath: str):
     return df
 
 
+def validate_lm(model: BaseModel, decoder_config, lm_h5: str = None, internal_lm_h5: str = None):
+    """
+    Check that the language models attached to `model` make sense for how it is about to decode.
+
+    `BaseModel.make_lm` only builds what the config describes; whether that combination is
+    coherent depends on `decoder_config`, which it never sees. This is the other half, called by
+    `scripts/test.py` once both are known.
+
+    Raises only for what cannot run at all. Everything else is a warning, because each case is
+    legal and occasionally deliberate -- but far more often a config that lost a key or a command
+    line that lost a flag, and all of them fail *silently*: the decode completes and the WER is
+    just quietly worse than it should be.
+
+    Parameters
+    ----------
+    model : BaseModel
+        After `make_lm`, so `model.lm` and `model.internal_lm` are populated.
+    decoder_config : configs.DecoderConfig
+        Supplies `lm_type`, `lm_alpha`, `lm_beta` and `beam_width`.
+    lm_h5, internal_lm_h5 : str
+        The paths that were passed to `make_lm`, used only to tell a trained model from one left
+        at its initial weights.
+
+    Raises
+    ------
+    ValueError
+        `lm_type` is "lodr" but no internal language model was built.
+    """
+    lm_type = str(getattr(decoder_config, "lm_type", "shallow") or "shallow").lower()
+    beam_width = int(getattr(decoder_config, "beam_width", 0) or 0)
+    lm_alpha = float(getattr(decoder_config, "lm_alpha", 0.0) or 0.0)
+    lm_beta = float(getattr(decoder_config, "lm_beta", 0.0) or 0.0)
+    has_external, has_internal = model.lm is not None, model.internal_lm is not None
+
+    if lm_type == "lodr" and not has_internal:
+        raise ValueError(
+            'decoder_config.lm_type is "lodr" but no internal language model was built. '
+            "Set lm_config.internal_config to the low-order LM to subtract, or change lm_type."
+        )
+
+    if beam_width <= 0 and (has_external or has_internal):
+        logger.warning(f"decoder_config.beam_width is {beam_width}, so beam search is off and the language models will not be used at all")
+        return
+
+    # An untrained LM is the quiet one: it is built, it is fused, and it contributes noise.
+    if has_external and not lm_h5:
+        logger.warning("An external language model is configured but no --lm-h5 was given, so it is fused in with its initial (untrained) weights")
+    if has_internal and lm_type == "lodr" and not internal_lm_h5:
+        logger.warning("An internal language model is configured but no --internal-lm-h5 was given, so it is subtracted with its initial (untrained) weights")
+
+    if lm_type != "shallow" and not has_external:
+        # Subtracting the internal LM without fusing anything in strips the model's language
+        # knowledge and puts none back. Legal -- it is the density-ratio form with a uniform
+        # external LM -- but it is far more often a config that forgot `external_config`.
+        logger.warning(f'lm_type is "{lm_type}" but no lm_config.external_config was given, so the internal LM is subtracted with nothing fused in')
+    if has_internal and lm_type != "lodr":
+        logger.warning(f'lm_config.internal_config was built but lm_type is "{lm_type}", which never reads it. Only "lodr" subtracts a separate model.')
+    if has_external and lm_alpha == 0.0:
+        logger.warning("An external language model is configured but lm_alpha is 0, so it costs a full LM call per step and changes nothing")
+    if lm_type != "shallow" and lm_beta == 0.0:
+        logger.warning(f'lm_type is "{lm_type}" but lm_beta is 0, so the internal LM correction is computed and then multiplied away')
+
+    logger.info(f"Language model settings validated: lm_type={lm_type}, lm_alpha={lm_alpha}, lm_beta={lm_beta}, beam_width={beam_width}")
+
+
 def convert_tflite(
     model: BaseModel,
     output: str = None,

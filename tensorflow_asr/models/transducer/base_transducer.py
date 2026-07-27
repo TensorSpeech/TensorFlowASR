@@ -1023,7 +1023,7 @@ class Transducer(BaseModel):
             counteract the bias of accumulated log-probabilities towards short transcripts.
         lm : Optional[LanguageModel]
             External language model to shallow fuse, see
-            `tensorflow_asr.models.decoders.language_model.LanguageModel`. `None` disables fusion
+            `tensorflow_asr.models.lm.language_model.LanguageModel`. `None` disables fusion
             entirely, so no LM call is made.
         lm_alpha : float
             `lambda` of eq. (3) in [1], the shallow fusion weight. `0.0` makes fusion a no-op
@@ -1186,10 +1186,10 @@ class Transducer(BaseModel):
                     _lm_updated = _lm_states
                     _lm_log_probs = None
                 else:
-                    _lm_log_probs, _lm_updated = lm.score(_previous, _lm_states)
+                    _lm_log_probs, _lm_updated = lm.call_next(_previous, _lm_states)
                     _lm_log_probs = tf.reshape(tf.cast(_lm_log_probs, tf.float32), [batch_size, beam, -1])  # [B, W, V]
                 if _has_lodr:
-                    _ilm_log_probs, _ilm_updated = internal_lm.score(_previous, _ilm_states)
+                    _ilm_log_probs, _ilm_updated = internal_lm.call_next(_previous, _ilm_states)
                     _ilm_log_probs = tf.reshape(tf.cast(_ilm_log_probs, tf.float32), [batch_size, beam, -1])  # [B, W, V]
                     # The low-order LM is a plain LM, so it has no blank column to speak of. Zeroing
                     # it makes the subtraction a no-op at blank, matching `_internal_lm_log_probs`.

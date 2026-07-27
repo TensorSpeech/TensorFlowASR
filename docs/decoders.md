@@ -130,6 +130,8 @@ recognize_beam(inputs, beam_width=10, max_tokens_per_frame=3, score_norm=True,
 | `internal_lm`          | `None`      | the low-order LM that `"lodr"` subtracts                                 |
 | `lm_beta`              | `0.0`       | `λ_I` of eq. (27) in \[5\], the internal LM weight                       |
 
+In a config file `lm_type`, `lm_alpha` and `lm_beta` come straight from `decoder_config` under those names; `lm` and `internal_lm` are built from `lm_config.external_config` and `lm_config.internal_config` (4.8).
+
 `score_norm` counteracts the bias of an accumulated log-probability towards short transcripts. Leaving it on is the usual choice; turning it off returns the maximum-probability path instead.
 
 ### 4.6 Shallow fusion
@@ -145,20 +147,29 @@ The blank term is the part that matters. Boosting only the label scores would ma
 
 Fusion is applied **before** the forced-blank masking of step 2, so a capped hypothesis pays the fused blank cost, and a completed one is still frozen at `0`.
 
-**No language model ships with TensorFlowASR.** `recognize_beam` takes any object satisfying [`LanguageModel`](../tensorflow_asr/models/decoders/language_model.py):
+**No external language model ships with TensorFlowASR.** `recognize_beam` takes any object satisfying [`LanguageModel`](../tensorflow_asr/models/lm/language_model.py):
 
 ```python
-class LanguageModel(Layer):
-    def get_initial_state(self, batch_size) -> tf.Tensor: ...  # [B, ...]
-    def score(self, previous_tokens, previous_states): ...  # -> ([B, V], [B, ...])
+class LanguageModel(keras.Model):
+    def get_initial_state(self, batch_size) -> tf.Tensor: ...   # [B, ...]
+    def call(self, tokens, training=False): ...                 # [B, U]      -> [B, U, V]
+    def call_next(self, previous_tokens, previous_states): ...  # ([B,1], [B,...]) -> ([B,V], [B,...])
 ```
 
-Two constraints follow from where it is called:
+It is a full `keras.Model`, not a layer, because it is trained on its own by `train_lm` and saved to its own h5. There are **two** forward passes because training and decoding want different shapes:
 
-- `score` runs **inside** the `tf.while_loop`, once per step on all `B * W` hypotheses. It must be pure TensorFlow — any python-side lookup breaks TFLite/XLA export.
+- `call` is **training** — teacher forced over a whole sequence, which is what `fit` runs, so it is the keras-idiomatic `call`.
+- `call_next` is **decoding** — one step, carrying state. The beam search calls this. The name is the one the rest of the repository already uses for a single stateful step (`TransducerPrediction.call_next`, `Encoder.call_next`, `Transducer.call_next`).
+
+Three constraints follow from where `call_next` runs:
+
+- It runs **inside** the `tf.while_loop`, once per step on all `B * W` hypotheses. It must be pure TensorFlow — any python-side lookup breaks TFLite/XLA export.
+- Weights must exist **before** decoding. `make()` builds them; a model first built inside the loop body would be creating variables inside a `tf.while_loop`, which graph mode rejects.
 - States must be a **single tensor**, batch on axis 0, any trailing rank. The beam re-orders them on axis 0 during recombination exactly as it does the prediction network states, so a python dict or ragged trie will not survive the loop.
 
-`score` returns log-probabilities over the *transducer* vocabulary with matching indices; the blank column is never read.
+Both return log-probabilities over the *transducer* vocabulary with matching indices; the blank column is never read by the decoder.
+
+Two token conventions are shared with the decoder. The **blank index doubles as start of sentence** — the beam holds `last_token = blank` until a hypothesis emits its first label — so training feeds `[blank, t1, ..., t_{n-1}]` to predict `[t1, ..., tn]` (`shift_tokens` does this). And there is **no end-of-sentence symbol**: a hypothesis ends when the frames run out, never on an emitted token.
 
 ### 4.7 Internal LM subtraction: ILME and LODR
 
@@ -184,6 +195,26 @@ z_ILM = J(g_u) = W_j·φ(W_p·h_pred + b_p) + b_j
 which is eq. (25) of \[5\], and matches this repository's joint — `ffn_out(act(merge(ffn_enc(enc), ffn_pred(pred))))` — with `enc = 0`. Drop the blank logit, softmax over what is left, and that is `p_ILM`. This is exact and adds no parameters, but costs a **second joint call per decoding step**. `Transducer.call_next(..., return_internal_lm=True)` reuses the prediction network output it already computed, so the expensive recurrent half is not run twice.
 
 **`"lodr"`** replaces the exact estimate with a cheap low-order n-gram trained on the same transcripts \[6\]. A bigram costs a table lookup instead of a joint call, and \[6\] reports it matching ILME in practice. `internal_lm` is an ordinary `LanguageModel` (4.6) with its own state, threaded through the beam and re-ordered onto the selected parents exactly like the external LM's. Its blank column is zeroed on the way in, so a general-purpose LM can be passed without special-casing.
+
+Unlike the external LM, this one **does ship**: [`BigramLanguageModel`](../tensorflow_asr/models/lm/bigram_language_model.py), fitted from your training transcripts by
+
+```bash
+tensorflow_asr train_lm \
+    --config-path=/path/to/config.yml.j2 \
+    --datadir=/path/to/data \
+    --dataset-type=slice \
+    --target=internal \
+    --output=/path/to/bigram.weights.h5
+```
+
+It counts adjacent token pairs over `data_config.train_dataset_config`, tokenizing with the config's own tokenizer so the indices line up with the transducer's vocabulary by construction. Note that a bigram is **not** trained by gradient descent: its maximum-likelihood estimate is a ratio of counts, exact in one pass, so it exposes `fit_counts` and `train_lm` dispatches to that instead of running `fit`. Any model without `fit_counts` — a neural LM — is trained by gradient descent on next-token cross-entropy instead. **The corpus matters**: the bigram must see the transcripts the transducer trained on, because that is what its internal LM learned. Counting the external LM's target-domain text instead would subtract the very knowledge fusion is adding, which is why the script takes no corpus argument.
+
+Two details of the table:
+
+- **Row `blank` is the sentence-start distribution.** The beam holds `last_token = blank` until a hypothesis emits its first label, so that row conditions the first token. There is no end-of-sentence counterpart — a hypothesis ends when the frames run out, not on an emitted symbol.
+- **Smoothing is mandatory, not a refinement.** An unsmoothed table gives `ln 0 = -inf` for every pair that never occurred, and the beam adds that into hypotheses that are perfectly legal, killing them outright. `build_table` uses Jelinek-Mercer interpolation with an add-`delta` unigram, `p(w|v) = λ·p_bi(w|v) + (1−λ)·p_uni(w)`. `λ` is forced to 0 for a context with no counts so its row still sums to one, and `λ = 1` is **rejected** — it looks like a legal "trust the counts fully" setting but leaves a seen context with no unigram floor, sending its unseen successors to `-inf`.
+
+The table is a dense `[V, V]` float32 **non-trainable weight**, saved and loaded through the ordinary keras h5 path like any other model: 256 KiB at `V = 256`, 4 MiB at `V = 1000`. The 20k-bigram pruning of \[6\] is not implemented — it exists for vocabularies far larger than this repository's, where dense storage stops being free.
 
 Both are approximations of the same quantity, so use one or the other, not both.
 
@@ -230,45 +261,77 @@ tensorflow_asr tflite \
 
 > **The TFLite export currently decodes without any language model.** `make_tflite_function` calls `recognize_beam(inputs, beam_width=beam_width)` and passes nothing else, so `lm`, `lm_alpha`, `lm_type`, `internal_lm` and `lm_beta` are all left at their defaults — even though `scripts/tflite.py` calls `model.make_lm()` first. This predates ILME/LODR and applies to plain shallow fusion just the same. Everything on this page about fusion holds for `model.recognize_beam(...)` and for evaluation via `predict_step`, but an exported `.tflite` is a plain ALSD++ beam.
 
-Evaluation reads its settings from the tokenizer's `DecoderConfig`:
+The split follows what each thing *is*. The language models are models, so they sit in a top-level `lm_config` next to `model_config`; how to score with them is a decoding setting, so it sits in `decoder_config` next to `beam_width`:
 
 ```yaml
-decoder_config:
-  beam_width: 16      # 0 (the shipped default) disables beam search
-  norm_score: True    # -> score_norm
-  lm_alpha: 0.5       # -> lm_alpha, eq. (3) lambda
-  lm_config:          # keras serialization blob, built by model.make_lm()
+model_config: { class_name: ..., config: { ... } }
+
+lm_config:
+  external_config:   # the LM fused *in*. Optional.
     class_name: my_package>MyLanguageModel
     config: { ... }
-```
+  internal_config:   # the low-order LM subtracted. Required by lm_type: lodr.
+    class_name: tensorflow_asr.models.lm.bigram_language_model>BigramLanguageModel
+    config: { vocab_size: 1000, blank: 0 }
 
-With an internal LM correction (4.7), two more keys join in. `type` and `internal_lm_config` sit *alongside* the keras ones and are stripped before deserialization, so `lm_config` is still an ordinary keras blob:
-
-```yaml
 decoder_config:
-  beam_width: 16
-  norm_score: True
-  lm_alpha: 0.5
-  lm_beta: 0.2        # -> lm_beta, eq. (27) lambda_I. Keep it below lm_alpha.
-  lm_config:
-    type: lodr        # -> lm_type: shallow (default) | ilme | lodr
-    class_name: my_package>MyLanguageModel
-    config: { ... }
-    internal_lm_config:   # lodr only: the low-order LM to subtract
-      class_name: my_package>MyBigramLanguageModel
-      config: { ... }
+  beam_width: 16     # 0 (the shipped default) disables beam search
+  norm_score: True   # -> score_norm
+  lm_type: lodr      # shallow (default) | ilme | lodr
+  lm_alpha: 0.3      # -> lm_alpha, eq. (3) lambda
+  lm_beta: 0.15      # -> lm_beta, eq. (27) lambda_I. Keep it below lm_alpha.
 ```
 
-For `type: ilme` there is nothing extra to configure — the estimate comes from the transducer's own joint — and `class_name` may be dropped entirely if you want subtraction without fusion.
+Both model configs are ordinary keras serialization blobs, exactly like `model_config` — which is what they are, and nothing more. **Trained weights are not in the config**: they are passed to `tensorflow_asr test` as `--lm-h5` and `--internal-lm-h5`, beside the ASR model's own `--h5`. Same reasoning in all three cases — the config says what the model *is*, a checkpoint says which trained copy of it you happen to be running, and you sweep the latter without editing the former.
 
-`predict_step` calls `BaseModel.get_beam_decoding_kwargs()`, which returns nothing when `beam_width <= 0`. In that case the beam column of the evaluation output mirrors the greedy one rather than running a second decode — the same `beam_width > 0` convention `make_tflite_function` already uses. `model.make_lm()` builds both LMs from `lm_config` and is called by `scripts/test.py` and `scripts/tflite.py`; it is a no-op when `lm_config` is empty. It also validates: an unknown `type`, or `lodr` without an `internal_lm_config`, raises rather than silently decoding without the correction. (On the `scripts/tflite.py` path the models it builds go unused — see the note above.)
+For `lm_type: ilme` there is nothing extra to configure — the estimate comes from the transducer's own joint — and `external_config` may be dropped entirely if you want subtraction without fusion. That combination warns, because far more often it means a config that forgot `external_config`.
 
-Neither LM is tracked as a keras sub-layer, so their weights never enter the ASR model's checkpoint.
+Fitting the language models is a separate step, before evaluation, and `--target` names the key it builds:
+
+```bash
+tensorflow_asr train_lm ... --target=internal --output=.../bigram.weights.h5   # counting
+tensorflow_asr train_lm ... --target=external --output=.../lm.weights.h5       # gradient descent
+```
+
+Those two outputs are what evaluation then loads:
+
+```bash
+tensorflow_asr test \
+    --config-path=/path/to/config.yml.j2 \
+    --h5=/path/to/asr.h5 \
+    --lm-h5=/path/to/lm.weights.h5 \
+    --internal-lm-h5=/path/to/bigram.weights.h5 \
+    ...
+```
+
+Both LM flags are optional. Leaving one out builds that model with its **initial** weights rather than skipping it, which is never what you want outside a test — so if a configured LM seems to be doing nothing, check the flag before the maths.
+
+`predict_step` calls `BaseModel.get_beam_decoding_kwargs()`, which returns nothing when `beam_width <= 0`. In that case the beam column of the evaluation output mirrors the greedy one rather than running a second decode — the same `beam_width > 0` convention `make_tflite_function` already uses.
+
+`model.make_lm(config.lm_config, lm_weights=..., internal_lm_weights=...)` **builds and nothing else** — it makes whichever of the two the config describes, leaves the other `None`, and never looks at `lm_type`. It is a no-op when nothing is configured. `scripts/tflite.py` passes no weights, because the models it builds go unused either way — see the note above.
+
+Judging whether the result is coherent is a separate step, `app_util.validate_lm(model, decoder_config, lm_h5=..., internal_lm_h5=...)`, which `scripts/test.py` calls straight after. Keeping them apart means building works on its own — in a test, a notebook, a half-configured sweep — without having to satisfy rules that only matter once you actually decode.
+
+It **raises** for one case only: `lm_type: lodr` with no internal model, which cannot run. Everything else warns, because each is legal and occasionally deliberate, but far more often a lost config key or a lost flag — and every one of them fails *silently*, decoding happily to a quietly worse WER:
+
+| Warning | What it means |
+| ------- | -------------- |
+| `beam_width` is 0 with an LM configured | beam search is off, so no LM is used at all |
+| an LM is configured but its `--*-h5` is missing | it is fused in with **initial, untrained** weights |
+| `lm_type` is not `shallow` and no `external_config` | the internal LM is subtracted with nothing fused in |
+| `internal_config` built but `lm_type` is not `lodr` | it was built and will never be read |
+| an `external_config` with `lm_alpha: 0` | a full LM call per step that changes nothing |
+| `lm_type` not `shallow` with `lm_beta: 0` | the correction is computed and then multiplied away |
+
+Unknown `lm_type` is caught earlier still, by `DecoderConfig` at config load, before any model is built.
+
+Neither LM is tracked as a keras sub-layer of the ASR model, so their weights never enter its checkpoint — they have their own h5 files.
 
 ### 4.9 Deviations from the paper
 
 - **Transcript storage.** \[1\] uses a trie (`transcripts` + `transcripts_ptrs` backlinks) to avoid copying whole transcripts on each expansion. Here transcripts are dense `[B, W, 2T+1]` and re-gathered each step, because `tf.gather` over the beam axis is a single vectorized op and keeps every shape static, which is what XLA and TFLite export need. Memory is `O(B * W * T)`.
-- **No bundled language model.** Equation (3) itself is implemented (4.6), but no concrete LM ships with the repository — \[1\] evaluates against an n-gram LM held on device. You supply the `LanguageModel`; the decoder only defines the interface and the fusion math. The same goes for LODR's low-order LM.
+- **No bundled *external* language model.** Equation (3) itself is implemented (4.6), but no external LM ships with the repository — \[1\] evaluates against an n-gram LM held on device, and \[5\] against a 58M-parameter 2-layer LSTM over the ASR model's own word-pieces. You supply the `LanguageModel`; the decoder defines the interface and the fusion math. LODR's *internal* LM is the exception and does ship, as `BigramLanguageModel` (4.7) — it is derivable from data the repository already has, whereas an external LM by definition is not.
+- **Bigram only.** `BigramLanguageModel` is order 2, dense, unpruned. \[6\] notes character-level units may want a higher order; that needs a new class, since a dense `[V, V, V]` trigram is not viable and the state would have to carry the token before last.
 - **Fusion form under ILME/LODR.** \[5\] states eq. (27) over plain shallow fusion, which leaves blank alone. Here the external term keeps ALSD++'s `(1 + λ)` blank scaling (4.6) and the subtraction is applied to the labels only. That combination is neither paper verbatim; it is the coherent merge of the two, and it keeps the deletion-rate property eq. (3) exists for.
 - **CUDA graphs.** Not applicable — the loop is a `tf.while_loop`.
 
@@ -314,10 +377,25 @@ What is covered:
 | Zeroing the encoder works      | on the **real** joint, not the stub: two very different acoustic frames give the same `p_ILM`, while the ordinary output differs                                             |
 | `λ_I = 0` is a no-op           | both `"ilme"` and `"lodr"` at `λ_I = 0` decode identically to plain shallow fusion                                                                                          |
 | LODR state threading           | the low-order LM is the same stateful test LM, so mis-ordering its state onto the parents fails                                                                              |
-| Bad configuration is rejected  | unknown `lm_type`, and `"lodr"` with no `internal_lm` / no `internal_lm_config`                                                                                             |
+| Bad configuration is rejected  | unknown `lm_type` (at config load), and `"lodr"` with no `internal_lm` / no `internal_config`                                                                               |
 | Config plumbing                | `get_beam_decoding_kwargs` for `beam_width <= 0`, `norm_score`, LM attachment, and that a config with no `type` yields exactly the pre-ILME argument set                     |
-| `make_lm` key handling         | `type` and `internal_lm_config` stripped before deserialization, the config object left intact, `"ilme"` with no `class_name`                                                |
+| Config plumbing, LM side       | `make_lm` builds only what is configured and ignores `lm_type` entirely, and routes each h5 path to its own model                                                            |
+| Misconfiguration is caught     | `validate_lm` raises only for `"lodr"` with nothing to subtract, and warns on each of the six silent cases above; `DecoderConfig` rejects an unknown `lm_type` at load        |
 | LM stays out of the checkpoint | attaching either LM does not change `model.weights`                                                                                                                          |
+
+`tests/test_bigram_language_model.py` covers the shipped LODR bigram separately:
+
+| Property                         | How                                                                                                                        |
+| -------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| Counting is right                | sentence starts land in row `blank`, repeated pairs counted once each (not collapsed), out-of-vocabulary tokens dropped     |
+| `fit_counts` fills the weight    | a fresh model is all zeros, a fitted one matches `build_table`, and the weight is non-trainable                             |
+| h5 round trip                    | `save_weights` → `build_lm(blob, weights=path)` restores the table; the table is never inlined into the config             |
+| Every row is a distribution      | labels sum to one, blank column exactly `0`, **no `-inf` anywhere**, at four interpolation weights                          |
+| Unseen context backs off cleanly | a context with no counts still sums to one and equals the unigram exactly                                                   |
+| The counts actually matter       | an observed successor outranks an unobserved one; `λ = 0` collapses every row to the same unigram                           |
+| Unsafe smoothing is rejected     | `delta = 0` and `interpolation = 1` both raise — the second looks legal but sends unseen successors of a seen context to `-inf` |
+| Same form as ILME                | table and `_internal_lm_log_probs` agree on blank-inert / labels-normalised, so `λ_I` means one thing across both           |
+| The model works where it is used | `call_next` row lookup and untouched state, `call` scores a whole sequence and agrees with `call_next` step by step, runs inside a real `tf.while_loop`, int indices survive keras autocasting |
 
 Beyond the suite, TFLite conversion of `recognize_beam` succeeds under `jit_compile=True`.
 

@@ -43,7 +43,10 @@ def main(
 
     model: BaseModel = keras_util.model_from_config(config.model_config)
     model.tokenizer = tokenizer
-    model.make_lm()  # no-op unless decoder_config.lm_config is set
+    # Built but unused: `make_tflite_function` calls `recognize_beam` without any LM arguments, so
+    # an exported model is a plain ALSD++ beam. No weight flags here for that reason -- see the
+    # note in docs/decoders.md 4.8.
+    model.make_lm(config.lm_config)
     model.make(batch_size=bs)
     if h5 and tf.io.gfile.exists(h5):
         model.load_weights(h5, skip_mismatch=False)

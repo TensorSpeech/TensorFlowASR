@@ -31,6 +31,8 @@ def main(
     datadir: str,
     outputdir: str,
     h5: str = None,
+    lm_h5: str = None,
+    internal_lm_h5: str = None,
     mxp: str = "none",
     bs: int = 1,
     jit_compile: bool = False,
@@ -45,6 +47,15 @@ def main(
 
     Parameters
     ----------
+    lm_h5 : str
+        Weights of the external language model fused into beam search, from
+        `tensorflow_asr train_lm --target=external`. Optional, and only read when
+        `lm_config.external_config` describes one. Without it that model keeps its initial
+        weights, which is never what you want outside a test.
+    internal_lm_h5 : str
+        Same, for the low-order language model LODR subtracts
+        (`train_lm --target=internal`, `lm_config.internal_config`). Only read when
+        `decoder_config.lm_type` is "lodr".
     device_type : str
         "cpu" (default), "gpu" or "tpu". Decoding defaults to the CPU on purpose: the greedy and
         beam loops are hundreds of tiny sequential steps, so an accelerator spends more time moving
@@ -73,7 +84,8 @@ def main(
 
     model: BaseModel = keras_util.model_from_config(config.model_config)
     model.tokenizer = tokenizer
-    model.make_lm()  # no-op unless decoder_config.lm_config is set
+    model.make_lm(config.lm_config, lm_weights=lm_h5, internal_lm_weights=internal_lm_h5)  # no-op unless lm_config sets a model
+    app_util.validate_lm(model, config.decoder_config, lm_h5=lm_h5, internal_lm_h5=internal_lm_h5)
     model.make(batch_size=batch_size)
     model.load_weights(h5, skip_mismatch=False)
     model.jit_compile = jit_compile

@@ -16,13 +16,18 @@ Two regimes matter and the distinction drives most of the parametrization below:
   lossy by design, so only legality can be asserted.
 """
 
+import logging
+
 import numpy as np
 import pytest
 
 from tensorflow_asr import keras, schemas, tf
-from tensorflow_asr.models.decoders.language_model import LanguageModel
+from tensorflow_asr.configs import DecoderConfig, LanguageModelConfig
+from tensorflow_asr.models.base_model import BaseModel
+from tensorflow_asr.models.lm.language_model import LanguageModel
 from tensorflow_asr.models.transducer.base_transducer import _internal_lm_log_probs
 from tensorflow_asr.models.transducer.rnnt import RnnTransducer
+from tensorflow_asr.utils import app_util
 
 BLANK = 0
 
@@ -44,7 +49,7 @@ class CountingLanguageModel(LanguageModel):
     """
     Bigram LM whose distribution also depends on how many labels the hypothesis has emitted.
 
-    The state is that count. `score` is called *before* the next token is chosen, so an LM cannot
+    The state is that count. `call_next` runs *before* the next token is chosen, so an LM cannot
     condition on it -- conditioning comes from `previous_tokens`, and the state carries the
     recurrent part, exactly as the prediction network does. Making the distribution depend on the
     count means a beam that advanced the state on a blank, or failed to re-order states onto the
@@ -53,18 +58,33 @@ class CountingLanguageModel(LanguageModel):
 
     def __init__(self, table, **kwargs):
         super().__init__(**kwargs)
-        self.table = tf.convert_to_tensor(table, dtype=tf.float32)  # [LM_POSITIONS, V, V]
+        table = np.asarray(table, dtype=np.float32)  # [LM_POSITIONS, V, V]
+        # A weight, not a constant, so this saves and loads through the ordinary keras h5 path the
+        # way a real LM does. Created here rather than in `build` because the decoder calls
+        # `call_next` from inside a `tf.while_loop`, where creating variables fails.
+        self.table = self.add_weight(name="table", shape=table.shape, initializer="zeros", trainable=False, dtype="float32")
+        self.table.assign(table)
 
     def get_initial_state(self, batch_size):
         return tf.zeros([batch_size, 1], dtype=tf.int32)
 
-    def score(self, previous_tokens, previous_states):
+    def call(self, tokens, training=False):
+        # Training path: position u is scored from the bucket it sits in, which is what the state
+        # counts up to at decoding time.
+        positions = tf.minimum(tf.range(tf.shape(tokens)[1]), LM_POSITIONS - 1)  # [U]
+        positions = tf.tile(tf.expand_dims(positions, 0), [tf.shape(tokens)[0], 1])  # [B, U]
+        return tf.gather_nd(self.table, tf.stack([positions, tokens], axis=-1))  # [B, U, V]
+
+    def call_next(self, previous_tokens, previous_states):
         count = tf.minimum(tf.reshape(previous_states, [-1]), LM_POSITIONS - 1)
         indices = tf.stack([count, tf.reshape(previous_tokens, [-1])], axis=-1)
         return tf.gather_nd(self.table, indices), tf.reshape(previous_states, [-1, 1]) + 1
 
+    def compute_output_shape(self, tokens_shape):
+        return (*tokens_shape, self.table.shape[-1])
+
     def get_config(self):
-        # `make_lm` deserializes from a keras blob, so the tests that go through it need this
+        # `build_lm` deserializes from a keras blob, so the tests that go through it need this
         return {**super().get_config(), "table": self.table.numpy().tolist()}
 
 
@@ -668,6 +688,11 @@ class _TokenizerStub:
         self.decoder_config = decoder_config
 
 
+def _lm_config(**kwargs):
+    """A `configs.LanguageModelConfig`, which now carries only the two model blobs."""
+    return LanguageModelConfig(kwargs)
+
+
 def test_beam_decoding_kwargs_from_decoder_config():
     model = build_model(4)
 
@@ -679,67 +704,179 @@ def test_beam_decoding_kwargs_from_decoder_config():
     assert model.get_beam_decoding_kwargs() == {"beam_width": 7, "score_norm": False}
 
     # the LM only joins in once one is attached
-    lm = CountingLanguageModel(log_softmax(0, (LM_POSITIONS, 4, 4)))
+    blob = keras.saving.serialize_keras_object(CountingLanguageModel(log_softmax(0, (LM_POSITIONS, 4, 4))))
     model.tokenizer = _TokenizerStub(_DecoderConfigStub(beam_width=3, norm_score=True, lm_alpha=0.4))
-    model.lm = lm
-    assert model.get_beam_decoding_kwargs() == {"beam_width": 3, "score_norm": True, "lm": lm, "lm_alpha": 0.4}
+    model.make_lm(_lm_config(external_config=blob))
+    assert model.get_beam_decoding_kwargs() == {"beam_width": 3, "score_norm": True, "lm": model.lm, "lm_alpha": 0.4}
 
 
 def test_beam_decoding_kwargs_carries_the_internal_lm_settings():
-    """A config that never asked for a correction must produce the arguments it always did."""
+    """How to score comes from `decoder_config`; which models to score with, from `lm_config`."""
     model = build_model(4)
-    lm = CountingLanguageModel(log_softmax(0, (LM_POSITIONS, 4, 4)))
-    model.lm = lm
+    blob = keras.saving.serialize_keras_object(CountingLanguageModel(log_softmax(0, (LM_POSITIONS, 4, 4))))
     common = dict(beam_width=3, norm_score=True, lm_alpha=0.4, lm_beta=0.2)
 
-    # no `type` at all, ie. every config written before internal LM subtraction existed
-    model.tokenizer = _TokenizerStub(_DecoderConfigStub(lm_config={"class_name": "X"}, **common))
-    assert model.get_beam_decoding_kwargs() == {"beam_width": 3, "score_norm": True, "lm": lm, "lm_alpha": 0.4}
+    # no `lm_type` at all, ie. every config written before internal LM subtraction existed
+    model.tokenizer = _TokenizerStub(_DecoderConfigStub(**common))
+    model.make_lm(_lm_config(external_config=blob))
+    assert model.get_beam_decoding_kwargs() == {"beam_width": 3, "score_norm": True, "lm": model.lm, "lm_alpha": 0.4}
 
-    model.tokenizer = _TokenizerStub(_DecoderConfigStub(lm_config={"type": "ilme", "class_name": "X"}, **common))
+    model.tokenizer = _TokenizerStub(_DecoderConfigStub(lm_type="ilme", **common))
+    model.make_lm(_lm_config(external_config=blob))
     assert model.get_beam_decoding_kwargs() == {
         "beam_width": 3,
         "score_norm": True,
-        "lm": lm,
+        "lm": model.lm,
         "lm_alpha": 0.4,
         "lm_type": "ilme",
         "lm_beta": 0.2,
     }
 
-    internal_lm = CountingLanguageModel(log_softmax(1, (LM_POSITIONS, 4, 4)))
-    model.internal_lm = internal_lm
-    model.tokenizer = _TokenizerStub(_DecoderConfigStub(lm_config={"type": "lodr", "class_name": "X"}, **common))
-    assert model.get_beam_decoding_kwargs()["internal_lm"] is internal_lm
+    model.tokenizer = _TokenizerStub(_DecoderConfigStub(lm_type="lodr", **common))
+    model.make_lm(_lm_config(external_config=blob, internal_config=blob))
+    assert model.get_beam_decoding_kwargs()["internal_lm"] is model.internal_lm
 
 
-def test_make_lm_reads_the_type_key():
+def test_make_lm_builds_only_what_is_configured():
+    """
+    `make_lm` builds and nothing more -- it never reads `lm_type` and never judges the result.
+    Whether the combination is coherent is `app_util.validate_lm`, tested separately below.
+    """
     model = build_model(4)
     blob = keras.saving.serialize_keras_object(CountingLanguageModel(log_softmax(0, (LM_POSITIONS, 4, 4))))
     internal_blob = keras.saving.serialize_keras_object(CountingLanguageModel(log_softmax(1, (LM_POSITIONS, 4, 4))))
+    model.tokenizer = _TokenizerStub(_DecoderConfigStub())
 
-    model.tokenizer = _TokenizerStub(_DecoderConfigStub(lm_config=dict(blob)))
-    model.make_lm()
+    model.make_lm(_lm_config(external_config=blob))
     assert isinstance(model.lm, CountingLanguageModel) and model.internal_lm is None
 
-    model.tokenizer = _TokenizerStub(_DecoderConfigStub(lm_config={"type": "lodr", "internal_lm_config": internal_blob, **blob}))
-    model.make_lm()
+    model.make_lm(_lm_config(internal_config=internal_blob))
+    assert model.lm is None and isinstance(model.internal_lm, CountingLanguageModel)
+
+    model.make_lm(_lm_config(external_config=blob, internal_config=internal_blob))
     assert isinstance(model.lm, CountingLanguageModel) and isinstance(model.internal_lm, CountingLanguageModel)
 
-    # ILME needs no external LM at all -- subtracting the internal one is the whole point
-    model.tokenizer = _TokenizerStub(_DecoderConfigStub(lm_config={"type": "ilme"}))
-    model.make_lm()
-    assert model.lm is None and model.internal_lm is None
+    # an absent block is the same as an empty one, and neither is an error
+    for empty in (_lm_config(), None):
+        model.make_lm(empty)
+        assert model.lm is None and model.internal_lm is None
+    assert model.get_beam_decoding_kwargs() == {}
 
-    # the config object itself must survive `make_lm`, which reads `type` again later
-    assert model.tokenizer.decoder_config.lm_config == {"type": "ilme"}
+    # building must not depend on `lm_type` -- even a nonsensical pairing builds fine
+    model.tokenizer = _TokenizerStub(_DecoderConfigStub(lm_type="lodr"))
+    model.make_lm(_lm_config(external_config=blob))
+    assert isinstance(model.lm, CountingLanguageModel) and model.internal_lm is None
 
-    model.tokenizer = _TokenizerStub(_DecoderConfigStub(lm_config={"type": "density_ratio", **blob}))
-    with pytest.raises(ValueError, match="lm_config.type"):
-        model.make_lm()
+    # the config dicts must survive being built from
+    assert "class_name" in blob
 
-    model.tokenizer = _TokenizerStub(_DecoderConfigStub(lm_config={"type": "lodr", **blob}))
-    with pytest.raises(ValueError, match="internal_lm_config"):
-        model.make_lm()
+
+def test_validate_lm_raises_only_when_decoding_cannot_run():
+    """LODR with no model to subtract is the one unrecoverable case."""
+    model = build_model(4)
+    blob = keras.saving.serialize_keras_object(CountingLanguageModel(log_softmax(0, (LM_POSITIONS, 4, 4))))
+    model.tokenizer = _TokenizerStub(_DecoderConfigStub())
+
+    model.make_lm(_lm_config(external_config=blob))
+    with pytest.raises(ValueError, match="lodr"):
+        app_util.validate_lm(model, _DecoderConfigStub(beam_width=4, lm_type="lodr"))
+
+    # every other combination is legal, however unwise, so it only warns
+    app_util.validate_lm(model, _DecoderConfigStub(beam_width=4, lm_type="ilme", lm_alpha=0.3, lm_beta=0.1))
+    app_util.validate_lm(model, _DecoderConfigStub(beam_width=4, lm_type="shallow", lm_alpha=0.3))
+    app_util.validate_lm(model, _DecoderConfigStub(beam_width=0))
+
+    model.make_lm(_lm_config(external_config=blob, internal_config=blob))
+    app_util.validate_lm(model, _DecoderConfigStub(beam_width=4, lm_type="lodr", lm_alpha=0.3, lm_beta=0.1))
+
+    # `DecoderConfig` still rejects an unknown type at config load, before any of this
+    with pytest.raises(ValueError, match="lm_type"):
+        DecoderConfig({"lm_type": "density_ratio"})
+
+
+@pytest.mark.parametrize(
+    "lm_type,external,internal,alpha,beta,lm_h5,expected",
+    [
+        ("shallow", True, False, 0.3, 0.0, "x.h5", None),  # the ordinary case, silent
+        ("shallow", True, False, 0.3, 0.0, None, "untrained"),
+        ("shallow", True, False, 0.0, 0.0, "x.h5", "lm_alpha is 0"),
+        ("ilme", False, False, 0.0, 0.1, None, "nothing fused in"),
+        ("ilme", True, True, 0.3, 0.1, "x.h5", "never reads it"),
+        ("ilme", True, False, 0.3, 0.0, "x.h5", "lm_beta is 0"),
+    ],
+)
+def test_validate_lm_warns_on_silent_misconfigurations(caplog, lm_type, external, internal, alpha, beta, lm_h5, expected):
+    """Each of these decodes happily and just produces a worse WER, so a warning is the only signal."""
+    model = build_model(4)
+    blob = keras.saving.serialize_keras_object(CountingLanguageModel(log_softmax(0, (LM_POSITIONS, 4, 4))))
+    model.tokenizer = _TokenizerStub(_DecoderConfigStub())
+    model.make_lm(_lm_config(external_config=blob if external else {}, internal_config=blob if internal else {}))
+
+    with caplog.at_level(logging.WARNING):
+        app_util.validate_lm(
+            model,
+            _DecoderConfigStub(beam_width=4, lm_type=lm_type, lm_alpha=alpha, lm_beta=beta),
+            lm_h5=lm_h5,
+            internal_lm_h5="y.h5",
+        )
+    warnings = " | ".join(r.message for r in caplog.records if r.levelno >= logging.WARNING)
+    if expected is None:
+        assert not warnings, f"expected no warning, got: {warnings}"
+    else:
+        assert expected in warnings, f"expected {expected!r} in: {warnings or '(none)'}"
+
+
+def test_validate_lm_says_beam_search_is_off(caplog):
+    """A configured LM with beam_width 0 is never used at all -- worth saying once, loudly."""
+    model = build_model(4)
+    blob = keras.saving.serialize_keras_object(CountingLanguageModel(log_softmax(0, (LM_POSITIONS, 4, 4))))
+    model.tokenizer = _TokenizerStub(_DecoderConfigStub())
+    model.make_lm(_lm_config(external_config=blob))
+
+    with caplog.at_level(logging.WARNING):
+        app_util.validate_lm(model, _DecoderConfigStub(beam_width=0, lm_type="shallow", lm_alpha=0.3))
+    assert any("beam search is off" in r.message for r in caplog.records)
+
+
+def test_build_lm_loads_weights_passed_alongside_the_config(tmp_path):
+    """Weights are an argument, not a config key -- the config says what the model is."""
+    trained = CountingLanguageModel(log_softmax(7, (LM_POSITIONS, 4, 4)))
+    trained.make()
+    path = str(tmp_path / "lm.weights.h5")
+    trained.save_weights(path)
+
+    blob = keras.saving.serialize_keras_object(CountingLanguageModel(np.zeros((LM_POSITIONS, 4, 4), np.float32)))
+    loaded = BaseModel.build_lm(blob, weights=path)
+    np.testing.assert_allclose(loaded.table.numpy(), trained.table.numpy())
+
+    # without a path the model keeps whatever its config gave it
+    untouched = BaseModel.build_lm(blob)
+    assert np.all(untouched.table.numpy() == 0.0)
+    assert BaseModel.build_lm({}) is None and BaseModel.build_lm(None) is None
+
+
+def test_make_lm_routes_each_weights_path_to_its_own_model(tmp_path):
+    """`test.py` passes two h5 paths; each must land on the model it belongs to."""
+    external = CountingLanguageModel(log_softmax(11, (LM_POSITIONS, 4, 4)))
+    internal = CountingLanguageModel(log_softmax(22, (LM_POSITIONS, 4, 4)))
+    external.make()
+    internal.make()
+    external_path, internal_path = str(tmp_path / "ext.weights.h5"), str(tmp_path / "int.weights.h5")
+    external.save_weights(external_path)
+    internal.save_weights(internal_path)
+
+    empty = keras.saving.serialize_keras_object(CountingLanguageModel(np.zeros((LM_POSITIONS, 4, 4), np.float32)))
+    model = build_model(4)
+    model.tokenizer = _TokenizerStub(_DecoderConfigStub(lm_type="lodr"))
+    model.make_lm(
+        _lm_config(external_config=empty, internal_config=empty),
+        lm_weights=external_path,
+        internal_lm_weights=internal_path,
+    )
+
+    np.testing.assert_allclose(model.lm.table.numpy(), external.table.numpy())
+    np.testing.assert_allclose(model.internal_lm.table.numpy(), internal.table.numpy())
+    assert not np.allclose(external.table.numpy(), internal.table.numpy()), "the two must be distinguishable"
 
 
 @pytest.mark.parametrize("attribute", ["lm", "internal_lm"])
