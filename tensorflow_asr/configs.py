@@ -41,6 +41,7 @@ class DecoderConfig:
         self.norm_score: bool = config.pop("norm_score", True)
         self.lm_config: dict = config.pop("lm_config", {})
         self.lm_alpha: float = config.pop("lm_alpha", 0.0)  # lambda of eq. (3) in https://arxiv.org/abs/2506.00185
+        self.lm_beta: float = config.pop("lm_beta", 0.0)  # lambda_I of eq. (27) in https://arxiv.org/abs/2011.01991
 
         self.model_type: str = config.pop("model_type", "unigram")
         self.vocabulary: str = config.pop("vocabulary", None)

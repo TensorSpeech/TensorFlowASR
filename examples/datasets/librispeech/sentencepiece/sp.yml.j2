@@ -13,9 +13,12 @@ decoder_config:
   bos_index: -1
   eos_token: "</s>"
   eos_index: -1
-  beam_width: 10
+  beam_width: 16
   norm_score: True
-  lm_config: null
+  lm_alpha: 0.3
+  lm_beta: 0.15
+  lm_config:
+    type: ilme
   model_type: bpe
   vocabulary: {{vocabprefix}}.model
   vocab_size: {{vocabsize}}

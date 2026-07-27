@@ -21,6 +21,7 @@ import pytest
 
 from tensorflow_asr import keras, schemas, tf
 from tensorflow_asr.models.decoders.language_model import LanguageModel
+from tensorflow_asr.models.transducer.base_transducer import _internal_lm_log_probs
 from tensorflow_asr.models.transducer.rnnt import RnnTransducer
 
 BLANK = 0
@@ -62,10 +63,26 @@ class CountingLanguageModel(LanguageModel):
         indices = tf.stack([count, tf.reshape(previous_tokens, [-1])], axis=-1)
         return tf.gather_nd(self.table, indices), tf.reshape(previous_states, [-1, 1]) + 1
 
+    def get_config(self):
+        # `make_lm` deserializes from a keras blob, so the tests that go through it need this
+        return {**super().get_config(), "table": self.table.numpy().tolist()}
+
 
 def log_softmax(seed, shape, scale=2.0):
     logits = np.random.RandomState(seed).randn(*shape).astype(np.float32) * scale
     return logits - np.log(np.exp(logits).sum(axis=-1, keepdims=True))
+
+
+def internal_log_softmax(seed, shape, scale=2.0):
+    """
+    An internal LM distribution in the form `_internal_lm_log_probs` produces: normalised over the
+    labels alone, with 0.0 in the blank column so that subtracting it never touches blank.
+    """
+    logits = np.random.RandomState(seed).randn(*shape).astype(np.float32) * scale
+    logits[..., BLANK] = -np.inf
+    out = logits - np.log(np.exp(logits).sum(axis=-1, keepdims=True))
+    out[..., BLANK] = 0.0
+    return out
 
 
 def token_budget(nframes, max_tokens_per_frame, padded_frames=None):
@@ -73,23 +90,47 @@ def token_budget(nframes, max_tokens_per_frame, padded_frames=None):
     return min(nframes * max_tokens_per_frame, 2 * (padded_frames or nframes) + 1)
 
 
-def solve_exact(logp, nframes, vocab_size, max_tokens_per_frame, score_norm, lm_logp=None, lm_alpha=0.0, padded_frames=None):
+def solve_exact(
+    logp,
+    nframes,
+    vocab_size,
+    max_tokens_per_frame,
+    score_norm,
+    lm_logp=None,
+    lm_alpha=0.0,
+    ilm_logp=None,
+    lm_beta=0.0,
+    padded_frames=None,
+):
     """
     Forward DP over `(t, u, last, expansions)` returning the best legal label sequence.
 
-    Transitions are scored with eq. (3) of https://arxiv.org/abs/2506.00185 when `lm_logp` is
-    given, and with the plain transducer log-probabilities otherwise.
+    Transitions are scored with the plain transducer log-probabilities when neither LM is given,
+    and otherwise with eq. (3) of https://arxiv.org/abs/2506.00185 plus the internal LM subtraction
+    of eq. (27) of https://arxiv.org/abs/2011.01991.
+
+    `ilm_logp` is read as `[state, last, token]` when it is 3-D -- the stateful LODR case, sharing
+    the test LM's convention that the state is the label count -- and as `[last, token]` when it is
+    2-D, the ILME case where the internal LM rides on the prediction network's own state.
     """
     max_u = token_budget(nframes, max_tokens_per_frame, padded_frames)
+    fused = lm_logp is not None or ilm_logp is not None
 
     def cost(t, u, last, token):
         # `u` doubles as the test LM's state: the number of labels emitted so far
         if token == BLANK:
-            return (1.0 + lm_alpha) * logp[t, last, BLANK] if lm_logp is not None else logp[t, last, BLANK]
-        if lm_logp is None:
+            return (1.0 + lm_alpha) * logp[t, last, BLANK] if fused else logp[t, last, BLANK]
+        if not fused:
             return logp[t, last, token]
+        # The external LM contributes 0 when absent, which is what the implementation does too:
+        # the `lm_alpha * ln(1 - p[blank])` half of eq. (3) survives on its own.
+        lm_value = 0.0 if lm_logp is None else lm_logp[min(u, LM_POSITIONS - 1), last, token]
         log_not_blank = np.log(-np.expm1(min(logp[t, last, BLANK], -1e-7)))
-        return logp[t, last, token] + lm_alpha * (log_not_blank + lm_logp[min(u, LM_POSITIONS - 1), last, token])
+        value = logp[t, last, token] + lm_alpha * (log_not_blank + lm_value)
+        if ilm_logp is not None:
+            ilm_value = ilm_logp[min(u, LM_POSITIONS - 1), last, token] if ilm_logp.ndim == 3 else ilm_logp[last, token]
+            value -= lm_beta * ilm_value
+        return value
 
     states = {(0, 0, BLANK, 0): (0.0, ())}
     terminals = []
@@ -131,8 +172,15 @@ def build_model(vocab_size):
     return model
 
 
-def stub_transducer(model, logp, lengths, vocab_size, padded_frames):
-    """Replace feature extraction, encoder and joint with a table lookup on (batch, frame, last)."""
+def stub_transducer(model, logp, lengths, vocab_size, padded_frames, ilm_logp=None):
+    """
+    Replace feature extraction, encoder and joint with a table lookup on (batch, frame, last).
+
+    `ilm_logp` is the [V, V] internal LM table the stub hands back when the beam asks for one, in
+    place of re-running the joint with a zeroed encoder output. It is indexed by the last token
+    only, since the internal LM of a transducer sees the label history and nothing else -- which is
+    exactly the property `test_internal_lm_ignores_the_encoder` checks on a real model.
+    """
     batch_size = len(lengths)
     encoded = np.zeros((batch_size, padded_frames, 4), dtype=np.float32)
     for b in range(batch_size):
@@ -145,11 +193,17 @@ def stub_transducer(model, logp, lengths, vocab_size, padded_frames):
     model.feature_extraction = lambda inputs, training=False: (encoded, encoded_length)
     model.encoder.call_next = lambda features, features_length, previous: (encoded, encoded_length, None)
 
-    def call_next(current_frames, previous_tokens, previous_decoder_states):
+    ilm_table = tf.convert_to_tensor(ilm_logp) if ilm_logp is not None else None
+
+    def call_next(current_frames, previous_tokens, previous_decoder_states, return_internal_lm=False):
         frame = tf.cast(tf.round(current_frames[:, 0, 0]), tf.int32)
         batch = tf.cast(tf.round(current_frames[:, 0, 1]), tf.int32)
         indices = tf.stack([batch, frame, tf.reshape(previous_tokens, [-1])], axis=-1)
-        return tf.reshape(tf.gather_nd(table, indices), [-1, 1, 1, vocab_size]), previous_decoder_states
+        outputs = tf.reshape(tf.gather_nd(table, indices), [-1, 1, 1, vocab_size])
+        if not return_internal_lm:
+            return outputs, previous_decoder_states
+        ilm = tf.gather(ilm_table, tf.reshape(previous_tokens, [-1]))  # [B * W, V]
+        return outputs, tf.reshape(ilm, [-1, 1, 1, vocab_size]), previous_decoder_states
 
     model.call_next = call_next
 
@@ -164,8 +218,8 @@ def make_inputs(batch_size):
     )
 
 
-def decode(model, logp, lengths, vocab_size, padded_frames, **kwargs):
-    stub_transducer(model, logp, lengths, vocab_size, padded_frames)
+def decode(model, logp, lengths, vocab_size, padded_frames, ilm_logp=None, **kwargs):
+    stub_transducer(model, logp, lengths, vocab_size, padded_frames, ilm_logp=ilm_logp)
     outputs = model.recognize_beam(inputs=make_inputs(len(lengths)), **kwargs)
     return [[int(t) for t in row if int(t) != BLANK] for row in outputs.tokens.numpy()]
 
@@ -424,6 +478,182 @@ def test_shallow_fusion_on_ragged_batch():
 
 
 # --------------------------------------------------------------------------------------------
+# internal LM subtraction: ILME (https://arxiv.org/abs/2011.01991), LODR (https://arxiv.org/abs/2203.16776)
+# --------------------------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("vocab_size", [3, 5])
+def test_internal_lm_log_probs_is_a_distribution_over_labels(vocab_size):
+    """Blank must be inert under subtraction, and the labels must normalise on their own."""
+    logits = tf.convert_to_tensor(np.random.RandomState(4).randn(2, 6, vocab_size).astype(np.float32) * 3.0)
+    out = _internal_lm_log_probs(logits, BLANK, vocab_size).numpy()
+
+    assert np.allclose(out[..., BLANK], 0.0), "blank column must be exactly 0, not a probability"
+    labels = np.delete(out, BLANK, axis=-1)
+    assert np.allclose(np.exp(labels).sum(axis=-1), 1.0, atol=1e-5), "labels must sum to one without blank"
+    # the ordering of the label logits has to survive the renormalisation untouched
+    kept = np.delete(logits.numpy(), BLANK, axis=-1)
+    assert np.array_equal(np.argsort(labels, axis=-1), np.argsort(kept, axis=-1))
+
+
+def test_internal_lm_ignores_the_encoder():
+    """
+    The defining property of the internal LM: it is a function of the label history alone.
+
+    This runs the real joint network -- no stub -- so it is what actually pins down that zeroing
+    the encoder output is what isolates the internal LM. Two very different acoustic frames must
+    give the same internal LM score for the same previous token, while the ordinary output must
+    not.
+    """
+    model = build_model(vocab_size=6)
+    previous_tokens = tf.constant([[1], [2], [3]], tf.int32)
+    states = model.predict_net.get_initial_state(batch_size=3)
+    frames_a = tf.random.stateless_normal([3, 1, 8], seed=[1, 2])
+    frames_b = tf.random.stateless_normal([3, 1, 8], seed=[3, 4]) * 5.0
+
+    outputs_a, ilm_a, _ = model.call_next(frames_a, previous_tokens, states, return_internal_lm=True)
+    outputs_b, ilm_b, _ = model.call_next(frames_b, previous_tokens, states, return_internal_lm=True)
+
+    np.testing.assert_allclose(ilm_a.numpy(), ilm_b.numpy(), rtol=1e-5, atol=1e-6)
+    assert not np.allclose(outputs_a.numpy(), outputs_b.numpy()), "the acoustic path is not reaching the output at all"
+    assert np.allclose(ilm_a.numpy()[..., BLANK], 0.0)
+
+
+@pytest.mark.parametrize("lm_beta", [0.0, 0.4, 1.0])
+@pytest.mark.parametrize("with_external_lm", [False, True])
+def test_ilme_matches_exact_dp(lm_beta, with_external_lm):
+    nframes, vocab_size, max_tokens_per_frame, beam_width = 3, 3, 7, 256
+    lm_alpha = 0.6 if with_external_lm else 0.0
+    model = build_model(vocab_size)
+    for seed in range(4):
+        logp = log_softmax(seed + 1201, (nframes, vocab_size, vocab_size))
+        ilm_logp = internal_log_softmax(seed + 1301, (vocab_size, vocab_size))
+        lm_logp = log_softmax(seed + 1401, (LM_POSITIONS, vocab_size, vocab_size)) if with_external_lm else None
+        expected = solve_exact(
+            logp,
+            nframes,
+            vocab_size,
+            max_tokens_per_frame,
+            score_norm=False,
+            lm_logp=lm_logp,
+            lm_alpha=lm_alpha,
+            ilm_logp=ilm_logp,
+            lm_beta=lm_beta,
+        )
+        actual = decode(
+            model,
+            logp[None],
+            [nframes],
+            vocab_size,
+            nframes,
+            ilm_logp=ilm_logp,
+            beam_width=beam_width,
+            max_tokens_per_frame=max_tokens_per_frame,
+            score_norm=False,
+            lm=CountingLanguageModel(lm_logp) if with_external_lm else None,
+            lm_alpha=lm_alpha,
+            lm_type="ilme",
+            lm_beta=lm_beta,
+        )[0]
+        assert actual == expected, f"seed {seed}: got {actual}, DP optimum is {expected}"
+
+
+@pytest.mark.parametrize("lm_beta", [0.0, 0.5])
+@pytest.mark.parametrize("score_norm", [False, True])
+def test_lodr_matches_exact_dp(lm_beta, score_norm):
+    """The low-order LM has its own state, so this also checks it is re-ordered onto the parents."""
+    nframes, vocab_size, max_tokens_per_frame, beam_width = 3, 3, 7, 256
+    model = build_model(vocab_size)
+    for seed in range(4):
+        logp = log_softmax(seed + 2201, (nframes, vocab_size, vocab_size))
+        lm_logp = log_softmax(seed + 2301, (LM_POSITIONS, vocab_size, vocab_size))
+        ilm_logp = internal_log_softmax(seed + 2401, (LM_POSITIONS, vocab_size, vocab_size))
+        expected = solve_exact(
+            logp,
+            nframes,
+            vocab_size,
+            max_tokens_per_frame,
+            score_norm,
+            lm_logp=lm_logp,
+            lm_alpha=0.6,
+            ilm_logp=ilm_logp,
+            lm_beta=lm_beta,
+        )
+        actual = decode(
+            model,
+            logp[None],
+            [nframes],
+            vocab_size,
+            nframes,
+            beam_width=beam_width,
+            max_tokens_per_frame=max_tokens_per_frame,
+            score_norm=score_norm,
+            lm=CountingLanguageModel(lm_logp),
+            lm_alpha=0.6,
+            lm_type="lodr",
+            internal_lm=CountingLanguageModel(ilm_logp),
+            lm_beta=lm_beta,
+        )[0]
+        assert actual == expected, f"seed {seed}: got {actual}, DP optimum is {expected}"
+
+
+@pytest.mark.parametrize("lm_type", ["ilme", "lodr"])
+def test_zero_beta_is_a_no_op(lm_type):
+    """Subtracting the internal LM at beta=0 must decode identically to plain shallow fusion."""
+    nframes, vocab_size = 4, 4
+    model = build_model(vocab_size)
+    for seed in range(4):
+        logp = log_softmax(seed + 3131, (nframes, vocab_size, vocab_size))
+        lm_logp = log_softmax(seed + 3232, (LM_POSITIONS, vocab_size, vocab_size))
+        common = dict(beam_width=16, max_tokens_per_frame=2, lm_alpha=0.5)
+        shallow = decode(model, logp[None], [nframes], vocab_size, nframes, lm=CountingLanguageModel(lm_logp), **common)[0]
+        extra = dict(internal_lm=CountingLanguageModel(internal_log_softmax(seed + 3333, (LM_POSITIONS, vocab_size, vocab_size))))
+        if lm_type == "ilme":
+            extra = dict(ilm_logp=internal_log_softmax(seed + 3333, (vocab_size, vocab_size)))
+        corrected = decode(
+            model,
+            logp[None],
+            [nframes],
+            vocab_size,
+            nframes,
+            lm=CountingLanguageModel(lm_logp),
+            lm_type=lm_type,
+            lm_beta=0.0,
+            **extra,
+            **common,
+        )[0]
+        assert shallow == corrected, f"seed {seed}: beta=0 changed the hypothesis"
+
+
+@pytest.mark.parametrize("lm_type", ["ilme", "lodr"])
+def test_internal_lm_subtraction_changes_the_hypothesis(lm_type):
+    """Guards against the subtraction silently not reaching the scores at all."""
+    nframes, vocab_size = 4, 4
+    model = build_model(vocab_size)
+    changed = 0
+    for seed in range(8):
+        logp = log_softmax(seed + 4141, (nframes, vocab_size, vocab_size))
+        lm_logp = log_softmax(seed + 4242, (LM_POSITIONS, vocab_size, vocab_size))
+        common = dict(beam_width=16, max_tokens_per_frame=2, lm_alpha=0.5, lm=CountingLanguageModel(lm_logp))
+        baseline = decode(model, logp[None], [nframes], vocab_size, nframes, **common)[0]
+        extra = dict(internal_lm=CountingLanguageModel(internal_log_softmax(seed + 4343, (LM_POSITIONS, vocab_size, vocab_size), scale=4.0)))
+        if lm_type == "ilme":
+            extra = dict(ilm_logp=internal_log_softmax(seed + 4343, (vocab_size, vocab_size), scale=4.0))
+        corrected = decode(model, logp[None], [nframes], vocab_size, nframes, lm_type=lm_type, lm_beta=1.5, **extra, **common)[0]
+        changed += baseline != corrected
+    assert changed > 0, f"{lm_type} never altered the output"
+
+
+def test_rejects_bad_lm_type_and_missing_internal_lm():
+    model = build_model(3)
+    stub_transducer(model, log_softmax(0, (1, 2, 3, 3)), [2], 3, 2)
+    with pytest.raises(ValueError, match="lm_type"):
+        model.recognize_beam(inputs=make_inputs(1), beam_width=4, lm_type="density_ratio")
+    with pytest.raises(ValueError, match="internal_lm"):
+        model.recognize_beam(inputs=make_inputs(1), beam_width=4, lm_type="lodr")
+
+
+# --------------------------------------------------------------------------------------------
 # config plumbing
 # --------------------------------------------------------------------------------------------
 
@@ -455,9 +685,67 @@ def test_beam_decoding_kwargs_from_decoder_config():
     assert model.get_beam_decoding_kwargs() == {"beam_width": 3, "score_norm": True, "lm": lm, "lm_alpha": 0.4}
 
 
-def test_language_model_is_not_tracked_as_a_keras_weight():
+def test_beam_decoding_kwargs_carries_the_internal_lm_settings():
+    """A config that never asked for a correction must produce the arguments it always did."""
+    model = build_model(4)
+    lm = CountingLanguageModel(log_softmax(0, (LM_POSITIONS, 4, 4)))
+    model.lm = lm
+    common = dict(beam_width=3, norm_score=True, lm_alpha=0.4, lm_beta=0.2)
+
+    # no `type` at all, ie. every config written before internal LM subtraction existed
+    model.tokenizer = _TokenizerStub(_DecoderConfigStub(lm_config={"class_name": "X"}, **common))
+    assert model.get_beam_decoding_kwargs() == {"beam_width": 3, "score_norm": True, "lm": lm, "lm_alpha": 0.4}
+
+    model.tokenizer = _TokenizerStub(_DecoderConfigStub(lm_config={"type": "ilme", "class_name": "X"}, **common))
+    assert model.get_beam_decoding_kwargs() == {
+        "beam_width": 3,
+        "score_norm": True,
+        "lm": lm,
+        "lm_alpha": 0.4,
+        "lm_type": "ilme",
+        "lm_beta": 0.2,
+    }
+
+    internal_lm = CountingLanguageModel(log_softmax(1, (LM_POSITIONS, 4, 4)))
+    model.internal_lm = internal_lm
+    model.tokenizer = _TokenizerStub(_DecoderConfigStub(lm_config={"type": "lodr", "class_name": "X"}, **common))
+    assert model.get_beam_decoding_kwargs()["internal_lm"] is internal_lm
+
+
+def test_make_lm_reads_the_type_key():
+    model = build_model(4)
+    blob = keras.saving.serialize_keras_object(CountingLanguageModel(log_softmax(0, (LM_POSITIONS, 4, 4))))
+    internal_blob = keras.saving.serialize_keras_object(CountingLanguageModel(log_softmax(1, (LM_POSITIONS, 4, 4))))
+
+    model.tokenizer = _TokenizerStub(_DecoderConfigStub(lm_config=dict(blob)))
+    model.make_lm()
+    assert isinstance(model.lm, CountingLanguageModel) and model.internal_lm is None
+
+    model.tokenizer = _TokenizerStub(_DecoderConfigStub(lm_config={"type": "lodr", "internal_lm_config": internal_blob, **blob}))
+    model.make_lm()
+    assert isinstance(model.lm, CountingLanguageModel) and isinstance(model.internal_lm, CountingLanguageModel)
+
+    # ILME needs no external LM at all -- subtracting the internal one is the whole point
+    model.tokenizer = _TokenizerStub(_DecoderConfigStub(lm_config={"type": "ilme"}))
+    model.make_lm()
+    assert model.lm is None and model.internal_lm is None
+
+    # the config object itself must survive `make_lm`, which reads `type` again later
+    assert model.tokenizer.decoder_config.lm_config == {"type": "ilme"}
+
+    model.tokenizer = _TokenizerStub(_DecoderConfigStub(lm_config={"type": "density_ratio", **blob}))
+    with pytest.raises(ValueError, match="lm_config.type"):
+        model.make_lm()
+
+    model.tokenizer = _TokenizerStub(_DecoderConfigStub(lm_config={"type": "lodr", **blob}))
+    with pytest.raises(ValueError, match="internal_lm_config"):
+        model.make_lm()
+
+
+@pytest.mark.parametrize("attribute", ["lm", "internal_lm"])
+def test_language_model_is_not_tracked_as_a_keras_weight(attribute):
     """A fused LM must not leak its weights into the ASR model's checkpoint."""
     model = build_model(4)
     before = len(model.weights)
-    model.lm = CountingLanguageModel(log_softmax(0, (LM_POSITIONS, 4, 4)))
+    setattr(model, attribute, CountingLanguageModel(log_softmax(0, (LM_POSITIONS, 4, 4))))
     assert len(model.weights) == before

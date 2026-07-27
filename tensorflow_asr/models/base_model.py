@@ -47,37 +47,66 @@ class BaseModel(keras.Model, TensorFlowTrainer):
 
     @property
     def lm(self):
-        """External language model used for shallow fusion during beam search, `None` if unused"""
+        """External language model fused into beam search, `None` if unused"""
         return getattr(self, "_lm", None)
 
+    @property
+    def internal_lm(self):
+        """Low-order language model subtracted by LODR during beam search, `None` if unused"""
+        return getattr(self, "_internal_lm", None)
+
     def _setattr_hook(self, name, value):
-        # Keep the shallow fusion LM out of keras attribute tracking. It is a frozen, externally
-        # trained model: letting keras adopt it as a sub-layer would pull its weights into this
-        # model's checkpoint, and assigning it after `make()` would raise outright because a built
-        # layer refuses new state. `Layer.__setattr__` calls this hook before it tracks anything,
-        # so stashing the LM here is the only point at which it can be hidden.
-        if name == "lm":
-            object.__setattr__(self, "_lm", value)
-            name, value = "_lm_attached", value is not None
+        # Keep the beam search language models out of keras attribute tracking. They are frozen,
+        # externally trained models: letting keras adopt one as a sub-layer would pull its weights
+        # into this model's checkpoint, and assigning it after `make()` would raise outright because
+        # a built layer refuses new state. `Layer.__setattr__` calls this hook before it tracks
+        # anything, so stashing them here is the only point at which they can be hidden.
+        if name in ("lm", "internal_lm"):
+            object.__setattr__(self, f"_{name}", value)
+            name, value = f"_{name}_attached", value is not None
         return super()._setattr_hook(name, value)
 
     def make_lm(self, custom_objects=None):
         """
-        Build the shallow fusion language model from `decoder_config.lm_config`, if one is set.
+        Build the beam search language models from `decoder_config.lm_config`, if one is set.
 
-        The config is a standard keras serialization blob (`class_name` + `config`), so the class
+        `lm_config` is a standard keras serialization blob (`class_name` + `config`), so the class
         only has to be registered with `@keras.utils.register_keras_serializable`. No language
         model ships with TensorFlowASR -- see
         `tensorflow_asr.models.decoders.language_model.LanguageModel` for the interface to
         implement.
+
+        Two extra keys sit alongside the keras ones and are removed before deserialization:
+
+        - `type`: "shallow" (default), "ilme" or "lodr", see `recognize_beam`. Configs written
+          before these existed have no `type` and keep behaving exactly as they did.
+        - `internal_lm_config`: a second keras blob, the low-order LM that "lodr" subtracts.
+
+        `class_name` may be left out entirely, which builds no external LM. That is only useful
+        with "ilme", where subtracting the internal LM is the whole point and there is nothing to
+        fuse in.
         """
         lm_config = getattr(getattr(self, "tokenizer", None), "decoder_config", None)
         lm_config = getattr(lm_config, "lm_config", None)
         if not lm_config:
             self.lm = None
+            self.internal_lm = None
             return None
-        self.lm = keras_util.model_from_config(lm_config, custom_objects=custom_objects)
-        logger.info(f"Loaded shallow fusion language model: {self.lm}")
+
+        lm_config = dict(lm_config)  # a copy, so the config object keeps its keys for later reads
+        lm_type = str(lm_config.pop("type", "shallow")).lower()
+        if lm_type not in ("shallow", "ilme", "lodr"):
+            raise ValueError(f'lm_config.type must be one of "shallow", "ilme", "lodr", got "{lm_type}"')
+        internal_lm_config = lm_config.pop("internal_lm_config", None)
+
+        self.lm = keras_util.model_from_config(lm_config, custom_objects=custom_objects) if lm_config.get("class_name") else None
+        if lm_type == "lodr":
+            if not internal_lm_config:
+                raise ValueError('lm_config.type "lodr" needs an `internal_lm_config` -- the low-order LM to subtract')
+            self.internal_lm = keras_util.model_from_config(internal_lm_config, custom_objects=custom_objects)
+        else:
+            self.internal_lm = None
+        logger.info(f"Loaded language models for beam search (type={lm_type}): lm={self.lm}, internal_lm={self.internal_lm}")
         return self.lm
 
     def get_beam_decoding_kwargs(self) -> dict:
@@ -95,6 +124,13 @@ class BaseModel(keras.Model, TensorFlowTrainer):
         kwargs = {"beam_width": beam_width, "score_norm": bool(getattr(decoder_config, "norm_score", True))}
         if self.lm is not None:
             kwargs.update(lm=self.lm, lm_alpha=float(getattr(decoder_config, "lm_alpha", 0.0)))
+        # Only sent when asked for, so a plain shallow fusion setup keeps calling `recognize_beam`
+        # with exactly the arguments it used before internal LM subtraction existed.
+        lm_type = str((getattr(decoder_config, "lm_config", None) or {}).get("type", "shallow")).lower()
+        if lm_type != "shallow":
+            kwargs.update(lm_type=lm_type, lm_beta=float(getattr(decoder_config, "lm_beta", 0.0)))
+            if lm_type == "lodr":
+                kwargs.update(internal_lm=self.internal_lm)
         return kwargs
 
     def summary(self, line_length=100, expand_nested=True, show_trainable=True, **kwargs):

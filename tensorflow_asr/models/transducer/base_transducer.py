@@ -64,26 +64,83 @@ def _pick_beam_states(states: tf.Tensor, indices: tf.Tensor, batch_size, beam: i
     return tf.gather_nd(tf.reshape(states, [batch_size, beam, *trailing]), indices)
 
 
-def _shallow_fusion(log_probs: tf.Tensor, lm_log_probs: tf.Tensor, lm_alpha: float, blank: int, vocab_size):
+def _internal_lm_log_probs(logits: tf.Tensor, blank: int, vocab_size):
     """
-    Fuse an external LM into the transducer log-probabilities, eq. (3) of the ALSD++ paper
-    (https://arxiv.org/abs/2506.00185):
+    Turn joint-network logits into internal language model log-probabilities.
 
-        ln p_tot[k] = ln p[k] + a * (ln (1 - p[blank]) + ln p_lm[k])    for k != blank
+    The caller produces `logits` by running the joint with the encoder output zeroed, so what is
+    left is the label-history path alone -- `z_ILM = J(g_u) = W_j phi(W_p h_pred + b_p) + b_j`, eq.
+    (25) of the ILME paper (https://arxiv.org/abs/2011.01991). Two steps remain:
+
+    1. Drop the blank logit. A language model has no blank symbol, and leaving it in the
+       normalisation would make every label probability depend on a token the LM cannot emit.
+       Masking it to a large negative number before the softmax is equivalent to normalising over
+       the labels alone, and keeps the shape static for XLA / TFLite.
+    2. Give the blank column the value 0.0 on the way out. The fusion below subtracts this tensor,
+       and blank must not be touched by the subtraction -- so 0.0 is the identity, not a
+       probability.
+
+    `logits` is [..., V], the result has the same shape.
+    """
+    is_blank = tf.equal(tf.range(vocab_size, dtype=tf.int32), blank)  # [V]
+    # `dtype.min` rather than a literal: this runs at the model's compute dtype, and a hardcoded
+    # -1e9 silently overflows to -inf under mixed_float16.
+    masked = tf.where(is_blank, tf.constant(logits.dtype.min, dtype=logits.dtype), logits)
+    return tf.where(is_blank, tf.zeros_like(logits), tf.nn.log_softmax(masked))
+
+
+def _fuse_lm(
+    log_probs: tf.Tensor,
+    lm_log_probs: tf.Tensor,
+    ilm_log_probs: tf.Tensor,
+    lm_alpha: float,
+    lm_beta: float,
+    blank: int,
+    vocab_size,
+):
+    """
+    Fuse an external LM into the transducer log-probabilities and optionally subtract an estimate
+    of the transducer's own internal LM:
+
+        ln p_tot[k] = ln p[k] + a * (ln (1 - p[blank]) + ln p_lm[k]) - b * ln p_ilm[k]  for k != blank
         ln p_tot[blank] = (1 + a) * ln p[blank]
 
-    Scaling blank by (1 + a) rather than leaving it alone is the point of the formulation: boosting
-    only the label scores would make blank comparatively cheaper at every frame and drive the
-    deletion rate up. `a = 0` reduces the whole thing to the plain transducer log-probabilities.
+    The `a` term is eq. (3) of the ALSD++ paper (https://arxiv.org/abs/2506.00185). Scaling blank by
+    (1 + a) rather than leaving it alone is the point of that formulation: boosting only the label
+    scores would make blank comparatively cheaper at every frame and drive the deletion rate up.
 
-    `log_probs` and `lm_log_probs` are [B, W, V]; the LM's blank column is never read.
+    The `b` term is the internal LM correction of eq. (27) of the ILME paper
+    (https://arxiv.org/abs/2011.01991). A transducer trained on paired speech and text learns a
+    language model of the training transcripts whether or not anyone asked for one, and that
+    implicit model fights the external LM on any domain it was not trained on. Subtracting it lets
+    the external LM speak for itself. Where `ln p_ilm` comes from is the caller's choice:
+
+    - ILME reads it off the transducer itself, by running the joint with the encoder output zeroed.
+      Exact, and free of extra parameters, but it costs a second joint call per step.
+    - LODR (https://arxiv.org/abs/2203.16776) replaces it with a cheap low-order n-gram LM trained
+      on the same transcripts. Only an approximation of the internal LM, but a bigram costs a table
+      lookup instead of a joint call, and the paper reports it matching ILME in practice.
+
+    Both weights default to a no-op: `a = 0` leaves the transducer log-probabilities alone, and
+    `b = 0` subtracts nothing.
+
+    `log_probs`, `lm_log_probs` and `ilm_log_probs` are [B, W, V]. Either LM tensor may be `None`,
+    meaning that half of the formula is dropped rather than multiplied by zero -- so a setup that
+    only shallow fuses builds exactly the graph it built before internal LM subtraction existed.
+    The external LM's blank column is never read; the internal LM's blank column is 0.0 by
+    construction, see `_internal_lm_log_probs`.
     """
     blank_log_prob = log_probs[..., blank : blank + 1]  # [B, W, 1]
-    # ln(1 - p[blank]) as ln(-expm1(x)), the stable form of log1mexp for x < 0. The clamp keeps the
-    # argument strictly negative so a saturated p[blank] = 1 cannot produce ln(0) = -inf.
-    log_not_blank = tf.math.log(-tf.math.expm1(tf.minimum(blank_log_prob, -1e-7)))
-    fused_labels = log_probs + lm_alpha * (log_not_blank + lm_log_probs)
-    fused_blank = (1.0 + lm_alpha) * blank_log_prob
+    fused_labels = log_probs
+    fused_blank = blank_log_prob
+    if lm_log_probs is not None:
+        # ln(1 - p[blank]) as ln(-expm1(x)), the stable form of log1mexp for x < 0. The clamp keeps
+        # the argument strictly negative so a saturated p[blank] = 1 cannot produce ln(0) = -inf.
+        log_not_blank = tf.math.log(-tf.math.expm1(tf.minimum(blank_log_prob, -1e-7)))
+        fused_labels = fused_labels + lm_alpha * (log_not_blank + lm_log_probs)
+        fused_blank = (1.0 + lm_alpha) * blank_log_prob
+    if ilm_log_probs is not None:
+        fused_labels = fused_labels - lm_beta * ilm_log_probs
     is_blank = tf.equal(tf.range(vocab_size, dtype=tf.int32), blank)  # [V]
     return tf.where(is_blank, tf.broadcast_to(fused_blank, tf.shape(log_probs)), fused_labels)
 
@@ -493,6 +550,7 @@ class Transducer(BaseModel):
         current_frames: tf.Tensor,
         previous_tokens: tf.Tensor,
         previous_decoder_states: tf.Tensor,
+        return_internal_lm: bool = False,
     ):
         """
         Decode current frame given previous predicted token and states
@@ -505,17 +563,33 @@ class Transducer(BaseModel):
             Predicted token of the previous frame
         previous_decoder_states : tf.Tensor, shape [B, num_rnns, nstates, state_size]
             States got from previous frame
+        return_internal_lm : bool
+            Also return the internal LM log-probabilities, for the ILME correction of
+            https://arxiv.org/abs/2011.01991. This is a python flag read at trace time, so it costs
+            nothing when off.
 
         Returns
         -------
         Tuple[tf.Tensor, tf.Tensor], shapes ([B, 1, 1, V], [B, num_rnns, nstates, state_size])
-            Output of joint network of the current frame, new states of prediction network
+            Output of joint network of the current frame, new states of prediction network.
+            With `return_internal_lm`, the internal LM log-probabilities [B, 1, 1, V] are inserted
+            in the middle, making it a 3-tuple.
         """
         with tf.name_scope(f"{self.name}_call_next"):
             y, new_states = self.predict_net.call_next(previous_tokens, previous_decoder_states)
             ytu = self.joint_net([current_frames, y], training=False)
             ytu = tf.nn.log_softmax(ytu)
-            return ytu, new_states
+            if not return_internal_lm:
+                return ytu, new_states
+            # Zeroing the encoder output is what isolates the internal LM: the joint is
+            # `ffn_out(act(merge(ffn_enc(enc), ffn_pred(pred))))`, so with `enc = 0` and the default
+            # additive merge only `ffn_enc`'s bias survives from the acoustic side, leaving exactly
+            # the `W_j phi(W_p h_pred + b_p) + b_j` of eq. (25) in the ILME paper. Reusing `y` is the
+            # reason this lives here rather than in a method of its own -- the prediction network is
+            # the expensive part of a decoding step and it must not be run twice.
+            ilm = self.joint_net([tf.zeros_like(current_frames), y], training=False)
+            vocab_size = shape_util.shape_list(ilm)[-1]
+            return ytu, _internal_lm_log_probs(ilm, self.blank, vocab_size), new_states
 
     def get_initial_encoder_states(self, batch_size=1):
         return []
@@ -900,6 +974,9 @@ class Transducer(BaseModel):
         score_norm: bool = True,
         lm=None,
         lm_alpha: float = 0.0,
+        lm_type: str = "shallow",
+        internal_lm=None,
+        lm_beta: float = 0.0,
         **kwargs,
     ):
         """
@@ -912,6 +989,10 @@ class Transducer(BaseModel):
                 G. Saon et al., ICASSP 2020
             [3] "Sequence Transduction with Recurrent Neural Networks" (the original transducer
                 beam search), A. Graves, 2012, https://arxiv.org/abs/1211.3711
+            [4] "Internal Language Model Estimation for Domain-Adaptive End-to-End Speech
+                Recognition" (ILME), Z. Meng et al., SLT 2021, https://arxiv.org/abs/2011.01991
+            [5] "Low-order Density Ratio: ... " (LODR), Z. Yao et al., 2022,
+                https://arxiv.org/abs/2203.16776
 
         Every iteration advances *each* hypothesis by exactly one step in the transducer lattice,
         either along the time axis (blank) or along the label axis (non-blank). All hypotheses in a
@@ -947,6 +1028,23 @@ class Transducer(BaseModel):
         lm_alpha : float
             `lambda` of eq. (3) in [1], the shallow fusion weight. `0.0` makes fusion a no-op
             mathematically, but the LM is still evaluated -- pass `lm=None` to skip the work.
+        lm_type : str
+            How to correct for the transducer's own internal language model, see `_fuse_lm`:
+
+            - "shallow": no correction, external LM only. The default.
+            - "ilme":    subtract the exact internal LM read off the transducer, by running the
+                         joint a second time with the encoder output zeroed [4].
+            - "lodr":    subtract `internal_lm`, a cheap low-order n-gram standing in for the
+                         internal LM [5].
+        internal_lm : Optional[LanguageModel]
+            The low-order LM of "lodr", same interface as `lm`. Ignored by the other types.
+        lm_beta : float
+            The internal LM weight, `lambda_I` of eq. (27) in [4]. Ignored when `lm_type` is
+            "shallow". Both papers tune it below the external weight: [4] lands on
+            `lambda_I / lambda_T` between 0.375 and 0.77 across its RNN-T setups, [5] on roughly
+            0.2. Neither paper analyses the failure mode, but it follows from `_fuse_lm`:
+            `ln p_ilm` is negative, so subtracting it *raises* label scores while blank is left
+            alone, and oversubtracting therefore drives over-emission.
 
         Returns
         -------
@@ -954,6 +1052,10 @@ class Transducer(BaseModel):
             Same contract as `recognize`, the values are taken from the best scoring hypothesis.
         """
         with tf.name_scope(f"{self.name}_recognize_beam"):
+            if lm_type not in ("shallow", "ilme", "lodr"):
+                raise ValueError(f'lm_type must be one of "shallow", "ilme", "lodr", got "{lm_type}"')
+            if lm_type == "lodr" and internal_lm is None:
+                raise ValueError('lm_type "lodr" needs an `internal_lm` to subtract, got None')
             # Stand-in for -inf: kept finite so that masked entries can be added to without
             # producing NaNs, and small enough that they can never win a top_k.
             neg_inf = tf.constant(-1e9, dtype=tf.float32)
@@ -993,6 +1095,10 @@ class Transducer(BaseModel):
             # Shallow fusion state, threaded through the beam exactly like the prediction network
             # state. With no LM, a scalar placeholder keeps the loop signature uniform.
             lm_states = _tile_to_beam(lm.get_initial_state(batch_size) if lm is not None else tf.zeros([batch_size, 1]), beam)
+            # Same for the LODR low-order LM. "ilme" needs no state of its own: it reads the
+            # internal LM off the prediction network, whose state is already carried in `states`.
+            _has_lodr = lm_type == "lodr"
+            ilm_states = _tile_to_beam(internal_lm.get_initial_state(batch_size) if _has_lodr else tf.zeros([batch_size, 1]), beam)
             frame_indices = tf.zeros([batch_size, beam], dtype=tf.int32)  # t of each hypothesis
             num_expansions = tf.zeros([batch_size, beam], dtype=tf.int32)  # labels emitted on the current frame
             tokens = tf.ones([batch_size, beam, max_tokens], dtype=tf.int32) * self.blank
@@ -1038,6 +1144,7 @@ class Transducer(BaseModel):
                 _final_last_tokens,
                 _final_states,
                 _lm_states,
+                _ilm_states,
             ):
                 # ALSD++ terminates on frames consumed, not on a fixed alignment length [1]
                 return tf.logical_not(tf.math.reduce_all(tf.greater_equal(_frame_indices, nframes)))
@@ -1056,23 +1163,45 @@ class Transducer(BaseModel):
                 _final_last_tokens,
                 _final_states,
                 _lm_states,
+                _ilm_states,
             ):
                 ##################### joint network, one call for the whole B * W beam
                 _current_frames = tf.gather(encoded, tf.minimum(_frame_indices, last_frame), batch_dims=1)  # [B, W, E]
                 _current_frames = tf.reshape(_current_frames, [batch_beam, 1, -1])  # [B * W, 1, E]
-                _log_probs, _new_states = self.call_next(_current_frames, tf.reshape(_last_tokens, [batch_beam, 1]), _states)
+                _previous = tf.reshape(_last_tokens, [batch_beam, 1])  # [B * W, 1]
+                if lm_type == "ilme":
+                    _log_probs, _ilm_log_probs, _new_states = self.call_next(_current_frames, _previous, _states, return_internal_lm=True)
+                    _ilm_log_probs = tf.reshape(tf.cast(_ilm_log_probs, tf.float32), [batch_size, beam, -1])  # [B, W, V]
+                else:
+                    _log_probs, _new_states = self.call_next(_current_frames, _previous, _states)
+                    _ilm_log_probs = None
                 _log_probs = tf.reshape(tf.cast(_log_probs, tf.float32), [batch_size, beam, -1])  # [B, W, V]
                 _vocab_size = shape_util.shape_list(_log_probs)[-1]
 
-                ##################### shallow fusion
-                # `lm` is a python object known at trace time, so an absent LM costs nothing at all
-                # rather than a masked-out branch inside the graph.
+                ##################### language model fusion
+                # `lm`, `lm_type` and `internal_lm` are python objects known at trace time, so every
+                # branch here is resolved while tracing: an absent LM costs nothing at all rather
+                # than a masked-out branch inside the graph.
                 if lm is None:
                     _lm_updated = _lm_states
+                    _lm_log_probs = None
                 else:
-                    _lm_log_probs, _lm_updated = lm.score(tf.reshape(_last_tokens, [batch_beam, 1]), _lm_states)
+                    _lm_log_probs, _lm_updated = lm.score(_previous, _lm_states)
                     _lm_log_probs = tf.reshape(tf.cast(_lm_log_probs, tf.float32), [batch_size, beam, -1])  # [B, W, V]
-                    _log_probs = _shallow_fusion(_log_probs, _lm_log_probs, lm_alpha, self.blank, _vocab_size)
+                if _has_lodr:
+                    _ilm_log_probs, _ilm_updated = internal_lm.score(_previous, _ilm_states)
+                    _ilm_log_probs = tf.reshape(tf.cast(_ilm_log_probs, tf.float32), [batch_size, beam, -1])  # [B, W, V]
+                    # The low-order LM is a plain LM, so it has no blank column to speak of. Zeroing
+                    # it makes the subtraction a no-op at blank, matching `_internal_lm_log_probs`.
+                    _ilm_log_probs = tf.where(
+                        tf.equal(tf.range(_vocab_size, dtype=tf.int32), self.blank),
+                        tf.zeros_like(_ilm_log_probs),
+                        _ilm_log_probs,
+                    )
+                else:
+                    _ilm_updated = _ilm_states
+                if _lm_log_probs is not None or _ilm_log_probs is not None:
+                    _log_probs = _fuse_lm(_log_probs, _lm_log_probs, _ilm_log_probs, lm_alpha, lm_beta, self.blank, _vocab_size)
 
                 ##################### forced blanks
                 # `_blocked` leaves the blank log-probability untouched and takes every label out
@@ -1143,9 +1272,10 @@ class Transducer(BaseModel):
                 _num_expansions = tf.gather(_num_expansions, _parents, batch_dims=1)
                 _hashes = tf.gather(_hashes, _parents, batch_dims=1)
                 _last_tokens = tf.gather(_last_tokens, _parents, batch_dims=1)
-                # Blank advances neither the prediction network nor the LM, so it keeps both parent states
+                # Blank advances neither the prediction network nor the LMs, so it keeps the parent states
                 _states = _select_beam_states(_states, _new_states, _parents, _is_blank, batch_size, beam)
                 _lm_states = _select_beam_states(_lm_states, _lm_updated, _parents, _is_blank, batch_size, beam)
+                _ilm_states = _select_beam_states(_ilm_states, _ilm_updated, _parents, _is_blank, batch_size, beam)
 
                 ##################### append the emitted label
                 _write_indices = tf.stack([grid_batch, grid_beam, tf.minimum(_tokens_length, max_tokens - 1)], axis=-1)  # [B, W, 3]
@@ -1181,6 +1311,7 @@ class Transducer(BaseModel):
                     _final_last_tokens,
                     _final_states,
                     _lm_states,
+                    _ilm_states,
                 )
 
             (
@@ -1197,6 +1328,7 @@ class Transducer(BaseModel):
                 final_last_tokens,
                 final_states,
                 lm_states,
+                ilm_states,
             ) = tf.while_loop(
                 cond,
                 body,
@@ -1214,6 +1346,7 @@ class Transducer(BaseModel):
                     final_last_tokens,
                     final_states,
                     lm_states,
+                    ilm_states,
                 ),
                 # Each hypothesis emits at most `s` labels before being forced to consume a frame,
                 # so T * (s + 1) steps are enough to drain every frame -- the static bound of [1]
