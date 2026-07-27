@@ -26,7 +26,11 @@ import numpy as np
 import tensorflow as tf
 from cached_property import cached_property
 
-inf = tf.constant(np.inf)
+# A numpy scalar rather than `tf.constant`: building a tensor at import time initialises
+# TensorFlow's eager context, which permanently fixes the visible device list before any caller can
+# choose a device. See the same note in `tensorflow_asr/features/gammatone.py`. The rest of this
+# file already compares against plain `-np.inf`, so this is the existing convention.
+inf = np.float32(np.inf)
 
 
 def logit_to_logproba(logit: tf.Tensor, axis: int) -> tf.Tensor:

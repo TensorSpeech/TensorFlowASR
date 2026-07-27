@@ -34,12 +34,32 @@ def main(
     mxp: str = "none",
     bs: int = 1,
     jit_compile: bool = False,
+    device_type: str = "cpu",
+    devices: list = None,
+    tpu_address: str = None,
+    tpu_vm: bool = False,
     repodir: str = os.getcwd(),
 ):
+    """
+    Evaluate a checkpoint over the test datasets.
 
+    Parameters
+    ----------
+    device_type : str
+        "cpu" (default), "gpu" or "tpu". Decoding defaults to the CPU on purpose: the greedy and
+        beam loops are hundreds of tiny sequential steps, so an accelerator spends more time moving
+        each step on and off the device than the arithmetic saves. On Apple silicon with the
+        `apple` extra installed, a measured decode was ~230x slower on the GPU than the CPU, and
+        `jit_compile=True` fails there. Pass `--device-type=gpu` if your accelerator does win --
+        worth timing before assuming it. On that measured decode: 256s on the accelerator, 1.2s on
+        the CPU.
+    """
     outputdir = file_util.preprocess_paths(outputdir, isdir=True)
     checkpoint_name = os.path.splitext(os.path.basename(h5))[0]
 
+    # Devices first: the visible list locks as soon as anything touches TensorFlow, and
+    # `setup_seed` is enough to do it.
+    env_util.setup_strategy(device_type=device_type, devices=devices, tpu_address=tpu_address, tpu_vm=tpu_vm)
     env_util.setup_seed()
     env_util.setup_mxp(mxp=mxp)
 
@@ -76,7 +96,7 @@ def main(
             overwrite = overwrite == "yes"
 
         if overwrite:
-            with file_util.save_file(output) as output_file_path:
+            with file_util.save_file(output) as output_file_path, env_util.device_scope(device_type):
                 model.predict(
                     test_data_loader,
                     verbose=1,

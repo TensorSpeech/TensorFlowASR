@@ -18,7 +18,13 @@ import numpy as np
 from tensorflow_asr import tf
 from tensorflow_asr.utils.shape_util import shape_list
 
-pi = tf.constant(np.pi, dtype=tf.complex64)
+# A numpy scalar, not `tf.constant`. Building a tensor here would run at import time, and creating
+# any tensor initialises TensorFlow's eager context, which permanently fixes the visible device
+# list. Since `tensorflow_asr/__init__.py` imports every submodule, that single constant meant the
+# device list was locked before any caller -- `env_util.setup_strategy`, a CLI flag -- had a chance
+# to choose one, so asking for CPU could only pin work rather than hide the accelerator.
+# `np.complex64` keeps the dtype identical, so the arithmetic below is unchanged.
+pi = np.complex64(np.pi)
 
 DEFAULT_FILTER_NUM = 100
 DEFAULT_LOW_FREQ = 100

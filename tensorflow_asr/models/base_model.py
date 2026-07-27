@@ -97,7 +97,7 @@ class BaseModel(keras.Model, TensorFlowTrainer):
             kwargs.update(lm=self.lm, lm_alpha=float(getattr(decoder_config, "lm_alpha", 0.0)))
         return kwargs
 
-    def summary(self, line_length=120, expand_nested=True, show_trainable=True, **kwargs):
+    def summary(self, line_length=100, expand_nested=True, show_trainable=True, **kwargs):
         super().summary(line_length=line_length, expand_nested=expand_nested, show_trainable=show_trainable, **kwargs)
 
     def save(self, filepath, overwrite=True, zipped=None, **kwargs):

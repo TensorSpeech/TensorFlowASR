@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import contextlib
 import logging
 import os
 import random
@@ -85,6 +86,59 @@ def setup_tpu(
     return tf.distribute.TPUStrategy(resolver)
 
 
+def setup_cpu():
+    """
+    Hide every accelerator so the run really stays on the CPU.
+
+    Asking for "cpu" used to just return the default strategy, which leaves any GPU visible and
+    lets TensorFlow place ops on it anyway. That matters most for decoding: the greedy and beam
+    loops are hundreds of tiny sequential steps, and shipping each one to an accelerator costs far
+    more than running it on the CPU. On Apple silicon with `tensorflow-metal` installed (the
+    `apple` extra) a measured decode was ~230x slower on the GPU, and `jit_compile=True` fails
+    outright there. No environment variable turns the metal plugin off, so hiding is the only way.
+
+    This only works because nothing builds a tensor at import time. Creating one initialises
+    TensorFlow's eager context and permanently fixes the visible device list, and since
+    `tensorflow_asr/__init__.py` imports every submodule, a single module-level `tf.constant`
+    anywhere in the package is enough to lock it before a caller can choose. Two used to
+    (`features/gammatone.py`, `losses/impl/ctc_tpu.py`); both now hold numpy scalars instead.
+    """
+    gpus = tf.config.list_physical_devices("GPU")
+    if not gpus:
+        logger.info("Run on CPU")
+        return tf.distribute.get_strategy()
+    try:
+        tf.config.set_visible_devices([], "GPU")
+        logger.info(f"Run on CPU, hiding {len(gpus)} accelerator(s): {[gpu.name for gpu in gpus]}")
+    except RuntimeError:
+        # Reachable only if the caller touched TensorFlow before asking for a device -- creating a
+        # tensor is enough. `device_scope` still pins work to the CPU in that case, which is weaker
+        # than hiding but far better than decoding on the accelerator.
+        logger.warning(
+            "Accelerator already initialised, so it cannot be hidden; falling back to a CPU device "
+            "scope. Call setup_strategy() before creating any tensor to avoid this."
+        )
+    return tf.distribute.get_strategy()
+
+
+def device_scope(device_type: str):
+    """
+    Context manager that pins work to the CPU when `device_type` is "cpu".
+
+    A safety net for callers that touched TensorFlow before choosing a device, which stops
+    `setup_cpu` from hiding the accelerator. Pinning is weaker -- some ops still land on the device
+    -- but on a measured decode it recovered most of the gap: 256s on the accelerator, 8.8s pinned,
+    1.2s hidden. When `setup_cpu` succeeded there is no visible accelerator left and this is a
+    no-op, as it is for any non-CPU device type, so callers can wrap unconditionally.
+    """
+    if device_type.lower() != "cpu":
+        return contextlib.nullcontext()
+    if not tf.config.list_logical_devices("GPU"):
+        return contextlib.nullcontext()  # nothing to steer away from
+    logger.info("Pinning to /CPU:0")
+    return tf.device("/CPU:0")
+
+
 def setup_strategy(
     device_type: str,
     devices: List[int] = None,
@@ -95,7 +149,7 @@ def setup_strategy(
         return setup_tpu(tpu_address, tpu_vm)
     if device_type.lower() == "gpu":
         return setup_gpu(devices)
-    return tf.distribute.get_strategy()
+    return setup_cpu()
 
 
 def has_devices(
