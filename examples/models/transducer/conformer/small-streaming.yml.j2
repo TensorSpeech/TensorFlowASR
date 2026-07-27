@@ -34,8 +34,12 @@ model_config:
     encoder_kernel_size: 31
     encoder_dropout: 0.1
     encoder_padding: causal
-    encoder_memory_length: null
-    encoder_history_size: 64 # frames = 4 * chunk_size
+    # left context, in encoder frames. One number for one receptive field: it is both the
+    # mask history during training and the kv cache length when streaming chunk by chunk.
+    encoder_memory_length: 64 # frames = 4 * chunk_size
+    # "kv" caches the projected keys/values, so the cached frames are not re-projected every
+    # chunk. Identical output to "hidden" while the weights are frozen, i.e. at inference.
+    encoder_memory_mode: kv
     encoder_chunk_size: 16 # frames
     prediction_label_encode_mode: embedding
     prediction_embed_dim: 320

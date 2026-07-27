@@ -138,7 +138,6 @@ class MHSAModule(keras.Model):
         norm_position="pre",
         memory_length=None,
         memory_mode="hidden",
-        history_size=None,
         chunk_size=None,
         use_attention_bias=False,
         kernel_regularizer=L2,
@@ -168,7 +167,6 @@ class MHSAModule(keras.Model):
                 output_shape=dmodel,
                 memory_length=memory_length,
                 memory_mode=memory_mode,
-                history_size=history_size,
                 chunk_size=chunk_size,
                 flash_attention=flash_attention,
                 use_attention_bias=use_attention_bias,
@@ -185,7 +183,6 @@ class MHSAModule(keras.Model):
                 output_shape=dmodel,
                 memory_length=memory_length,
                 memory_mode=memory_mode,
-                history_size=history_size,
                 chunk_size=chunk_size,
                 flash_attention=flash_attention,
                 kernel_regularizer=kernel_regularizer,
@@ -446,7 +443,6 @@ class ConformerBlock(keras.Model):
         block_norm_position="post",
         memory_length=None,
         memory_mode="hidden",
-        history_size=None,
         chunk_size=None,
         kernel_regularizer=L2,
         bias_regularizer=None,
@@ -489,7 +485,6 @@ class ConformerBlock(keras.Model):
             norm_position=module_norm_position,
             memory_length=memory_length,
             memory_mode=memory_mode,
-            history_size=history_size,
             chunk_size=chunk_size,
             flash_attention=mhsam_flash_attention,
             kernel_regularizer=kernel_regularizer,
@@ -628,7 +623,6 @@ class ConformerEncoder(keras.Model):
         block_norm_position="post",
         memory_length=None,
         memory_mode="hidden",
-        history_size=None,
         chunk_size=None,
         kernel_regularizer=L2,
         bias_regularizer=None,
@@ -661,6 +655,9 @@ class ConformerEncoder(keras.Model):
         self._num_heads = num_heads
         self._key_dim = head_size
         self._memory_length = memory_length
+        # kept so callers can size a streaming chunk without reaching into the attention
+        # layers -- see BaseModel.get_signal_chunk_size_and_step
+        self.chunk_size = chunk_size
         self._use_attention_causal_mask = use_attention_causal_mask
         self._use_attention_auto_mask = use_attention_auto_mask
 
@@ -698,7 +695,6 @@ class ConformerEncoder(keras.Model):
                 block_norm_position=block_norm_position,
                 memory_length=memory_length,
                 memory_mode=memory_mode,
-                history_size=history_size,
                 chunk_size=chunk_size,
                 kernel_regularizer=kernel_regularizer,
                 bias_regularizer=bias_regularizer,

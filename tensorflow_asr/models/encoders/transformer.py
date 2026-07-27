@@ -77,7 +77,6 @@ class TransformerBlock(keras.Model):
         dropout=0.1,
         memory_length=None,
         memory_mode="hidden",
-        history_size=None,
         chunk_size=None,
         use_attention_bias=False,
         kernel_regularizer=None,
@@ -103,7 +102,6 @@ class TransformerBlock(keras.Model):
                 output_shape=dmodel,
                 memory_length=memory_length,
                 memory_mode=memory_mode,
-                history_size=history_size,
                 chunk_size=chunk_size,
                 flash_attention=flash_attention,
                 kernel_regularizer=kernel_regularizer,
@@ -119,7 +117,6 @@ class TransformerBlock(keras.Model):
                 output_shape=dmodel,
                 memory_length=memory_length,
                 memory_mode=memory_mode,
-                history_size=history_size,
                 chunk_size=chunk_size,
                 flash_attention=flash_attention,
                 use_attention_bias=use_attention_bias,
@@ -219,7 +216,6 @@ class TransformerEncoder(keras.Model):
         pwffn_activation="relu",
         memory_length=None,
         memory_mode="hidden",
-        history_size=None,
         chunk_size=None,
         flash_attention=None,
         kernel_regularizer=None,
@@ -233,6 +229,9 @@ class TransformerEncoder(keras.Model):
         self._num_blocks = num_blocks
         self._dmodel = dmodel
         self._memory_length = memory_length
+        # kept so callers can size a streaming chunk without reaching into the attention
+        # layers -- see BaseModel.get_signal_chunk_size_and_step
+        self.chunk_size = chunk_size
 
         subsampling_name = subsampling.pop("type", None)
         if subsampling_name == "vgg":
@@ -285,7 +284,6 @@ class TransformerEncoder(keras.Model):
                 dropout=dropout,
                 memory_length=memory_length,
                 memory_mode=memory_mode,
-                history_size=history_size,
                 chunk_size=chunk_size,
                 flash_attention=flash_attention,
                 use_attention_bias=use_attention_bias,

@@ -368,6 +368,41 @@ class BaseModel(keras.Model, TensorFlowTrainer):
 
     # -------------------------------- INFERENCE FUNCTIONS -------------------------------------
 
+    def get_signal_chunk_size_and_step(self, nchunks: int = 1):
+        """
+        How many audio samples to feed per streaming call, and how far to advance afterwards.
+
+        Chains the two reductions between raw audio and encoder output::
+
+            signal --FeatureExtraction--> feature frames --encoder subsampling--> encoder frames
+
+        so it walks them backwards: `nchunks` attention chunks is
+        `nchunks * chunk_size` encoder frames, which is that times `time_reduction_factor`
+        feature frames, which `FeatureExtraction.get_signal_chunk_size_and_step` turns into a
+        sample count.
+
+        Getting this wrong is not a rounding error. A chunk that covers a fraction of an attention
+        chunk makes the streamed decode group frames into windows a single pass never uses, and the
+        two stop agreeing -- `tests/test_inference.py` asserts that from both sides. Calling this
+        rather than picking a number by hand is what keeps them aligned.
+
+        Parameters
+        ----------
+        nchunks : int
+            Attention chunks per call. Larger means fewer, bigger calls and higher latency; the
+            transcript is unchanged, since any whole number of chunks stays aligned.
+
+        Returns
+        -------
+        (signal_chunk_size, signal_chunk_step)
+            Samples to pass as `inputs`, and how far to advance the read position. They differ
+            because consecutive frames overlap: a window is `frame_length` long but only
+            `frame_step` new samples arrive each frame.
+        """
+        chunk_size = getattr(getattr(self, "encoder", None), "chunk_size", None) or 1
+        nframes = nchunks * chunk_size * self.time_reduction_factor
+        return self.feature_extraction.get_signal_chunk_size_and_step(nframes)
+
     def get_initial_tokens(self, batch_size=1):
         return tf.ones([batch_size, 1], dtype=tf.int32) * self.tokenizer.blank
 

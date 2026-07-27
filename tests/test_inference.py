@@ -30,6 +30,7 @@ Two of those properties are worth calling out, because both were measured rather
   configuration where greedy streaming is exact so it cannot be confused with missing state.
 """
 
+import inspect
 import os
 
 import numpy as np
@@ -57,6 +58,7 @@ SPEECH_CONFIG = dict(
 )
 
 MEMORY_LENGTH = 8
+CHUNK_SIZE = 4  # attention chunk, in encoder frames
 NUM_HEADS, HEAD_SIZE, DMODEL = 2, 4, 8
 NUM_BLOCKS = 2
 SEED = 3
@@ -76,7 +78,7 @@ def subsampling_config(kernel=3):
     }
 
 
-def build_model(tokenizer, streaming=True, memory_mode="kv", memory_length=MEMORY_LENGTH, seed=SEED, conv_kernel=3):
+def build_model(tokenizer, streaming=True, memory_mode="kv", memory_length=MEMORY_LENGTH, seed=SEED, conv_kernel=3, dropout=0.1):
     """
     A tiny streaming Conformer transducer.
 
@@ -84,9 +86,13 @@ def build_model(tokenizer, streaming=True, memory_mode="kv", memory_length=MEMOR
     chunked attention with a bounded history, and a causal attention mask so no frame can see
     past its own position. Setting it False keeps the same weights but lets attention run over
     the whole utterance, which is the contrast used by the prefix-consistency tests.
+
+    Note there is no separate history-size knob: `memory_length` is the left context for both
+    mechanisms -- the mask when a whole utterance is processed at once, the cache when it arrives
+    chunk by chunk. See `test_memory_length_is_the_only_left_context_knob`.
     """
     tf.keras.utils.set_random_seed(seed)
-    streaming_kwargs = dict(encoder_chunk_size=4, encoder_history_size=8, encoder_use_attention_causal_mask=True) if streaming else {}
+    streaming_kwargs = dict(encoder_chunk_size=CHUNK_SIZE, encoder_use_attention_causal_mask=True) if streaming else {}
     model = Conformer(
         blank=0,
         vocab_size=tokenizer.num_classes,
@@ -98,6 +104,7 @@ def build_model(tokenizer, streaming=True, memory_mode="kv", memory_length=MEMOR
         encoder_num_heads=NUM_HEADS,
         encoder_kernel_size=conv_kernel,
         encoder_padding="causal",
+        encoder_dropout=dropout,
         encoder_memory_length=memory_length,
         encoder_memory_mode=memory_mode,
         prediction_embed_dim=8,
@@ -297,20 +304,15 @@ def test_non_streaming_encoder_is_not_prefix_consistent(tokenizer, signal):
     assert difference > 1e-3, "a non-causal encoder unexpectedly produced stable prefix frames"
 
 
-CHUNK_SIZE = 4  # attention chunk, in encoder frames
-
-
 def chunk_geometry(model, chunks=1):
     """
-    Signal chunk sized to a whole number of *attention* chunks.
+    Signal chunk covering a whole number of attention chunks.
 
-    Exact streaming needs each decode call to cover `encoder_chunk_size` encoder frames, i.e.
-    `chunk_size * time_reduction_factor` feature frames. Feed a chunk that straddles the boundary
-    and the whole-utterance pass groups frames into attention chunks differently from the streamed
-    one, so the two legitimately disagree -- see `test_misaligned_chunks_break_the_equivalence`.
+    Delegates to the model rather than recomputing, so this exercises the real helper that callers
+    use -- an arithmetic slip in `BaseModel.get_signal_chunk_size_and_step` would surface here as a
+    broken streaming equivalence rather than hiding behind a duplicate implementation.
     """
-    frames = CHUNK_SIZE * model.time_reduction_factor * chunks
-    size, step = model.feature_extraction.get_signal_chunk_size_and_step(frames)
+    size, step = model.get_signal_chunk_size_and_step(chunks)
     return int(size), int(step)
 
 
@@ -660,3 +662,132 @@ def test_greedy_export_signature_is_unaffected_by_the_beam_fields(model):
 
     assert beam_inputs == greedy_inputs + 3, f"beam export should add exactly 3 inputs, got {beam_inputs - greedy_inputs}"
     assert beam_outputs == greedy_outputs + 3, f"beam export should add exactly 3 outputs, got {beam_outputs - greedy_outputs}"
+
+
+# --------------------------------------------------------------------------- left context
+
+
+def test_memory_length_is_the_only_left_context_knob(tokenizer):
+    """
+    One parameter for one receptive field.
+
+    http://arxiv.org/abs/2010.11395 describes its history window as keeping "a fixed length of key
+    and value vectors" -- masking and caching are two executions of the same left context, not two
+    mechanisms to size independently. There used to be a separate `history_size` for the mask, and
+    nothing tied it to the cache; a config could set them apart and decode the model under a
+    receptive field it was never trained for.
+
+    This asserts they cannot drift, by construction: `MultiHeadAttention` exposes no history knob,
+    and its streaming mask reads `memory_length`.
+    """
+    from tensorflow_asr.models.layers.multihead_attention import MultiHeadAttention
+
+    parameters = inspect.signature(MultiHeadAttention.__init__).parameters
+    assert "history_size" not in parameters, "a second left-context knob reappeared"
+    assert "memory_length" in parameters and "chunk_size" in parameters
+
+    layer = MultiHeadAttention(num_heads=NUM_HEADS, key_dim=HEAD_SIZE, memory_length=6, chunk_size=2, name="m")
+    query = tf.random.normal([1, 8, DMODEL])
+    mask = layer._compute_attention_mask(query, query)  # pylint: disable=protected-access
+
+    # a query in the second chunk sees its own chunk plus `memory_length` frames before it
+    attended = mask.numpy()[0][3]
+    assert attended.sum() == 4, f"expected chunk(2) + as much history as exists, got {attended.sum()}"
+    assert attended[:4].all() and not attended[4:].any(), f"unexpected span: {attended.astype(int)}"
+
+
+@pytest.mark.parametrize("memory_length", [MEMORY_LENGTH // 2, MEMORY_LENGTH, MEMORY_LENGTH * 2])
+def test_streaming_is_exact_only_at_the_trained_left_context(tokenizer, memory_length):
+    """
+    The cache must supply exactly what the mask assumed, which is now automatic.
+
+    Before the merge these were separate numbers, and only their equality gave an exact streamed
+    decode -- too short starved the cache, too long over-fed it. Both are now the same parameter,
+    so varying it varies mask and cache together and the equivalence holds throughout. A regression
+    that reintroduced a second knob would break this for the mismatched values.
+    """
+    model = build_model(tokenizer, memory_length=memory_length, conv_kernel=1)
+    audio = synthetic_audio(model)
+
+    whole = emitted(decode(model, initial_input(model, audio), beam_width=0))
+    streamed = stream(model, audio, beam_width=0)
+
+    assert whole == streamed, f"memory_length={memory_length}: whole={whole[:15]} streamed={streamed[:15]}"
+
+
+def test_attention_memory_is_not_used_during_training(tokenizer):
+    """
+    Training must not consult the attention cache, in either mode.
+
+    Training sees the whole utterance at once and gets its left context from the streaming mask, so
+    the cache is redundant there -- and under `memory_mode="kv"` actively wrong, since cached
+    projections are stale as soon as the weights move. The encoder therefore emits no `attention`
+    entry under `training=True`, so a training step cannot silently consume one.
+
+    Asserted on the state structure rather than by comparing outputs: `training=True` also switches
+    dropout and BatchNorm, so two forward passes differ for reasons unrelated to the cache.
+
+    The `convolution` entry is expected in both, deliberately. Unlike attention it has no masking
+    equivalent -- a depthwise convolution simply needs its left context -- and it is inert during
+    training anyway, since the training path never passes an initial state.
+    """
+    model = build_model(tokenizer, dropout=0.0)
+    audio = synthetic_audio(model)[:, : chunk_geometry(model)[0]]
+    features, features_length = model.feature_extraction((audio, tf.shape(audio)[1:2]), training=False)
+    state = model.get_initial_encoder_states(1)
+
+    inference = model.encoder((features, features_length), initial_state=state, training=False, return_states=True)[2]
+    training = model.encoder((features, features_length), initial_state=state, training=True, return_states=True)[2]
+
+    assert all("attention" in block for block in inference["blocks"]), "inference should carry the attention cache"
+    assert all("attention" not in block for block in training["blocks"]), "the attention cache leaked into training"
+    assert all("convolution" in block for block in training["blocks"]), "convolution context is needed in both"
+
+
+def test_signal_chunk_size_walks_both_reductions_back(tokenizer):
+    """
+    `get_signal_chunk_size_and_step` must undo feature extraction *and* encoder subsampling.
+
+    Missing either one gives a chunk that does not line up with an attention chunk, which is what
+    breaks streaming equivalence (see `test_misaligned_chunks_break_the_equivalence`).
+    """
+    model = build_model(tokenizer)
+    extraction = model.feature_extraction
+
+    assert model.encoder.chunk_size == CHUNK_SIZE
+    assert model.time_reduction_factor > 1, "the test is vacuous without subsampling"
+
+    for nchunks in (1, 2, 3):
+        size, step = model.get_signal_chunk_size_and_step(nchunks)
+        frames = nchunks * CHUNK_SIZE * model.time_reduction_factor
+        expected_size, expected_step = extraction.get_signal_chunk_size_and_step(frames)
+
+        assert (int(size), int(step)) == (int(expected_size), int(expected_step))
+        # step is short of size by exactly the window overlap
+        assert int(size) - int(step) == extraction.frame_length - extraction.frame_step
+
+
+def test_signal_chunk_yields_exactly_one_attention_chunk(tokenizer):
+    """The returned samples must produce `chunk_size` encoder frames, not merely something close."""
+    model = build_model(tokenizer)
+    size, _ = model.get_signal_chunk_size_and_step(1)
+    audio = tf.zeros([1, int(size)], tf.float32)
+
+    _, frames = encoder_frames(model, audio)
+
+    assert frames == CHUNK_SIZE, f"one chunk of audio gave {frames} encoder frames, expected {CHUNK_SIZE}"
+
+
+def test_signal_chunk_falls_back_when_not_streaming(tokenizer):
+    """
+    A non-streaming encoder has no `chunk_size`, so one call is one encoder frame.
+
+    Keeps the helper usable for frame-by-frame work instead of raising on a missing attribute.
+    """
+    model = build_model(tokenizer, streaming=False)
+    assert model.encoder.chunk_size is None
+
+    size, step = model.get_signal_chunk_size_and_step()
+    expected = model.feature_extraction.get_signal_chunk_size_and_step(model.time_reduction_factor)
+
+    assert (int(size), int(step)) == (int(expected[0]), int(expected[1]))

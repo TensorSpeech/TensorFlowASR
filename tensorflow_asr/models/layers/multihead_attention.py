@@ -101,12 +101,12 @@ def compute_causal_mask(query, value=None):
     return tf.linalg.band_part(tf.ones((1, q_seq_length, v_seq_length), tf.bool), -1, 0)  # creates a lower triangular matrix
 
 
-def compute_streaming_mask(chunk_size, history_size, query, value=None):
+def compute_streaming_mask(chunk_size, memory_length, query, value=None):
     """
     Computes a streaming mask as in http://arxiv.org/abs/2010.11395
-    For example, if query and value both contain sequences of length 8, chunk size 2, history_size 2
+    For example, if query and value both contain sequences of length 8, chunk size 2, memory_length 2
     Chunk size = 2 -> it can see < 2 frames in the future because it in the same chunk, the 2nd frame is the last frame in the chunk therefore it does not see future # pylint: disable=line-too-long
-    History size = 2 -> it can see history_size = 2 frames in the past
+    Memory length = 2 -> it can see memory_length = 2 frames in the past
     The * indicates the current frame
     All frames in the same chunk can see each other
     this function returns a boolean `Tensor` equal to:
@@ -120,9 +120,18 @@ def compute_streaming_mask(chunk_size, history_size, query, value=None):
       [ 0,  0,  0,  0,  1,  1,  1*,  1 ],
       [ 0,  0,  0,  0,  1,  1,  1,  1*]]]
     ```
+
+    `memory_length` is the paper's "history window size", which it describes as keeping "a fixed
+    length of key and value vectors". Masking and caching are two executions of that one receptive
+    field: this mask limits the lookback when a whole utterance is processed in one pass, and the
+    `Memory` layer supplies the identical frames when the utterance arrives chunk by chunk. They
+    must therefore use the same number, which is why there is only one parameter -- a separate
+    `history_size` could be set out of step with the cache, and the model would then be decoded
+    under a receptive field it was never trained for.
+
     Args:
       chunk_size: chunk size to split
-      history_size: history size to keep
+      memory_length: number of past frames each chunk may attend to; negative means unlimited
       query: query `Tensor` of shape `(B, T, ...)`.
       value: value `Tensor` of shape `(B, S, ...)` (optional, defaults to query).
     Returns:
@@ -130,7 +139,7 @@ def compute_streaming_mask(chunk_size, history_size, query, value=None):
     """
     q_seq_length = shape_util.shape_list(query)[1]
     v_seq_length = q_seq_length if value is None else shape_util.shape_list(value)[1]
-    hist_size = tf.where(tf.less(history_size, 0), v_seq_length, tf.constant(history_size, tf.int32))
+    hist_size = tf.where(tf.less(memory_length, 0), v_seq_length, tf.constant(memory_length, tf.int32))
 
     def _fn(x):
         index = x * chunk_size
@@ -150,7 +159,7 @@ def compute_attention_mask(
     attention_mask=None,
     use_causal_mask=False,
     chunk_size=None,
-    history_size=None,
+    memory_length=None,
 ):
     """Computes the attention mask, using the Keras masks of the inputs.
 
@@ -204,8 +213,8 @@ def compute_attention_mask(
         # the shape of the causal mask is [1, T, S]
         mask = compute_causal_mask(query, value)
         auto_mask = mask if auto_mask is None else auto_mask & mask
-    if chunk_size is not None and history_size is not None:
-        mask = compute_streaming_mask(chunk_size, history_size, query, value)
+    if chunk_size is not None and memory_length is not None:
+        mask = compute_streaming_mask(chunk_size, memory_length, query, value)
         auto_mask = mask if auto_mask is None else auto_mask & mask
     if auto_mask is not None:
         # merge attention_mask & automatic mask, to shape [B, T, S]
@@ -253,7 +262,6 @@ class MultiHeadAttention(keras.layers.MultiHeadAttention):
         flash_attention=None,
         memory_length=None,
         memory_mode="hidden",
-        history_size=None,
         chunk_size=None,
         kernel_initializer="glorot_uniform",
         bias_initializer="zeros",
@@ -270,7 +278,6 @@ class MultiHeadAttention(keras.layers.MultiHeadAttention):
         self._memory_length = memory_length
         self._memory_mode = memory_mode
         self._chunk_size = chunk_size
-        self._history_size = history_size
         self._key_memory = None
         self._value_memory = None
         if output_shape:
@@ -442,8 +449,8 @@ class MultiHeadAttention(keras.layers.MultiHeadAttention):
         use_causal_mask=False,
     ):
         attention_mask = super()._compute_attention_mask(query, value, query_mask, value_mask, key_mask, attention_mask, use_causal_mask)
-        if self._chunk_size is not None and self._history_size is not None:
-            mask = compute_streaming_mask(self._chunk_size, self._history_size, query, value)
+        if self._chunk_size is not None and self._memory_length is not None:
+            mask = compute_streaming_mask(self._chunk_size, self._memory_length, query, value)
             attention_mask = mask if attention_mask is None else attention_mask & mask
         return attention_mask
 
@@ -490,9 +497,14 @@ class MultiHeadAttention(keras.layers.MultiHeadAttention):
 
         states = None
         memory_mask = None
+        # Memory is an inference-time mechanism. Training sees the whole utterance in one pass and
+        # gets the identical receptive field from `compute_streaming_mask`, so caching there would
+        # be redundant -- and for `memory_mode="kv"` actively wrong, since cached projections go
+        # stale the moment the weights move (tests/test_memory.py pins that divergence).
+        use_memory = return_states and not training
 
         # "hidden" extends before the projections so W_k/W_v see [memory; segment].
-        if return_states and self._memory_mode == "hidden":
+        if use_memory and self._memory_mode == "hidden":
             key, value, states, memory_mask = self._with_memory(
                 key, value, initial_state, training, key_mask=key_keras_mask, value_mask=value_keras_mask
             )
@@ -512,7 +524,7 @@ class MultiHeadAttention(keras.layers.MultiHeadAttention):
         value = self._value_dense(value)
 
         # "kv" extends after them, caching the projections instead of re-computing them.
-        if return_states and self._memory_mode == "kv":
+        if use_memory and self._memory_mode == "kv":
             key, value, states, memory_mask = self._with_memory(
                 key, value, initial_state, training, key_mask=key_keras_mask, value_mask=value_keras_mask
             )
@@ -599,7 +611,6 @@ class MultiHeadRelativeAttention(MultiHeadAttention):
         flash_attention=None,
         memory_length=None,
         memory_mode="hidden",
-        history_size=None,
         chunk_size=None,
         kernel_initializer="glorot_uniform",
         bias_initializer="zeros",
@@ -624,7 +635,6 @@ class MultiHeadRelativeAttention(MultiHeadAttention):
             flash_attention=flash_attention,
             memory_length=memory_length,
             memory_mode=memory_mode,
-            history_size=history_size,
             chunk_size=chunk_size,
             kernel_initializer=kernel_initializer,
             bias_initializer=bias_initializer,
@@ -757,11 +767,16 @@ class MultiHeadRelativeAttention(MultiHeadAttention):
 
         states = None
         memory_mask = None
+        # Memory is an inference-time mechanism. Training sees the whole utterance in one pass and
+        # gets the identical receptive field from `compute_streaming_mask`, so caching there would
+        # be redundant -- and for `memory_mode="kv"` actively wrong, since cached projections go
+        # stale the moment the weights move (tests/test_memory.py pins that divergence).
+        use_memory = return_states and not training
 
         # "hidden" extends before the projections so W_k/W_v see [memory; segment]. The relative
         # positional encoding already spans `memory_length + length` either way -- it is a
         # function of lengths only, so it is unaffected by which form the cache takes.
-        if return_states and self._memory_mode == "hidden":
+        if use_memory and self._memory_mode == "hidden":
             key, value, states, memory_mask = self._with_memory(
                 key, value, initial_state, training, key_mask=key_keras_mask, value_mask=value_keras_mask
             )
@@ -781,7 +796,7 @@ class MultiHeadRelativeAttention(MultiHeadAttention):
         value = self._value_dense(value)
 
         # "kv" extends after them, caching the projections instead of re-computing them.
-        if return_states and self._memory_mode == "kv":
+        if use_memory and self._memory_mode == "kv":
             key, value, states, memory_mask = self._with_memory(
                 key, value, initial_state, training, key_mask=key_keras_mask, value_mask=value_keras_mask
             )

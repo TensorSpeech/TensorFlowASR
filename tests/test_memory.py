@@ -349,10 +349,16 @@ def test_unknown_memory_mode_is_rejected():
         MultiHeadAttention(num_heads=NUM_HEADS, key_dim=HEAD_SIZE, memory_length=4, memory_mode="kvcache")
 
 
-def test_memory_cache_is_detached_in_both_modes():
+def test_memory_is_skipped_during_training():
     """
-    `SG(.)` must hold whichever form the cache takes, or a training-time recurrence would
-    backpropagate into the previous segment.
+    Training must not consult the cache at all, in either mode.
+
+    Training sees the whole utterance in one pass and gets the same left context from the streaming
+    mask, so the cache is redundant there -- and for `kv` actively wrong, since cached projections
+    are stale the moment the weights move (see the test below). The layer therefore returns no
+    states under `training=True`, even when asked for them, so a training step cannot silently
+    consume them. `Memory` keeps its own stop-gradient regardless; that is pinned separately by
+    `test_memory_is_detached_from_the_graph_while_training`.
     """
     first, second = tf.random.normal([BATCH, LENGTH, DMODEL]), tf.random.normal([BATCH, LENGTH, DMODEL])
     encoding = relative_encoding(second, LENGTH)
@@ -360,21 +366,11 @@ def test_memory_cache_is_detached_in_both_modes():
     for memory_mode in ("hidden", "kv"):
         block = kv_block(memory_mode)
         block([first, encoding], training=False)
-        _, states = block(
-            [first, encoding],
-            training=False,
-            use_auto_mask=False,
-            initial_state=block.get_initial_state(BATCH),
-            return_states=True,
-        )
-        cache = {name: tf.Variable(value) for name, value in states.items()}
+        inference = block([first, encoding], training=False, use_auto_mask=False, initial_state=block.get_initial_state(BATCH), return_states=True)
+        training = block([first, encoding], training=True, use_auto_mask=False, initial_state=block.get_initial_state(BATCH), return_states=True)
 
-        with tf.GradientTape(persistent=True) as tape:
-            outputs, _ = block([second, encoding], training=True, use_auto_mask=False, initial_state=cache, return_states=True)
-            loss = tf.reduce_sum(outputs)
-
-        for name, variable in cache.items():
-            assert tape.gradient(loss, variable) is None, f"{memory_mode} leaked a gradient into the {name} cache"
+        assert len(inference) == 2, f"{memory_mode}: inference should return states"
+        assert len(training) == 1, f"{memory_mode}: training returned states, so the cache was consulted"
 
 
 def test_kv_cache_diverges_after_a_weight_update():

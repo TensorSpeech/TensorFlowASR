@@ -989,9 +989,7 @@ class Transducer(BaseModel):
                 last_tokens = tf.tile(inputs.previous_tokens, [1, beam])  # [B, W]
                 # Only the first hypothesis is alive initially, otherwise the first expansion would
                 # select the same best token W times over W identical hypotheses
-                scores = tf.concat(
-                    [tf.zeros([batch_size, 1], dtype=tf.float32), tf.fill([batch_size, beam - 1], neg_inf)], axis=1
-                )  # [B, W]
+                scores = tf.concat([tf.zeros([batch_size, 1], dtype=tf.float32), tf.fill([batch_size, beam - 1], neg_inf)], axis=1)  # [B, W]
             # Shallow fusion state, threaded through the beam exactly like the prediction network
             # state. With no LM, a scalar placeholder keeps the loop signature uniform.
             lm_states = _tile_to_beam(lm.get_initial_state(batch_size) if lm is not None else tf.zeros([batch_size, 1]), beam)
