@@ -147,7 +147,7 @@ The blank term is the part that matters. Boosting only the label scores would ma
 
 Fusion is applied **before** the forced-blank masking of step 2, so a capped hypothesis pays the fused blank cost, and a completed one is still frozen at `0`.
 
-**No external language model ships with TensorFlowASR.** `recognize_beam` takes any object satisfying [`LanguageModel`](../tensorflow_asr/models/lm/language_model.py):
+`recognize_beam` takes any object satisfying [`LanguageModel`](../tensorflow_asr/models/lm/language_model.py):
 
 ```python
 class LanguageModel(keras.Model):
@@ -170,6 +170,40 @@ Three constraints follow from where `call_next` runs:
 Both return log-probabilities over the *transducer* vocabulary with matching indices; the blank column is never read by the decoder.
 
 Two token conventions are shared with the decoder. The **blank index doubles as start of sentence** — the beam holds `last_token = blank` until a hypothesis emits its first label — so training feeds `[blank, t1, ..., t_{n-1}]` to predict `[t1, ..., tn]` (`shift_tokens` does this). And there is **no end-of-sentence symbol**: a hypothesis ends when the frames run out, never on an emitted token.
+
+One implementation ships: [`LSTMLanguageModel`](../tensorflow_asr/models/lm/lstm_language_model.py). Its defaults reproduce the external LM of the ILME paper \[5\] — two 2048-unit LSTM layers over a 512-dimensional embedding with input and output embeddings tied, which is 58M parameters at their 3999 word-pieces:
+
+```yaml
+lm_config:
+  external_config:
+    class_name: tensorflow_asr.models.lm.lstm_language_model>LSTMLanguageModel
+    config:
+      vocab_size: 1000
+      embed_dim: 512
+      units: 2048
+      nlayers: 2
+      tie_embeddings: True
+```
+
+Tying is why there is a projection layer: reusing the `[V, E]` embedding matrix as the output layer needs an `E`-wide input, but the last LSTM is `units`-wide, so a `units → embed_dim` projection sits between them. `tie_embeddings: false` drops it for an ordinary `units → V` dense layer, which is bigger and usually slightly worse.
+
+**Start much smaller than the defaults.** At 58M parameters this runs once per beam step on all `B * W` hypotheses, and transducer decoding is hundreds of small sequential steps per utterance — the LM will dominate the runtime. `units: 512, nlayers: 2` is a reasonable first try; grow it only if the WER pays for the time.
+
+### Where the pretrained weights aren't
+
+There is no drop-in checkpoint, and the reason is worth stating once. The k2/icefall LODR recipe does publish one ([`ezerhouni/icefall-librispeech-rnn-lm`](https://huggingface.co/ezerhouni/icefall-librispeech-rnn-lm), a 3-layer 2048-unit RNN over BPE 500), but `call_next` returns log-probabilities indexed against **your** transducer's vocabulary. Using those weights would mean adopting icefall's exact SentencePiece model — same merges, same integer indices — for the ASR model too, on top of converting PyTorch weights to Keras. Retraining is the cheaper path, which is what `train_lm` is for.
+
+What *is* reusable is the corpus. ILME and LODR both train on the LibriSpeech LM corpus, ~800M words against the ~9M words of LibriSpeech transcripts, and it is a single download:
+
+```bash
+wget https://www.openslr.org/resources/11/librispeech-lm-norm.txt.gz
+tensorflow_asr train_lm ... --target=external --text-path=librispeech-lm-norm.txt.gz \
+    --output=lm.weights.h5
+```
+
+`.gz` is read directly and the file is streamed, so the ~4 GB decompressed size never has to be materialised. `--max-lines` caps it for a quick run.
+
+One number not to copy blindly: the icefall recipe recommends `--lm-scale 0.42` with `--ngram-lm-scale -0.24`. That scale is **negative** because icefall *adds* it, in the density-ratio form. This repository *subtracts*, so the equivalent is `lm_alpha: 0.42` with `lm_beta: 0.24` — positive. Carrying the minus sign across would double the internal LM instead of removing it, and would decode perfectly happily while doing so.
 
 ### 4.7 Internal LM subtraction: ILME and LODR
 
@@ -264,22 +298,30 @@ tensorflow_asr tflite \
 The split follows what each thing *is*. The language models are models, so they sit in a top-level `lm_config` next to `model_config`; how to score with them is a decoding setting, so it sits in `decoder_config` next to `beam_width`:
 
 ```yaml
-model_config: { class_name: ..., config: { ... } }
+model_config:
+  class_name: ...
+  config:
+    ...
 
 lm_config:
-  external_config:   # the LM fused *in*. Optional.
+  # the LM fused *in*. Optional.
+  external_config:
     class_name: my_package>MyLanguageModel
-    config: { ... }
-  internal_config:   # the low-order LM subtracted. Required by lm_type: lodr.
+    config:
+      ...
+  # the low-order LM subtracted. Required by lm_type: lodr.
+  internal_config:
     class_name: tensorflow_asr.models.lm.bigram_language_model>BigramLanguageModel
-    config: { vocab_size: 1000, blank: 0 }
+    config:
+      vocab_size: 1000
+      blank: 0
 
 decoder_config:
-  beam_width: 16     # 0 (the shipped default) disables beam search
-  norm_score: True   # -> score_norm
-  lm_type: lodr      # shallow (default) | ilme | lodr
-  lm_alpha: 0.3      # -> lm_alpha, eq. (3) lambda
-  lm_beta: 0.15      # -> lm_beta, eq. (27) lambda_I. Keep it below lm_alpha.
+  beam_width: 16    # 0 (the shipped default) disables beam search
+  norm_score: True  # -> score_norm
+  lm_type: lodr     # shallow (default) | ilme | lodr
+  lm_alpha: 0.3     # -> lm_alpha, eq. (3) lambda
+  lm_beta: 0.15     # -> lm_beta, eq. (27) lambda_I. Keep it below lm_alpha.
 ```
 
 Both model configs are ordinary keras serialization blobs, exactly like `model_config` — which is what they are, and nothing more. **Trained weights are not in the config**: they are passed to `tensorflow_asr test` as `--lm-h5` and `--internal-lm-h5`, beside the ASR model's own `--h5`. Same reasoning in all three cases — the config says what the model *is*, a checkpoint says which trained copy of it you happen to be running, and you sweep the latter without editing the former.
@@ -330,7 +372,7 @@ Neither LM is tracked as a keras sub-layer of the ASR model, so their weights ne
 ### 4.9 Deviations from the paper
 
 - **Transcript storage.** \[1\] uses a trie (`transcripts` + `transcripts_ptrs` backlinks) to avoid copying whole transcripts on each expansion. Here transcripts are dense `[B, W, 2T+1]` and re-gathered each step, because `tf.gather` over the beam axis is a single vectorized op and keeps every shape static, which is what XLA and TFLite export need. Memory is `O(B * W * T)`.
-- **No bundled *external* language model.** Equation (3) itself is implemented (4.6), but no external LM ships with the repository — \[1\] evaluates against an n-gram LM held on device, and \[5\] against a 58M-parameter 2-layer LSTM over the ASR model's own word-pieces. You supply the `LanguageModel`; the decoder defines the interface and the fusion math. LODR's *internal* LM is the exception and does ship, as `BigramLanguageModel` (4.7) — it is derivable from data the repository already has, whereas an external LM by definition is not.
+- **No bundled n-gram external LM.** \[1\] evaluates against a GPU-resident 6-gram (their NGPU-LM, chosen so the LM call is cheap enough to rescore the full hypothesis set rather than prune early). What ships here is `LSTMLanguageModel`, matching \[5\]'s architecture instead — a dense `[V, V, ...]` n-gram table is only viable at order 2, which is why the *internal* LM is a bigram and the external one is neural. No pretrained weights ship for either; `train_lm` fits them.
 - **Bigram only.** `BigramLanguageModel` is order 2, dense, unpruned. \[6\] notes character-level units may want a higher order; that needs a new class, since a dense `[V, V, V]` trigram is not viable and the state would have to carry the token before last.
 - **Fusion form under ILME/LODR.** \[5\] states eq. (27) over plain shallow fusion, which leaves blank alone. Here the external term keeps ALSD++'s `(1 + λ)` blank scaling (4.6) and the subtraction is applied to the labels only. That combination is neither paper verbatim; it is the coherent merge of the two, and it keeps the deletion-rate property eq. (3) exists for.
 - **CUDA graphs.** Not applicable — the loop is a `tf.while_loop`.
@@ -382,6 +424,20 @@ What is covered:
 | Config plumbing, LM side       | `make_lm` builds only what is configured and ignores `lm_type` entirely, and routes each h5 path to its own model                                                            |
 | Misconfiguration is caught     | `validate_lm` raises only for `"lodr"` with nothing to subtract, and warns on each of the six silent cases above; `DecoderConfig` rejects an unknown `lm_type` at load        |
 | LM stays out of the checkpoint | attaching either LM does not change `model.weights`                                                                                                                          |
+
+`tests/test_lstm_language_model.py` and `tests/test_train_lm.py` cover the shipped external LM and the training pipeline:
+
+| Property                          | How                                                                                                                          |
+| --------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| The two forward passes agree      | `call_next` stepped with threaded state reproduces `call` teacher-forced, over 1/2/3 layers x tied and untied                 |
+| Outputs are log-probabilities     | both paths exponentiate to 1; state has the `[B, nlayers, 2, units]` layout the beam re-orders                                |
+| The state carries the history     | the same token from two different states gives different distributions, so it is not a unigram in disguise                    |
+| Usable where it is called         | runs inside a real `tf.while_loop`, graph output bit-identical to eager, survives config + h5 round trip                      |
+| Matches the published size        | ILME defaults at V=3999 land within 55-61M parameters against the paper's 58M                                                 |
+| Corpus reading                    | plain and gzipped text both stream; indices match the tokenizer; `max_lines` caps                                             |
+| Teacher forcing lines up          | inputs are targets shifted by one with blank in front, padded to the longest in the batch, empty lines dropped                |
+| Padding is masked from the loss   | weights are 1 on real tokens and 0 on padding, and the padded targets really do hold blank -- which is why it cannot be inferred |
+| Training learns the corpus        | on a corpus with two possible openings, >90% of the mass after BOS lands on those two, and P(blank) stays under 0.05          |
 
 `tests/test_bigram_language_model.py` covers the shipped LODR bigram separately:
 

@@ -46,34 +46,65 @@ def transcript_tokens(tokenizer, dataset_type: str, dataset_config):
         yield tokenizer.tokenize(text).numpy()
 
 
-def token_dataset(sequences, blank: int, batch_size: int, max_length: int):
+def to_training_pairs(tokens: tf.data.Dataset, blank: int, batch_size: int, max_length: int):
     """
-    A `tf.data` pipeline of `(inputs, targets, sample_weight)` for teacher-forced LM training.
+    Turn a `tf.data` stream of token vectors into `(inputs, targets, sample_weight)` batches.
 
     Targets are the transcript; inputs are the same sequence shifted right with blank in front, so
     position `u` predicts token `u` from everything before it -- the same conditioning the beam
     search hands to `call_next`.
 
-    `sample_weight` is 0 on padding so the loss ignores it. It cannot be derived from the values:
-    blank is the pad value *and* a legal token, since it doubles as start of sentence.
+    `sample_weight` is 1 on real tokens and 0 on padding, so the loss ignores the padding. It is
+    built *before* batching, as an all-ones vector the same length as the sequence, and then padded
+    with 0 by `padded_batch`. Deriving it afterwards would be impossible: blank is the pad value
+    *and* a legal token, since it doubles as start of sentence.
     """
+    dataset = tokens.map(lambda t: t[:max_length], num_parallel_calls=tf.data.AUTOTUNE)
+    dataset = dataset.filter(lambda t: tf.size(t) > 0)  # blank lines carry no supervision
+    dataset = dataset.map(lambda t: (t, tf.ones_like(t, dtype=tf.float32)), num_parallel_calls=tf.data.AUTOTUNE)
+    dataset = dataset.padded_batch(
+        batch_size,
+        padded_shapes=([None], [None]),  # to the longest in the batch, not to `max_length`
+        padding_values=(tf.constant(blank, tf.int32), 0.0),
+    )
+    dataset = dataset.map(lambda t, w: (shift_tokens(t, blank), t, w), num_parallel_calls=tf.data.AUTOTUNE)
+    return dataset.prefetch(tf.data.AUTOTUNE)
+
+
+def text_line_tokens(tokenizer, text_path: str, max_lines: int = None) -> tf.data.Dataset:
+    """
+    Tokenize a plain text corpus, one sentence per line, as a streaming `tf.data` pipeline.
+
+    This is the path for the **external** language model, whose whole point is a corpus far larger
+    than the ASR transcripts -- the LibriSpeech LM corpus is ~40M lines and 800M words, several GB
+    uncompressed. So nothing is materialised: `TextLineDataset` streams the file (transparently
+    through gzip when the name ends in `.gz`, which is how OpenSLR ships it) and tokenization runs
+    inside the graph in parallel. Reading it into a python list first, as the transcript path can
+    afford to, would need tens of GB and hours of eager op dispatch.
+
+    Tokenizing with the tokenizer built from your own config is what guarantees the indices match
+    the transducer's vocabulary -- the requirement `LanguageModel.call_next` states but cannot
+    check.
+    """
+    path = file_util.preprocess_paths(text_path)
+    dataset = tf.data.TextLineDataset(
+        path,
+        compression_type="GZIP" if str(path).endswith(".gz") else "",
+        num_parallel_reads=tf.data.AUTOTUNE,
+    )
+    if max_lines:
+        dataset = dataset.take(max_lines)
+    return dataset.map(lambda line: tf.cast(tokenizer.tokenize(line), tf.int32), num_parallel_calls=tf.data.AUTOTUNE)
+
+
+def transcript_token_dataset(sequences) -> tf.data.Dataset:
+    """The transcript generator as a `tf.data` stream, so it can share `to_training_pairs`."""
 
     def generator():
         for seq in sequences:
-            seq = np.asarray(seq, dtype=np.int32).reshape(-1)[:max_length]
-            targets = np.full([max_length], blank, dtype=np.int32)
-            targets[: seq.size] = seq
-            weights = np.zeros([max_length], dtype=np.float32)
-            weights[: seq.size] = 1.0
-            yield targets, weights
+            yield np.asarray(seq, dtype=np.int32).reshape(-1)
 
-    dataset = tf.data.Dataset.from_generator(
-        generator,
-        output_signature=(tf.TensorSpec([max_length], tf.int32), tf.TensorSpec([max_length], tf.float32)),
-    )
-    dataset = dataset.batch(batch_size)
-    dataset = dataset.map(lambda targets, weights: (shift_tokens(targets, blank), targets, weights))
-    return dataset.prefetch(tf.data.AUTOTUNE)
+    return tf.data.Dataset.from_generator(generator, output_signature=tf.TensorSpec([None], tf.int32))
 
 
 def main(
@@ -82,6 +113,8 @@ def main(
     dataset_type: str,
     output: str,
     target: str = "internal",
+    text_path: str = None,
+    max_lines: int = None,
     modeldir: str = None,
     bs: int = 32,
     epochs: int = 10,
@@ -102,9 +135,16 @@ def main(
       subtracts. This one **must** be fitted on the ASR training transcripts, because what it
       approximates is the internal LM the transducer picked up from exactly that text. Fitting it
       on target-domain text would make the correction subtract the knowledge fusion is adding.
-    - "external" builds `lm_config.external_config`, the LM that gets fused in. Training it on the
-      ASR transcripts only reproduces what the model already knows -- the point of an external LM
-      is a far larger corpus -- so point `data_config.train_dataset_config` at that text.
+    - "external" builds `lm_config.external_config`, the LM that gets fused in. Point
+      `--text-path` at a large text corpus: the whole value of an external LM is seeing far more
+      text than the ASR transcripts. The published setups use the LibriSpeech LM corpus, ~40M
+      lines and 800M words, against the ~9M words of LibriSpeech transcripts:
+
+          wget https://www.openslr.org/resources/11/librispeech-lm-norm.txt.gz
+
+      `.gz` is read directly, no need to decompress. Without `--text-path` it falls back to the
+      transcripts and warns, because that trains the external LM on exactly the text the
+      transducer already learned -- which is what ILME and LODR exist to *subtract*.
 
     Fitting dispatches on the model. An n-gram exposes `fit_counts` and is fitted in a single
     counting pass, which is its exact maximum-likelihood estimate; anything else is trained by
@@ -119,12 +159,22 @@ def main(
     Parameters
     ----------
     output : str
-        Where to write the h5. Point `lm_config.<target>_config.weights` at it.
+        Where to write the h5. Pass it to `tensorflow_asr test` as `--lm-h5` or `--internal-lm-h5`.
+    text_path : str
+        Plain text corpus, one sentence per line, optionally gzipped. External LM only.
+    max_lines : int
+        Stop after this many lines of `--text-path`. For a quick run over a corpus of tens of
+        millions of lines.
     max_length : int
-        Transcripts are truncated to this many tokens. Only affects gradient training.
+        Sequences are truncated to this many tokens. Only affects gradient training.
     """
     if target not in TARGETS:
         raise ValueError(f"target must be one of {TARGETS}, got {target}")
+    if text_path and target != "external":
+        # The internal LM approximates what the transducer picked up from its training transcripts.
+        # Counting it over any other corpus would make the correction subtract the wrong thing, so
+        # there is deliberately no way to point it at one.
+        raise ValueError(f"--text-path is only valid with --target=external, got --target={target}. The internal LM must be fitted on the ASR training transcripts.")
 
     env_util.setup_strategy(device_type=device_type, devices=devices)
     env_util.setup_seed()
@@ -142,13 +192,11 @@ def main(
     lm: LanguageModel = BaseModel.build_lm(model_config)
     lm.summary()
 
-    sequences = transcript_tokens(tokenizer, dataset_type, config.data_config.train_dataset_config)
-
     if hasattr(lm, "fit_counts"):
         # An n-gram's maximum likelihood estimate is a ratio of counts, exact and available in one
         # pass. Gradient descent would only approximate what this computes outright.
         logger.info(f"{type(lm).__name__} provides `fit_counts`, fitting by counting rather than gradient descent")
-        counts = lm.fit_counts(sequences)
+        counts = lm.fit_counts(transcript_tokens(tokenizer, dataset_type, config.data_config.train_dataset_config))
         vocab_size, seen_pairs = counts.shape[0], int((counts > 0).sum())
         logger.info(
             f"Counted {int(counts.sum())} bigrams: {seen_pairs} distinct pairs "
@@ -156,13 +204,23 @@ def main(
             f"{int((counts.sum(axis=1) > 0).sum())}/{vocab_size} contexts seen"
         )
     else:
-        sequences = list(sequences)
-        logger.info(f"Training {type(lm).__name__} on {len(sequences)} transcripts for {epochs} epochs")
+        if text_path:
+            tokens = text_line_tokens(tokenizer, text_path, max_lines=max_lines)
+            source = f"{text_path}{f' (first {max_lines} lines)' if max_lines else ''}"
+        else:
+            if target == "external":
+                logger.warning(
+                    "Training the external language model on the ASR transcripts, which is the text the transducer "
+                    "already learned. Pass --text-path to a larger corpus, or the fusion has little left to add."
+                )
+            tokens = transcript_token_dataset(transcript_tokens(tokenizer, dataset_type, config.data_config.train_dataset_config))
+            source = "the training transcripts"
+        logger.info(f"Training {type(lm).__name__} ({lm.count_params() / 1e6:.1f}M params) on {source} for {epochs} epochs")
         lm.compile(
             optimizer=keras.optimizers.Adam(learning_rate=learning_rate),
             loss=keras.losses.SparseCategoricalCrossentropy(from_logits=True),
         )
-        lm.fit(token_dataset(sequences, tokenizer.blank, batch_size=bs, max_length=max_length), epochs=epochs)
+        lm.fit(to_training_pairs(tokens, tokenizer.blank, batch_size=bs, max_length=max_length), epochs=epochs)
 
     output = file_util.preprocess_paths(output)
     lm.save_weights(output)
