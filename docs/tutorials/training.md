@@ -1,10 +1,11 @@
 - [Training Tutorial](#training-tutorial)
-  - [1. Install packages](#1-install-packages)
+  - [1. Installation](#1-installation)
   - [2. Prepare transcripts files](#2-prepare-transcripts-files)
   - [3. Prepare config file](#3-prepare-config-file)
-  - [4. \[Optional\]\[Required if using TPUs\] Create tfrecords](#4-optionalrequired-if-using-tpus-create-tfrecords)
+  - [4. \[Optional\] Create tfrecords](#4-optional-create-tfrecords)
   - [5. Generate vocabulary and metadata](#5-generate-vocabulary-and-metadata)
   - [6. Run training](#6-run-training)
+  - [7. \[Optional\] Train a language model](#7-optional-train-a-language-model)
 
 
 # Training Tutorial
@@ -93,4 +94,89 @@ tensorflow_asr train \
     --tpu-address=local
 ## See others params
 tensorflow_asr train --help
+```
+
+## 7. [Optional] Train a language model
+
+Only needed if you decode with beam search and a language model. Greedy decoding uses none, so you can stop at step 6.
+
+There are two language models, and `--target` picks which one is trained:
+
+| `--target`   | What it is                                        | Trained on                       | Config key                 |
+| ------------ | ------------------------------------------------- | -------------------------------- | -------------------------- |
+| `external`   | the LM fused *into* the scores                    | a large text corpus              | `lm_config.external_config` |
+| `internal`   | the low-order LM that LODR *subtracts*            | the ASR training transcripts     | `lm_config.internal_config` |
+
+Which ones you need depends on `decoder_config.lm_type`: `shallow` and `ilme` use the external LM only, `lodr` uses both. See [decoders.md](../decoders.md) for what each mode does and how to set `lm_alpha` and `lm_beta`.
+
+Add the models to the same config file used for training. `vocab_size` must equal the tokenizer's vocabulary size, because the LM returns scores indexed against the transducer's own tokens:
+
+```yaml
+lm_config:
+  external_config:
+    class_name: tensorflow_asr.models.lm.lstm_language_model>LSTMLanguageModel
+    config:
+      vocab_size: 1000
+      embed_dim: 512
+      units: 2048
+      nlayers: 2
+      tie_embeddings: True
+  internal_config:
+    class_name: tensorflow_asr.models.lm.bigram_language_model>BigramLanguageModel
+    config:
+      vocab_size: 1000
+      blank: 0
+```
+
+### 7.1 Internal language model (for `lm_type: lodr`)
+
+```bash
+tensorflow_asr train_lm \
+    --config-path=/path/to/config.yml.j2 \
+    --datadir=/path/to/datadir \
+    --dataset-type=slice \
+    --target=internal \
+    --output=/path/to/modeldir/internal_lm.weights.h5
+```
+
+This one must be fitted on the ASR training transcripts, so there is no `--text-path` for it — the whole point is to approximate what the transducer already picked up from that exact text. `BigramLanguageModel` is fitted by counting in a single pass, which is its exact estimate, so `--epochs`, `--bs` and `--learning-rate` do nothing here.
+
+### 7.2 External language model
+
+Point `--text-path` at a corpus much larger than your transcripts. The published setups use the LibriSpeech LM corpus, ~800M words against the ~9M words of LibriSpeech transcripts:
+
+```bash
+wget https://www.openslr.org/resources/11/librispeech-lm-norm.txt.gz
+
+tensorflow_asr train_lm \
+    --config-path=/path/to/config.yml.j2 \
+    --datadir=/path/to/datadir \
+    --dataset-type=slice \
+    --target=external \
+    --text-path=/path/to/librispeech-lm-norm.txt.gz \
+    --max-lines=1000000 \
+    --bs=128 \
+    --epochs=1 \
+    --output=/path/to/modeldir/lm.weights.h5
+## See others params
+tensorflow_asr train_lm --help
+```
+
+The `.gz` is read directly and streamed, so the several GB never has to be unpacked. `--max-lines` caps it for a quick first run; drop it to use the whole corpus. `--datadir` and `--dataset-type` are still required even though the text comes from `--text-path`, because the config is rendered with them.
+
+Without `--text-path` it falls back to the training transcripts and warns, since that trains the external LM on the text the transducer already learned.
+
+### 7.3 Use the weights
+
+The weights are not named in the config. Pass them to `tensorflow_asr test`, which loads them into the models `lm_config` describes:
+
+```bash
+tensorflow_asr test \
+    --config-path=/path/to/config.yml.j2 \
+    --dataset-type=slice \
+    --datadir=/path/to/datadir \
+    --outputdir=/path/to/modeldir/tests \
+    --h5=/path/to/modeldir/weights.h5 \
+    --lm-h5=/path/to/modeldir/lm.weights.h5 \
+    --internal-lm-h5=/path/to/modeldir/internal_lm.weights.h5
 ```
