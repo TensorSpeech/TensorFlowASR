@@ -63,6 +63,25 @@ model_config:
       config:
         l2: 1e-6
 
+lm_config:
+  # the LM fused *in*. Optional.
+  external_config:
+    class_name: tensorflow_asr.models.lm.lstm_language_model>LSTMLanguageModel
+    config:
+      vocab_size: {{decoder_config.vocabsize}}
+      embed_dim: 512
+      units: 2048
+      nlayers: 2
+      tie_embeddings: true
+  # the low-order LM subtracted. Required by lm_type: lodr.
+  internal_config:
+    class_name: tensorflow_asr.models.lm.bigram_language_model>BigramLanguageModel
+    config:
+      vocab_size: {{decoder_config.vocabsize}}
+      blank: 0
+      interpolation: 0.75
+      delta: 0.1
+
 learning_config:
   optimizer_config:
     class_name: Adam

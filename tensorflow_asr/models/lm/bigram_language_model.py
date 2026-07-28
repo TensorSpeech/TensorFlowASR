@@ -155,7 +155,14 @@ class BigramLanguageModel(LanguageModel):
     this repository's, where dense storage stops being free.
     """
 
-    def __init__(self, vocab_size: int, blank: int = 0, interpolation: float = 0.75, delta: float = 0.1, **kwargs):
+    def __init__(
+        self,
+        vocab_size: int,
+        blank: int = 0,
+        interpolation: float = 0.75,
+        delta: float = 0.1,
+        **kwargs,
+    ):
         super().__init__(**kwargs)
         self.vocab_size = vocab_size
         self.blank = blank
