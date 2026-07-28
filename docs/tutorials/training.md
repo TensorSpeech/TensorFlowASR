@@ -17,7 +17,11 @@ These commands are example for librispeech dataset, but we can apply similar to 
 ```bash
 uv sync                 # CPU / Apple Silicon
 uv sync --extra cuda    # NVIDIA GPU
-uv sync --extra tpu     # TPU
+
+# TPU: sync first, then swap TensorFlow for the Cloud TPU build. This cannot be an
+# extra -- `tensorflow-tpu` ships its own `tensorflow` distribution, so the two
+# cannot be installed together. Re-run it after any later `uv sync`.
+uv sync && ./scripts/install_tpu.sh
 ```
 
 ## 2. Prepare transcripts files

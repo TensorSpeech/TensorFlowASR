@@ -18,6 +18,7 @@ REPO_DIR = "${repo_dir}"
 DATADIR = "${datadir}"
 MODELDIR = "${modeldir}"
 OUTPUT = "${output_path}"
+DEVICE_TYPE = "${device_type}"
 
 
 def run(cmd, cwd=None):
@@ -56,31 +57,47 @@ run(["uv", "--version"])
 # The target carries the accelerator extra -- `.[cuda]` on a GPU kernel, which is what pulls
 # tensorflow[and-cuda] and the nvidia wheels. Installing plain `.` on a GPU box gives you a
 # TensorFlow that runs, sees no device, and quietly trains on the CPU.
-run(
-    ["uv", "pip", "install", "--system", "--python", sys.executable]
-    + shlex.split("${uv_install_args}")
-    + ["-e", "${install_target}"],
-    cwd=REPO_DIR,
-)
+ENV_FLAGS = ["--system", "--python", sys.executable]
+
+run(["uv", "pip", "install"] + ENV_FLAGS + ["-q", "-e", "${install_target}"], cwd=REPO_DIR)
+
+# The TPU build has to replace the stock TensorFlow rather than sit beside it -- both ship a
+# `tensorflow` distribution and `tensorflow` is a base dependency, so no extra can express it.
+# `scripts/install_tpu.sh` in the repository does the uninstall-then-install, and lives there
+# rather than here so the same command works outside a notebook. It reads the version off the
+# TensorFlow it is replacing, so the two cannot drift.
+if DEVICE_TYPE == "tpu":
+    run([os.path.join(REPO_DIR, "scripts", "install_tpu.sh")] + ENV_FLAGS)
+
+import glob  # noqa: E402
 
 import tensorflow as tf  # noqa: E402
 
-# `list_physical_devices` only enumerates; it does not call `initialize_tpu_system`, which takes
-# exclusive hold of the chips. train_lm runs in a subprocess and needs to do that itself, so
-# grabbing the TPU here would leave it with nothing to attach to.
-DEVICE_TYPE = "${device_type}"
-devices = tf.config.list_physical_devices(DEVICE_TYPE.upper()) if DEVICE_TYPE != "cpu" else []
-print("TensorFlow", tf.__version__, "| visible", DEVICE_TYPE.upper(), "devices:", devices)
+print("TensorFlow", tf.__version__)
 
-# Fail here rather than hours into a run that turned out to be on the CPU. An accelerator kernel
-# with a CPU-only TensorFlow trains perfectly happily, just far too slowly to finish.
-if DEVICE_TYPE != "cpu" and not devices:
-    raise SystemExit(
-        "device_type is \"" + DEVICE_TYPE + "\" but TensorFlow sees no such device.\n"
-        "Check that enable_gpu / enable_tpu matches device_type in the tfvars, and that "
-        "uv_install_args does not add --no-deps, which skips the accelerator extra "
-        "(.[cuda] installs tensorflow[and-cuda]; .[tpu] installs tensorflow-tpu)."
-    )
+if DEVICE_TYPE == "gpu":
+    # A GPU is registered at import, so an empty list here really does mean no GPU. Fail now
+    # rather than hours into a run that turned out to be on the CPU: a GPU kernel with a CPU-only
+    # TensorFlow trains perfectly happily, just far too slowly to finish.
+    gpus = tf.config.list_physical_devices("GPU")
+    print("Visible GPUs:", gpus)
+    if not gpus:
+        raise SystemExit(
+            "device_type is \"gpu\" but TensorFlow sees no GPU.\n"
+            "Check that `accelerator` in the tfvars is an Nvidia* ID -- that is what installs "
+            "the .[cuda] extra, and therefore tensorflow[and-cuda]."
+        )
+
+elif DEVICE_TYPE == "tpu":
+    # A TPU is different: `tf.tpu.experimental.initialize_tpu_system` is what creates the devices,
+    # so `list_physical_devices("TPU")` is empty until then and an empty list here proves nothing.
+    # Initialising would take exclusive hold of the chips, and train_lm runs in a subprocess that
+    # has to do that itself -- so this reports what can be seen without claiming the TPU, and
+    # train_lm is left as the authority on whether the TPU actually works.
+    print("Physical TPU devices:", tf.config.list_physical_devices("TPU"), "(expected empty until initialize_tpu_system runs)")
+    print("TPU device nodes:", sorted(glob.glob("/dev/accel*")) or "none found")
+    print("TPU env:", {k: v for k, v in sorted(os.environ.items()) if k.startswith(("TPU", "LIBTPU", "XLA", "PJRT"))} or "none set")
+    run([sys.executable, "-m", "pip", "show", "tensorflow-tpu", "libtpu"])
 
 # %%
 # The config is jinja2 and its imports resolve against `repodir` (see

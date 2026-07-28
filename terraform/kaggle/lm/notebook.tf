@@ -1,4 +1,8 @@
 locals {
+  # Cloned outside /kaggle/working deliberately: everything under /kaggle/working is collected as
+  # notebook output, so a clone there would be dragged into every `kaggle kernels output`.
+  repo_dir = "/tmp/TensorFlowASR"
+
   # Flags that only appear when they are set. train_lm rejects --text-path unless
   # --target=external, so it is gated here too rather than left to fail on Kaggle.
   optional_flags = concat(
@@ -11,36 +15,36 @@ locals {
     var.device_type == "tpu" && var.tpu_vm ? ["--tpu-vm=True"] : [],
   )
 
-  # The accelerator decides the extra. `cuda` pulls tensorflow[and-cuda] with the nvidia
-  # wheels; plain `tensorflow` cannot see a GPU. Both cannot be set at once -- a precondition
-  # in main.tf rejects that -- so this never produces a conflicting pair.
+  # The accelerator decides the extra. `cuda` pulls tensorflow[and-cuda] with the nvidia wheels;
+  # plain `tensorflow` cannot see a GPU.
+  #
+  # There is no TPU extra, in pyproject or here, and there cannot be: `tensorflow` is a base
+  # dependency and `tensorflow-tpu` ships its own `tensorflow` distribution, so an extra adding it
+  # installs the pair and whichever lands last wins. The TPU build is swapped in afterwards by
+  # `scripts/install_tpu.sh` -- see the install cell.
   #
   # Bracket syntax rather than `--extra cuda`: uv rejects `--extra` alongside `-e .` with
   # "Requesting extras requires a pyproject.toml ... use <dir>[extra] syntax instead".
-  install_extras = compact([
-    var.enable_gpu ? "cuda" : "",
-    var.enable_tpu ? "tpu" : "",
-  ])
+  install_extras = compact([local.use_gpu ? "cuda" : ""])
   install_target = length(local.install_extras) > 0 ? ".[${join(",", local.install_extras)}]" : "."
 
   notebook_source = templatefile("${path.module}/templates/train_lm.py.tftpl", {
-    repo_url        = var.repo_url
-    repo_ref        = var.repo_ref
-    repo_dir        = var.repo_dir
-    uv_install_args = var.uv_install_args
-    install_target  = local.install_target
-    config_path     = var.config_path
-    datadir         = var.datadir
-    modeldir        = var.modeldir
-    output_path     = var.output_path
-    dataset_type    = var.dataset_type
-    target          = var.target
-    bs              = var.bs
-    epochs          = var.epochs
-    max_length      = var.max_length
-    learning_rate   = var.learning_rate
-    device_type     = var.device_type
-    mxp             = var.mxp
+    repo_url       = var.repo_url
+    repo_ref       = var.repo_ref
+    repo_dir       = local.repo_dir
+    install_target = local.install_target
+    config_path    = var.config_path
+    datadir        = var.datadir
+    modeldir       = var.modeldir
+    output_path    = var.output_path
+    dataset_type   = var.dataset_type
+    target         = var.target
+    bs             = var.bs
+    epochs         = var.epochs
+    max_length     = var.max_length
+    learning_rate  = var.learning_rate
+    device_type    = var.device_type
+    mxp            = var.mxp
 
     # A JSON list is also a valid Python list literal, and a JSON string is a valid Python
     # string literal, so both drop straight into the source with Terraform doing the escaping.

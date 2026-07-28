@@ -119,11 +119,11 @@ tpu_address = "local"
 tpu_vm      = true
 ```
 
-**`enable_tpu = true` on its own does not get you a TPU.** It maps to the v3-8, which Kaggle has
-phased out, so the kernel starts with no accelerator attached and you only find out once the
-notebook is running. Hardware is picked by an accelerator ID, written to `machine_shape` and passed
-as `kaggle kernels push --accelerator`; the API treats that as an override for the booleans. A
-precondition rejects `enable_tpu` without an ID.
+Hardware is picked by an accelerator ID, written to `machine_shape` and passed as
+`kaggle kernels push --accelerator`. Kaggle's older `enable_gpu` / `enable_tpu` booleans are not
+exposed by this module: they cannot say *which* GPU, and `enable_tpu` maps to the v3-8 that Kaggle
+has phased out, so a TPU asked for that way comes up with nothing attached. The metadata booleans
+are derived from the ID's prefix.
 
 Valid IDs as of Feb 2026, from the
 [CLI docs](https://github.com/Kaggle/kaggle-cli/blob/main/docs/kernels.md) — some are restricted to
@@ -137,8 +137,7 @@ TpuV38  Tpu1VmV38  TpuV5E8  TpuV6E8
 
 `accelerator` is what Kaggle attaches; `device_type` is what TensorFlow is told to use. They are
 separate knobs and disagreeing is silent — the kernel boots, installs the wrong extra and trains on
-the CPU — so a precondition rejects the mismatch at plan time. `enable_gpu` / `enable_tpu` are
-derived from the ID when one is set, so the metadata can never contradict it.
+the CPU — so a precondition rejects the mismatch at plan time.
 
 **Sizing.** A v5e-8 is 8 chips x 16 GB HBM. `bs` is per replica, so `bs = 32` is a global batch of
 256 — 8x what the same number means on one GPU, so scale `learning_rate` up (~2.5e-3 by sqrt
@@ -164,9 +163,34 @@ keras 3 / tensorflow 2.19 any value above 1 combined with a distribution strateg
 Dense model and with the stock Keras loss, so it is not this repository. Whether `TPUStrategy`
 shares the fault is unknown. Raise it if you like, but check a few steps run first.
 
-**The `tpu` extra replaces the image's TensorFlow.** `.[tpu]` installs `tensorflow-tpu`, which
-displaces whatever TF Kaggle's TPU image ships with. That may or may not work against their
-runtime; if the kernel comes up with no TPU visible, that is the first thing to suspect.
+**The TensorFlow build is swapped, not added.** There is no `tpu` extra, and there cannot be:
+`tensorflow` is a base dependency and `tensorflow-tpu` ships its own `tensorflow` distribution, so
+an extra adding it resolves to `tensorflow==2.19.1` *and* `tensorflow-tpu==2.19.1` and whichever
+lands last wins. The notebook installs the project normally, then runs
+[`scripts/install_tpu.sh`](../../../scripts/install_tpu.sh) from the clone:
+
+```
+uv pip uninstall --system --python <py> tensorflow
+uv pip install   --system --python <py> tensorflow-tpu~=<minor of the tensorflow it replaced>
+```
+
+The version is read off the `tensorflow` being replaced, so it tracks whatever `uv sync` resolved
+and cannot drift from the pin in `pyproject.toml`. Only the minor is pinned, because the patch
+levels do not line up between the two distributions — `tensorflow` has a 2.19.0 where
+`tensorflow-tpu` jumps from 2.19.0rc0 straight to 2.19.1. Set `TPU_PACKAGE` in the environment to
+force something else.
+
+The logic lives in the repository rather than in this template so the same command works outside a
+notebook — `uv sync && ./scripts/install_tpu.sh` locally.
+
+`tensorflow-text` keeps working — the module it imports is still there, now provided by
+`tensorflow-tpu`.
+
+`setup.sh` also passes `-f https://storage.googleapis.com/libtpu-tf-releases/index.html`. That was
+needed for the 2.18 line, whose `libtpu~=2.18.0` existed only on Google's index — that index still
+tops out at 2.18. From 2.19 the dependency is `libtpu==0.0.10`, which is on PyPI, and
+`tensorflow-tpu~=2.19.0` resolves for linux with no extra index. Pinning back to 2.18 means
+adding that `--find-links` to the install command in `scripts/install_tpu.sh`.
 
 **An LSTM is a poor fit for a TPU.** It is sequential over timesteps, which is what TPUs are worst
 at. Benchmark a few hundred steps against the P100 before committing — the GPU may simply win.
@@ -195,15 +219,13 @@ surfaces as a path with a hole in it rather than an error.
 
 **Installing replaces the image's TensorFlow** and takes a while. The notebook bootstraps `uv`
 and runs `uv pip install --system`, which resolves the same dependencies as pip but much faster —
-and `pyproject.toml` pins `tensorflow~=2.19.0`, so a differing image version gets replaced. If the
-image already has a compatible one, `uv_install_args = "-q --no-deps"` skips the whole resolution.
+and `pyproject.toml` pins `tensorflow~=2.19.0`, so a differing image version gets replaced.
 
-**The accelerator picks the extra.** `enable_gpu` installs `-e .[cuda]`, which is what pulls
-`tensorflow[and-cuda]` and the twelve nvidia wheels; `enable_tpu` installs `-e .[tpu]`. Plain
-`tensorflow` on a GPU box runs fine, sees no device, and trains on the CPU — so the notebook
-checks `tf.config.list_physical_devices("GPU")` right after installing and stops there if
-`device_type` is `gpu` and nothing showed up. Note `--no-deps` skips the extra along with
-everything else, which is the one way to ask for cuda and not get it.
+**The accelerator picks the extra.** An `Nvidia*` ID installs `-e .[cuda]`, which is what pulls
+`tensorflow[and-cuda]` and the twelve nvidia wheels; a `Tpu*` ID runs `scripts/install_tpu.sh`
+instead. Plain `tensorflow` on a GPU box runs fine, sees no device, and trains on the CPU — so the
+notebook checks `tf.config.list_physical_devices("GPU")` right after installing and stops there if
+`device_type` is `gpu` and nothing showed up.
 
 Terraform builds the target as `.[cuda]` rather than passing `--extra cuda`: uv rejects `--extra`
 next to `-e .` with *"Requesting extras requires a pyproject.toml … use `<dir>[extra]` syntax"*.

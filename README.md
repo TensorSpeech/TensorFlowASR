@@ -82,7 +82,6 @@ git clone https://github.com/TensorSpeech/TensorFlowASR.git
 cd TensorFlowASR
 uv sync                 # CPU / Apple Silicon
 uv sync --extra cuda    # NVIDIA GPU
-uv sync --extra tpu     # TPU
 uv sync --extra dev     # add the development tooling
 ```
 
@@ -92,12 +91,21 @@ Extras are declared in `pyproject.toml`:
 | ------ | -------- |
 | _(none)_ | `tensorflow` + `tensorflow-text`, works on CPU and Apple Silicon |
 | `cuda` | `tensorflow[and-cuda]` for NVIDIA GPUs |
-| `tpu`  | `tensorflow-tpu` (Linux x86_64 only) |
 | `dev`  | `pytest`, `ruff`, `pre-commit`, plotting and export tooling |
 
-`cuda` and `tpu` are mutually exclusive — uv rejects any combination of them.
 Run commands inside the environment with `uv run`, e.g. `uv run pytest` or
 `uv run tensorflow_asr --help`.
+
+**Cloud TPU** is not an extra:
+
+```bash
+uv sync && ./scripts/install_tpu.sh
+```
+
+`tensorflow-tpu` ships its own `tensorflow` distribution, and `tensorflow` is a base
+dependency, so an extra adding it would install both and leave whichever landed last in
+place. The script uninstalls the stock build first, then installs the TPU one. Re-run it
+after any later `uv sync`, which puts the stock `tensorflow` back.
 
 > **TPU note:** `tensorflow-tpu` ships its own `tensorflow` distribution and
 > overwrites the base one. This matches the previous `setup.sh tpu` behaviour,

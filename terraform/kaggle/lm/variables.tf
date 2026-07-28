@@ -22,24 +22,19 @@ variable "kaggle_key" {
 }
 
 variable "kernel_slug" {
-  description = "Kernel slug. The notebook lives at kaggle.com/code/<username>/<slug>."
+  description = <<-EOT
+    Kernel slug. The notebook lives at kaggle.com/code/<username>/<slug>, and the slug doubles as
+    the title.
+
+    The 5-character minimum comes from the title: Kaggle rejects anything shorter. Slugs alone
+    could be 3.
+  EOT
   type        = string
   default     = "tensorflowasr-train-lm"
 
   validation {
-    condition     = can(regex("^[a-z0-9][a-z0-9-]{2,}$", var.kernel_slug))
-    error_message = "kernel_slug must be lowercase letters, digits and hyphens, at least 3 characters."
-  }
-}
-
-variable "kernel_title" {
-  description = "Title shown on Kaggle. Kaggle requires at least 5 characters."
-  type        = string
-  default     = "TensorFlowASR train_lm"
-
-  validation {
-    condition     = length(var.kernel_title) >= 5
-    error_message = "Kaggle rejects titles shorter than 5 characters."
+    condition     = can(regex("^[a-z0-9][a-z0-9-]{4,}$", var.kernel_slug))
+    error_message = "kernel_slug must be lowercase letters, digits and hyphens, at least 5 characters (Kaggle rejects titles shorter than that, and the slug is used as the title)."
   }
 }
 
@@ -52,12 +47,12 @@ variable "is_private" {
 variable "accelerator" {
   description = <<-EOT
     Accelerator ID, written to `machine_shape` and passed as `kaggle kernels push --accelerator`.
-    This is what actually picks the hardware.
+    This is what picks the hardware. "" means no accelerator; pair it with device_type = "cpu".
 
-    `enable_gpu` / `enable_tpu` are the older, coarser switches, and the API treats an accelerator
-    ID as an override for them. They are also no longer sufficient on their own: `enable_tpu` maps
-    to the v3-8, which Kaggle has phased out, so a TPU kernel asked for that way comes up with no
-    TPU attached. Set this instead.
+    Kaggle also has older `enable_gpu` / `enable_tpu` booleans, which this module does not expose:
+    they cannot say *which* GPU, and `enable_tpu` maps to the v3-8 that Kaggle has phased out, so
+    a TPU asked for that way comes up with nothing attached. The metadata booleans are derived
+    from the prefix of this ID instead, so they can never contradict it.
 
     Valid IDs as of Feb 2026, from https://github.com/Kaggle/kaggle-cli/blob/main/docs/kernels.md
     -- some are restricted to competition participants or Kaggle admins:
@@ -65,12 +60,9 @@ variable "accelerator" {
       NvidiaTeslaP100  NvidiaTeslaT4  NvidiaTeslaT4Highmem  NvidiaTeslaA100
       NvidiaL4  NvidiaL4X1  NvidiaH100  NvidiaRtxPro6000
       TpuV38  Tpu1VmV38  TpuV5E8  TpuV6E8
-
-    "" falls back to the booleans below. `enable_gpu` / `enable_tpu` are derived from the prefix
-    when this is set, so they cannot disagree with it.
   EOT
   type        = string
-  default     = ""
+  default     = "NvidiaTeslaP100"
 
   validation {
     condition = contains(
@@ -83,32 +75,6 @@ variable "accelerator" {
     )
     error_message = "Unknown accelerator ID. See https://github.com/Kaggle/kaggle-cli/blob/main/docs/kernels.md for the current list."
   }
-}
-
-variable "enable_gpu" {
-  description = <<-EOT
-    Attach a GPU, when `accelerator` is not set. Ignored by the bigram, which is fitted by counting.
-    Prefer `accelerator` -- this switch cannot express which GPU.
-  EOT
-  type        = bool
-  default     = true
-}
-
-variable "enable_tpu" {
-  description = <<-EOT
-    Attach a TPU, when `accelerator` is not set.
-
-    On its own this asks for the v3-8, which Kaggle has phased out, so the kernel starts with no
-    TPU. Use `accelerator = "TpuV5E8"` instead.
-  EOT
-  type        = bool
-  default     = false
-}
-
-variable "enable_internet" {
-  description = "Internet access. Must stay true: the notebook clones the repository, downloads uv and installs the dependencies."
-  type        = bool
-  default     = true
 }
 
 variable "dataset_sources" {
@@ -159,39 +125,6 @@ variable "repo_ref" {
   EOT
   type        = string
   default     = "feat/beamsearch"
-}
-
-variable "repo_dir" {
-  description = <<-EOT
-    Where to clone inside the Kaggle machine. Deliberately outside /kaggle/working:
-    everything under /kaggle/working is collected as notebook output, so a clone there
-    would be pulled down by every `kaggle kernels output`.
-  EOT
-  type        = string
-  default     = "/tmp/TensorFlowASR"
-}
-
-variable "uv_install_args" {
-  description = <<-EOT
-    Extra flags for `uv pip install`, run with the repository as the working directory.
-    The notebook bootstraps uv itself, then installs with `--system` into the Kaggle
-    interpreter, so no virtualenv is involved.
-
-    The install target is appended automatically and picks up the extra that matches the
-    accelerator: `-e .[cuda]` when enable_gpu, `-e .[tpu]` when enable_tpu, plain `-e .`
-    otherwise. The cuda extra is what pulls tensorflow[and-cuda] and the nvidia wheels;
-    without it a GPU kernel installs a TensorFlow that cannot see the GPU.
-
-    Adding "--no-deps" here defeats that -- the extra resolves to nothing and the image's
-    own TensorFlow is left in place. That is a reasonable choice if the image already has
-    a compatible one and you would rather not spend the minutes, but it is a choice.
-
-    This resolves from pyproject.toml, not uv.lock -- `uv pip install` does not read the
-    lock file. Getting the locked versions would mean `uv sync`, which builds a whole
-    virtualenv and re-downloads TensorFlow every session.
-  EOT
-  type        = string
-  default     = "-q"
 }
 
 # ---------------------------------------------------------------------------
@@ -316,7 +249,7 @@ variable "learning_rate" {
 }
 
 variable "device_type" {
-  description = "cpu, gpu or tpu. Should line up with enable_gpu / enable_tpu."
+  description = "cpu, gpu or tpu. Must line up with `accelerator`; a precondition rejects a mismatch."
   type        = string
   default     = "gpu"
 
@@ -339,6 +272,15 @@ variable "tpu_address" {
     "local" is what `docs/tutorials/training.md` uses and what a TPU VM wants, since the chips are
     attached to the machine running the code rather than reached over the network. Set it to ""
     to let the resolver auto-detect.
+
+    If the TPU runtime complains
+
+        Could not find SliceBuilder port 8471 in any of the 0 ports provided in
+        tpu_process_addresses="local"
+
+    then "local" is being read as a list of process addresses and finding none. Try "" first,
+    then "" together with tpu_vm = false, which restores the `experimental_connect_to_cluster`
+    call that the VM path skips. Which combination Kaggle wants is untested here.
   EOT
   type        = string
   default     = "local"

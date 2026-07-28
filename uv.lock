@@ -6,10 +6,6 @@ resolution-markers = [
     "sys_platform == 'emscripten'",
     "sys_platform != 'emscripten' and sys_platform != 'win32'",
 ]
-conflicts = [[
-    { package = "tensorflowasr", extra = "cuda" },
-    { package = "tensorflowasr", extra = "tpu" },
-]]
 
 [manifest]
 constraints = [{ name = "numba", specifier = ">=0.62" }]
@@ -157,7 +153,7 @@ name = "cffi"
 version = "2.1.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "pycparser", marker = "implementation_name != 'PyPy' or (extra == 'extra-13-tensorflowasr-cuda' and extra == 'extra-13-tensorflowasr-tpu')" },
+    { name = "pycparser", marker = "implementation_name != 'PyPy'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/57/5f/ff100cae70ebe9d8df1c01a00e510e45d9adb5c1fdda84791b199141de97/cffi-2.1.0.tar.gz", hash = "sha256:efc1cdd798b1aaf39b4610bba7aad28c9bea9b910f25c784ccf9ec1fa719d1f9", size = 531036, upload-time = "2026-07-06T21:34:30.382Z" }
 wheels = [
@@ -211,7 +207,7 @@ name = "click"
 version = "8.4.2"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "colorama", marker = "sys_platform == 'win32' or (extra == 'extra-13-tensorflowasr-cuda' and extra == 'extra-13-tensorflowasr-tpu')" },
+    { name = "colorama", marker = "sys_platform == 'win32'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/76/d4/81420972a676e8ffea40450d8c8c92943e7218a78fe9b64359836cc9876b/click-8.4.2.tar.gz", hash = "sha256:9a6cea6e60b17ebe0a44c5cc636d94f09bd66142c1cd7d8b4cd731c4917a15f6", size = 338000, upload-time = "2026-06-24T17:45:15.148Z" }
 wheels = [
@@ -553,7 +549,7 @@ dependencies = [
     { name = "click" },
     { name = "filelock" },
     { name = "fsspec" },
-    { name = "hf-xet", marker = "platform_machine == 'AMD64' or platform_machine == 'aarch64' or platform_machine == 'amd64' or platform_machine == 'arm64' or platform_machine == 'x86_64' or (extra == 'extra-13-tensorflowasr-cuda' and extra == 'extra-13-tensorflowasr-tpu')" },
+    { name = "hf-xet", marker = "platform_machine == 'AMD64' or platform_machine == 'aarch64' or platform_machine == 'amd64' or platform_machine == 'arm64' or platform_machine == 'x86_64'" },
     { name = "httpx" },
     { name = "packaging" },
     { name = "pyyaml" },
@@ -597,11 +593,11 @@ name = "ipython"
 version = "8.39.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "colorama", marker = "sys_platform == 'win32' or (extra == 'extra-13-tensorflowasr-cuda' and extra == 'extra-13-tensorflowasr-tpu')" },
+    { name = "colorama", marker = "sys_platform == 'win32'" },
     { name = "decorator" },
     { name = "jedi" },
     { name = "matplotlib-inline" },
-    { name = "pexpect", marker = "(sys_platform != 'emscripten' and sys_platform != 'win32') or (sys_platform == 'emscripten' and extra == 'extra-13-tensorflowasr-cuda' and extra == 'extra-13-tensorflowasr-tpu') or (sys_platform == 'win32' and extra == 'extra-13-tensorflowasr-cuda' and extra == 'extra-13-tensorflowasr-tpu')" },
+    { name = "pexpect", marker = "sys_platform != 'emscripten' and sys_platform != 'win32'" },
     { name = "prompt-toolkit" },
     { name = "pygments" },
     { name = "stack-data" },
@@ -795,14 +791,6 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/0e/2d/77783a52641a21ff7e2230aa588e4fb4a61422a64673096a36776b7e5bd9/librosa-0.10.2.post1.tar.gz", hash = "sha256:cd99f16717cbcd1e0983e37308d1db46a6f7dfc2e396e5a9e61e6821e44bd2e7", size = 325533, upload-time = "2024-05-14T15:49:40.53Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/8c/8a/2d231b35456506b7c98b3ab9bbf07917b205fed8615d2e59e976ab497fff/librosa-0.10.2.post1-py3-none-any.whl", hash = "sha256:dc882750e8b577a63039f25661b7e39ec4cfbacc99c1cffba666cd664fb0a7a0", size = 260089, upload-time = "2024-05-14T15:49:38.919Z" },
-]
-
-[[package]]
-name = "libtpu"
-version = "0.0.10"
-source = { registry = "https://pypi.org/simple" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/bc/3a/23e4ff7378f2c581988013eff0528b3a935e5eda4bc6b61857c0ebe9a740/libtpu-0.0.10-py3-none-manylinux_2_27_x86_64.whl", hash = "sha256:50917a43a9b634c36593f175acb3f939ace21ea23cb31ee78e52cfe5b1b17245", size = 129678970, upload-time = "2025-02-21T21:07:16.467Z" },
 ]
 
 [[package]]
@@ -1267,7 +1255,7 @@ source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "numpy" },
     { name = "python-dateutil" },
-    { name = "tzdata", marker = "sys_platform == 'emscripten' or sys_platform == 'win32' or (extra == 'extra-13-tensorflowasr-cuda' and extra == 'extra-13-tensorflowasr-tpu')" },
+    { name = "tzdata", marker = "sys_platform == 'emscripten' or sys_platform == 'win32'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/be/4f/5f3422a2afec5ffc46308b79e53291365a93748b498ac2e58bead0197916/pandas-3.0.5.tar.gz", hash = "sha256:dca3734d6ab7c906e6730f0788b0a1dbb9f2467731f9711f77995c8e9d62d712", size = 4658219, upload-time = "2026-07-22T22:19:28.819Z" }
 wheels = [
@@ -1296,7 +1284,7 @@ name = "pexpect"
 version = "4.9.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "ptyprocess", marker = "(sys_platform != 'emscripten' and sys_platform != 'win32') or (sys_platform == 'emscripten' and extra == 'extra-13-tensorflowasr-cuda' and extra == 'extra-13-tensorflowasr-tpu') or (sys_platform == 'win32' and extra == 'extra-13-tensorflowasr-cuda' and extra == 'extra-13-tensorflowasr-tpu')" },
+    { name = "ptyprocess" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/42/92/cc564bf6381ff43ce1f4d06852fc19a2f11d180f23dc32d9588bee2f149d/pexpect-4.9.0.tar.gz", hash = "sha256:ee7d41123f3c9911050ea2c2dac107568dc43b2d3b0c7557a33212c398ead30f", size = 166450, upload-time = "2023-11-25T09:07:26.339Z" }
 wheels = [
@@ -1497,7 +1485,7 @@ name = "pytest"
 version = "9.1.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "colorama", marker = "sys_platform == 'win32' or (extra == 'extra-13-tensorflowasr-cuda' and extra == 'extra-13-tensorflowasr-tpu')" },
+    { name = "colorama", marker = "sys_platform == 'win32'" },
     { name = "iniconfig" },
     { name = "packaging" },
     { name = "pluggy" },
@@ -1879,8 +1867,8 @@ name = "tensorflow-metal"
 version = "1.2.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "six", marker = "(sys_platform != 'emscripten' and sys_platform != 'win32') or (sys_platform == 'emscripten' and extra == 'extra-13-tensorflowasr-cuda' and extra == 'extra-13-tensorflowasr-tpu') or (sys_platform == 'win32' and extra == 'extra-13-tensorflowasr-cuda' and extra == 'extra-13-tensorflowasr-tpu')" },
-    { name = "wheel", marker = "(sys_platform != 'emscripten' and sys_platform != 'win32') or (sys_platform == 'emscripten' and extra == 'extra-13-tensorflowasr-cuda' and extra == 'extra-13-tensorflowasr-tpu') or (sys_platform == 'win32' and extra == 'extra-13-tensorflowasr-cuda' and extra == 'extra-13-tensorflowasr-tpu')" },
+    { name = "six" },
+    { name = "wheel" },
 ]
 wheels = [
     { url = "https://files.pythonhosted.org/packages/dc/bf/988b619322d5617a928e7f31cbb1ed8dd7f375f69dfa73dab26409a00382/tensorflow_metal-1.2.0-cp312-cp312-macosx_12_0_arm64.whl", hash = "sha256:4bece0ecb154b713b9f5ad4aec676a366d312822161e3cf0e1dea737c64cec04", size = 1357400, upload-time = "2025-01-31T00:52:57.924Z" },
@@ -1897,38 +1885,6 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/aa/d7/417877fddb215d8a99ae636946f96b19f6e2ceedcd7eb49be985baae3662/tensorflow_text-2.19.0-cp312-cp312-macosx_11_0_arm64.whl", hash = "sha256:4e73841fbc06061b0d6f0ef6367e94ec171e4eff2e45938e1d411a27021e0e31", size = 6109258, upload-time = "2025-04-04T20:52:38.556Z" },
     { url = "https://files.pythonhosted.org/packages/21/23/70683698d751e08cf1ab70d6f31a39034a2a9a494c1ec42d301cba3d8287/tensorflow_text-2.19.0-cp312-cp312-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:a77839d411aae75eacd60fa9d85453d1a2bcada79fc391d10a6d6aacc82b6088", size = 5447455, upload-time = "2025-04-04T20:52:19.879Z" },
     { url = "https://files.pythonhosted.org/packages/5a/e2/3efb758e284f2701429e1afc90293494fa3be7eac93fdc96de6378b21831/tensorflow_text-2.19.0-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:fc159c551243cf7926be66c68dd0d480d2f7e0d82b4c7e494cb2bfa20d7617ca", size = 5240926, upload-time = "2025-04-04T20:53:34.924Z" },
-]
-
-[[package]]
-name = "tensorflow-tpu"
-version = "2.19.1"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "absl-py", marker = "sys_platform != 'emscripten' and sys_platform != 'win32'" },
-    { name = "astunparse", marker = "sys_platform != 'emscripten' and sys_platform != 'win32'" },
-    { name = "flatbuffers", marker = "sys_platform != 'emscripten' and sys_platform != 'win32'" },
-    { name = "gast", marker = "sys_platform != 'emscripten' and sys_platform != 'win32'" },
-    { name = "google-pasta", marker = "sys_platform != 'emscripten' and sys_platform != 'win32'" },
-    { name = "grpcio", marker = "sys_platform != 'emscripten' and sys_platform != 'win32'" },
-    { name = "h5py", marker = "sys_platform != 'emscripten' and sys_platform != 'win32'" },
-    { name = "keras", marker = "sys_platform != 'emscripten' and sys_platform != 'win32'" },
-    { name = "libclang", marker = "sys_platform != 'emscripten' and sys_platform != 'win32'" },
-    { name = "libtpu", marker = "sys_platform != 'emscripten' and sys_platform != 'win32'" },
-    { name = "ml-dtypes", marker = "sys_platform != 'emscripten' and sys_platform != 'win32'" },
-    { name = "numpy", marker = "sys_platform != 'emscripten' and sys_platform != 'win32'" },
-    { name = "opt-einsum", marker = "sys_platform != 'emscripten' and sys_platform != 'win32'" },
-    { name = "packaging", marker = "sys_platform != 'emscripten' and sys_platform != 'win32'" },
-    { name = "protobuf", marker = "sys_platform != 'emscripten' and sys_platform != 'win32'" },
-    { name = "requests", marker = "sys_platform != 'emscripten' and sys_platform != 'win32'" },
-    { name = "setuptools", marker = "sys_platform != 'emscripten' and sys_platform != 'win32'" },
-    { name = "six", marker = "sys_platform != 'emscripten' and sys_platform != 'win32'" },
-    { name = "tensorboard", marker = "sys_platform != 'emscripten' and sys_platform != 'win32'" },
-    { name = "termcolor", marker = "sys_platform != 'emscripten' and sys_platform != 'win32'" },
-    { name = "typing-extensions", marker = "sys_platform != 'emscripten' and sys_platform != 'win32'" },
-    { name = "wrapt", marker = "sys_platform != 'emscripten' and sys_platform != 'win32'" },
-]
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/5f/54/016385899a87c4d700d73cba23485c2dd44ca6bd35f895b78589cbb12417/tensorflow_tpu-2.19.1-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:4615bf13ee56eae3d4e5a415c32f76575e22feef434fc7864019864656d0136c", size = 255394818, upload-time = "2025-08-13T16:32:53.796Z" },
 ]
 
 [[package]]
@@ -1959,10 +1915,10 @@ dependencies = [
 
 [package.optional-dependencies]
 apple = [
-    { name = "tensorflow-metal", marker = "(platform_machine == 'arm64' and sys_platform == 'darwin') or (platform_machine != 'arm64' and extra == 'extra-13-tensorflowasr-cuda' and extra == 'extra-13-tensorflowasr-tpu') or (sys_platform != 'darwin' and extra == 'extra-13-tensorflowasr-cuda' and extra == 'extra-13-tensorflowasr-tpu')" },
+    { name = "tensorflow-metal", marker = "platform_machine == 'arm64' and sys_platform == 'darwin'" },
 ]
 cuda = [
-    { name = "tensorflow", extra = ["and-cuda"], marker = "extra == 'extra-13-tensorflowasr-cuda'" },
+    { name = "tensorflow", extra = ["and-cuda"] },
 ]
 dev = [
     { name = "graphviz" },
@@ -1973,9 +1929,6 @@ dev = [
     { name = "pytest" },
     { name = "ruff" },
     { name = "tf2onnx" },
-]
-tpu = [
-    { name = "tensorflow-tpu", marker = "sys_platform == 'linux'" },
 ]
 
 [package.metadata]
@@ -2007,11 +1960,10 @@ requires-dist = [
     { name = "tensorflow", extras = ["and-cuda"], marker = "extra == 'cuda'", specifier = "~=2.19.0" },
     { name = "tensorflow-metal", marker = "platform_machine == 'arm64' and sys_platform == 'darwin' and extra == 'apple'", specifier = "~=1.2.0" },
     { name = "tensorflow-text", specifier = "~=2.19.0" },
-    { name = "tensorflow-tpu", marker = "sys_platform == 'linux' and extra == 'tpu'", specifier = "~=2.19.0" },
     { name = "tf2onnx", marker = "extra == 'dev'", specifier = ">=1.16.1" },
     { name = "tqdm", specifier = ">=4.67.1" },
 ]
-provides-extras = ["apple", "cuda", "tpu", "dev"]
+provides-extras = ["apple", "cuda", "dev"]
 
 [[package]]
 name = "termcolor"
@@ -2052,7 +2004,7 @@ name = "tqdm"
 version = "4.69.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "colorama", marker = "sys_platform == 'win32' or (extra == 'extra-13-tensorflowasr-cuda' and extra == 'extra-13-tensorflowasr-tpu')" },
+    { name = "colorama", marker = "sys_platform == 'win32'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/dd/84/da0e5038228fa34dfd77c5026b173ed035d2a3ba31f1077590c013de2bff/tqdm-4.69.1.tar.gz", hash = "sha256:2be21080a0ce17e902c2f1baeb6a74bf551b67bbdfa4bc0109fad471d0b4cb0d", size = 793046, upload-time = "2026-07-24T14:22:02.08Z" }
 wheels = [

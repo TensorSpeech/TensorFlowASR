@@ -38,15 +38,17 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-# `tensorflow-metal` only publishes macosx_12_0_arm64 wheels, and Cloud TPU only exists on Linux.
-# Both need an environment marker: uv resolves a universal lock covering every platform in the
-# marker space, so an unmarked requirement has to be satisfiable on Windows too. Without the
-# marker below, `tensorflow-tpu 2.19.1` pulls `tensorflow-intel==2.19.1` on win32 -- a version
-# that was never published (tensorflow-intel stops at 2.18.0) -- and the whole lock fails. The
-# 2.20 series dropped that win32 dependency, which is why this only appeared on the downgrade.
+# `tensorflow-metal` only publishes macosx_12_0_arm64 wheels, so it needs an environment marker:
+# uv resolves a universal lock covering every platform in the marker space, and an unmarked
+# requirement has to be satisfiable on Windows too.
+#
+# There is deliberately no `tpu` extra. `tensorflow-tpu` ships its own `tensorflow` distribution
+# and `tensorflow` is a base dependency above, so an extra adding it installs *both* -- resolving
+# `.[tpu]` for linux yields `tensorflow==2.19.1` and `tensorflow-tpu==2.19.1`, and whichever lands
+# last wins. Uninstall-then-install is the only way to get it right, which is what
+# `scripts/install_tpu.sh` does (and what `setup.sh tpu` did before the move to uv).
 apple = ["tensorflow-metal~=1.2.0; sys_platform == 'darwin' and platform_machine == 'arm64'"]
 cuda = ["tensorflow[and-cuda]~=2.19.0"]
-tpu = ["tensorflow-tpu~=2.19.0; sys_platform == 'linux'"]
 dev = [
     "pytest>=7.4.1",
     "ruff>=0.14.0",
@@ -73,12 +75,6 @@ build-backend = "setuptools.build_meta"
 include = ["tensorflow_asr", "tensorflow_asr.*"]
 
 [tool.uv]
-# `cuda` and `tpu` provide mutually exclusive TensorFlow builds.
-# NOTE: `tensorflow-tpu` ships its own `tensorflow` distribution and overwrites
-# the base one it is installed over. This mirrors the old `setup.sh tpu`
-# behaviour, which uninstalled `tensorflow` and force-installed `tensorflow-tpu`.
-conflicts = [[{ extra = "cuda" }, { extra = "tpu" }]]
-
 # librosa pulls numba in transitively with a very loose numpy constraint. Left
 # alone, uv maximises numpy (2.5.x) and backtracks numba to 0.53.1, whose
 # llvmlite 0.36 sdist hard-fails to build on Python >= 3.10. Holding numba

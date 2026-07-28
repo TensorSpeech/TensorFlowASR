@@ -8,19 +8,18 @@ kaggle_username = "your-kaggle-username"
 kaggle_key      = "your-kaggle-api-key" # https://www.kaggle.com/settings -> Create New Token
 
 # --- The notebook ---------------------------------------------------------
-kernel_slug  = "tensorflowasr-train-lm"
-kernel_title = "TensorFlowASR train_lm"
-is_private   = true
+# The slug doubles as the title, so it needs at least 5 characters.
+kernel_slug = "tensorflowasr-train-lm"
+is_private  = true
 
-# `accelerator` is what actually picks the hardware; enable_gpu / enable_tpu are the older,
-# coarser switches it overrides. `device_type` is what TensorFlow is told to use, and a
+# `accelerator` picks the hardware; `device_type` is what TensorFlow is told to use. A
 # precondition rejects a mismatch rather than letting the kernel train on the CPU in silence.
 accelerator = "NvidiaTeslaP100" # or NvidiaTeslaT4, NvidiaL4, ...
 device_type = "gpu"
 
 # For a TPU instead -- read the TPU section of the README first, none of it has run on real
 # hardware, and an LSTM is a poor fit for a TPU to begin with:
-# accelerator = "TpuV5E8"   # NOT enable_tpu alone: that asks for the retired v3-8
+# accelerator = "TpuV5E8"
 # device_type = "tpu"
 # tpu_address = "local"     # TPU VM: the chips are on this machine
 # tpu_vm      = true
