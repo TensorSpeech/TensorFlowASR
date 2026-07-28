@@ -49,14 +49,58 @@ variable "is_private" {
   default     = true
 }
 
+variable "accelerator" {
+  description = <<-EOT
+    Accelerator ID, written to `machine_shape` and passed as `kaggle kernels push --accelerator`.
+    This is what actually picks the hardware.
+
+    `enable_gpu` / `enable_tpu` are the older, coarser switches, and the API treats an accelerator
+    ID as an override for them. They are also no longer sufficient on their own: `enable_tpu` maps
+    to the v3-8, which Kaggle has phased out, so a TPU kernel asked for that way comes up with no
+    TPU attached. Set this instead.
+
+    Valid IDs as of Feb 2026, from https://github.com/Kaggle/kaggle-cli/blob/main/docs/kernels.md
+    -- some are restricted to competition participants or Kaggle admins:
+
+      NvidiaTeslaP100  NvidiaTeslaT4  NvidiaTeslaT4Highmem  NvidiaTeslaA100
+      NvidiaL4  NvidiaL4X1  NvidiaH100  NvidiaRtxPro6000
+      TpuV38  Tpu1VmV38  TpuV5E8  TpuV6E8
+
+    "" falls back to the booleans below. `enable_gpu` / `enable_tpu` are derived from the prefix
+    when this is set, so they cannot disagree with it.
+  EOT
+  type        = string
+  default     = ""
+
+  validation {
+    condition = contains(
+      [
+        "", "NvidiaTeslaP100", "NvidiaTeslaT4", "NvidiaTeslaT4Highmem", "NvidiaTeslaA100",
+        "NvidiaL4", "NvidiaL4X1", "NvidiaH100", "NvidiaRtxPro6000",
+        "TpuV38", "Tpu1VmV38", "TpuV5E8", "TpuV6E8",
+      ],
+      var.accelerator
+    )
+    error_message = "Unknown accelerator ID. See https://github.com/Kaggle/kaggle-cli/blob/main/docs/kernels.md for the current list."
+  }
+}
+
 variable "enable_gpu" {
-  description = "Attach a GPU. Needed for anything but a toy LSTM LM; ignored by the bigram, which is fitted by counting."
+  description = <<-EOT
+    Attach a GPU, when `accelerator` is not set. Ignored by the bigram, which is fitted by counting.
+    Prefer `accelerator` -- this switch cannot express which GPU.
+  EOT
   type        = bool
   default     = true
 }
 
 variable "enable_tpu" {
-  description = "Attach a TPU instead of a GPU."
+  description = <<-EOT
+    Attach a TPU, when `accelerator` is not set.
+
+    On its own this asks for the v3-8, which Kaggle has phased out, so the kernel starts with no
+    TPU. Use `accelerator = "TpuV5E8"` instead.
+  EOT
   type        = bool
   default     = false
 }

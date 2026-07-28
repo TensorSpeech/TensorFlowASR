@@ -12,19 +12,20 @@ kernel_slug  = "tensorflowasr-train-lm"
 kernel_title = "TensorFlowASR train_lm"
 is_private   = true
 
-# The accelerator Kaggle attaches and the one TensorFlow is told to use have to agree; a
+# `accelerator` is what actually picks the hardware; enable_gpu / enable_tpu are the older,
+# coarser switches it overrides. `device_type` is what TensorFlow is told to use, and a
 # precondition rejects a mismatch rather than letting the kernel train on the CPU in silence.
-enable_gpu  = true
+accelerator = "NvidiaTeslaP100" # or NvidiaTeslaT4, NvidiaL4, ...
 device_type = "gpu"
 
 # For a TPU instead -- read the TPU section of the README first, none of it has run on real
 # hardware, and an LSTM is a poor fit for a TPU to begin with:
-# enable_gpu  = false
-# enable_tpu  = true
+# accelerator = "TpuV5E8"   # NOT enable_tpu alone: that asks for the retired v3-8
 # device_type = "tpu"
-# tpu_address = "local"   # TPU VM: the chips are on this machine
+# tpu_address = "local"     # TPU VM: the chips are on this machine
 # tpu_vm      = true
-# bs          = 32        # per replica -- 8 cores means a global batch of 256
+# bs          = 32          # per replica -- 8 cores means a global batch of 256
+# learning_rate = 2.5e-3    # global batch is 8x larger, so scale the rate up
 
 # Datasets to mount. Each shows up at /kaggle/input/<dataset-slug>.
 dataset_sources = [

@@ -3,6 +3,12 @@ locals {
   build_dir  = abspath("${path.module}/build")
   output_dir = var.output_dir != "" ? abspath(var.output_dir) : abspath("${path.module}/output")
   kernel_id  = "${var.kaggle_username}/${var.kernel_slug}"
+
+  # An accelerator ID overrides the booleans server-side, so derive them from it rather than
+  # letting a stale `enable_gpu` sit in the metadata contradicting `machine_shape`.
+  accelerator_is_tpu = startswith(var.accelerator, "Tpu")
+  use_gpu            = var.accelerator != "" ? !local.accelerator_is_tpu : var.enable_gpu
+  use_tpu            = var.accelerator != "" ? local.accelerator_is_tpu : var.enable_tpu
 }
 
 resource "local_file" "notebook" {
@@ -24,19 +30,25 @@ resource "local_file" "notebook" {
       error_message = "config_file does not exist: ${var.config_file}"
     }
     precondition {
-      condition     = !(var.enable_gpu && var.enable_tpu)
-      error_message = "Enable either a GPU or a TPU, not both."
+      condition     = !(local.use_gpu && local.use_tpu)
+      error_message = "Ask for either a GPU or a TPU, not both."
     }
     precondition {
       # Two separate knobs that have to agree: the accelerator Kaggle attaches, and the one
       # TensorFlow is told to use. Disagreeing is silent -- the kernel boots, installs the wrong
       # extra, and trains on the CPU.
-      condition     = (var.device_type == "gpu") == var.enable_gpu || var.device_type == "cpu"
-      error_message = "device_type=\"gpu\" needs enable_gpu = true, and enable_gpu = true needs device_type = \"gpu\" (or \"cpu\" to deliberately ignore the accelerator)."
+      condition     = (var.device_type == "gpu") == local.use_gpu || var.device_type == "cpu"
+      error_message = "device_type=\"gpu\" needs a GPU accelerator, and a GPU accelerator needs device_type = \"gpu\" (or \"cpu\" to deliberately ignore it)."
     }
     precondition {
-      condition     = (var.device_type == "tpu") == var.enable_tpu || var.device_type == "cpu"
-      error_message = "device_type=\"tpu\" needs enable_tpu = true, and enable_tpu = true needs device_type = \"tpu\" (or \"cpu\" to deliberately ignore the accelerator)."
+      condition     = (var.device_type == "tpu") == local.use_tpu || var.device_type == "cpu"
+      error_message = "device_type=\"tpu\" needs a TPU accelerator (accelerator = \"TpuV5E8\"), and a TPU accelerator needs device_type = \"tpu\" (or \"cpu\" to deliberately ignore it)."
+    }
+    precondition {
+      # enable_tpu alone asks for the retired v3-8 and yields a kernel with no TPU at all, which
+      # only shows up once the notebook is running.
+      condition     = !(var.accelerator == "" && var.enable_tpu)
+      error_message = "enable_tpu without an accelerator ID asks for the phased-out v3-8. Set accelerator = \"TpuV5E8\" (or another Tpu* ID)."
     }
     precondition {
       condition     = startswith(var.output_path, "/kaggle/working")
@@ -51,21 +63,25 @@ resource "local_file" "metadata" {
 
   # Field names come from the CLI's own `kernels init` template
   # (kaggle/api/kaggle_api_extended.py), not from the website docs, which lag it.
-  content = jsonencode({
+  #
+  # `machine_shape` is omitted entirely rather than sent empty: the CLI reads it with
+  # `get_or_default(meta_data, "machine_shape", None)`, and an empty string is not None.
+  content = jsonencode(merge({
     id                  = local.kernel_id
     title               = var.kernel_title
     code_file           = local.code_file
     language            = "python"
     kernel_type         = "notebook"
     is_private          = var.is_private
-    enable_gpu          = var.enable_gpu
-    enable_tpu          = var.enable_tpu
+    enable_gpu          = local.use_gpu
+    enable_tpu          = local.use_tpu
     enable_internet     = var.enable_internet
     dataset_sources     = var.dataset_sources
     competition_sources = var.competition_sources
     kernel_sources      = []
     model_sources       = var.model_sources
-  })
+    }, var.accelerator != "" ? { machine_shape = var.accelerator } : {}),
+  )
 }
 
 # Owns the kernel's existence and nothing else.
@@ -121,6 +137,7 @@ resource "terraform_data" "push" {
       KAGGLE_CONFIG_DIR     = local.build_dir
       KERNEL_ID             = local.kernel_id
       BUILD_DIR             = local.build_dir
+      ACCELERATOR           = var.accelerator
       OUTPUT_DIR            = local.output_dir
       WAIT_FOR_COMPLETION   = tostring(var.wait_for_completion)
       POLL_INTERVAL_SECONDS = tostring(var.poll_interval_seconds)

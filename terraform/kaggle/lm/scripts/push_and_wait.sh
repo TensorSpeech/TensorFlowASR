@@ -19,7 +19,16 @@ if ! command -v kaggle >/dev/null 2>&1; then
 fi
 
 echo "==> Pushing $KERNEL_ID from $BUILD_DIR"
-kaggle kernels push -p "$BUILD_DIR"
+
+# --accelerator is the documented way to pick the hardware and takes precedence over the
+# metadata's machine_shape. Both carry the same value; passing it explicitly means the choice is
+# visible in the push output rather than buried in a JSON file.
+if [ -n "${ACCELERATOR:-}" ]; then
+    echo "==> Accelerator: $ACCELERATOR"
+    kaggle kernels push -p "$BUILD_DIR" --accelerator "$ACCELERATOR"
+else
+    kaggle kernels push -p "$BUILD_DIR"
+fi
 
 kernel_url="https://www.kaggle.com/code/$KERNEL_ID"
 

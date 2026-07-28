@@ -113,16 +113,40 @@ Supported, and **untested on real hardware**. Everything below was verified with
 compiler. Read this before spending a session.
 
 ```hcl
-enable_gpu  = false
-enable_tpu  = true
+accelerator = "TpuV5E8"
 device_type = "tpu"
 tpu_address = "local"
 tpu_vm      = true
 ```
 
-`enable_*` is what Kaggle attaches; `device_type` is what TensorFlow is told to use. They are
+**`enable_tpu = true` on its own does not get you a TPU.** It maps to the v3-8, which Kaggle has
+phased out, so the kernel starts with no accelerator attached and you only find out once the
+notebook is running. Hardware is picked by an accelerator ID, written to `machine_shape` and passed
+as `kaggle kernels push --accelerator`; the API treats that as an override for the booleans. A
+precondition rejects `enable_tpu` without an ID.
+
+Valid IDs as of Feb 2026, from the
+[CLI docs](https://github.com/Kaggle/kaggle-cli/blob/main/docs/kernels.md) — some are restricted to
+competition participants or admins:
+
+```
+NvidiaTeslaP100  NvidiaTeslaT4  NvidiaTeslaT4Highmem  NvidiaTeslaA100
+NvidiaL4  NvidiaL4X1  NvidiaH100  NvidiaRtxPro6000
+TpuV38  Tpu1VmV38  TpuV5E8  TpuV6E8
+```
+
+`accelerator` is what Kaggle attaches; `device_type` is what TensorFlow is told to use. They are
 separate knobs and disagreeing is silent — the kernel boots, installs the wrong extra and trains on
-the CPU — so a precondition rejects the mismatch at plan time.
+the CPU — so a precondition rejects the mismatch at plan time. `enable_gpu` / `enable_tpu` are
+derived from the ID when one is set, so the metadata can never contradict it.
+
+**Sizing.** A v5e-8 is 8 chips x 16 GB HBM. `bs` is per replica, so `bs = 32` is a global batch of
+256 — 8x what the same number means on one GPU, so scale `learning_rate` up (~2.5e-3 by sqrt
+scaling) or the run does one-eighth the updates per epoch at the old rate. Weights plus Adam are
+only ~0.7 GB per core; activations dominate, and they scale with `bs x max_length`. Since TPU pads
+every sequence to `max_length`, lowering it to about the 99th percentile of your token lengths cuts
+memory *and* compute, which is a bigger lever than `bs`. Out-of-memory shows up at compile or the
+first step, so bisecting `bs` costs minutes.
 
 **`bs` is per replica.** A v3-8 has 8 cores, so `bs = 32` is a global batch of 256. `steps_per_epoch`
 is derived from the global batch, so an epoch stays one pass over the data.
