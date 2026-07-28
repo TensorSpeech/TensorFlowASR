@@ -1,0 +1,76 @@
+# Copy to terraform.tfvars and fill in. terraform.tfvars is gitignored because the API key
+# below is a live credential -- check that `git status` never lists it before committing.
+#
+#   cp terraform.tfvars.example terraform.tfvars
+
+# --- Kaggle account -------------------------------------------------------
+kaggle_username = "your-kaggle-username"
+kaggle_key      = "your-kaggle-api-key" # https://www.kaggle.com/settings -> Create New Token
+
+# --- The notebook ---------------------------------------------------------
+kernel_slug  = "tensorflowasr-train-lm"
+kernel_title = "TensorFlowASR train_lm"
+is_private   = true
+
+# The accelerator Kaggle attaches and the one TensorFlow is told to use have to agree; a
+# precondition rejects a mismatch rather than letting the kernel train on the CPU in silence.
+enable_gpu  = true
+device_type = "gpu"
+
+# For a TPU instead -- read the TPU section of the README first, none of it has run on real
+# hardware, and an LSTM is a poor fit for a TPU to begin with:
+# enable_gpu  = false
+# enable_tpu  = true
+# device_type = "tpu"
+# tpu_address = "local"   # TPU VM: the chips are on this machine
+# tpu_vm      = true
+# bs          = 32        # per replica -- 8 cores means a global batch of 256
+
+# Datasets to mount. Each shows up at /kaggle/input/<dataset-slug>.
+dataset_sources = [
+  "your-username/librispeech-train-clean-100",
+]
+
+# --- Code -----------------------------------------------------------------
+# repo_ref must be a pushed branch that has tensorflow_asr/scripts/train_lm.py and
+# tensorflow_asr/models/lm/. That is not main today.
+repo_url = "https://github.com/TensorSpeech/TensorFlowASR.git"
+repo_ref = "feat/beamsearch"
+
+# --- Config and data ------------------------------------------------------
+# A config inside the repository...
+config_path = "examples/models/transducer/conformer/small.yml.j2"
+# ...or one from this machine, embedded into the notebook (wins over config_path):
+# config_file = "../../../examples/models/transducer/conformer/small.yml.j2"
+
+datadir  = "/kaggle/input/librispeech-train-clean-100"
+modeldir = "/kaggle/working/model"
+
+# The example configs interpolate these through jinja. An undefined one renders empty
+# rather than failing, so a missing entry usually shows up as a half-formed path.
+extra_args = [
+  # "--vocabprefix=/kaggle/input/librispeech-vocab/sp",
+  # "--vocabsize=1000",
+]
+
+# --- Which language model -------------------------------------------------
+# "internal" -> lm_config.internal_config, the bigram LODR subtracts. Fitted by counting
+#               over the ASR transcripts, so epochs/bs/learning_rate do nothing.
+target      = "internal"
+output_path = "/kaggle/working/internal_lm.weights.h5"
+
+# "external" -> lm_config.external_config, the LM fused in. Wants a big corpus:
+# target      = "external"
+# output_path = "/kaggle/working/lm.weights.h5"
+# text_path   = "/kaggle/input/librispeech-lm-corpus/librispeech-lm-norm.txt.gz"
+# max_lines   = 1000000   # the full corpus is ~40M lines; see the README on session limits
+# bs          = 128
+# epochs      = 1
+
+# --- What apply does after pushing ---------------------------------------
+# Default is false: push and return, then watch it with `terraform output status_command`.
+# true makes `terraform apply` block until the run finishes, which can be hours, and
+# download the weights itself.
+wait_for_completion = false
+timeout_minutes     = 720
+download_output     = true

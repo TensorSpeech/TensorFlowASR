@@ -14,7 +14,9 @@
 
 
 import logging
+import math
 import os
+import time
 
 import numpy as np
 
@@ -27,6 +29,7 @@ from tensorflow_asr.utils import cli_util, env_util, file_util
 logger = logging.getLogger(__name__)
 
 TARGETS = ("external", "internal")
+LR_SCHEDULES = ("cosine", "constant")
 
 
 def transcript_tokens(tokenizer, dataset_type: str, dataset_config):
@@ -46,7 +49,16 @@ def transcript_tokens(tokenizer, dataset_type: str, dataset_config):
         yield tokenizer.tokenize(text).numpy()
 
 
-def to_training_pairs(tokens: tf.data.Dataset, blank: int, batch_size: int, max_length: int):
+def to_training_pairs(
+    tokens: tf.data.Dataset,
+    blank: int,
+    batch_size: int,
+    max_length: int,
+    shuffle_buffer: int = 0,
+    repeat: bool = False,
+    padded_length: int = None,
+    drop_remainder: bool = False,
+):
     """
     Turn a `tf.data` stream of token vectors into `(inputs, targets, sample_weight)` batches.
 
@@ -58,17 +70,156 @@ def to_training_pairs(tokens: tf.data.Dataset, blank: int, batch_size: int, max_
     built *before* batching, as an all-ones vector the same length as the sequence, and then padded
     with 0 by `padded_batch`. Deriving it afterwards would be impossible: blank is the pad value
     *and* a legal token, since it doubles as start of sentence.
+
+    `shuffle_buffer` matters more than it looks. Both sources arrive in a fixed order -- a text
+    corpus is laid out by source document, and `transcript_tokens` turns dataset shuffling off --
+    so without it the model spends thousands of consecutive steps inside one narrow slice of the
+    data. Shuffling happens on single sequences before batching, so batches are mixed too.
+
+    `repeat` cycles the data so a finite dataset can fill fixed-size epochs. It is applied **after**
+    batching on purpose: repeating the sequences first would let batches straddle the seam, so a
+    cycle would be `N / batch_size` batches with the remainder swallowed into the next pass.
+    Repeating whole batches instead makes one cycle exactly `ceil(N / batch_size)` batches, which
+    is what lets `steps_per_epoch` mean "one epoch is one pass over the data". The shuffle is
+    upstream of the repeat, so every pass is shuffled differently.
+
+    `padded_length` and `drop_remainder` exist for XLA, which compiles per input shape. Left alone,
+    every batch is padded to its own longest sequence, so nearly every batch is a new shape -- fine
+    on a GPU, ruinous on a TPU, where the run would spend its time recompiling. Pinning the length
+    and dropping the short final batch makes every batch identically shaped, at the cost of padding
+    short sequences out to `padded_length` and skipping up to `batch_size - 1` sequences per pass
+    (different ones each pass, since the shuffle is upstream).
     """
+    sequence_shape = [padded_length] if padded_length else [None]
     dataset = tokens.map(lambda t: t[:max_length], num_parallel_calls=tf.data.AUTOTUNE)
     dataset = dataset.filter(lambda t: tf.size(t) > 0)  # blank lines carry no supervision
+    if shuffle_buffer > 0:
+        dataset = dataset.shuffle(shuffle_buffer, reshuffle_each_iteration=True)
     dataset = dataset.map(lambda t: (t, tf.ones_like(t, dtype=tf.float32)), num_parallel_calls=tf.data.AUTOTUNE)
     dataset = dataset.padded_batch(
         batch_size,
-        padded_shapes=([None], [None]),  # to the longest in the batch, not to `max_length`
+        padded_shapes=(sequence_shape, sequence_shape),  # [None] pads to the longest in the batch
         padding_values=(tf.constant(blank, tf.int32), 0.0),
+        drop_remainder=drop_remainder,
     )
     dataset = dataset.map(lambda t, w: (shift_tokens(t, blank), t, w), num_parallel_calls=tf.data.AUTOTUNE)
+    if repeat:
+        dataset = dataset.repeat()
     return dataset.prefetch(tf.data.AUTOTUNE)
+
+
+def count_elements(dataset: tf.data.Dataset) -> int:
+    """Number of elements in a dataset, by walking it once."""
+    return int(dataset.reduce(tf.constant(0, tf.int64), lambda total, *_: total + 1))
+
+
+def count_text_lines(text_path: str, max_lines: int = None) -> int:
+    """
+    Number of non-blank lines in a text corpus.
+
+    Counted on the raw lines rather than on the tokenized stream: tokenizing tens of millions of
+    lines purely to count them would cost about as much as an epoch of training. The blank-line
+    filter is applied here too so the number matches what `to_training_pairs` will actually yield,
+    give or take a line that survives the strip but still tokenizes to nothing.
+    """
+    path = file_util.preprocess_paths(text_path)
+    dataset = tf.data.TextLineDataset(path, compression_type="GZIP" if str(path).endswith(".gz") else "")
+    if max_lines:
+        dataset = dataset.take(max_lines)
+    return count_elements(dataset.filter(lambda line: tf.strings.length(tf.strings.strip(line)) > 0))
+
+
+def steps_for_one_pass(num_sequences: int, batch_size: int, drop_remainder: bool = False) -> int:
+    """
+    Batches in one full pass, so an epoch covers the data exactly once.
+
+    `drop_remainder` has to match the data pipeline. Rounding up when the short final batch is
+    being dropped would ask for a step the pass does not contain, and the epoch would quietly
+    borrow from the next one.
+    """
+    if drop_remainder:
+        return max(num_sequences // batch_size, 1)
+    return max(math.ceil(num_sequences / batch_size), 1)
+
+
+class MaskedSparseCategoricalCrossentropy(keras.losses.Loss):
+    """
+    Cross entropy averaged over the real tokens rather than over every padded position.
+
+    Keras reduces with `sum_over_batch_size`, which divides by the element count. Padded positions
+    contribute nothing to the numerator but still count in the denominator, so the stock loss comes
+    out scaled by the fraction of the batch that is real: at 50% padding it reports half the true
+    per-token cross entropy. Two consequences, both bad. The number is not comparable to any
+    published perplexity, and the gradient is scaled per batch by however much padding that batch
+    happened to contain, so the effective step size wobbles with sequence length.
+
+    Dividing by `sum(sample_weight)` fixes both. `__call__` is overridden rather than `call`
+    because the division has to happen after the weights are applied, which is exactly the step
+    the base class owns.
+
+    The token count is summed **across replicas**. Keras adds up what each replica's loss returns,
+    so dividing by the local count would make both the reported loss and the gradient scale with
+    the number of replicas -- on a TPU v3-8 that is 8x, which silently multiplies the effective
+    learning rate and makes `clipnorm` bite eight times harder. Measured before the all-reduce was
+    added: two replicas reported 6.79 against a `ln(30) = 3.40` uniform baseline, exactly double.
+    """
+
+    def __init__(self, name="masked_sparse_categorical_crossentropy", **kwargs):
+        super().__init__(name=name, **kwargs)
+
+    def __call__(self, y_true, y_pred, sample_weight=None):
+        # `call` returns log-probabilities, and log_softmax is idempotent, so from_logits=True
+        # re-normalises a distribution that is already normalised -- a no-op, not a second softmax.
+        losses = keras.ops.sparse_categorical_crossentropy(y_true, y_pred, from_logits=True)
+        weights = keras.ops.ones_like(losses) if sample_weight is None else keras.ops.cast(sample_weight, losses.dtype)
+
+        total = keras.ops.sum(losses * weights)
+        count = keras.ops.sum(weights)
+
+        # Outside a strategy this is the default replica context and `all_reduce` is a no-op, so
+        # the single-device number is unchanged.
+        replica_context = tf.distribute.get_replica_context()
+        if replica_context is not None:
+            count = replica_context.all_reduce(tf.distribute.ReduceOp.SUM, count)
+
+        return total / keras.ops.maximum(count, 1.0)
+
+
+def build_optimizer(learning_rate: float, total_steps: int, warmup_steps: int, clipnorm: float, lr_schedule: str):
+    """
+    Adam, optionally with a warmup-then-cosine schedule and global-norm clipping.
+
+    A 2x2048 LSTM at these sizes reaches gradient norms in the tens within a few dozen steps, which
+    is the usual way an LSTM language model stalls: one bad step moves the weights somewhere the
+    optimiser then spends thousands of steps crawling out of. Clipping the global norm is the
+    standard guard, and the warmup keeps the first steps -- when Adam's second-moment estimate is
+    still nearly empty and its effective step is largest -- from being the damaging ones.
+
+    Cosine decay needs to know where the end is, so it only applies when the step budget is known
+    (`steps_per_epoch` x `epochs`). Without one the learning rate is left flat rather than guessed.
+    """
+    if lr_schedule not in LR_SCHEDULES:
+        raise ValueError(f"lr_schedule must be one of {LR_SCHEDULES}, got {lr_schedule}")
+
+    schedule = learning_rate
+    if lr_schedule == "cosine":
+        if total_steps:
+            # Cap the warmup on short runs, otherwise a quick job is nothing but warmup.
+            warmup = min(warmup_steps, max(total_steps // 10, 1))
+            schedule = keras.optimizers.schedules.CosineDecay(
+                initial_learning_rate=0.0,
+                decay_steps=max(total_steps - warmup, 1),
+                warmup_target=learning_rate,
+                warmup_steps=warmup,
+            )
+            logger.info(f"Learning rate: 0 -> {learning_rate} over {warmup} steps, then cosine to 0 at step {total_steps}")
+        else:
+            logger.warning(
+                "lr_schedule=cosine needs a step budget to decay over. Pass --steps-per-epoch, "
+                f"or --lr-schedule=constant to silence this. Holding the rate at {learning_rate}."
+            )
+
+    return keras.optimizers.Adam(learning_rate=schedule, clipnorm=clipnorm if clipnorm and clipnorm > 0 else None)
 
 
 def text_line_tokens(tokenizer, text_path: str, max_lines: int = None) -> tf.data.Dataset:
@@ -118,12 +269,21 @@ def main(
     modeldir: str = None,
     bs: int = 32,
     epochs: int = 10,
+    steps_per_epoch: int = None,
     max_length: int = 256,
     learning_rate: float = 1e-3,
+    lr_schedule: str = "cosine",
+    warmup_steps: int = 1000,
+    clipnorm: float = 1.0,
+    shuffle_buffer: int = 10000,
     device_type: str = "gpu",
     devices: list = None,
+    tpu_address: str = None,
+    tpu_vm: bool = False,
+    spx: int = 1,
     mxp: str = "none",
     repodir: str = os.getcwd(),
+    verbose: int = 1,
     **kwargs,
 ):
     """
@@ -151,10 +311,11 @@ def main(
     gradient descent on next-token cross-entropy. Either way the result is written to `output` as
     h5, ready for the `weights` key of the config that built it.
 
-    Note on the loss: `LanguageModel.call` returns log-probabilities, and
-    `SparseCategoricalCrossentropy(from_logits=True)` is the correct pairing for those --
-    `softmax(ln p) = p` whenever `p` is already normalised, so the loss re-normalising is a no-op
-    rather than a second softmax.
+    Note on the loss: `LanguageModel.call` returns log-probabilities, and cross entropy
+    `from_logits=True` is the correct pairing for those -- `softmax(ln p) = p` whenever `p` is
+    already normalised, so the loss re-normalising is a no-op rather than a second softmax. It is
+    averaged over real tokens only; see `MaskedSparseCategoricalCrossentropy` for why the stock
+    reduction reports the wrong number here.
 
     Parameters
     ----------
@@ -167,18 +328,90 @@ def main(
         millions of lines.
     max_length : int
         Sequences are truncated to this many tokens. Only affects gradient training.
+    steps_per_epoch : int
+        Steps per epoch. Left unset, the dataset is counted and this becomes
+        `ceil(sequences / bs)`, so **one epoch is one full pass over the data** -- and `epochs` is
+        then the number of passes.
+
+        Set it explicitly to skip the counting pass, or to cut a corpus too large to traverse into
+        shorter epochs. That is worth doing on something like the 40M-line LibriSpeech LM corpus:
+        a full pass there is ~1.25M steps, and Keras reports the *running mean* of the loss over
+        the current epoch, so a single enormous epoch shows a number that stops moving long before
+        training does. Shorter epochs reset that average and give you a reading per epoch.
+
+        Note that epochs do not restart the stream -- with the data cycling, epoch 2 continues
+        where epoch 1 stopped. Epoch boundaries line up with passes only because the step count
+        matches one pass exactly.
+    lr_schedule : str
+        "cosine" (default) warms up from 0 then decays to 0 over `steps_per_epoch` x `epochs`;
+        "constant" holds `learning_rate`. Cosine needs `steps_per_epoch` and warns without it.
+    warmup_steps : int
+        Steps to reach `learning_rate`. Capped at a tenth of the run so short jobs are not all
+        warmup.
+    clipnorm : float
+        Clip gradients to this global norm. 0 disables. Large LSTMs here reach norms in the tens
+        within a few dozen steps, which is the usual cause of a language model that stalls.
+    shuffle_buffer : int
+        Sequences buffered for shuffling. 0 disables, which leaves the corpus in file order --
+        thousands of consecutive steps inside one document. Costs roughly
+        `shuffle_buffer x max_length x 4` bytes.
+    bs : int
+        Batch size **per replica**. The dataset is batched at `bs x replicas`, matching
+        `scripts/train.py`, so a TPU v3-8 with `--bs=32` runs a global batch of 256.
+    device_type : str
+        "gpu" (default), "cpu" or "tpu".
+
+        On TPU two pipeline changes are forced, because XLA compiles per input shape and the
+        default pipeline produces a new shape almost every batch: sequences are padded to
+        `max_length` rather than to the longest in the batch, and the short final batch is
+        dropped. Both cost something -- short sequences carry padding out to `max_length`, and up
+        to `bs x replicas - 1` sequences are skipped per pass -- and neither is worth paying on a
+        GPU, where dynamic shapes are free.
+
+        A stacked LSTM is a poor fit for a TPU regardless: it is sequential over timesteps, which
+        is what TPUs are worst at. Measure against the GPU before committing to a session.
+    tpu_address : str
+        Cluster address. Leave unset on a Kaggle TPU VM.
+    tpu_vm : bool
+        True on a TPU VM, which skips `experimental_connect_to_cluster`. Kaggle's TPUs are VMs.
+    spx : int
+        `steps_per_execution`, batches per device call. Raising it cuts host round trips and is the
+        usual throughput lever on TPU.
+
+        **Left at 1 because it could not be verified.** With `keras 3` on `tensorflow 2.19`, any
+        value above 1 combined with a distribution strategy fails during `fit` with
+        `InvalidArgumentError: You must feed a value for placeholder tensor .../while/cond/...`.
+        Measured with `MirroredStrategy` over two virtual CPU devices: it fails for a plain Dense
+        model as readily as for this LSTM, and with the stock Keras loss as readily as with the
+        masked one, so it is not something about this script. Single-device runs are fine at any
+        value. Whether `TPUStrategy` shares the fault is untested -- there is no TPU here. Try it
+        on a real TPU by all means, but check a couple of steps run before spending a session.
     """
     if target not in TARGETS:
         raise ValueError(f"target must be one of {TARGETS}, got {target}")
+    if lr_schedule not in LR_SCHEDULES:
+        raise ValueError(f"lr_schedule must be one of {LR_SCHEDULES}, got {lr_schedule}")
     if text_path and target != "external":
         # The internal LM approximates what the transducer picked up from its training transcripts.
         # Counting it over any other corpus would make the correction subtract the wrong thing, so
         # there is deliberately no way to point it at one.
-        raise ValueError(f"--text-path is only valid with --target=external, got --target={target}. The internal LM must be fitted on the ASR training transcripts.")
+        raise ValueError(
+            f"--text-path is only valid with --target=external, got --target={target}. The internal LM must be fitted on the ASR training transcripts."
+        )
 
-    env_util.setup_strategy(device_type=device_type, devices=devices)
+    strategy = env_util.setup_strategy(device_type=device_type, devices=devices, tpu_address=tpu_address, tpu_vm=tpu_vm)
     env_util.setup_seed()
     env_util.setup_mxp(mxp=mxp)
+
+    # XLA compiles per input shape, and the default pipeline pads each batch to its own longest
+    # sequence -- a new shape almost every step. On a GPU that is free; on a TPU it means
+    # recompiling instead of training, so shapes are pinned there.
+    on_tpu = device_type.lower() == "tpu"
+    global_batch_size = bs * strategy.num_replicas_in_sync
+    if strategy.num_replicas_in_sync > 1:
+        logger.info(f"{strategy.num_replicas_in_sync} replicas: --bs={bs} per replica gives a global batch of {global_batch_size}")
+    if on_tpu:
+        logger.info(f"TPU: padding every sequence to max_length={max_length} and dropping the short final batch, so every step has one shape")
 
     config = Config(config_path, training=False, repodir=repodir, datadir=datadir, modeldir=modeldir, **kwargs)
     model_config = config.lm_config.external_config if target == "external" else config.lm_config.internal_config
@@ -189,38 +422,77 @@ def main(
     tokenizer.make()
     logger.info(f"Vocabulary size {tokenizer.num_classes}, blank index {tokenizer.blank}")
 
-    lm: LanguageModel = BaseModel.build_lm(model_config)
-    lm.summary()
+    # Everything that creates variables goes inside the scope: under `TPUStrategy` a model built
+    # outside it is not replicated across the cores, and the optimizer slots compile follows.
+    with strategy.scope():
+        lm: LanguageModel = BaseModel.build_lm(model_config)
+        lm.summary()
 
-    if hasattr(lm, "fit_counts"):
-        # An n-gram's maximum likelihood estimate is a ratio of counts, exact and available in one
-        # pass. Gradient descent would only approximate what this computes outright.
-        logger.info(f"{type(lm).__name__} provides `fit_counts`, fitting by counting rather than gradient descent")
-        counts = lm.fit_counts(transcript_tokens(tokenizer, dataset_type, config.data_config.train_dataset_config))
-        vocab_size, seen_pairs = counts.shape[0], int((counts > 0).sum())
-        logger.info(
-            f"Counted {int(counts.sum())} bigrams: {seen_pairs} distinct pairs "
-            f"({100.0 * seen_pairs / vocab_size**2:.2f}% of the table), "
-            f"{int((counts.sum(axis=1) > 0).sum())}/{vocab_size} contexts seen"
-        )
-    else:
-        if text_path:
-            tokens = text_line_tokens(tokenizer, text_path, max_lines=max_lines)
-            source = f"{text_path}{f' (first {max_lines} lines)' if max_lines else ''}"
+        if hasattr(lm, "fit_counts"):
+            # An n-gram's maximum likelihood estimate is a ratio of counts, exact and available in
+            # one pass. Gradient descent would only approximate what this computes outright.
+            logger.info(f"{type(lm).__name__} provides `fit_counts`, fitting by counting rather than gradient descent")
+            if on_tpu:
+                logger.warning("Counting runs on the host, so --device-type=tpu buys this model nothing.")
+            counts = lm.fit_counts(transcript_tokens(tokenizer, dataset_type, config.data_config.train_dataset_config))
+            vocab_size, seen_pairs = counts.shape[0], int((counts > 0).sum())
+            logger.info(
+                f"Counted {int(counts.sum())} bigrams: {seen_pairs} distinct pairs "
+                f"({100.0 * seen_pairs / vocab_size**2:.2f}% of the table), "
+                f"{int((counts.sum(axis=1) > 0).sum())}/{vocab_size} contexts seen"
+            )
         else:
-            if target == "external":
-                logger.warning(
-                    "Training the external language model on the ASR transcripts, which is the text the transducer "
-                    "already learned. Pass --text-path to a larger corpus, or the fusion has little left to add."
+            if text_path:
+                tokens = text_line_tokens(tokenizer, text_path, max_lines=max_lines)
+                source = f"{text_path}{f' (first {max_lines} lines)' if max_lines else ''}"
+            else:
+                if target == "external":
+                    logger.warning(
+                        "Training the external language model on the ASR transcripts, which is the text the transducer "
+                        "already learned. Pass --text-path to a larger corpus, or the fusion has little left to add."
+                    )
+                tokens = transcript_token_dataset(transcript_tokens(tokenizer, dataset_type, config.data_config.train_dataset_config))
+                source = "the training transcripts"
+            if steps_per_epoch is None:
+                # One epoch = one pass over the data. Counting costs a walk over the corpus, which
+                # is cheap for transcripts and a decompress-and-split for a text file; pass
+                # --steps-per-epoch to skip it and define the epoch yourself.
+                logger.info("Counting the dataset so that one epoch is one full pass (pass --steps-per-epoch to skip)")
+                started = time.time()
+                num_sequences = count_text_lines(text_path, max_lines) if text_path else count_elements(tokens)
+                steps_per_epoch = steps_for_one_pass(num_sequences, global_batch_size, drop_remainder=on_tpu)
+                logger.info(
+                    f"{num_sequences:,} sequences -> {steps_per_epoch:,} steps per epoch at global batch size "
+                    f"{global_batch_size} (counted in {time.time() - started:.1f}s)"
                 )
-            tokens = transcript_token_dataset(transcript_tokens(tokenizer, dataset_type, config.data_config.train_dataset_config))
-            source = "the training transcripts"
-        logger.info(f"Training {type(lm).__name__} ({lm.count_params() / 1e6:.1f}M params) on {source} for {epochs} epochs")
-        lm.compile(
-            optimizer=keras.optimizers.Adam(learning_rate=learning_rate),
-            loss=keras.losses.SparseCategoricalCrossentropy(from_logits=True),
-        )
-        lm.fit(to_training_pairs(tokens, tokenizer.blank, batch_size=bs, max_length=max_length), epochs=epochs)
+
+            total_steps = steps_per_epoch * epochs
+            logger.info(
+                f"Training {type(lm).__name__} ({lm.count_params() / 1e6:.1f}M params) on {source} "
+                f"for {epochs} epochs x {steps_per_epoch:,} steps = {total_steps:,} steps"
+            )
+            pairs = to_training_pairs(
+                tokens,
+                tokenizer.blank,
+                batch_size=global_batch_size,
+                max_length=max_length,
+                shuffle_buffer=shuffle_buffer,
+                repeat=True,
+                padded_length=max_length if on_tpu else None,
+                drop_remainder=on_tpu,
+            )
+            lm.compile(
+                optimizer=build_optimizer(
+                    learning_rate=learning_rate,
+                    total_steps=total_steps,
+                    warmup_steps=warmup_steps,
+                    clipnorm=clipnorm,
+                    lr_schedule=lr_schedule,
+                ),
+                loss=MaskedSparseCategoricalCrossentropy(),
+                steps_per_execution=spx,
+            )
+            lm.fit(pairs, epochs=epochs, steps_per_epoch=steps_per_epoch, verbose=verbose)
 
     output = file_util.preprocess_paths(output)
     lm.save_weights(output)

@@ -1,0 +1,18 @@
+# terraform.tfvars holds a live Kaggle API key. Never commit it.
+*.tfvars
+*.tfvars.json
+!*.tfvars.example
+
+# build/ holds the generated notebook and kaggle.json, which also holds the key.
+build/
+output/
+
+# State can contain anything a resource attribute touched.
+*.tfstate
+*.tfstate.*
+.terraform/
+crash.log
+crash.*.log
+
+# Belt and braces: never let a credentials file through from anywhere in here.
+kaggle.json

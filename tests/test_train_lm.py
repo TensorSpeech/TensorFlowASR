@@ -9,6 +9,8 @@ value and a legal token.
 """
 
 import gzip
+import subprocess
+import sys
 
 import numpy as np
 import pytest
@@ -16,7 +18,17 @@ import pytest
 from tensorflow_asr import keras, tf
 from tensorflow_asr.configs import DecoderConfig
 from tensorflow_asr.models.lm.lstm_language_model import LSTMLanguageModel
-from tensorflow_asr.scripts.train_lm import TARGETS, text_line_tokens, to_training_pairs
+from tensorflow_asr.scripts.train_lm import (
+    LR_SCHEDULES,
+    TARGETS,
+    MaskedSparseCategoricalCrossentropy,
+    build_optimizer,
+    count_elements,
+    count_text_lines,
+    steps_for_one_pass,
+    text_line_tokens,
+    to_training_pairs,
+)
 from tensorflow_asr.tokenizers import CharTokenizer
 
 LINES = ["THE QUICK BROWN FOX", "AB", "A LAZY DOG SLEEPS HERE"]
@@ -140,3 +152,278 @@ def test_training_reduces_loss_and_learns_the_corpus(tokenizer, tmp_path):
 
 def test_targets_are_the_two_supported_names():
     assert TARGETS == ("external", "internal")
+
+
+# --------------------------------------------------------------------------------------------
+# the loss has to ignore padding in the denominator, not just the numerator
+# --------------------------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("padding_fraction", [0.0, 0.25, 0.5, 0.75])
+def test_loss_is_per_real_token_regardless_of_padding(padding_fraction):
+    """
+    Keras reduces with `sum_over_batch_size`, dividing by the element count, so padded positions
+    deflate the stock loss even though they contribute nothing: at 50% padding it reports half the
+    true cross entropy. That makes the number incomparable to any published perplexity and scales
+    each batch's gradient by however much padding it happened to contain.
+    """
+    vocab, length = 100, 8
+    real = int(length * (1 - padding_fraction))
+    weights = tf.constant([[1.0] * real + [0.0] * (length - real)])
+    # uniform logits, so the true per-token cross entropy is exactly ln(vocab)
+    value = float(MaskedSparseCategoricalCrossentropy()(tf.constant([[1] * length]), tf.zeros([1, length, vocab]), sample_weight=weights))
+
+    np.testing.assert_allclose(value, np.log(vocab), rtol=1e-5)
+
+
+def test_loss_reaches_the_model_through_fit(tokenizer, corpus):
+    """Overriding `__call__` bypasses Keras's reduction, so check `fit` really routes weights in."""
+    pairs = to_training_pairs(text_line_tokens(tokenizer, corpus), blank=tokenizer.blank, batch_size=3, max_length=64)
+    lm = LSTMLanguageModel(vocab_size=tokenizer.num_classes, embed_dim=8, units=16, nlayers=1)
+    lm.make()
+    lm.compile(optimizer=keras.optimizers.SGD(0.0), loss=MaskedSparseCategoricalCrossentropy())
+
+    # a frozen model on a padded batch: the logged loss must be the per-token value, and the
+    # untrained model is near uniform, so it should sit close to ln(V) rather than a fraction of it
+    logged = lm.fit(pairs, epochs=1, verbose=0).history["loss"][0]
+    assert 0.75 * np.log(tokenizer.num_classes) < logged < 1.25 * np.log(tokenizer.num_classes), (
+        f"expected ~ln({tokenizer.num_classes})={np.log(tokenizer.num_classes):.2f} per token, got {logged:.2f}"
+    )
+
+
+# --------------------------------------------------------------------------------------------
+# shuffling, clipping and the schedule
+# --------------------------------------------------------------------------------------------
+
+
+def test_shuffle_buffer_reorders_the_stream(tokenizer, tmp_path):
+    """Both sources arrive in a fixed order, so without this the model sees one slice at a time."""
+    path = tmp_path / "ordered.txt"
+    path.write_text("\n".join(f"{'A' * (i % 20 + 1)}" for i in range(200)) + "\n")
+
+    def first_lengths(shuffle_buffer):
+        pairs = to_training_pairs(
+            text_line_tokens(tokenizer, str(path)), blank=tokenizer.blank, batch_size=8, max_length=64, shuffle_buffer=shuffle_buffer
+        )
+        _, targets, weights = next(iter(pairs))
+        return list(weights.numpy().sum(axis=1))
+
+    assert first_lengths(0) == sorted(first_lengths(0)), "unshuffled, the file order is preserved"
+    assert any(first_lengths(200) != first_lengths(0) for _ in range(3)), "shuffling must change the order"
+
+
+def test_repeat_lets_a_finite_dataset_fill_fixed_epochs(tokenizer, corpus):
+    """`steps_per_epoch` on a finite dataset runs dry part way through unless it cycles."""
+    pairs = to_training_pairs(text_line_tokens(tokenizer, corpus), blank=tokenizer.blank, batch_size=2, max_length=64, repeat=True)
+    assert sum(1 for _ in pairs.take(20)) == 20, "a repeating dataset never runs out"
+
+    finite = to_training_pairs(text_line_tokens(tokenizer, corpus), blank=tokenizer.blank, batch_size=2, max_length=64)
+    assert sum(1 for _ in finite) == 2, "3 lines at batch size 2 is 2 batches and then it stops"
+
+
+# --------------------------------------------------------------------------------------------
+# one epoch is one pass over the data
+# --------------------------------------------------------------------------------------------
+
+
+def test_counts_lines_without_tokenizing(tokenizer, corpus):
+    """Counting drives steps_per_epoch, so it has to agree with what the pipeline yields."""
+    assert count_text_lines(corpus) == len(LINES)
+    assert count_text_lines(corpus, max_lines=2) == 2
+    # and it matches the count of the tokenized stream, which is the expensive way to get it
+    assert count_text_lines(corpus) == count_elements(text_line_tokens(tokenizer, corpus))
+
+
+def test_blank_lines_are_left_out_of_the_count(tokenizer, tmp_path):
+    """They are dropped by the pipeline, so counting them would overstate a pass."""
+    path = tmp_path / "gappy.txt"
+    path.write_text("HELLO\n\n   \nWORLD\n")
+    assert count_text_lines(str(path)) == 2
+
+    pairs = to_training_pairs(text_line_tokens(tokenizer, str(path)), blank=tokenizer.blank, batch_size=1, max_length=64)
+    assert sum(1 for _ in pairs) == steps_for_one_pass(count_text_lines(str(path)), 1)
+
+
+@pytest.mark.parametrize(
+    "sequences,batch_size,expected",
+    [(100, 10, 10), (101, 10, 11), (99, 10, 10), (1, 32, 1), (0, 32, 1)],  # a partial batch still costs a step
+)
+def test_steps_for_one_pass_rounds_up(sequences, batch_size, expected):
+    assert steps_for_one_pass(sequences, batch_size) == expected
+
+
+@pytest.mark.parametrize(
+    "sequences,batch_size,expected",
+    [(100, 10, 10), (101, 10, 10), (99, 10, 9), (1, 32, 1)],  # the short final batch is gone, so round down
+)
+def test_steps_for_one_pass_rounds_down_when_dropping_the_remainder(sequences, batch_size, expected):
+    assert steps_for_one_pass(sequences, batch_size, drop_remainder=True) == expected
+
+
+# --------------------------------------------------------------------------------------------
+# TPU needs one shape for every step
+# --------------------------------------------------------------------------------------------
+
+
+def test_static_shapes_for_xla(tokenizer, tmp_path):
+    """
+    XLA compiles per input shape. Padding each batch to its own longest sequence gives a new shape
+    almost every step, which on TPU means recompiling instead of training.
+    """
+    path = tmp_path / "varied.txt"
+    path.write_text("\n".join("A" * (i % 17 + 1) for i in range(40)) + "\n")
+
+    def shapes(**kwargs):
+        pairs = to_training_pairs(text_line_tokens(tokenizer, str(path)), blank=tokenizer.blank, batch_size=4, max_length=32, **kwargs)
+        return {tuple(t.shape) for t, _, _ in pairs}
+
+    assert len(shapes()) > 1, "the default pipeline really does produce many shapes"
+    assert shapes(padded_length=32, drop_remainder=True) == {(4, 32)}, "pinned, every batch is identical"
+
+
+def test_drop_remainder_removes_the_short_batch(tokenizer, tmp_path):
+    path = tmp_path / "five.txt"
+    path.write_text("\n".join(f"LINE {i}" for i in range(5)) + "\n")
+
+    def batch_rows(**kwargs):
+        pairs = to_training_pairs(text_line_tokens(tokenizer, str(path)), blank=tokenizer.blank, batch_size=4, max_length=32, **kwargs)
+        return [int(w.shape[0]) for _, _, w in pairs]
+
+    assert batch_rows() == [4, 1]
+    assert batch_rows(drop_remainder=True) == [4], "the 5th sequence is skipped this pass"
+
+
+DISTRIBUTED_LOSS_PROBE = """
+import tensorflow as tf
+tf.config.set_logical_device_configuration(
+    tf.config.list_physical_devices("CPU")[0], [tf.config.LogicalDeviceConfiguration()] * 2
+)
+import numpy as np
+from tensorflow_asr import keras
+from tensorflow_asr.models.lm.lstm_language_model import LSTMLanguageModel
+from tensorflow_asr.scripts.train_lm import MaskedSparseCategoricalCrossentropy
+
+V, N, L = 30, 64, 8
+x = np.random.randint(1, V, (N, L)).astype("int32")
+w = np.ones((N, L), "float32")
+ds = tf.data.Dataset.from_tensor_slices((x, x, w)).batch(8, drop_remainder=True).repeat()
+
+strategy = tf.distribute.MirroredStrategy(["/cpu:0", "/cpu:1"])
+with strategy.scope():
+    lm = LSTMLanguageModel(vocab_size=V, embed_dim=8, units=16, nlayers=1)
+    lm.make()
+    # a frozen model, so the loss stays at the uniform baseline and only the reduction is measured
+    lm.compile(optimizer=keras.optimizers.SGD(0.0), loss=MaskedSparseCategoricalCrossentropy())
+    loss = lm.fit(ds, epochs=1, steps_per_epoch=2, verbose=0).history["loss"][0]
+
+print(f"{strategy.num_replicas_in_sync} {loss} {np.log(V)}")
+"""
+
+
+def test_loss_does_not_scale_with_replica_count(tmp_path):
+    """
+    Keras sums what each replica's loss returns. Dividing by the local token count would make both
+    the reported loss and the gradient scale with the replica count -- 8x on a TPU v3-8, silently
+    multiplying the learning rate and making clipnorm bite eight times harder. The all-reduce in
+    `MaskedSparseCategoricalCrossentropy` is what stops that, and nothing else here would catch it.
+
+    Runs in a subprocess: virtual devices can only be configured before TensorFlow initialises its
+    context, which any earlier test in the session will already have done.
+    """
+    probe = tmp_path / "probe.py"
+    probe.write_text(DISTRIBUTED_LOSS_PROBE)
+    completed = subprocess.run([sys.executable, str(probe)], capture_output=True, text=True, timeout=900, check=False)
+
+    if completed.returncode != 0:
+        pytest.skip(f"could not run the distributed probe: {completed.stderr.strip().splitlines()[-1:] }")
+
+    replicas, loss, uniform = (float(v) for v in completed.stdout.strip().splitlines()[-1].split())
+    assert replicas == 2, "the probe needs two replicas to say anything"
+    np.testing.assert_allclose(loss, uniform, rtol=0.02), "loss must be the per-token value, not replicas x it"
+
+
+def test_padding_to_max_length_still_masks_the_loss(tokenizer, tmp_path):
+    """Pinning the length adds a lot of padding, so the mask matters more, not less."""
+    path = tmp_path / "short.txt"
+    path.write_text("AB\nCD\n")
+    pairs = to_training_pairs(
+        text_line_tokens(tokenizer, str(path)), blank=tokenizer.blank, batch_size=2, max_length=32, padded_length=32, drop_remainder=True
+    )
+    _, targets, weights = next(iter(pairs))
+
+    assert targets.shape == (2, 32)
+    assert weights.numpy().sum() == 4, "only the 4 real tokens are supervised, the other 60 slots are padding"
+    # and the masked loss still reports a per-token value despite 94% padding
+    value = float(MaskedSparseCategoricalCrossentropy()(targets, tf.zeros([2, 32, tokenizer.num_classes]), sample_weight=weights))
+    np.testing.assert_allclose(value, np.log(tokenizer.num_classes), rtol=1e-5)
+
+
+@pytest.mark.parametrize("batch_size", [1, 2, 4])
+def test_one_epoch_of_counted_steps_is_exactly_one_pass(tokenizer, tmp_path, batch_size):
+    """
+    The property the whole thing rests on: `repeat` is applied after batching, so a cycle is
+    exactly `ceil(N / bs)` batches. Repeating the sequences instead would let batches straddle the
+    seam and an "epoch" would quietly drift out of step with the data.
+    """
+    path = tmp_path / "many.txt"
+    path.write_text("\n".join(f"LINE {i}" for i in range(10)) + "\n")
+
+    steps = steps_for_one_pass(count_text_lines(str(path)), batch_size)
+    pairs = to_training_pairs(text_line_tokens(tokenizer, str(path)), blank=tokenizer.blank, batch_size=batch_size, max_length=64, repeat=True)
+
+    # every sequence seen exactly once across one epoch's worth of steps
+    rows = sum(int(w.numpy().shape[0]) for _, _, w in pairs.take(steps))
+    assert rows == 10, f"one epoch of {steps} steps at bs={batch_size} covered {rows} sequences, expected 10"
+
+
+def test_repeat_after_batching_keeps_the_partial_batch(tokenizer, tmp_path):
+    """Sizes must be [4, 1] then [4, 1] again -- not merged into [4, 4, ...] across the cycle."""
+    path = tmp_path / "five.txt"
+    path.write_text("\n".join(f"LINE {i}" for i in range(5)) + "\n")
+    pairs = to_training_pairs(text_line_tokens(tokenizer, str(path)), blank=tokenizer.blank, batch_size=4, max_length=64, repeat=True)
+
+    assert [int(w.numpy().shape[0]) for _, _, w in pairs.take(4)] == [4, 1, 4, 1]
+
+
+def test_clipping_is_applied_and_can_be_disabled():
+    assert build_optimizer(1e-3, None, 100, clipnorm=1.0, lr_schedule="constant").clipnorm == 1.0
+    assert build_optimizer(1e-3, None, 100, clipnorm=0, lr_schedule="constant").clipnorm is None
+
+
+def rate_at(optimizer, step):
+    """
+    The rate the optimizer would actually use at `step`.
+
+    Read through `optimizer.iterations` rather than off the schedule object: in Keras 3
+    `optimizer.learning_rate` is the current *value*, so this checks the optimizer is really
+    driving the schedule and not merely holding one.
+    """
+    optimizer.iterations.assign(step)
+    return float(optimizer.learning_rate)
+
+
+def test_cosine_schedule_warms_up_then_decays():
+    optimizer = build_optimizer(1e-3, total_steps=1000, warmup_steps=100, clipnorm=1.0, lr_schedule="cosine")
+
+    assert rate_at(optimizer, 0) < 1e-4, "starts near zero"
+    np.testing.assert_allclose(rate_at(optimizer, 100), 1e-3, rtol=1e-4)  # peak at the end of warmup
+    assert rate_at(optimizer, 550) < 1e-3, "decaying after the peak"
+    assert rate_at(optimizer, 1000) < 1e-5, "and lands near zero at the step budget"
+
+
+def test_warmup_is_capped_so_short_runs_are_not_all_warmup():
+    optimizer = build_optimizer(1e-3, total_steps=200, warmup_steps=1000, clipnorm=1.0, lr_schedule="cosine")
+    # warmup capped to total_steps // 10 = 20, so by then it is already at the peak
+    np.testing.assert_allclose(rate_at(optimizer, 20), 1e-3, rtol=1e-4)
+
+
+def test_cosine_without_a_step_budget_falls_back_to_a_constant_rate():
+    """It cannot decay over an unknown horizon, so it holds the rate rather than inventing one."""
+    schedule = build_optimizer(1e-3, total_steps=None, warmup_steps=100, clipnorm=1.0, lr_schedule="cosine").learning_rate
+    np.testing.assert_allclose(float(schedule), 1e-3)
+
+
+def test_unknown_schedule_is_rejected():
+    with pytest.raises(ValueError, match="lr_schedule must be one of"):
+        build_optimizer(1e-3, 1000, 100, clipnorm=1.0, lr_schedule="triangular")
+    assert LR_SCHEDULES == ("cosine", "constant")
