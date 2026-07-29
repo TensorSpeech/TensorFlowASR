@@ -12,9 +12,12 @@ locals {
 }
 
 resource "local_file" "notebook" {
-  filename        = "${local.build_dir}/${local.code_file}"
-  content         = jsonencode(local.notebook)
-  file_permission = "0644"
+  filename = "${local.build_dir}/${local.code_file}"
+  content  = jsonencode(local.notebook)
+
+  # 0600, not 0644: with `kaggle_model_handle` set the notebook carries the API token, the same
+  # reason build/kaggle.json is owner-only.
+  file_permission = "0600"
 
   lifecycle {
     precondition {

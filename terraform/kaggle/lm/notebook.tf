@@ -48,6 +48,21 @@ locals {
     device_type     = var.device_type
     mxp             = var.mxp
 
+    # Only rendered when kaggle_model_handle is set, since nothing else in the notebook needs to
+    # authenticate -- the repo clone and the dataset mount do not.
+    #
+    # This puts the API token in `local.notebook_source`, so it reaches terraform.tfstate,
+    # build/notebook.ipynb and the notebook Kaggle stores. That is the deliberate trade for not
+    # having to attach a Kaggle Secret by hand: no Kaggle API can create or attach one. The push
+    # credentials in `main.tf` still travel through provisioner `environment`, which stays out of
+    # state; this is the one path that does not.
+    #
+    # jsonencode, not quotes: a JSON string is a valid Python string literal, so Terraform does
+    # the escaping and a key containing a quote or backslash cannot break the cell.
+    kaggle_model_handle = var.kaggle_model_handle
+    kaggle_username     = jsonencode(var.kaggle_username)
+    kaggle_key          = jsonencode(var.kaggle_key)
+
     # A JSON list is also a valid Python list literal, and a JSON string is a valid Python
     # string literal, so both drop straight into the source with Terraform doing the escaping.
     extra_flags   = jsonencode(concat(local.optional_flags, var.extra_args))

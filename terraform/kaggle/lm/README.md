@@ -59,10 +59,37 @@ session, and Kaggle kills the kernel rather than saving what it had. Start with 
 run, and `train_lm` only writes the weights once `fit` returns — so a kernel killed at the session
 cap leaves nothing behind. Set `kaggle_model_handle` and the training state is checked into a
 Kaggle model after each epoch and pulled back at the start of the next run, so re-pushing continues
-rather than restarts. Uploading needs write credentials the notebook does not have by default:
-attach your Kaggle API token as a Secret so `KAGGLE_USERNAME` and `KAGGLE_KEY` are set. Set the
-handle without them and the first upload raises at the end of epoch one, ending the run — so check
-the Secret is attached before starting anything long.
+rather than restarts.
+
+**Setting `kaggle_model_handle` puts your API token in the notebook.** A Kaggle notebook has no
+write credentials of its own: the implicit auth is a read-only data proxy that serves public models
+and cannot create a model version at all. So the generated notebook exports `KAGGLE_USERNAME` and
+`KAGGLE_KEY` from the tfvars, in a cell that appears only when the handle is set.
+
+Know what that costs. The token ends up in three more places than the push credentials do:
+
+| Where | Mitigation |
+| --- | --- |
+| `terraform.tfstate` | gitignored; Terraform prints it as `(sensitive value)` |
+| `build/notebook.ipynb` | gitignored; written `0600` |
+| the notebook Kaggle stores | keep `is_private = true` |
+
+If any of those get out, rotate at <https://www.kaggle.com/settings>.
+
+The clean alternative is a **Kaggle Secret** (Add-ons → Secrets on the notebook), which keeps the
+token off disk entirely — but it cannot be automated, so it is a manual step on every new kernel.
+There is no API for it at all: the kernel push request carries 21 fields and none is a secret, the
+whole `kaggle` package contains no occurrence of the string, and the generated SDK exposes 22
+services with no secrets RPC among them. Kaggle's own UI drives an internal endpoint that
+authenticates with a browser session rather than an API token. To switch, replace the two
+`os.environ[...]` lines in `templates/train_lm.py.tftpl` with `UserSecretsClient().get_secret(...)`
+and drop `kaggle_username`/`kaggle_key` from `notebook.tf`.
+
+The same cell sets `DISABLE_KAGGLE_CACHE=1`. Without it, `model_download` goes through the notebook
+data proxy, which answers a model that does not exist yet — every first run — with a generic
+`{"errors":["Internal error"],"error":{"code":13}}`. That surfaces as a `kagglehub.BackendError`,
+which the restore path does not recognise (it handles the REST 404), so it escapes and kills the run
+before the first step. The REST client returns a real 404, understood as "nothing to restore yet".
 
 This is why `wait_for_completion` defaults to `false`: turning it on ties up a terminal for the
 whole run, and interrupting a blocked `apply` leaves the push recorded in state while you have no

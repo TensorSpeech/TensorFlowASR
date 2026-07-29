@@ -192,6 +192,33 @@ def test_loss_is_per_real_token_regardless_of_padding(padding_fraction):
     np.testing.assert_allclose(value, np.log(vocab), rtol=1e-5)
 
 
+def test_loss_graph_has_no_device_bound_assertion():
+    """
+    Regression: the loss must not put an `Assert` in the graph.
+
+    `sparse_categorical_crossentropy` reaches `tf.nn.sparse_softmax_cross_entropy_with_logits`,
+    which adds a runtime shape check whenever the static shapes are not fully known -- every GPU
+    batch, since those pad to the longest sequence in the batch rather than to `max_length`. The
+    check is an `Assert`, `Assert` has no GPU kernel on any backend, and `MirroredStrategy` pins
+    every op to the device, so it failed the run outright:
+
+        Cannot assign a device for operation .../SparseSoftmaxCrossEntropyWithLogits/assert_equal_1
+        ... no supported kernel for GPU devices is available
+
+    Checked on the graph rather than by running on a GPU, so it holds in CPU-only CI.
+    """
+    vocab = 12
+    signature = [
+        tf.TensorSpec([None, None], tf.int32),
+        tf.TensorSpec([None, None, vocab], tf.float32),
+        tf.TensorSpec([None, None], tf.float32),
+    ]
+    graph = tf.function(MaskedSparseCategoricalCrossentropy(), input_signature=signature).get_concrete_function().graph
+    assertions = sorted({op.type for op in graph.get_operations() if "Assert" in op.type})
+
+    assert not assertions, f"these ops have no GPU kernel and would fail under MirroredStrategy: {assertions}"
+
+
 def test_loss_reaches_the_model_through_fit(tokenizer, corpus):
     """Overriding `__call__` bypasses Keras's reduction, so check `fit` really routes weights in."""
     pairs = to_training_pairs(text_line_tokens(tokenizer, corpus), blank=tokenizer.blank, batch_size=3, max_length=64)

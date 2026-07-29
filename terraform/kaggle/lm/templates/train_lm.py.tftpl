@@ -154,6 +154,32 @@ cmd = [
 ]
 cmd += ${extra_flags}
 
+%{ if kaggle_model_handle != "" ~}
+# %%
+# Checkpointing to a Kaggle model needs write credentials, and this notebook has none by
+# default. Kaggle's implicit auth is a read-only data proxy: it serves `model_download` for
+# public models and cannot create a model version at all.
+#
+# SECURITY: the two lines below are your real API token, written here by Terraform from the
+# tfvars. It therefore exists in terraform.tfstate, in build/notebook.ipynb, and in the copy of
+# this notebook Kaggle stores -- keep `is_private = true`, and rotate the token at
+# https://www.kaggle.com/settings if any of those get out.
+#
+# The alternative is Kaggle Secrets (Add-ons -> Secrets), which keeps the token off disk, but it
+# cannot be automated: no Kaggle API can create or attach a secret. This cell disappears when
+# kaggle_model_handle is unset.
+os.environ["KAGGLE_USERNAME"] = ${kaggle_username}
+os.environ["KAGGLE_KEY"] = ${kaggle_key}
+
+# Send `model_download` through the REST API rather than the notebook data proxy. The proxy is
+# chosen automatically inside a notebook and answers a model that does not exist yet -- every
+# first run -- with a generic {"errors":["Internal error"],"error":{"code":13}}, which arrives
+# as kagglehub BackendError. The restore path only recognises the REST 404, so that error
+# escapes and kills the run before the first step. The REST client returns a real 404, which is
+# understood as "nothing to restore yet", and it can read the private model on later runs.
+os.environ["DISABLE_KAGGLE_CACHE"] = "1"
+
+%{ endif ~}
 run(cmd)
 
 # %%

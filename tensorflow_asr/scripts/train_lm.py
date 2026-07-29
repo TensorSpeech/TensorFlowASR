@@ -162,9 +162,28 @@ class MaskedSparseCategoricalCrossentropy(keras.losses.Loss):
         super().__init__(name=name, **kwargs)
 
     def __call__(self, y_true, y_pred, sample_weight=None):
-        # `call` returns log-probabilities, and log_softmax is idempotent, so from_logits=True
-        # re-normalises a distribution that is already normalised -- a no-op, not a second softmax.
-        losses = keras.ops.sparse_categorical_crossentropy(y_true, y_pred, from_logits=True)
+        # Written out rather than calling `sparse_categorical_crossentropy`, which is the same
+        # arithmetic but reaches `tf.nn.sparse_softmax_cross_entropy_with_logits`. That op adds a
+        # runtime shape check whenever the static shapes are not fully known -- which is every GPU
+        # batch, since those pad to the longest sequence in the batch rather than to `max_length`.
+        # The check is an `Assert`, and `Assert` has no GPU kernel on any backend, so under
+        # `MirroredStrategy` (which pins every op to the device) it fails outright with
+        # "Could not satisfy explicit device specification" unless TF_SOFT_PLACEMENT is on.
+        #
+        # log_softmax then gather is the same value with no assertion in the graph. `call` already
+        # returns log-probabilities and log_softmax is idempotent, so this re-normalises a
+        # distribution that is already normalised -- a no-op, not a second softmax.
+        #
+        # `tf.gather(batch_dims=2)` rather than `keras.ops.take_along_axis`, which needs an
+        # explicit `expand_dims` and lowers to `BroadcastTo` + gather. Measured pinned to the
+        # device with soft placement off, the broadcast is itself unplaceable on a backend with
+        # thin kernel coverage, so it trades one such op for another. `one_hot` then sum also
+        # works but materialises a [batch, time, vocab] tensor to read one value per position.
+        #
+        # float32 regardless of the mixed-precision policy: log_softmax over the vocabulary is
+        # where a float16 loss loses its accuracy, and the cast costs nothing next to the matmul.
+        log_probs = keras.ops.log_softmax(keras.ops.cast(y_pred, "float32"), axis=-1)
+        losses = -tf.gather(log_probs, keras.ops.cast(y_true, "int32"), batch_dims=2, axis=2)
         weights = keras.ops.ones_like(losses) if sample_weight is None else keras.ops.cast(sample_weight, losses.dtype)
 
         total = keras.ops.sum(losses * weights)
