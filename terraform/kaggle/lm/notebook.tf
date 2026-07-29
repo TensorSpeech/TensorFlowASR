@@ -9,6 +9,7 @@ locals {
     var.text_path != "" ? ["--text-path=${var.text_path}"] : [],
     var.max_lines != null ? ["--max-lines=${var.max_lines}"] : [],
     var.spx > 1 ? ["--spx=${var.spx}"] : [],
+    var.kaggle_model_handle != "" ? ["--kaggle-model-handle=${var.kaggle_model_handle}"] : [],
     # Only meaningful on a TPU, and train_lm ignores them otherwise, but passing them anyway would
     # put misleading flags in the notebook for a GPU run.
     var.device_type == "tpu" && var.tpu_address != "" ? ["--tpu-address=${var.tpu_address}"] : [],

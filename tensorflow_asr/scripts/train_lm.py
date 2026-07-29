@@ -20,6 +20,7 @@ import time
 
 import numpy as np
 
+from tensorflow_asr import callbacks as asr_callbacks
 from tensorflow_asr import datasets, keras, tf, tokenizers  # import to aid logging messages
 from tensorflow_asr.configs import Config
 from tensorflow_asr.models.base_model import BaseModel
@@ -185,6 +186,28 @@ class MaskedSparseCategoricalCrossentropy(keras.losses.Loss):
         return total / keras.ops.maximum(count, 1.0)
 
 
+def build_callbacks(modeldir: str, kaggle_model_handle: str = None, save_freq="epoch"):
+    """
+    Checkpointing, so a run that is cut short can be picked up rather than started again.
+
+    This matters on a time-boxed machine. A full pass over a corpus like LibriSpeech LM is far
+    longer than a Kaggle session, and `/kaggle/working` starts empty on every run -- so without
+    this an interrupted run loses everything, since the weights are only written once `fit`
+    returns. `KaggleModelBackupAndRestore` round-trips the checkpoint through a Kaggle Model, which
+    is the same mechanism the ASR trainer uses (see `{{ kaggle_model_handle }}` in the example
+    configs); the next session downloads it in `on_train_begin` and resumes.
+
+    Without a handle there is no checkpointing at all, which is the right default for a short run
+    where uploading every epoch would cost more than restarting.
+    """
+    if not kaggle_model_handle:
+        return []
+    if not modeldir:
+        raise ValueError("--kaggle-model-handle needs --modeldir as well: the checkpoint is written there before being uploaded.")
+    logger.info(f"Backing up to the Kaggle model {kaggle_model_handle} every {save_freq}, and restoring from it if it already exists")
+    return [asr_callbacks.KaggleModelBackupAndRestore(model_dir=modeldir, model_handle=kaggle_model_handle, save_freq=save_freq)]
+
+
 def build_optimizer(learning_rate: float, total_steps: int, warmup_steps: int, clipnorm: float, lr_schedule: str):
     """
     Adam, optionally with a warmup-then-cosine schedule and global-norm clipping.
@@ -276,6 +299,7 @@ def main(
     warmup_steps: int = 1000,
     clipnorm: float = 1.0,
     shuffle_buffer: int = 10000,
+    kaggle_model_handle: str = None,
     device_type: str = "gpu",
     devices: list = None,
     tpu_address: str = None,
@@ -355,6 +379,20 @@ def main(
         Sequences buffered for shuffling. 0 disables, which leaves the corpus in file order --
         thousands of consecutive steps inside one document. Costs roughly
         `shuffle_buffer x max_length x 4` bytes.
+    kaggle_model_handle : str
+        Kaggle model to check the training state in and out of, e.g.
+        "owner/tensorflowasr-lm/keras/external". Needs `--modeldir`.
+
+        Turn this on for any run longer than the machine it is on. A checkpoint goes up after
+        every epoch and comes back down at the start of the next run, so an interrupted run
+        continues instead of restarting -- which matters because the weights are only written to
+        `--output` once `fit` returns, and a killed session otherwise loses the lot. The ASR
+        trainer uses the same callback via `{{ kaggle_model_handle }}` in the example configs.
+
+        Uploading needs write credentials, which is not the same as being able to read public
+        models: set KAGGLE_USERNAME and KAGGLE_KEY, or have ~/.kaggle/kaggle.json. Inside a Kaggle
+        notebook that means attaching your API token as a Secret -- the notebook's own implicit
+        auth is not enough.
     bs : int
         Batch size **per replica**. The dataset is batched at `bs x replicas`, matching
         `scripts/train.py`, so a TPU v3-8 with `--bs=32` runs a global batch of 256.
@@ -391,6 +429,10 @@ def main(
         raise ValueError(f"target must be one of {TARGETS}, got {target}")
     if lr_schedule not in LR_SCHEDULES:
         raise ValueError(f"lr_schedule must be one of {LR_SCHEDULES}, got {lr_schedule}")
+    if kaggle_model_handle and not modeldir:
+        # Checked here as well as in build_callbacks so it fails before the corpus is counted,
+        # which on a large one is minutes of work thrown away.
+        raise ValueError("--kaggle-model-handle needs --modeldir as well: the checkpoint is written there before being uploaded.")
     if text_path and target != "external":
         # The internal LM approximates what the transducer picked up from its training transcripts.
         # Counting it over any other corpus would make the correction subtract the wrong thing, so
@@ -492,7 +534,13 @@ def main(
                 loss=MaskedSparseCategoricalCrossentropy(),
                 steps_per_execution=spx,
             )
-            lm.fit(pairs, epochs=epochs, steps_per_epoch=steps_per_epoch, verbose=verbose)
+            lm.fit(
+                pairs,
+                epochs=epochs,
+                steps_per_epoch=steps_per_epoch,
+                verbose=verbose,
+                callbacks=build_callbacks(modeldir, kaggle_model_handle),
+            )
 
     output = file_util.preprocess_paths(output)
     lm.save_weights(output)

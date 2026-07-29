@@ -55,6 +55,14 @@ setups in the papers use the LibriSpeech LM corpus, about 800M words — that wi
 session, and Kaggle kills the kernel rather than saving what it had. Start with `max_lines` and
 `epochs` small enough to finish, confirm the weights are usable, and scale up from there.
 
+**A run that is cut short loses everything by default.** `/kaggle/working` starts empty on every
+run, and `train_lm` only writes the weights once `fit` returns — so a kernel killed at the session
+cap leaves nothing behind. Set `kaggle_model_handle` and the training state is checked into a
+Kaggle model after each epoch and pulled back at the start of the next run, so re-pushing continues
+rather than restarts. Uploading needs write credentials the notebook does not have by default:
+attach your Kaggle API token as a Secret so `KAGGLE_USERNAME` and `KAGGLE_KEY` are set. Without
+them the upload is skipped with a warning and training carries on.
+
 This is why `wait_for_completion` defaults to `false`: turning it on ties up a terminal for the
 whole run, and interrupting a blocked `apply` leaves the push recorded in state while you have no
 idea what the kernel is doing. Waiting is most useful for a short run you want to fetch

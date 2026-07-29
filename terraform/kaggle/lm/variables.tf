@@ -62,7 +62,6 @@ variable "accelerator" {
       TpuV38  Tpu1VmV38  TpuV5E8  TpuV6E8
   EOT
   type        = string
-  default     = "NvidiaTeslaP100"
 
   validation {
     condition = contains(
@@ -156,9 +155,29 @@ variable "datadir" {
 }
 
 variable "modeldir" {
-  description = "Value for --modeldir. Only matters if the config interpolates {{ modeldir }}."
+  description = <<-EOT
+    Value for --modeldir. Where the checkpoint is written when `kaggle_model_handle` is set, and
+    also what the config sees if it interpolates {{ modeldir }}.
+  EOT
   type        = string
   default     = "/kaggle/working/model"
+}
+
+variable "kaggle_model_handle" {
+  description = <<-EOT
+    Kaggle model to check the training state in and out of, e.g.
+    "owner/tensorflowasr-lm/keras/external". Empty disables checkpointing.
+
+    Worth setting for any run longer than a session. `/kaggle/working` starts empty on every run,
+    and `train_lm` only writes the weights once `fit` returns, so a kernel killed at the session
+    cap loses the lot. With a handle the state goes up after each epoch and comes back down at the
+    start of the next run, so re-pushing the notebook continues rather than restarting.
+
+    Uploading needs write credentials, which the notebook does not have by default -- attach your
+    Kaggle API token as a Secret so KAGGLE_USERNAME and KAGGLE_KEY are set. Reading public models
+    works without that; writing does not.
+  EOT
+  type        = string
 }
 
 variable "dataset_type" {

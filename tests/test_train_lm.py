@@ -15,6 +15,7 @@ import sys
 import numpy as np
 import pytest
 
+from tensorflow_asr import callbacks as asr_callbacks
 from tensorflow_asr import keras, tf
 from tensorflow_asr.configs import DecoderConfig
 from tensorflow_asr.models.lm.lstm_language_model import LSTMLanguageModel
@@ -22,6 +23,7 @@ from tensorflow_asr.scripts.train_lm import (
     LR_SCHEDULES,
     TARGETS,
     MaskedSparseCategoricalCrossentropy,
+    build_callbacks,
     build_optimizer,
     count_elements,
     count_text_lines,
@@ -421,6 +423,77 @@ def test_cosine_without_a_step_budget_falls_back_to_a_constant_rate():
     """It cannot decay over an unknown horizon, so it holds the rate rather than inventing one."""
     schedule = build_optimizer(1e-3, total_steps=None, warmup_steps=100, clipnorm=1.0, lr_schedule="cosine").learning_rate
     np.testing.assert_allclose(float(schedule), 1e-3)
+
+
+# --------------------------------------------------------------------------------------------
+# checkpointing, so an interrupted run resumes
+# --------------------------------------------------------------------------------------------
+
+
+def test_no_checkpointing_without_a_handle(tmp_path):
+    """The right default for a short run: uploading every epoch would cost more than restarting."""
+    assert build_callbacks(str(tmp_path)) == []
+    assert build_callbacks(None) == []
+
+
+def test_handle_builds_a_kaggle_backup_callback(tmp_path):
+    """
+    Weights are only written to --output once `fit` returns, so a killed session otherwise loses
+    everything. This callback checks the state into a Kaggle model after each epoch and pulls it
+    back in `on_train_begin`.
+    """
+    callbacks = build_callbacks(str(tmp_path), kaggle_model_handle="owner/lm/keras/external")
+
+    assert len(callbacks) == 1
+    callback = callbacks[0]
+    assert isinstance(callback, asr_callbacks.KaggleModelBackupAndRestore)
+    assert isinstance(callback, keras.callbacks.BackupAndRestore), "it has to restore training state, not just upload files"
+    config = callback.get_config()
+    assert config["model_handle"] == "owner/lm/keras/external"
+    assert config["save_freq"] == "epoch"
+    # the local checkpoint lives under modeldir, which is what gets uploaded
+    assert str(tmp_path) in callback.backup_dir
+
+
+def test_a_failed_upload_does_not_kill_training(tokenizer, tmp_path, caplog):
+    """
+    The callback exists to survive interruptions, so it must not cause one. Without write
+    credentials -- the default inside a Kaggle notebook -- `model_upload` raises, and before this
+    was guarded the run died at the end of the first epoch: strictly worse than no callback.
+    """
+
+    class Unauthorized:
+        def model_download(self, handle, force_download=False):
+            return str(tmp_path / "empty")
+
+        def model_upload(self, **kwargs):
+            raise PermissionError("401 Unauthorized")
+
+    (tmp_path / "empty").mkdir()
+    path = tmp_path / "c.txt"
+    path.write_text("\n".join(["AB", "TX"] * 8) + "\n")
+    pairs = to_training_pairs(text_line_tokens(tokenizer, str(path)), blank=tokenizer.blank, batch_size=4, max_length=16, repeat=True)
+
+    lm = LSTMLanguageModel(vocab_size=tokenizer.num_classes, embed_dim=8, units=16, nlayers=1)
+    lm.make()
+    lm.compile(optimizer=keras.optimizers.SGD(0.0), loss=MaskedSparseCategoricalCrossentropy())
+    callbacks = build_callbacks(str(tmp_path / "model"), kaggle_model_handle="owner/lm/keras/external")
+    callbacks[0]._api = Unauthorized()  # noqa: SLF001 - keeps the test off the network
+
+    history = lm.fit(pairs, epochs=2, steps_per_epoch=2, verbose=0, callbacks=callbacks)
+
+    assert len(history.history["loss"]) == 2, "both epochs must run despite the upload failing"
+    assert any("Could not upload" in record.message for record in caplog.records), "and it has to say so, not fail silently"
+    # the local checkpoint is still written, so a single-machine run stays resumable
+    assert list((tmp_path / "model" / "states").glob("*.weights.h5"))
+
+
+def test_handle_without_modeldir_is_rejected():
+    """There is nowhere to write the checkpoint before uploading it."""
+    with pytest.raises(ValueError, match="needs --modeldir"):
+        build_callbacks(None, kaggle_model_handle="owner/lm/keras/external")
+    with pytest.raises(ValueError, match="needs --modeldir"):
+        build_callbacks("", kaggle_model_handle="owner/lm/keras/external")
 
 
 def test_unknown_schedule_is_rejected():
