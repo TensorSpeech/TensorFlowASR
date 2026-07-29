@@ -161,12 +161,23 @@ tensorflow_asr train_lm \
     --max-lines=1000000 \
     --bs=128 \
     --epochs=1 \
+    --steps-per-epoch=7813 \
     --output=/path/to/modeldir/lm.weights.h5
 ## See others params
 tensorflow_asr train_lm --help
 ```
 
 The `.gz` is read directly and streamed, so the several GB never has to be unpacked. `--max-lines` caps it for a quick first run; drop it to use the whole corpus. `--datadir` and `--dataset-type` are still required even though the text comes from `--text-path`, because the config is rendered with them.
+
+`--steps-per-epoch` is required, and is not derived from the corpus: working it out means reading every line before the first training step, which on a corpus this size costs minutes on every run. Count once instead and keep the number:
+
+```bash
+zcat librispeech-lm-norm.txt.gz | wc -l    # 40418260 for the full corpus
+```
+
+One full pass is `ceil(sequences / (bs x replicas))` — replicas is 8 on a TPU and 1 everywhere else. Above, `ceil(1000000 / 128) = 7813`.
+
+A full pass is often the wrong epoch. The whole corpus at `--bs=32` is ~1.25M steps, and the progress bar shows the running mean of the loss *within* an epoch — so one huge epoch reports a number that stops moving long before training does. Shorter epochs reset that average and give you a reading you can act on. Epochs do not restart the stream, so nothing is re-read: epoch 2 carries on where epoch 1 stopped.
 
 Without `--text-path` it falls back to the training transcripts and warns, since that trains the external LM on the text the transducer already learned.
 

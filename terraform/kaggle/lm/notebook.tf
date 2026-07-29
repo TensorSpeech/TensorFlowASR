@@ -30,22 +30,23 @@ locals {
   install_target = length(local.install_extras) > 0 ? ".[${join(",", local.install_extras)}]" : "."
 
   notebook_source = templatefile("${path.module}/templates/train_lm.py.tftpl", {
-    repo_url       = var.repo_url
-    repo_ref       = var.repo_ref
-    repo_dir       = local.repo_dir
-    install_target = local.install_target
-    config_path    = var.config_path
-    datadir        = var.datadir
-    modeldir       = var.modeldir
-    output_path    = var.output_path
-    dataset_type   = var.dataset_type
-    target         = var.target
-    bs             = var.bs
-    epochs         = var.epochs
-    max_length     = var.max_length
-    learning_rate  = var.learning_rate
-    device_type    = var.device_type
-    mxp            = var.mxp
+    repo_url        = var.repo_url
+    repo_ref        = var.repo_ref
+    repo_dir        = local.repo_dir
+    install_target  = local.install_target
+    config_path     = var.config_path
+    datadir         = var.datadir
+    modeldir        = var.modeldir
+    output_path     = var.output_path
+    dataset_type    = var.dataset_type
+    target          = var.target
+    bs              = var.bs
+    epochs          = var.epochs
+    steps_per_epoch = var.steps_per_epoch
+    max_length      = var.max_length
+    learning_rate   = var.learning_rate
+    device_type     = var.device_type
+    mxp             = var.mxp
 
     # A JSON list is also a valid Python list literal, and a JSON string is a valid Python
     # string literal, so both drop straight into the source with Terraform doing the escaping.

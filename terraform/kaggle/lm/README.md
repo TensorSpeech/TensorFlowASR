@@ -60,8 +60,9 @@ run, and `train_lm` only writes the weights once `fit` returns — so a kernel k
 cap leaves nothing behind. Set `kaggle_model_handle` and the training state is checked into a
 Kaggle model after each epoch and pulled back at the start of the next run, so re-pushing continues
 rather than restarts. Uploading needs write credentials the notebook does not have by default:
-attach your Kaggle API token as a Secret so `KAGGLE_USERNAME` and `KAGGLE_KEY` are set. Without
-them the upload is skipped with a warning and training carries on.
+attach your Kaggle API token as a Secret so `KAGGLE_USERNAME` and `KAGGLE_KEY` are set. Set the
+handle without them and the first upload raises at the end of epoch one, ending the run — so check
+the Secret is attached before starting anything long.
 
 This is why `wait_for_completion` defaults to `false`: turning it on ties up a terminal for the
 whole run, and interrupting a blocked `apply` leaves the push recorded in state while you have no
@@ -156,7 +157,8 @@ memory *and* compute, which is a bigger lever than `bs`. Out-of-memory shows up 
 first step, so bisecting `bs` costs minutes.
 
 **`bs` is per replica.** A v3-8 has 8 cores, so `bs = 32` is a global batch of 256. `steps_per_epoch`
-is derived from the global batch, so an epoch stays one pass over the data.
+counts steps at that global batch, so switching to a TPU without dividing it by 8 turns one pass
+into eight.
 
 **Two pipeline changes are forced on TPU**, because XLA compiles per input shape and the default
 pipeline pads each batch to its own longest sequence — a new shape almost every step, so the run

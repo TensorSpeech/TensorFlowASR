@@ -14,11 +14,7 @@
 
 
 import logging
-import math
 import os
-import time
-
-import numpy as np
 
 from tensorflow_asr import callbacks as asr_callbacks
 from tensorflow_asr import datasets, keras, tf, tokenizers  # import to aid logging messages
@@ -33,20 +29,33 @@ TARGETS = ("external", "internal")
 LR_SCHEDULES = ("cosine", "constant")
 
 
-def transcript_tokens(tokenizer, dataset_type: str, dataset_config):
+def read_transcripts(tokenizer, dataset_type: str, dataset_config) -> list:
     """
-    Tokenized transcripts of a dataset, one array per utterance.
+    The transcripts of a dataset, as a list of strings.
 
     Reads the entries directly rather than building the audio pipeline: a language model needs the
     text and nothing else, and loading the waveforms would dominate the runtime for no reason.
+    Holding them all in memory is what `read_entries` already does, so the list costs nothing on
+    top -- LibriSpeech's 281k transcripts are about 30 MB of text.
     """
-    from tqdm import tqdm
-
     dataset_config.shuffle = False
     dataset_config.drop_remainder = False
     dataset = datasets.get(tokenizer=tokenizer, dataset_config=dataset_config, dataset_type=dataset_type)
     dataset.read_entries()
-    for text in tqdm(dataset.vocab_generator(), total=dataset.num_entries, desc="Reading transcripts"):
+    return list(dataset.vocab_generator())
+
+
+def transcript_tokens(tokenizer, dataset_type: str, dataset_config):
+    """
+    Tokenized transcripts, one numpy array per utterance.
+
+    For `fit_counts`, which tallies bigrams in python and has no use for a `tf.data` stream. The
+    gradient-descent path uses `transcript_token_dataset` instead.
+    """
+    from tqdm import tqdm
+
+    transcripts = read_transcripts(tokenizer, dataset_type, dataset_config)
+    for text in tqdm(transcripts, desc="Reading transcripts"):
         yield tokenizer.tokenize(text).numpy()
 
 
@@ -109,38 +118,22 @@ def to_training_pairs(
     return dataset.prefetch(tf.data.AUTOTUNE)
 
 
-def count_elements(dataset: tf.data.Dataset) -> int:
-    """Number of elements in a dataset, by walking it once."""
-    return int(dataset.reduce(tf.constant(0, tf.int64), lambda total, *_: total + 1))
-
-
-def count_text_lines(text_path: str, max_lines: int = None) -> int:
+def check_steps_per_epoch(steps_per_epoch: int) -> int:
     """
-    Number of non-blank lines in a text corpus.
+    Gradient training needs to be told the epoch length; it is not derived.
 
-    Counted on the raw lines rather than on the tokenized stream: tokenizing tens of millions of
-    lines purely to count them would cost about as much as an epoch of training. The blank-line
-    filter is applied here too so the number matches what `to_training_pairs` will actually yield,
-    give or take a line that survives the strip but still tokenizes to nothing.
+    Deriving it means walking the whole corpus before the first step -- minutes on a large text
+    file, and the walk has to be repeatable or it consumes the data it just measured. Asking for
+    the number keeps startup constant and makes the epoch an explicit choice, which it should be:
+    a full pass over a 40M-line corpus is a worse epoch than a short one, because the progress bar
+    reports a running mean that flattens out over a long epoch.
     """
-    path = file_util.preprocess_paths(text_path)
-    dataset = tf.data.TextLineDataset(path, compression_type="GZIP" if str(path).endswith(".gz") else "")
-    if max_lines:
-        dataset = dataset.take(max_lines)
-    return count_elements(dataset.filter(lambda line: tf.strings.length(tf.strings.strip(line)) > 0))
-
-
-def steps_for_one_pass(num_sequences: int, batch_size: int, drop_remainder: bool = False) -> int:
-    """
-    Batches in one full pass, so an epoch covers the data exactly once.
-
-    `drop_remainder` has to match the data pipeline. Rounding up when the short final batch is
-    being dropped would ask for a step the pass does not contain, and the epoch would quietly
-    borrow from the next one.
-    """
-    if drop_remainder:
-        return max(num_sequences // batch_size, 1)
-    return max(math.ceil(num_sequences / batch_size), 1)
+    if not steps_per_epoch or steps_per_epoch < 1:
+        raise ValueError(
+            "--steps-per-epoch is required and must be at least 1. One pass over the data is "
+            "ceil(sequences / (bs x replicas)) steps; `wc -l` on the corpus gives the sequence count."
+        )
+    return steps_per_epoch
 
 
 class MaskedSparseCategoricalCrossentropy(keras.losses.Loss):
@@ -271,14 +264,18 @@ def text_line_tokens(tokenizer, text_path: str, max_lines: int = None) -> tf.dat
     return dataset.map(lambda line: tf.cast(tokenizer.tokenize(line), tf.int32), num_parallel_calls=tf.data.AUTOTUNE)
 
 
-def transcript_token_dataset(sequences) -> tf.data.Dataset:
-    """The transcript generator as a `tf.data` stream, so it can share `to_training_pairs`."""
+def transcript_token_dataset(tokenizer, dataset_type: str, dataset_config) -> tf.data.Dataset:
+    """
+    Tokenized transcripts as a `tf.data` stream, so they can share `to_training_pairs`.
 
-    def generator():
-        for seq in sequences:
-            yield np.asarray(seq, dtype=np.int32).reshape(-1)
-
-    return tf.data.Dataset.from_generator(generator, output_signature=tf.TensorSpec([None], tf.int32))
+    Built from the list of transcripts rather than by wrapping `transcript_tokens` in
+    `from_generator`. A generator object can only be walked once, so anything that reads the
+    dataset ahead of training leaves the training walk with nothing -- a silent empty run.
+    `from_tensor_slices` can be replayed, and tokenization moves into the graph.
+    """
+    transcripts = read_transcripts(tokenizer, dataset_type, dataset_config)
+    dataset = tf.data.Dataset.from_tensor_slices(transcripts)
+    return dataset.map(lambda line: tf.cast(tokenizer.tokenize(line), tf.int32), num_parallel_calls=tf.data.AUTOTUNE)
 
 
 def main(
@@ -353,18 +350,21 @@ def main(
     max_length : int
         Sequences are truncated to this many tokens. Only affects gradient training.
     steps_per_epoch : int
-        Steps per epoch. Left unset, the dataset is counted and this becomes
-        `ceil(sequences / bs)`, so **one epoch is one full pass over the data** -- and `epochs` is
-        then the number of passes.
+        Steps per epoch. **Required** for gradient training; the n-gram models, which fit by
+        counting, ignore it.
 
-        Set it explicitly to skip the counting pass, or to cut a corpus too large to traverse into
-        shorter epochs. That is worth doing on something like the 40M-line LibriSpeech LM corpus:
-        a full pass there is ~1.25M steps, and Keras reports the *running mean* of the loss over
-        the current epoch, so a single enormous epoch shows a number that stops moving long before
-        training does. Shorter epochs reset that average and give you a reading per epoch.
+        For one epoch to be one full pass over the data, set it to
+        `ceil(sequences / (bs x replicas))` -- `wc -l` on the corpus gives the sequence count, and
+        it is worth writing down rather than recomputing, since counting means reading the whole
+        corpus before training can start.
+
+        A full pass is often the wrong epoch anyway. The 40M-line LibriSpeech LM corpus is ~1.25M
+        steps at batch 32, and Keras reports the *running mean* of the loss over the current epoch,
+        so one enormous epoch shows a number that stops moving long before training does. Shorter
+        epochs reset that average and give you a reading you can act on.
 
         Note that epochs do not restart the stream -- with the data cycling, epoch 2 continues
-        where epoch 1 stopped. Epoch boundaries line up with passes only because the step count
+        where epoch 1 stopped. Epoch boundaries line up with passes only when the step count
         matches one pass exactly.
     lr_schedule : str
         "cosine" (default) warms up from 0 then decays to 0 over `steps_per_epoch` x `epochs`;
@@ -392,7 +392,8 @@ def main(
         Uploading needs write credentials, which is not the same as being able to read public
         models: set KAGGLE_USERNAME and KAGGLE_KEY, or have ~/.kaggle/kaggle.json. Inside a Kaggle
         notebook that means attaching your API token as a Secret -- the notebook's own implicit
-        auth is not enough.
+        auth is not enough. The upload is not guarded: without the credentials it raises at the
+        end of the first epoch and takes the run down with it, so check them before a long run.
     bs : int
         Batch size **per replica**. The dataset is batched at `bs x replicas`, matching
         `scripts/train.py`, so a TPU v3-8 with `--bs=32` runs a global batch of 256.
@@ -484,6 +485,7 @@ def main(
                 f"{int((counts.sum(axis=1) > 0).sum())}/{vocab_size} contexts seen"
             )
         else:
+            steps_per_epoch = check_steps_per_epoch(steps_per_epoch)
             if text_path:
                 tokens = text_line_tokens(tokenizer, text_path, max_lines=max_lines)
                 source = f"{text_path}{f' (first {max_lines} lines)' if max_lines else ''}"
@@ -493,21 +495,8 @@ def main(
                         "Training the external language model on the ASR transcripts, which is the text the transducer "
                         "already learned. Pass --text-path to a larger corpus, or the fusion has little left to add."
                     )
-                tokens = transcript_token_dataset(transcript_tokens(tokenizer, dataset_type, config.data_config.train_dataset_config))
+                tokens = transcript_token_dataset(tokenizer, dataset_type, config.data_config.train_dataset_config)
                 source = "the training transcripts"
-            if steps_per_epoch is None:
-                # One epoch = one pass over the data. Counting costs a walk over the corpus, which
-                # is cheap for transcripts and a decompress-and-split for a text file; pass
-                # --steps-per-epoch to skip it and define the epoch yourself.
-                logger.info("Counting the dataset so that one epoch is one full pass (pass --steps-per-epoch to skip)")
-                started = time.time()
-                num_sequences = count_text_lines(text_path, max_lines) if text_path else count_elements(tokens)
-                steps_per_epoch = steps_for_one_pass(num_sequences, global_batch_size, drop_remainder=on_tpu)
-                logger.info(
-                    f"{num_sequences:,} sequences -> {steps_per_epoch:,} steps per epoch at global batch size "
-                    f"{global_batch_size} (counted in {time.time() - started:.1f}s)"
-                )
-
             total_steps = steps_per_epoch * epochs
             logger.info(
                 f"Training {type(lm).__name__} ({lm.count_params() / 1e6:.1f}M params) on {source} "

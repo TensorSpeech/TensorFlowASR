@@ -55,9 +55,10 @@ extra_args = [
 
 # --- Which language model -------------------------------------------------
 # "internal" -> lm_config.internal_config, the bigram LODR subtracts. Fitted by counting
-#               over the ASR transcripts, so epochs/bs/learning_rate do nothing.
-target      = "internal"
-output_path = "/kaggle/working/internal_lm.weights.h5"
+#               over the ASR transcripts, so epochs/bs/learning_rate/steps_per_epoch do nothing.
+target          = "internal"
+output_path     = "/kaggle/working/internal_lm.weights.h5"
+steps_per_epoch = 1 # unused by the n-gram path, but the variable has no default
 
 # "external" -> lm_config.external_config, the LM fused in. Wants a big corpus:
 # target      = "external"
@@ -66,6 +67,13 @@ output_path = "/kaggle/working/internal_lm.weights.h5"
 # max_lines   = 1000000   # the full corpus is ~40M lines; see the README on session limits
 # bs          = 128
 # epochs      = 1
+#
+# steps_per_epoch has no default on purpose -- train_lm will not read the corpus to guess it.
+# One full pass is ceil(sequences / (bs x replicas)):
+#   `wc -l` the corpus (or `zcat corpus.gz | wc -l` if gzipped) for the sequence count,
+#   replicas is 8 on a TPU and 1 everywhere else.
+# With max_lines = 1000000 and bs = 128 on one GPU that is ceil(1000000 / 128) = 7813:
+# steps_per_epoch = 7813
 
 # --- What apply does after pushing ---------------------------------------
 # Default is false: push and return, then watch it with `terraform output status_command`.

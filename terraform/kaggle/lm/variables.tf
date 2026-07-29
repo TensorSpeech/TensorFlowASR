@@ -255,6 +255,26 @@ variable "epochs" {
   default     = 10
 }
 
+variable "steps_per_epoch" {
+  description = <<-EOT
+    Batches per epoch. Required: `train_lm` will not guess it, because guessing means reading the
+    whole corpus before training starts.
+
+    For one epoch to be one full pass, use ceil(sequences / (bs x replicas)) -- `wc -l` on the
+    corpus gives the sequence count, and replicas is 8 on a TPU, 1 otherwise. A shorter epoch is
+    often better on a large corpus: the progress bar shows the running mean of the loss within an
+    epoch, so a very long one stops looking like it is moving.
+
+    Ignored by the n-gram models, which fit by counting rather than gradient descent.
+  EOT
+  type        = number
+
+  validation {
+    condition     = var.steps_per_epoch >= 1
+    error_message = "steps_per_epoch must be at least 1."
+  }
+}
+
 variable "max_length" {
   description = "Truncate sequences to this many tokens."
   type        = number

@@ -9,6 +9,7 @@ value and a legal token.
 """
 
 import gzip
+import math
 import subprocess
 import sys
 
@@ -17,7 +18,7 @@ import pytest
 
 from tensorflow_asr import callbacks as asr_callbacks
 from tensorflow_asr import keras, tf
-from tensorflow_asr.configs import DecoderConfig
+from tensorflow_asr.configs import DatasetConfig, DecoderConfig
 from tensorflow_asr.models.lm.lstm_language_model import LSTMLanguageModel
 from tensorflow_asr.scripts.train_lm import (
     LR_SCHEDULES,
@@ -25,11 +26,10 @@ from tensorflow_asr.scripts.train_lm import (
     MaskedSparseCategoricalCrossentropy,
     build_callbacks,
     build_optimizer,
-    count_elements,
-    count_text_lines,
-    steps_for_one_pass,
+    check_steps_per_epoch,
     text_line_tokens,
     to_training_pairs,
+    transcript_token_dataset,
 )
 from tensorflow_asr.tokenizers import CharTokenizer
 
@@ -41,6 +41,20 @@ def tokenizer():
     tok = CharTokenizer(DecoderConfig({"type": "characters", "blank_index": 0, "vocabulary": None}))
     tok.make()
     return tok
+
+
+@pytest.fixture
+def transcripts(tokenizer, tmp_path):
+    """
+    The args for `transcript_token_dataset`, backed by a transcript tsv.
+
+    A real tsv rather than a stub, because the bug being guarded against lived in how the entries
+    were handed to `tf.data`. No audio is read: the language model path stops at `read_entries`.
+    """
+    path = tmp_path / "transcripts.tsv"
+    rows = "\n".join(f"/audio/{index}.flac\t1.0\t{line}" for index, line in enumerate(LINES))
+    path.write_text(f"PATH\tDURATION\tTRANSCRIPT\n{rows}\n")
+    return tokenizer, "generator", DatasetConfig({"data_paths": [str(path)], "enabled": True})
 
 
 @pytest.fixture(params=["plain", "gzip"])
@@ -224,42 +238,37 @@ def test_repeat_lets_a_finite_dataset_fill_fixed_epochs(tokenizer, corpus):
 
 
 # --------------------------------------------------------------------------------------------
-# one epoch is one pass over the data
+# the epoch length is given, not derived
 # --------------------------------------------------------------------------------------------
 
 
-def test_counts_lines_without_tokenizing(tokenizer, corpus):
-    """Counting drives steps_per_epoch, so it has to agree with what the pipeline yields."""
-    assert count_text_lines(corpus) == len(LINES)
-    assert count_text_lines(corpus, max_lines=2) == 2
-    # and it matches the count of the tokenized stream, which is the expensive way to get it
-    assert count_text_lines(corpus) == count_elements(text_line_tokens(tokenizer, corpus))
+@pytest.mark.parametrize("bad", [None, 0, -1])
+def test_steps_per_epoch_is_required(bad):
+    """Deriving it costs a walk over the whole corpus before the first step, so it is asked for."""
+    with pytest.raises(ValueError, match="steps-per-epoch is required"):
+        check_steps_per_epoch(bad)
+    assert check_steps_per_epoch(1) == 1
+    assert check_steps_per_epoch(7813) == 7813
 
 
-def test_blank_lines_are_left_out_of_the_count(tokenizer, tmp_path):
-    """They are dropped by the pipeline, so counting them would overstate a pass."""
+def test_the_transcripts_can_be_read_twice(transcripts):
+    """
+    Regression: `transcript_tokens` is a one-shot generator, and wrapping it in `from_generator`
+    made every read after the first yield nothing. Anything that inspects the dataset before
+    training -- counting it, peeking at a batch -- would then train on an empty stream.
+    """
+    tokens = transcript_token_dataset(*transcripts)
+    assert sum(1 for _ in tokens) == len(LINES)
+    assert sum(1 for _ in tokens) == len(LINES), "reading it must not consume it"
+
+
+def test_blank_lines_are_dropped(tokenizer, tmp_path):
+    """They carry no supervision, so the pipeline yields nothing for them."""
     path = tmp_path / "gappy.txt"
     path.write_text("HELLO\n\n   \nWORLD\n")
-    assert count_text_lines(str(path)) == 2
 
     pairs = to_training_pairs(text_line_tokens(tokenizer, str(path)), blank=tokenizer.blank, batch_size=1, max_length=64)
-    assert sum(1 for _ in pairs) == steps_for_one_pass(count_text_lines(str(path)), 1)
-
-
-@pytest.mark.parametrize(
-    "sequences,batch_size,expected",
-    [(100, 10, 10), (101, 10, 11), (99, 10, 10), (1, 32, 1), (0, 32, 1)],  # a partial batch still costs a step
-)
-def test_steps_for_one_pass_rounds_up(sequences, batch_size, expected):
-    assert steps_for_one_pass(sequences, batch_size) == expected
-
-
-@pytest.mark.parametrize(
-    "sequences,batch_size,expected",
-    [(100, 10, 10), (101, 10, 10), (99, 10, 9), (1, 32, 1)],  # the short final batch is gone, so round down
-)
-def test_steps_for_one_pass_rounds_down_when_dropping_the_remainder(sequences, batch_size, expected):
-    assert steps_for_one_pass(sequences, batch_size, drop_remainder=True) == expected
+    assert sum(1 for _ in pairs) == 2, "4 lines in, but only 2 hold text"
 
 
 # --------------------------------------------------------------------------------------------
@@ -337,7 +346,7 @@ def test_loss_does_not_scale_with_replica_count(tmp_path):
     completed = subprocess.run([sys.executable, str(probe)], capture_output=True, text=True, timeout=900, check=False)
 
     if completed.returncode != 0:
-        pytest.skip(f"could not run the distributed probe: {completed.stderr.strip().splitlines()[-1:] }")
+        pytest.skip(f"could not run the distributed probe: {completed.stderr.strip().splitlines()[-1:]}")
 
     replicas, loss, uniform = (float(v) for v in completed.stdout.strip().splitlines()[-1].split())
     assert replicas == 2, "the probe needs two replicas to say anything"
@@ -363,14 +372,15 @@ def test_padding_to_max_length_still_masks_the_loss(tokenizer, tmp_path):
 @pytest.mark.parametrize("batch_size", [1, 2, 4])
 def test_one_epoch_of_counted_steps_is_exactly_one_pass(tokenizer, tmp_path, batch_size):
     """
-    The property the whole thing rests on: `repeat` is applied after batching, so a cycle is
-    exactly `ceil(N / bs)` batches. Repeating the sequences instead would let batches straddle the
-    seam and an "epoch" would quietly drift out of step with the data.
+    What makes `ceil(sequences / bs)` the right number to hand to --steps-per-epoch: `repeat` is
+    applied after batching, so a cycle is exactly that many batches. Repeating the sequences
+    instead would let batches straddle the seam and an "epoch" would drift out of step with the
+    data.
     """
     path = tmp_path / "many.txt"
     path.write_text("\n".join(f"LINE {i}" for i in range(10)) + "\n")
 
-    steps = steps_for_one_pass(count_text_lines(str(path)), batch_size)
+    steps = math.ceil(10 / batch_size)
     pairs = to_training_pairs(text_line_tokens(tokenizer, str(path)), blank=tokenizer.blank, batch_size=batch_size, max_length=64, repeat=True)
 
     # every sequence seen exactly once across one epoch's worth of steps
@@ -453,39 +463,6 @@ def test_handle_builds_a_kaggle_backup_callback(tmp_path):
     assert config["save_freq"] == "epoch"
     # the local checkpoint lives under modeldir, which is what gets uploaded
     assert str(tmp_path) in callback.backup_dir
-
-
-def test_a_failed_upload_does_not_kill_training(tokenizer, tmp_path, caplog):
-    """
-    The callback exists to survive interruptions, so it must not cause one. Without write
-    credentials -- the default inside a Kaggle notebook -- `model_upload` raises, and before this
-    was guarded the run died at the end of the first epoch: strictly worse than no callback.
-    """
-
-    class Unauthorized:
-        def model_download(self, handle, force_download=False):
-            return str(tmp_path / "empty")
-
-        def model_upload(self, **kwargs):
-            raise PermissionError("401 Unauthorized")
-
-    (tmp_path / "empty").mkdir()
-    path = tmp_path / "c.txt"
-    path.write_text("\n".join(["AB", "TX"] * 8) + "\n")
-    pairs = to_training_pairs(text_line_tokens(tokenizer, str(path)), blank=tokenizer.blank, batch_size=4, max_length=16, repeat=True)
-
-    lm = LSTMLanguageModel(vocab_size=tokenizer.num_classes, embed_dim=8, units=16, nlayers=1)
-    lm.make()
-    lm.compile(optimizer=keras.optimizers.SGD(0.0), loss=MaskedSparseCategoricalCrossentropy())
-    callbacks = build_callbacks(str(tmp_path / "model"), kaggle_model_handle="owner/lm/keras/external")
-    callbacks[0]._api = Unauthorized()  # noqa: SLF001 - keeps the test off the network
-
-    history = lm.fit(pairs, epochs=2, steps_per_epoch=2, verbose=0, callbacks=callbacks)
-
-    assert len(history.history["loss"]) == 2, "both epochs must run despite the upload failing"
-    assert any("Could not upload" in record.message for record in caplog.records), "and it has to say so, not fail silently"
-    # the local checkpoint is still written, so a single-machine run stays resumable
-    assert list((tmp_path / "model" / "states").glob("*.weights.h5"))
 
 
 def test_handle_without_modeldir_is_rejected():
