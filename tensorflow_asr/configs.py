@@ -124,6 +124,10 @@ class DataConfig:
         _test_dataset_config = config.pop("test_dataset_config", None)
         if _test_dataset_config:
             self.test_dataset_configs.append(_test_dataset_config)
+        # The text `scripts/train_lm.py` trains a language model on. Separate from the ASR datasets
+        # because its `data_paths` may be ASR transcript `.tsv` (for the internal LM) or a large
+        # `.txt`/`.txt.gz` corpus (for the external LM), or a mix -- see `datasets.LMDataset`.
+        self.lm_dataset_config = DatasetConfig(config.pop("lm_dataset_config", {}))
 
 
 class LearningConfig:

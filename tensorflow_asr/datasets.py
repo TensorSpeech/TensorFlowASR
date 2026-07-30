@@ -60,6 +60,7 @@
 
 # Where `predictions` and `predictions_length` are the label prepanded by blank and its length for training *Transducer*
 
+import gzip
 import json
 import logging
 import os
@@ -500,3 +501,294 @@ class ASRSliceDataset(ASRDataset):
         dataset = dataset.map(self.load, num_parallel_calls=AUTOTUNE, deterministic=False)
 
         return self.process(dataset, batch_size, ga_steps=ga_steps, padded_shapes=padded_shapes)
+
+
+class LMDataset(AbstractDataset):
+    """
+    Text dataset for training a `LanguageModel` (see `scripts/train_lm.py`).
+
+    `data_paths` may mix two kinds of file, told apart by extension:
+
+    - `.tsv` -- ASR transcript files (`PATH\tDURATION\tTRANSCRIPT`, with the header row skipped), of
+      which only the transcript column is read. This is the text the transducer trained on, and the
+      right source for the *internal* LM that LODR subtracts.
+    - `.txt` / `.txt.gz` -- a plain text corpus, one sentence per line, read directly through gzip
+      when the name ends in `.gz` (how OpenSLR ships the LibriSpeech LM corpus). This is the right
+      source for the *external* LM, whose whole point is far more text than the transcripts -- the
+      LibriSpeech LM corpus is ~40M lines and several GB.
+
+    Everything streams one line at a time -- nothing is held in memory -- so a multi-GB external
+    corpus is fine. Tokenisation uses the same tokenizer built from the config, which is what
+    guarantees the indices match the transducer's vocabulary (the requirement
+    `LanguageModel.call_next` states but cannot check).
+
+    `max_input_length` is the longest tokenised sequence in the corpus. For a language model the
+    text *is* the input (input and target are the same sequence shifted by one, see `shift_tokens`),
+    so this is the LM analog of `ASRDataset.max_label_length`, and it is computed, saved and loaded
+    the same way -- a JSON file keyed by `stage`.
+    """
+
+    def __init__(
+        self,
+        stage: str,
+        tokenizer: AbstractTokenizer,
+        data_paths: list,
+        metadata: str = None,
+        shuffle: bool = False,
+        buffer_size: int = BUFFER_SIZE,
+        cache: bool = False,
+        drop_remainder: bool = True,
+        indefinite: bool = True,
+        enabled: bool = True,
+        max_length: int = 0,  # truncate sequences to this many tokens; 0 = no limit
+        max_lines: int = None,  # stop after this many lines across all files; None = read all
+        name: str = "",
+        **kwargs,
+    ):
+        self.tokenizer = tokenizer
+        self.data_paths = data_paths or []
+        if not isinstance(self.data_paths, list):
+            raise ValueError("data_paths must be a list of string paths")
+        self.stage = stage
+        self.metadata = metadata
+        self.shuffle = shuffle
+        self.buffer_size = buffer_size
+        self.cache = cache
+        self.drop_remainder = drop_remainder
+        self.indefinite = indefinite
+        self.enabled = enabled
+        self.max_length = max_length
+        self.max_lines = max_lines
+        self.name = name or stage
+        self.total_steps = None
+        self.num_entries = 0
+
+        for key, value in kwargs.items():
+            setattr(self, key, value)
+
+        self.max_input_length = None
+        self.load_metadata()
+
+    # -------------------------------- FILES -------------------------------------
+
+    def _resolved_paths(self):
+        return file_util.preprocess_paths(self.data_paths, enabled=self.enabled, check_exists=True) or []
+
+    def _iter_tsv(self, path):
+        with tf.io.gfile.GFile(path, "r") as f:
+            for line in f.read().splitlines()[1:]:  # skip the header of the tsv file
+                parts = line.split("\t", 2)  # PATH \t DURATION \t TRANSCRIPT
+                if len(parts) == 3:
+                    yield parts[2]
+
+    def _iter_textfile(self, path):
+        if path.lower().endswith(".gz"):
+            # gfile does not decompress, so wrap its bytes stream in gzip -- this keeps remote
+            # paths (gs://) working, which a plain gzip.open would not.
+            with tf.io.gfile.GFile(path, "rb") as raw, gzip.GzipFile(fileobj=raw) as gz:
+                for line in gz:
+                    yield line.decode("utf-8").rstrip("\r\n")
+        else:
+            with tf.io.gfile.GFile(path, "r") as f:
+                for line in f:
+                    yield line.rstrip("\r\n")
+
+    def _iter_texts(self):
+        """Stream text, one line at a time, across every file in `data_paths`."""
+        count = 0
+        for path in self._resolved_paths():
+            source = self._iter_tsv(path) if path.lower().endswith(".tsv") else self._iter_textfile(path)
+            for text in source:
+                yield text
+                count += 1
+                if self.max_lines and count >= self.max_lines:
+                    return
+
+    # -------------------------------- ENTRIES -------------------------------------
+
+    def read_entries(self):
+        # Only resolves and validates the paths; unlike the ASR dataset it does not read them, so a
+        # multi-GB corpus is not walked here. `num_entries` stays 0 (unknown) until metadata is
+        # computed -- the size of the external corpus is why `train_lm.py` asks for
+        # `--steps-per-epoch` rather than counting.
+        self.data_paths = self._resolved_paths()
+        for path in self.data_paths:
+            logger.info(f"Using LM text from {path} ...")
+
+    def generator(self):
+        for text in self._iter_texts():
+            yield bytes(text, "utf-8")
+
+    def vocab_generator(self):
+        for text in self._iter_texts():
+            yield text
+
+    def token_generator(self):
+        """
+        Tokenized text, one numpy array per line, for the n-gram `fit_counts` counting pass.
+
+        `fit_counts` tallies bigrams in python and has no use for a `tf.data` stream, so this yields
+        eagerly. The gradient-descent path uses `create` instead.
+        """
+        for text in self._iter_texts():
+            yield self.tokenizer.tokenize(text).numpy()
+
+    # -------------------------------- LOAD AND PREPROCESS -------------------------------------
+
+    def _text_line_dataset(self):
+        """A streaming `tf.data.Dataset` of text lines (string tensors) over all files."""
+        line_datasets = []
+        for path in self._resolved_paths():
+            lower = path.lower()
+            if lower.endswith(".tsv"):
+                # Transcripts are bounded (the ASR training set), so materialising them is cheap and
+                # gives a replayable dataset -- a generator walked once would leave later passes empty.
+                transcripts = list(self._iter_tsv(path))
+                if transcripts:
+                    line_datasets.append(tf.data.Dataset.from_tensor_slices(transcripts))
+            else:
+                # TextLineDataset streams the file in C++ (transparently through gzip for `.gz`), so
+                # a multi-GB corpus is never read into memory; tokenization runs in the graph after.
+                line_datasets.append(
+                    tf.data.TextLineDataset(
+                        path,
+                        compression_type="GZIP" if lower.endswith(".gz") else "",
+                        num_parallel_reads=AUTOTUNE,
+                    )
+                )
+        if not line_datasets:
+            raise ValueError(f"No readable data files in data_paths for the {self.stage} LM dataset")
+        dataset = line_datasets[0]
+        for extra in line_datasets[1:]:
+            dataset = dataset.concatenate(extra)
+        return dataset
+
+    def _token_dataset(self):
+        """A streaming `tf.data.Dataset` of tokenized `int32` vectors, one per line."""
+        dataset = self._text_line_dataset()
+        if self.max_lines:
+            dataset = dataset.take(self.max_lines)
+        return dataset.map(lambda line: tf.cast(self.tokenizer.tokenize(line), tf.int32), num_parallel_calls=AUTOTUNE)
+
+    def create(self, batch_size: int):
+        """
+        A batched `(inputs, targets, sample_weight)` dataset for training a `LanguageModel`.
+
+        Targets are the token sequence; inputs are the same sequence shifted right with blank in
+        front, so position `u` predicts token `u` from everything before it -- the conditioning the
+        beam search hands to `call_next`. `sample_weight` is 1 on real tokens and 0 on padding, built
+        *before* batching as an all-ones vector and then padded with 0: blank is the pad value *and*
+        a legal token (it doubles as start of sentence), so the mask cannot be recovered afterwards.
+
+        Every knob is read from the config on `self`:
+
+        - `max_length` truncates each sequence, and is also the padded length when set -- a fixed
+          shape, which is what XLA/TPU needs. Left unset (0), batches pad to their own longest
+          sequence, which is cheaper on a GPU. Pinning the shape for a TPU is therefore just
+          `max_length` plus `drop_remainder` in `lm_dataset_config`, the same way the ASR datasets
+          pin from metadata.
+        - `shuffle` with `buffer_size` shuffles single sequences before batching, so the model does
+          not spend thousands of consecutive steps inside one slice of a corpus laid out by document.
+        - `drop_remainder` drops the short final batch (needed on TPU, where every batch must share
+          one shape).
+        - `indefinite` repeats the data so a finite corpus can fill fixed-size epochs. It is applied
+          *after* batching, so one cycle is exactly `ceil(sequences / batch_size)` batches rather
+          than letting a batch straddle the seam.
+        """
+        from tensorflow_asr.models.lm.language_model import shift_tokens  # pylint: disable=import-outside-toplevel
+
+        blank = self.tokenizer.blank
+        max_length = self.max_length or None  # 0 => no truncation; t[:None] keeps the whole sequence
+        sequence_shape = [self.max_length] if self.max_length else [None]
+
+        dataset = self._token_dataset()
+        dataset = dataset.map(lambda t: t[:max_length], num_parallel_calls=AUTOTUNE)
+        dataset = dataset.filter(lambda t: tf.size(t) > 0)  # blank lines carry no supervision
+        if self.shuffle and self.buffer_size:
+            dataset = dataset.shuffle(self.buffer_size, reshuffle_each_iteration=True)
+        dataset = dataset.map(lambda t: (t, tf.ones_like(t, dtype=tf.float32)), num_parallel_calls=AUTOTUNE)
+        dataset = dataset.padded_batch(
+            batch_size,
+            padded_shapes=(sequence_shape, sequence_shape),
+            padding_values=(tf.constant(blank, tf.int32), 0.0),
+            drop_remainder=self.drop_remainder,
+        )
+        dataset = dataset.map(lambda t, w: (shift_tokens(t, blank), t, w), num_parallel_calls=AUTOTUNE)
+        if self.indefinite:
+            dataset = dataset.repeat()
+        return dataset.prefetch(AUTOTUNE)
+
+    # -------------------------------- metadata -------------------------------------
+
+    def compute_metadata(self):
+        if not self.tokenizer.initialized:
+            raise ValueError("Tokenizer must be initialized before computing metadata")
+
+        from tqdm import tqdm  # pylint: disable=import-outside-toplevel
+
+        self.max_input_length = 0 if self.max_input_length is None else self.max_input_length
+        num_entries = 0
+        for tokens in tqdm(self.token_generator(), desc=f"Computing metadata for entries in {self.stage} LM dataset", disable=False):
+            self.max_input_length = max(self.max_input_length, len(tokens))
+            num_entries += 1
+        self.total_steps = num_entries
+        self.num_entries = num_entries
+
+    def save_metadata(self):
+        if self.metadata is None:
+            return
+        self.metadata = file_util.preprocess_paths(self.metadata)
+        if tf.io.gfile.exists(self.metadata):
+            with tf.io.gfile.GFile(self.metadata, "r") as f:
+                try:
+                    content = json.loads(f.read())
+                except json.JSONDecodeError as e:
+                    raise ValueError(f"File {self.metadata} is currently not in json format. Please update the file") from e
+        else:
+            content = {}
+        content[self.stage] = dict(
+            max_input_length=self.max_input_length,
+            num_entries=self.total_steps,
+        )
+        with tf.io.gfile.GFile(self.metadata, "w") as f:
+            f.write(json.dumps(content, indent=2))
+        logger.info(f"Metadata written to {self.metadata}")
+
+    def load_metadata(self):
+        if self.metadata is None:
+            return
+        if not self.enabled:
+            return
+        content = None
+        self.metadata = file_util.preprocess_paths(self.metadata)
+        if tf.io.gfile.exists(self.metadata):
+            logger.info(f"Loading metadata from {self.metadata} ...")
+            with tf.io.gfile.GFile(self.metadata, "r") as f:
+                try:
+                    content = json.loads(f.read()).get(self.stage, {})
+                except json.JSONDecodeError as e:
+                    raise ValueError(f"File {self.metadata} must be in json format") from e
+        if not content:
+            return
+        self.max_input_length = content.get("max_input_length")
+        self.total_steps = int(content.get("num_entries", 0))
+        self.num_entries = self.total_steps
+
+    def update_metadata(self):
+        self.load_metadata()
+        self.compute_metadata()
+        self.save_metadata()
+
+
+def get_lm(
+    tokenizer: AbstractTokenizer,
+    dataset_config: DatasetConfig,
+    **overrides,
+):
+    """
+    Build an `LMDataset` from a `DatasetConfig`, mirroring `get` for the ASR datasets.
+
+    `overrides` win over the config, which is how `scripts/train_lm.py` points the external LM at
+    `--text-path` (`data_paths=[text_path]`) and passes `max_length` / `max_lines`.
+    """
+    return LMDataset(tokenizer=tokenizer, **{**vars(dataset_config), **overrides})

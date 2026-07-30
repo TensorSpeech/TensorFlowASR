@@ -12,110 +12,22 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
 import logging
 import os
+
+os.environ["TQDM_DISABLE"] = "1"
 
 from tensorflow_asr import callbacks as asr_callbacks
 from tensorflow_asr import datasets, keras, tf, tokenizers  # import to aid logging messages
 from tensorflow_asr.configs import Config
 from tensorflow_asr.models.base_model import BaseModel
-from tensorflow_asr.models.lm.language_model import LanguageModel, shift_tokens
+from tensorflow_asr.models.lm.language_model import LanguageModel
 from tensorflow_asr.utils import cli_util, env_util, file_util
 
 logger = logging.getLogger(__name__)
 
 TARGETS = ("external", "internal")
 LR_SCHEDULES = ("cosine", "constant")
-
-
-def read_transcripts(tokenizer, dataset_type: str, dataset_config) -> list:
-    """
-    The transcripts of a dataset, as a list of strings.
-
-    Reads the entries directly rather than building the audio pipeline: a language model needs the
-    text and nothing else, and loading the waveforms would dominate the runtime for no reason.
-    Holding them all in memory is what `read_entries` already does, so the list costs nothing on
-    top -- LibriSpeech's 281k transcripts are about 30 MB of text.
-    """
-    dataset_config.shuffle = False
-    dataset_config.drop_remainder = False
-    dataset = datasets.get(tokenizer=tokenizer, dataset_config=dataset_config, dataset_type=dataset_type)
-    dataset.read_entries()
-    return list(dataset.vocab_generator())
-
-
-def transcript_tokens(tokenizer, dataset_type: str, dataset_config):
-    """
-    Tokenized transcripts, one numpy array per utterance.
-
-    For `fit_counts`, which tallies bigrams in python and has no use for a `tf.data` stream. The
-    gradient-descent path uses `transcript_token_dataset` instead.
-    """
-    from tqdm import tqdm
-
-    transcripts = read_transcripts(tokenizer, dataset_type, dataset_config)
-    for text in tqdm(transcripts, desc="Reading transcripts"):
-        yield tokenizer.tokenize(text).numpy()
-
-
-def to_training_pairs(
-    tokens: tf.data.Dataset,
-    blank: int,
-    batch_size: int,
-    max_length: int,
-    shuffle_buffer: int = 0,
-    repeat: bool = False,
-    padded_length: int = None,
-    drop_remainder: bool = False,
-):
-    """
-    Turn a `tf.data` stream of token vectors into `(inputs, targets, sample_weight)` batches.
-
-    Targets are the transcript; inputs are the same sequence shifted right with blank in front, so
-    position `u` predicts token `u` from everything before it -- the same conditioning the beam
-    search hands to `call_next`.
-
-    `sample_weight` is 1 on real tokens and 0 on padding, so the loss ignores the padding. It is
-    built *before* batching, as an all-ones vector the same length as the sequence, and then padded
-    with 0 by `padded_batch`. Deriving it afterwards would be impossible: blank is the pad value
-    *and* a legal token, since it doubles as start of sentence.
-
-    `shuffle_buffer` matters more than it looks. Both sources arrive in a fixed order -- a text
-    corpus is laid out by source document, and `transcript_tokens` turns dataset shuffling off --
-    so without it the model spends thousands of consecutive steps inside one narrow slice of the
-    data. Shuffling happens on single sequences before batching, so batches are mixed too.
-
-    `repeat` cycles the data so a finite dataset can fill fixed-size epochs. It is applied **after**
-    batching on purpose: repeating the sequences first would let batches straddle the seam, so a
-    cycle would be `N / batch_size` batches with the remainder swallowed into the next pass.
-    Repeating whole batches instead makes one cycle exactly `ceil(N / batch_size)` batches, which
-    is what lets `steps_per_epoch` mean "one epoch is one pass over the data". The shuffle is
-    upstream of the repeat, so every pass is shuffled differently.
-
-    `padded_length` and `drop_remainder` exist for XLA, which compiles per input shape. Left alone,
-    every batch is padded to its own longest sequence, so nearly every batch is a new shape -- fine
-    on a GPU, ruinous on a TPU, where the run would spend its time recompiling. Pinning the length
-    and dropping the short final batch makes every batch identically shaped, at the cost of padding
-    short sequences out to `padded_length` and skipping up to `batch_size - 1` sequences per pass
-    (different ones each pass, since the shuffle is upstream).
-    """
-    sequence_shape = [padded_length] if padded_length else [None]
-    dataset = tokens.map(lambda t: t[:max_length], num_parallel_calls=tf.data.AUTOTUNE)
-    dataset = dataset.filter(lambda t: tf.size(t) > 0)  # blank lines carry no supervision
-    if shuffle_buffer > 0:
-        dataset = dataset.shuffle(shuffle_buffer, reshuffle_each_iteration=True)
-    dataset = dataset.map(lambda t: (t, tf.ones_like(t, dtype=tf.float32)), num_parallel_calls=tf.data.AUTOTUNE)
-    dataset = dataset.padded_batch(
-        batch_size,
-        padded_shapes=(sequence_shape, sequence_shape),  # [None] pads to the longest in the batch
-        padding_values=(tf.constant(blank, tf.int32), 0.0),
-        drop_remainder=drop_remainder,
-    )
-    dataset = dataset.map(lambda t, w: (shift_tokens(t, blank), t, w), num_parallel_calls=tf.data.AUTOTUNE)
-    if repeat:
-        dataset = dataset.repeat()
-    return dataset.prefetch(tf.data.AUTOTUNE)
 
 
 def check_steps_per_epoch(steps_per_epoch: int) -> int:
@@ -257,64 +169,19 @@ def build_optimizer(learning_rate: float, total_steps: int, warmup_steps: int, c
     return keras.optimizers.Adam(learning_rate=schedule, clipnorm=clipnorm if clipnorm and clipnorm > 0 else None)
 
 
-def text_line_tokens(tokenizer, text_path: str, max_lines: int = None) -> tf.data.Dataset:
-    """
-    Tokenize a plain text corpus, one sentence per line, as a streaming `tf.data` pipeline.
-
-    This is the path for the **external** language model, whose whole point is a corpus far larger
-    than the ASR transcripts -- the LibriSpeech LM corpus is ~40M lines and 800M words, several GB
-    uncompressed. So nothing is materialised: `TextLineDataset` streams the file (transparently
-    through gzip when the name ends in `.gz`, which is how OpenSLR ships it) and tokenization runs
-    inside the graph in parallel. Reading it into a python list first, as the transcript path can
-    afford to, would need tens of GB and hours of eager op dispatch.
-
-    Tokenizing with the tokenizer built from your own config is what guarantees the indices match
-    the transducer's vocabulary -- the requirement `LanguageModel.call_next` states but cannot
-    check.
-    """
-    path = file_util.preprocess_paths(text_path)
-    dataset = tf.data.TextLineDataset(
-        path,
-        compression_type="GZIP" if str(path).endswith(".gz") else "",
-        num_parallel_reads=tf.data.AUTOTUNE,
-    )
-    if max_lines:
-        dataset = dataset.take(max_lines)
-    return dataset.map(lambda line: tf.cast(tokenizer.tokenize(line), tf.int32), num_parallel_calls=tf.data.AUTOTUNE)
-
-
-def transcript_token_dataset(tokenizer, dataset_type: str, dataset_config) -> tf.data.Dataset:
-    """
-    Tokenized transcripts as a `tf.data` stream, so they can share `to_training_pairs`.
-
-    Built from the list of transcripts rather than by wrapping `transcript_tokens` in
-    `from_generator`. A generator object can only be walked once, so anything that reads the
-    dataset ahead of training leaves the training walk with nothing -- a silent empty run.
-    `from_tensor_slices` can be replayed, and tokenization moves into the graph.
-    """
-    transcripts = read_transcripts(tokenizer, dataset_type, dataset_config)
-    dataset = tf.data.Dataset.from_tensor_slices(transcripts)
-    return dataset.map(lambda line: tf.cast(tokenizer.tokenize(line), tf.int32), num_parallel_calls=tf.data.AUTOTUNE)
-
-
 def main(
     config_path: str,
     datadir: str,
-    dataset_type: str,
     output: str,
     target: str = "internal",
-    text_path: str = None,
-    max_lines: int = None,
     modeldir: str = None,
     bs: int = 32,
     epochs: int = 10,
     steps_per_epoch: int = None,
-    max_length: int = 256,
     learning_rate: float = 1e-3,
     lr_schedule: str = "cosine",
     warmup_steps: int = 1000,
     clipnorm: float = 1.0,
-    shuffle_buffer: int = 10000,
     kaggle_model_handle: str = None,
     device_type: str = "gpu",
     devices: list = None,
@@ -334,17 +201,23 @@ def main(
     - "internal" (default) builds `lm_config.internal_config`, the low-order LM that LODR
       subtracts. This one **must** be fitted on the ASR training transcripts, because what it
       approximates is the internal LM the transducer picked up from exactly that text. Fitting it
-      on target-domain text would make the correction subtract the knowledge fusion is adding.
-    - "external" builds `lm_config.external_config`, the LM that gets fused in. Point
-      `--text-path` at a large text corpus: the whole value of an external LM is seeing far more
-      text than the ASR transcripts. The published setups use the LibriSpeech LM corpus, ~40M
-      lines and 800M words, against the ~9M words of LibriSpeech transcripts:
+      on target-domain text would make the correction subtract the knowledge fusion is adding, so
+      point `data_config.lm_dataset_config.data_paths` at the transcript `.tsv` files.
+    - "external" builds `lm_config.external_config`, the LM that gets fused in. The whole value of
+      an external LM is seeing far more text than the ASR transcripts, so point
+      `data_config.lm_dataset_config.data_paths` at a large corpus. The published setups use the
+      LibriSpeech LM corpus, ~40M lines and 800M words, against the ~9M words of LibriSpeech
+      transcripts:
 
           wget https://www.openslr.org/resources/11/librispeech-lm-norm.txt.gz
 
-      `.gz` is read directly, no need to decompress. Without `--text-path` it falls back to the
-      transcripts and warns, because that trains the external LM on exactly the text the
-      transducer already learned -- which is what ILME and LODR exist to *subtract*.
+      `.gz` is read directly, no need to decompress.
+
+    The text, how much of it to read, and how long each sequence may be all come from
+    `data_config.lm_dataset_config`: its `data_paths` (transcript `.tsv`, a `.txt`/`.txt.gz` corpus,
+    or a mix -- `datasets.LMDataset` reads them all), `max_length` (tokens per sequence; sequences
+    are truncated to it and it is what TPU pads to) and `max_lines` (lines to read, for a quick run
+    over a huge corpus). With no `data_paths` there is nothing to train on and the run stops.
 
     Fitting dispatches on the model. An n-gram exposes `fit_counts` and is fitted in a single
     counting pass, which is its exact maximum-likelihood estimate; anything else is trained by
@@ -361,13 +234,6 @@ def main(
     ----------
     output : str
         Where to write the h5. Pass it to `tensorflow_asr test` as `--lm-h5` or `--internal-lm-h5`.
-    text_path : str
-        Plain text corpus, one sentence per line, optionally gzipped. External LM only.
-    max_lines : int
-        Stop after this many lines of `--text-path`. For a quick run over a corpus of tens of
-        millions of lines.
-    max_length : int
-        Sequences are truncated to this many tokens. Only affects gradient training.
     steps_per_epoch : int
         Steps per epoch. **Required** for gradient training; the n-gram models, which fit by
         counting, ignore it.
@@ -394,10 +260,6 @@ def main(
     clipnorm : float
         Clip gradients to this global norm. 0 disables. Large LSTMs here reach norms in the tens
         within a few dozen steps, which is the usual cause of a language model that stalls.
-    shuffle_buffer : int
-        Sequences buffered for shuffling. 0 disables, which leaves the corpus in file order --
-        thousands of consecutive steps inside one document. Costs roughly
-        `shuffle_buffer x max_length x 4` bytes.
     kaggle_model_handle : str
         Kaggle model to check the training state in and out of, e.g.
         "owner/tensorflowasr-lm/keras/external". Needs `--modeldir`.
@@ -453,13 +315,6 @@ def main(
         # Checked here as well as in build_callbacks so it fails before the corpus is counted,
         # which on a large one is minutes of work thrown away.
         raise ValueError("--kaggle-model-handle needs --modeldir as well: the checkpoint is written there before being uploaded.")
-    if text_path and target != "external":
-        # The internal LM approximates what the transducer picked up from its training transcripts.
-        # Counting it over any other corpus would make the correction subtract the wrong thing, so
-        # there is deliberately no way to point it at one.
-        raise ValueError(
-            f"--text-path is only valid with --target=external, got --target={target}. The internal LM must be fitted on the ASR training transcripts."
-        )
 
     strategy = env_util.setup_strategy(device_type=device_type, devices=devices, tpu_address=tpu_address, tpu_vm=tpu_vm)
     env_util.setup_seed()
@@ -472,8 +327,6 @@ def main(
     global_batch_size = bs * strategy.num_replicas_in_sync
     if strategy.num_replicas_in_sync > 1:
         logger.info(f"{strategy.num_replicas_in_sync} replicas: --bs={bs} per replica gives a global batch of {global_batch_size}")
-    if on_tpu:
-        logger.info(f"TPU: padding every sequence to max_length={max_length} and dropping the short final batch, so every step has one shape")
 
     config = Config(config_path, training=False, repodir=repodir, datadir=datadir, modeldir=modeldir, **kwargs)
     model_config = config.lm_config.external_config if target == "external" else config.lm_config.internal_config
@@ -483,6 +336,27 @@ def main(
     tokenizer = tokenizers.get(config)
     tokenizer.make()
     logger.info(f"Vocabulary size {tokenizer.num_classes}, blank index {tokenizer.blank}")
+
+    # The text to train on, and every dataset knob, come from `data_config.lm_dataset_config` -- no
+    # CLI override. Its `data_paths` may be ASR transcript `.tsv` (for the internal LM), a
+    # `.txt`/`.txt.gz` corpus (for the external LM), or a mix; `LMDataset` reads them all and streams
+    # even a multi-GB corpus rather than loading it, tokenising with this same tokenizer so the
+    # indices match the transducer's vocabulary. `max_length`, `max_lines`, `shuffle`, `buffer_size`,
+    # `drop_remainder` and `indefinite` ride along on the same config; `LMDataset.create` batches and
+    # teacher-forces from them below.
+    lm_dataset_config = config.data_config.lm_dataset_config
+    if not lm_dataset_config.data_paths:
+        raise ValueError(
+            "No LM training data. Set `data_config.lm_dataset_config.data_paths` in the config: "
+            "transcript .tsv for --target=internal, a .txt/.txt.gz corpus for --target=external."
+        )
+    lm_dataset = datasets.get_lm(tokenizer=tokenizer, dataset_config=lm_dataset_config)
+    source = "the LM dataset (data_config.lm_dataset_config)"
+
+    if on_tpu:
+        if not lm_dataset.max_length:
+            lm_dataset.compute_metadata()
+        lm_dataset.drop_remainder = True
 
     # Everything that creates variables goes inside the scope: under `TPUStrategy` a model built
     # outside it is not replicated across the cores, and the optimizer slots compile follows.
@@ -496,7 +370,8 @@ def main(
             logger.info(f"{type(lm).__name__} provides `fit_counts`, fitting by counting rather than gradient descent")
             if on_tpu:
                 logger.warning("Counting runs on the host, so --device-type=tpu buys this model nothing.")
-            counts = lm.fit_counts(transcript_tokens(tokenizer, dataset_type, config.data_config.train_dataset_config))
+            logger.info(f"Counting bigrams over {source}")
+            counts = lm.fit_counts(lm_dataset.token_generator())
             vocab_size, seen_pairs = counts.shape[0], int((counts > 0).sum())
             logger.info(
                 f"Counted {int(counts.sum())} bigrams: {seen_pairs} distinct pairs "
@@ -505,32 +380,12 @@ def main(
             )
         else:
             steps_per_epoch = check_steps_per_epoch(steps_per_epoch)
-            if text_path:
-                tokens = text_line_tokens(tokenizer, text_path, max_lines=max_lines)
-                source = f"{text_path}{f' (first {max_lines} lines)' if max_lines else ''}"
-            else:
-                if target == "external":
-                    logger.warning(
-                        "Training the external language model on the ASR transcripts, which is the text the transducer "
-                        "already learned. Pass --text-path to a larger corpus, or the fusion has little left to add."
-                    )
-                tokens = transcript_token_dataset(tokenizer, dataset_type, config.data_config.train_dataset_config)
-                source = "the training transcripts"
             total_steps = steps_per_epoch * epochs
             logger.info(
                 f"Training {type(lm).__name__} ({lm.count_params() / 1e6:.1f}M params) on {source} "
                 f"for {epochs} epochs x {steps_per_epoch:,} steps = {total_steps:,} steps"
             )
-            pairs = to_training_pairs(
-                tokens,
-                tokenizer.blank,
-                batch_size=global_batch_size,
-                max_length=max_length,
-                shuffle_buffer=shuffle_buffer,
-                repeat=True,
-                padded_length=max_length if on_tpu else None,
-                drop_remainder=on_tpu,
-            )
+            pairs = lm_dataset.create(batch_size=global_batch_size)
             lm.compile(
                 optimizer=build_optimizer(
                     learning_rate=learning_rate,

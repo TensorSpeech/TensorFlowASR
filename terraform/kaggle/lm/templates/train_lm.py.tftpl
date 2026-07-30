@@ -141,16 +141,13 @@ cmd = [
     "--datadir=" + DATADIR,
     "--modeldir=" + MODELDIR,
     "--output=" + OUTPUT,
-    "--dataset-type=${dataset_type}",
     "--target=${target}",
     "--bs=${bs}",
     "--epochs=${epochs}",
     "--steps-per-epoch=${steps_per_epoch}",
-    "--max-length=${max_length}",
     "--learning-rate=${learning_rate}",
     "--device-type=${device_type}",
     "--mxp=${mxp}",
-    "--verbose=2",
 ]
 cmd += ${extra_flags}
 

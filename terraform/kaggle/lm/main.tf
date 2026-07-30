@@ -21,10 +21,6 @@ resource "local_file" "notebook" {
 
   lifecycle {
     precondition {
-      condition     = var.text_path == "" || var.target == "external"
-      error_message = "text_path applies to target=\"external\" only. The internal LM must be fitted on the ASR training transcripts, so train_lm rejects it."
-    }
-    precondition {
       condition     = var.config_file == "" || fileexists(var.config_file)
       error_message = "config_file does not exist: ${var.config_file}"
     }

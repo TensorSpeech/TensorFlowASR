@@ -52,8 +52,9 @@ tensorflow_asr test ... --internal-lm-h5=output/internal_lm.weights.h5
 
 **Kaggle caps a session at roughly 9–12 hours**, with a weekly GPU quota on top. The external LM
 setups in the papers use the LibriSpeech LM corpus, about 800M words — that will not finish in one
-session, and Kaggle kills the kernel rather than saving what it had. Start with `max_lines` and
-`epochs` small enough to finish, confirm the weights are usable, and scale up from there.
+session, and Kaggle kills the kernel rather than saving what it had. Start with
+`lm_dataset_config.max_lines` (in the config) and `epochs` small enough to finish, confirm the
+weights are usable, and scale up from there.
 
 **A run that is cut short loses everything by default.** `/kaggle/working` starts empty on every
 run, and `train_lm` only writes the weights once `fit` returns — so a kernel killed at the session
@@ -179,9 +180,10 @@ the CPU — so a precondition rejects the mismatch at plan time.
 256 — 8x what the same number means on one GPU, so scale `learning_rate` up (~2.5e-3 by sqrt
 scaling) or the run does one-eighth the updates per epoch at the old rate. Weights plus Adam are
 only ~0.7 GB per core; activations dominate, and they scale with `bs x max_length`. Since TPU pads
-every sequence to `max_length`, lowering it to about the 99th percentile of your token lengths cuts
-memory *and* compute, which is a bigger lever than `bs`. Out-of-memory shows up at compile or the
-first step, so bisecting `bs` costs minutes.
+every sequence to `lm_dataset_config.max_length` (which it requires — the run stops without one),
+lowering it to about the 99th percentile of your token lengths cuts memory *and* compute, which is
+a bigger lever than `bs`. Out-of-memory shows up at compile or the first step, so bisecting `bs`
+costs minutes.
 
 **`bs` is per replica.** A v3-8 has 8 cores, so `bs = 32` is a global batch of 256. `steps_per_epoch`
 counts steps at that global batch, so switching to a TPU without dividing it by 8 turns one pass
@@ -271,8 +273,10 @@ Note `uv pip install` reads `pyproject.toml`, **not `uv.lock`**. Only `uv sync` 
 that builds a virtualenv and re-downloads TensorFlow every session — a poor trade inside a
 time-boxed notebook. So the versions here are the pins, not the locked resolution.
 
-**`--text-path` only applies to `target = "external"`.** A precondition catches it at plan time,
-matching the check in `train_lm` itself.
+**The training text is a dataset setting, not a flag.** Point
+`data_config.lm_dataset_config.data_paths` at ASR transcript `.tsv` for `target = "internal"`, or a
+large `.txt`/`.txt.gz` corpus for `target = "external"`; `max_length` and `max_lines` live on the
+same config block. `train_lm` reads it all from there.
 
 ## Files
 

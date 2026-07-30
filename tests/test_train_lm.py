@@ -19,6 +19,7 @@ import pytest
 from tensorflow_asr import callbacks as asr_callbacks
 from tensorflow_asr import keras, tf
 from tensorflow_asr.configs import DatasetConfig, DecoderConfig
+from tensorflow_asr.datasets import LMDataset, get_lm
 from tensorflow_asr.models.lm.lstm_language_model import LSTMLanguageModel
 from tensorflow_asr.scripts.train_lm import (
     LR_SCHEDULES,
@@ -27,13 +28,33 @@ from tensorflow_asr.scripts.train_lm import (
     build_callbacks,
     build_optimizer,
     check_steps_per_epoch,
-    text_line_tokens,
-    to_training_pairs,
-    transcript_token_dataset,
 )
 from tensorflow_asr.tokenizers import CharTokenizer
 
 LINES = ["THE QUICK BROWN FOX", "AB", "A LAZY DOG SLEEPS HERE"]
+
+
+# The pipeline lives in `datasets.LMDataset`. These two helpers keep the tests below pointed at its
+# seams over one corpus file: `lm_tokens` is the tokenized `int32` stream (reading/tokenization),
+# and `lm_pairs` is the batched `(inputs, targets, sample_weight)` from `create`, with the old
+# `to_training_pairs` knobs mapped onto the dataset config. `padded_length` is gone -- a set
+# `max_length` is itself the fixed padded length; left at 0, batches pad to their own longest.
+def lm_tokens(tokenizer, text_path, **kwargs):
+    return LMDataset(stage="train", tokenizer=tokenizer, data_paths=[str(text_path)], **kwargs)._token_dataset()
+
+
+def lm_pairs(tokenizer, text_path, batch_size, *, max_length=0, shuffle_buffer=0, repeat=False, drop_remainder=False):
+    dataset = LMDataset(
+        stage="train",
+        tokenizer=tokenizer,
+        data_paths=[str(text_path)],
+        max_length=max_length,
+        shuffle=shuffle_buffer > 0,
+        buffer_size=shuffle_buffer,
+        drop_remainder=drop_remainder,
+        indefinite=repeat,
+    )
+    return dataset.create(batch_size=batch_size)
 
 
 @pytest.fixture(scope="module")
@@ -46,15 +67,15 @@ def tokenizer():
 @pytest.fixture
 def transcripts(tokenizer, tmp_path):
     """
-    The args for `transcript_token_dataset`, backed by a transcript tsv.
+    An `LMDataset` over a transcript tsv -- the internal-LM source, read as text.
 
     A real tsv rather than a stub, because the bug being guarded against lived in how the entries
-    were handed to `tf.data`. No audio is read: the language model path stops at `read_entries`.
+    were handed to `tf.data`. No audio is read: the language model path only needs the text column.
     """
     path = tmp_path / "transcripts.tsv"
     rows = "\n".join(f"/audio/{index}.flac\t1.0\t{line}" for index, line in enumerate(LINES))
     path.write_text(f"PATH\tDURATION\tTRANSCRIPT\n{rows}\n")
-    return tokenizer, "generator", DatasetConfig({"data_paths": [str(path)], "enabled": True})
+    return get_lm(tokenizer=tokenizer, dataset_config=DatasetConfig({"data_paths": [str(path)], "enabled": True, "stage": "train"}))
 
 
 @pytest.fixture(params=["plain", "gzip"])
@@ -78,7 +99,7 @@ def corpus(request, tmp_path_factory):
 
 def test_reads_plain_and_gzipped_text(tokenizer, corpus):
     """`.gz` must be read directly -- the LibriSpeech LM corpus is several GB decompressed."""
-    rows = [row.numpy() for row in text_line_tokens(tokenizer, corpus)]
+    rows = [row.numpy() for row in lm_tokens(tokenizer, corpus)]
     assert len(rows) == len(LINES)
     assert [len(r) for r in rows] == [len(line) for line in LINES], "one token per character"
     assert all(r.dtype == np.int32 for r in rows)
@@ -86,12 +107,60 @@ def test_reads_plain_and_gzipped_text(tokenizer, corpus):
 
 def test_tokens_match_the_tokenizer(tokenizer, corpus):
     """Indices must agree with the transducer's vocabulary, which is why the config's tokenizer is used."""
-    first = next(iter(text_line_tokens(tokenizer, corpus))).numpy()
+    first = next(iter(lm_tokens(tokenizer, corpus))).numpy()
     np.testing.assert_array_equal(first, tokenizer.tokenize(LINES[0]).numpy())
 
 
 def test_max_lines_caps_the_stream(tokenizer, corpus):
-    assert len(list(text_line_tokens(tokenizer, corpus, max_lines=2))) == 2
+    assert len(list(lm_tokens(tokenizer, corpus, max_lines=2))) == 2
+
+
+# --------------------------------------------------------------------------------------------
+# LMDataset: mixing a transcript tsv with a text corpus, and the metadata it precomputes
+# --------------------------------------------------------------------------------------------
+
+
+def test_lmdataset_streams_tsv_and_text_together(tokenizer, tmp_path):
+    """`data_paths` mixes an ASR transcript tsv with plain and gzipped text; all stream as one corpus."""
+    tsv = tmp_path / "t.tsv"
+    tsv.write_text("PATH\tDURATION\tTRANSCRIPT\n/a.flac\t1.0\tHELLO\n")
+    txt = tmp_path / "c.txt"
+    txt.write_text("WORLD\nAGAIN\n")
+    gz = tmp_path / "c.txt.gz"
+    with gzip.open(gz, "wt", encoding="utf-8") as f:
+        f.write("ZIPPED\n")
+
+    ds = LMDataset(stage="train", tokenizer=tokenizer, data_paths=[str(tsv), str(txt), str(gz)])
+    assert list(ds.vocab_generator()) == ["HELLO", "WORLD", "AGAIN", "ZIPPED"], "header dropped, transcript column only"
+
+    lengths = [int(tf.shape(t)[0]) for t in ds._token_dataset()]
+    assert lengths == [len(w) for w in ("HELLO", "WORLD", "AGAIN", "ZIPPED")], "one token per character"
+    assert lengths == [int(tf.shape(t)[0]) for t in ds._token_dataset()], "reading it must not consume it"
+
+
+def test_lmdataset_metadata_round_trips_max_input_length(tokenizer, tmp_path):
+    """`max_input_length` is the longest tokenised line, saved per stage and reloaded on construction."""
+    txt = tmp_path / "c.txt"
+    txt.write_text("HI\nA LONGER LINE\nMID\n")
+    meta = tmp_path / "lm_metadata.json"
+
+    ds = LMDataset(stage="train", tokenizer=tokenizer, data_paths=[str(txt)], metadata=str(meta))
+    ds.compute_metadata()
+    assert ds.max_input_length == len("A LONGER LINE"), "one token per character, spaces included"
+    assert ds.num_entries == 3
+    ds.save_metadata()
+
+    reloaded = LMDataset(stage="train", tokenizer=tokenizer, data_paths=[str(txt)], metadata=str(meta))
+    assert reloaded.max_input_length == len("A LONGER LINE"), "loaded from the metadata file, not recomputed"
+    assert reloaded.num_entries == 3
+
+
+def test_lmdataset_max_lines_caps_the_corpus(tokenizer, tmp_path):
+    txt = tmp_path / "c.txt"
+    txt.write_text("\n".join(f"LINE{i}" for i in range(10)) + "\n")
+    ds = LMDataset(stage="train", tokenizer=tokenizer, data_paths=[str(txt)], max_lines=3)
+    assert sum(1 for _ in ds._token_dataset()) == 3
+    assert list(ds.vocab_generator()) == ["LINE0", "LINE1", "LINE2"]
 
 
 # --------------------------------------------------------------------------------------------
@@ -100,7 +169,7 @@ def test_max_lines_caps_the_stream(tokenizer, corpus):
 
 
 def test_inputs_are_targets_shifted_by_one(tokenizer, corpus):
-    pairs = to_training_pairs(text_line_tokens(tokenizer, corpus), blank=tokenizer.blank, batch_size=3, max_length=64)
+    pairs = lm_pairs(tokenizer, corpus, 3, max_length=64)
     inputs, targets, weights = next(iter(pairs))
 
     assert np.all(inputs.numpy()[:, 0] == tokenizer.blank), "blank stands in for start of sentence"
@@ -110,11 +179,12 @@ def test_inputs_are_targets_shifted_by_one(tokenizer, corpus):
 
 def test_padding_is_masked_out_of_the_loss(tokenizer, corpus):
     """Blank is the pad value *and* a legal token, so the mask cannot be derived from the values."""
-    pairs = to_training_pairs(text_line_tokens(tokenizer, corpus), blank=tokenizer.blank, batch_size=3, max_length=64)
+    # max_length left at 0 so the batch pads to its own longest sequence, which is what this checks.
+    pairs = lm_pairs(tokenizer, corpus, 3)
     _, targets, weights = next(iter(pairs))
 
     lengths = [len(line) for line in LINES]
-    assert weights.shape[1] == max(lengths), "padded to the longest in the batch, not to max_length"
+    assert weights.shape[1] == max(lengths), "padded to the longest in the batch"
     for row, length in zip(weights.numpy(), lengths):
         assert row[:length].sum() == length and row[length:].sum() == 0.0
     # and the padded positions really do hold blank, which is what makes the mask necessary
@@ -122,7 +192,7 @@ def test_padding_is_masked_out_of_the_loss(tokenizer, corpus):
 
 
 def test_max_length_truncates(tokenizer, corpus):
-    pairs = to_training_pairs(text_line_tokens(tokenizer, corpus), blank=tokenizer.blank, batch_size=3, max_length=5)
+    pairs = lm_pairs(tokenizer, corpus, 3, max_length=5)
     inputs, _, _ = next(iter(pairs))
     assert inputs.shape[1] == 5
 
@@ -130,7 +200,7 @@ def test_max_length_truncates(tokenizer, corpus):
 def test_empty_lines_are_dropped(tokenizer, tmp_path):
     path = tmp_path / "with-blanks.txt"
     path.write_text("HELLO\n\n\nWORLD\n")
-    pairs = to_training_pairs(text_line_tokens(tokenizer, str(path)), blank=tokenizer.blank, batch_size=8, max_length=64)
+    pairs = lm_pairs(tokenizer, str(path), 8, max_length=64)
     _, targets, _ = next(iter(pairs))
     assert targets.shape[0] == 2, "an empty line carries no supervision"
 
@@ -147,7 +217,7 @@ def test_training_reduces_loss_and_learns_the_corpus(tokenizer, tmp_path):
     """
     path = tmp_path / "c.txt"
     path.write_text("\n".join(["AB", "TX"] * 40) + "\n")
-    pairs = to_training_pairs(text_line_tokens(tokenizer, str(path)), blank=tokenizer.blank, batch_size=8, max_length=32)
+    pairs = lm_pairs(tokenizer, str(path), 8, max_length=32)
 
     lm = LSTMLanguageModel(vocab_size=tokenizer.num_classes, embed_dim=16, units=32, nlayers=1)
     lm.make()
@@ -221,7 +291,7 @@ def test_loss_graph_has_no_device_bound_assertion():
 
 def test_loss_reaches_the_model_through_fit(tokenizer, corpus):
     """Overriding `__call__` bypasses Keras's reduction, so check `fit` really routes weights in."""
-    pairs = to_training_pairs(text_line_tokens(tokenizer, corpus), blank=tokenizer.blank, batch_size=3, max_length=64)
+    pairs = lm_pairs(tokenizer, corpus, 3, max_length=64)
     lm = LSTMLanguageModel(vocab_size=tokenizer.num_classes, embed_dim=8, units=16, nlayers=1)
     lm.make()
     lm.compile(optimizer=keras.optimizers.SGD(0.0), loss=MaskedSparseCategoricalCrossentropy())
@@ -245,10 +315,8 @@ def test_shuffle_buffer_reorders_the_stream(tokenizer, tmp_path):
     path.write_text("\n".join(f"{'A' * (i % 20 + 1)}" for i in range(200)) + "\n")
 
     def first_lengths(shuffle_buffer):
-        pairs = to_training_pairs(
-            text_line_tokens(tokenizer, str(path)), blank=tokenizer.blank, batch_size=8, max_length=64, shuffle_buffer=shuffle_buffer
-        )
-        _, targets, weights = next(iter(pairs))
+        pairs = lm_pairs(tokenizer, str(path), 8, max_length=64, shuffle_buffer=shuffle_buffer)
+        _, _, weights = next(iter(pairs))
         return list(weights.numpy().sum(axis=1))
 
     assert first_lengths(0) == sorted(first_lengths(0)), "unshuffled, the file order is preserved"
@@ -257,10 +325,10 @@ def test_shuffle_buffer_reorders_the_stream(tokenizer, tmp_path):
 
 def test_repeat_lets_a_finite_dataset_fill_fixed_epochs(tokenizer, corpus):
     """`steps_per_epoch` on a finite dataset runs dry part way through unless it cycles."""
-    pairs = to_training_pairs(text_line_tokens(tokenizer, corpus), blank=tokenizer.blank, batch_size=2, max_length=64, repeat=True)
+    pairs = lm_pairs(tokenizer, corpus, 2, max_length=64, repeat=True)
     assert sum(1 for _ in pairs.take(20)) == 20, "a repeating dataset never runs out"
 
-    finite = to_training_pairs(text_line_tokens(tokenizer, corpus), blank=tokenizer.blank, batch_size=2, max_length=64)
+    finite = lm_pairs(tokenizer, corpus, 2, max_length=64)
     assert sum(1 for _ in finite) == 2, "3 lines at batch size 2 is 2 batches and then it stops"
 
 
@@ -280,11 +348,12 @@ def test_steps_per_epoch_is_required(bad):
 
 def test_the_transcripts_can_be_read_twice(transcripts):
     """
-    Regression: `transcript_tokens` is a one-shot generator, and wrapping it in `from_generator`
-    made every read after the first yield nothing. Anything that inspects the dataset before
-    training -- counting it, peeking at a batch -- would then train on an empty stream.
+    Regression: the tokenized stream must be replayable. A one-shot generator wrapped in
+    `from_generator` yields nothing after the first walk, so anything that inspects the dataset
+    before training -- counting it, peeking at a batch -- would leave training with an empty stream.
+    `from_tensor_slices` (for a tsv) and `TextLineDataset` both replay.
     """
-    tokens = transcript_token_dataset(*transcripts)
+    tokens = transcripts._token_dataset()
     assert sum(1 for _ in tokens) == len(LINES)
     assert sum(1 for _ in tokens) == len(LINES), "reading it must not consume it"
 
@@ -294,7 +363,7 @@ def test_blank_lines_are_dropped(tokenizer, tmp_path):
     path = tmp_path / "gappy.txt"
     path.write_text("HELLO\n\n   \nWORLD\n")
 
-    pairs = to_training_pairs(text_line_tokens(tokenizer, str(path)), blank=tokenizer.blank, batch_size=1, max_length=64)
+    pairs = lm_pairs(tokenizer, str(path), 1, max_length=64)
     assert sum(1 for _ in pairs) == 2, "4 lines in, but only 2 hold text"
 
 
@@ -312,11 +381,10 @@ def test_static_shapes_for_xla(tokenizer, tmp_path):
     path.write_text("\n".join("A" * (i % 17 + 1) for i in range(40)) + "\n")
 
     def shapes(**kwargs):
-        pairs = to_training_pairs(text_line_tokens(tokenizer, str(path)), blank=tokenizer.blank, batch_size=4, max_length=32, **kwargs)
-        return {tuple(t.shape) for t, _, _ in pairs}
+        return {tuple(t.shape) for t, _, _ in lm_pairs(tokenizer, str(path), 4, **kwargs)}
 
-    assert len(shapes()) > 1, "the default pipeline really does produce many shapes"
-    assert shapes(padded_length=32, drop_remainder=True) == {(4, 32)}, "pinned, every batch is identical"
+    assert len(shapes()) > 1, "left dynamic (max_length=0), every batch pads to its own longest -- many shapes"
+    assert shapes(max_length=32, drop_remainder=True) == {(4, 32)}, "pinned by max_length, every batch is identical"
 
 
 def test_drop_remainder_removes_the_short_batch(tokenizer, tmp_path):
@@ -324,8 +392,7 @@ def test_drop_remainder_removes_the_short_batch(tokenizer, tmp_path):
     path.write_text("\n".join(f"LINE {i}" for i in range(5)) + "\n")
 
     def batch_rows(**kwargs):
-        pairs = to_training_pairs(text_line_tokens(tokenizer, str(path)), blank=tokenizer.blank, batch_size=4, max_length=32, **kwargs)
-        return [int(w.shape[0]) for _, _, w in pairs]
+        return [int(w.shape[0]) for _, _, w in lm_pairs(tokenizer, str(path), 4, max_length=32, **kwargs)]
 
     assert batch_rows() == [4, 1]
     assert batch_rows(drop_remainder=True) == [4], "the 5th sequence is skipped this pass"
@@ -384,9 +451,7 @@ def test_padding_to_max_length_still_masks_the_loss(tokenizer, tmp_path):
     """Pinning the length adds a lot of padding, so the mask matters more, not less."""
     path = tmp_path / "short.txt"
     path.write_text("AB\nCD\n")
-    pairs = to_training_pairs(
-        text_line_tokens(tokenizer, str(path)), blank=tokenizer.blank, batch_size=2, max_length=32, padded_length=32, drop_remainder=True
-    )
+    pairs = lm_pairs(tokenizer, str(path), 2, max_length=32, drop_remainder=True)
     _, targets, weights = next(iter(pairs))
 
     assert targets.shape == (2, 32)
@@ -408,7 +473,7 @@ def test_one_epoch_of_counted_steps_is_exactly_one_pass(tokenizer, tmp_path, bat
     path.write_text("\n".join(f"LINE {i}" for i in range(10)) + "\n")
 
     steps = math.ceil(10 / batch_size)
-    pairs = to_training_pairs(text_line_tokens(tokenizer, str(path)), blank=tokenizer.blank, batch_size=batch_size, max_length=64, repeat=True)
+    pairs = lm_pairs(tokenizer, str(path), batch_size, max_length=64, repeat=True)
 
     # every sequence seen exactly once across one epoch's worth of steps
     rows = sum(int(w.numpy().shape[0]) for _, _, w in pairs.take(steps))
@@ -419,7 +484,7 @@ def test_repeat_after_batching_keeps_the_partial_batch(tokenizer, tmp_path):
     """Sizes must be [4, 1] then [4, 1] again -- not merged into [4, 4, ...] across the cycle."""
     path = tmp_path / "five.txt"
     path.write_text("\n".join(f"LINE {i}" for i in range(5)) + "\n")
-    pairs = to_training_pairs(text_line_tokens(tokenizer, str(path)), blank=tokenizer.blank, batch_size=4, max_length=64, repeat=True)
+    pairs = lm_pairs(tokenizer, str(path), 4, max_length=64, repeat=True)
 
     assert [int(w.numpy().shape[0]) for _, _, w in pairs.take(4)] == [4, 1, 4, 1]
 

@@ -180,17 +180,6 @@ variable "kaggle_model_handle" {
   type        = string
 }
 
-variable "dataset_type" {
-  description = "One of tfrecord, slice, generator."
-  type        = string
-  default     = "slice"
-
-  validation {
-    condition     = contains(["tfrecord", "slice", "generator"], var.dataset_type)
-    error_message = "dataset_type must be tfrecord, slice or generator."
-  }
-}
-
 # ---------------------------------------------------------------------------
 # train_lm arguments
 # ---------------------------------------------------------------------------
@@ -199,11 +188,11 @@ variable "target" {
   description = <<-EOT
     Which language model to train.
 
-    "internal" fits lm_config.internal_config, the low-order LM that LODR subtracts. It must
-    be fitted on the ASR training transcripts, so it ignores `text_path`.
+    "internal" fits lm_config.internal_config, the low-order LM that LODR subtracts. Point
+    data_config.lm_dataset_config.data_paths at the ASR training transcripts (.tsv).
 
-    "external" fits lm_config.external_config, the LM fused in. Point `text_path` at a large
-    corpus; without one it falls back to the transcripts and warns.
+    "external" fits lm_config.external_config, the LM fused in. Point
+    data_config.lm_dataset_config.data_paths at a large .txt/.txt.gz corpus.
   EOT
   type        = string
   default     = "internal"
@@ -218,24 +207,6 @@ variable "output_path" {
   description = "Where the notebook writes the weights. Keep it under /kaggle/working so it is collected as output."
   type        = string
   default     = "/kaggle/working/lm.weights.h5"
-}
-
-variable "text_path" {
-  description = <<-EOT
-    Text corpus for the external LM, one sentence per line, optionally gzipped. A path inside
-    the Kaggle machine, normally a mounted dataset.
-
-    The published setups use the LibriSpeech LM corpus (openslr.org/resources/11,
-    librispeech-lm-norm.txt.gz). Upload it as a Kaggle dataset and add it to `dataset_sources`.
-  EOT
-  type        = string
-  default     = ""
-}
-
-variable "max_lines" {
-  description = "Stop after this many lines of text_path. null reads the whole corpus."
-  type        = number
-  default     = null
 }
 
 variable "bs" {
@@ -273,12 +244,6 @@ variable "steps_per_epoch" {
     condition     = var.steps_per_epoch >= 1
     error_message = "steps_per_epoch must be at least 1."
   }
-}
-
-variable "max_length" {
-  description = "Truncate sequences to this many tokens."
-  type        = number
-  default     = 256
 }
 
 variable "learning_rate" {

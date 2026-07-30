@@ -3,11 +3,9 @@ locals {
   # notebook output, so a clone there would be dragged into every `kaggle kernels output`.
   repo_dir = "/tmp/TensorFlowASR"
 
-  # Flags that only appear when they are set. train_lm rejects --text-path unless
-  # --target=external, so it is gated here too rather than left to fail on Kaggle.
+  # Flags that only appear when they are set. The dataset itself -- its data_paths, max_length and
+  # max_lines -- lives in the config's data_config.lm_dataset_config, not in flags.
   optional_flags = concat(
-    var.text_path != "" ? ["--text-path=${var.text_path}"] : [],
-    var.max_lines != null ? ["--max-lines=${var.max_lines}"] : [],
     var.spx > 1 ? ["--spx=${var.spx}"] : [],
     var.kaggle_model_handle != "" ? ["--kaggle-model-handle=${var.kaggle_model_handle}"] : [],
     # Only meaningful on a TPU, and train_lm ignores them otherwise, but passing them anyway would
@@ -38,12 +36,10 @@ locals {
     datadir         = var.datadir
     modeldir        = var.modeldir
     output_path     = var.output_path
-    dataset_type    = var.dataset_type
     target          = var.target
     bs              = var.bs
     epochs          = var.epochs
     steps_per_epoch = var.steps_per_epoch
-    max_length      = var.max_length
     learning_rate   = var.learning_rate
     device_type     = var.device_type
     mxp             = var.mxp

@@ -60,11 +60,12 @@ target          = "internal"
 output_path     = "/kaggle/working/internal_lm.weights.h5"
 steps_per_epoch = 1 # unused by the n-gram path, but the variable has no default
 
-# "external" -> lm_config.external_config, the LM fused in. Wants a big corpus:
+# "external" -> lm_config.external_config, the LM fused in. Wants a big corpus, which you point
+# at in the config's data_config.lm_dataset_config -- its data_paths (e.g. the LibriSpeech LM
+# corpus librispeech-lm-norm.txt.gz), max_length and max_lines. These are dataset settings and no
+# longer terraform variables.
 # target      = "external"
 # output_path = "/kaggle/working/lm.weights.h5"
-# text_path   = "/kaggle/input/librispeech-lm-corpus/librispeech-lm-norm.txt.gz"
-# max_lines   = 1000000   # the full corpus is ~40M lines; see the README on session limits
 # bs          = 128
 # epochs      = 1
 #
@@ -72,7 +73,7 @@ steps_per_epoch = 1 # unused by the n-gram path, but the variable has no default
 # One full pass is ceil(sequences / (bs x replicas)):
 #   `wc -l` the corpus (or `zcat corpus.gz | wc -l` if gzipped) for the sequence count,
 #   replicas is 8 on a TPU and 1 everywhere else.
-# With max_lines = 1000000 and bs = 128 on one GPU that is ceil(1000000 / 128) = 7813:
+# With lm_dataset_config.max_lines = 1000000 and bs = 128 on one GPU that is ceil(1000000/128) = 7813:
 # steps_per_epoch = 7813
 
 # --- What apply does after pushing ---------------------------------------
