@@ -262,6 +262,82 @@ def test_loss_is_per_real_token_regardless_of_padding(padding_fraction):
     np.testing.assert_allclose(value, np.log(vocab), rtol=1e-5)
 
 
+@pytest.mark.parametrize("bad", [-np.inf, np.inf, np.nan])
+def test_padding_cannot_poison_the_loss(bad):
+    """
+    Regression: the mask must *drop* padded positions, not multiply them by zero.
+
+    `inf * 0` and `nan * 0` are both `nan`, so applying the mask by multiplication let a single
+    non-finite value at a position nobody is supervising take out the whole loss -- and from there
+    the gradients, the weights, and every subsequent epoch. Padded positions are real forward passes
+    over pad tokens, so they are exactly where such a value appears unnoticed.
+    """
+    vocab, length = 6, 4
+    y_true = tf.zeros([1, length], tf.int32)
+    weights = tf.constant([[1.0, 1.0, 0.0, 0.0]])  # last two positions are padding
+
+    logits = np.zeros([1, length, vocab], "float32")
+    logits[0, 3, 0] = bad  # non-finite, but only where the mask is 0
+
+    value = float(MaskedSparseCategoricalCrossentropy()(y_true, tf.constant(logits), sample_weight=weights))
+    np.testing.assert_allclose(value, np.log(vocab), rtol=1e-5)
+
+
+def test_a_non_finite_real_token_still_shows_up():
+    """The guard must not hide a genuinely diverged model, only ignore what it was told to ignore."""
+    vocab, length = 6, 4
+    logits = np.zeros([1, length, vocab], "float32")
+    logits[0, 0, 0] = np.nan  # a *supervised* position
+
+    value = float(
+        MaskedSparseCategoricalCrossentropy()(
+            tf.zeros([1, length], tf.int32), tf.constant(logits), sample_weight=tf.constant([[1.0, 1.0, 0.0, 0.0]])
+        )
+    )
+    assert np.isnan(value), "divergence at a real token must still be reported, for TerminateOnNaN to catch"
+
+
+def test_non_finite_gradients_never_reach_the_weights():
+    """
+    Regression: one non-finite gradient used to be fatal and permanent.
+
+    There is no `LossScaleOptimizer` at a float32 policy to skip the step, and `clipnorm` cannot
+    help -- the global norm of a vector containing NaN is NaN, so the clipped gradient is NaN too.
+    """
+    for clipnorm in (1.0, 0):
+        optimizer = build_optimizer(1e-3, None, 100, clipnorm=clipnorm, lr_schedule="constant")
+        variable = keras.Variable([1.0, 2.0, 3.0], name="w")
+        optimizer.build([variable])
+        optimizer.apply([tf.constant([np.nan, np.inf, 0.5], tf.float32)], [variable])
+
+        values = np.asarray(variable)
+        assert np.isfinite(values).all(), f"clipnorm={clipnorm} let a non-finite gradient through: {values}"
+        assert values[0] == 1.0 and values[1] == 2.0, "the non-finite entries must be dropped, not applied"
+        assert values[2] != 3.0, "the finite entry must still train"
+
+
+def test_one_bad_gradient_cannot_poison_other_variables():
+    """
+    The sanitising has to happen *before* the clipping, which global clipping makes load-bearing.
+
+    A global norm is one scalar over every gradient at once, so a single NaN anywhere makes that
+    norm NaN and every variable is scaled by NaN -- turning one bad tensor into a dead model. That
+    is strictly worse than the per-variable clipping this replaced, and is only safe because
+    `NanSafeAdam.apply` zeroes the non-finite entries before delegating.
+    """
+    optimizer = build_optimizer(1e-3, None, 100, clipnorm=1.0, lr_schedule="constant")
+    a = keras.Variable([1.0, 2.0], name="a")
+    b = keras.Variable([3.0, 4.0], name="b")  # entirely healthy
+    c = keras.Variable([5.0, 6.0], name="c")
+    optimizer.build([a, b, c])
+
+    optimizer.apply([tf.constant([np.nan, 0.0]), tf.constant([0.5, 0.5]), tf.constant([np.inf, 0.2])], [a, b, c])
+
+    for v in (a, b, c):
+        assert np.isfinite(np.asarray(v)).all(), f"{v.name} was poisoned across the global norm: {np.asarray(v)}"
+    assert not np.allclose(np.asarray(b), [3.0, 4.0]), "the healthy variable must still train"
+
+
 def test_loss_graph_has_no_device_bound_assertion():
     """
     Regression: the loss must not put an `Assert` in the graph.
@@ -490,8 +566,33 @@ def test_repeat_after_batching_keeps_the_partial_batch(tokenizer, tmp_path):
 
 
 def test_clipping_is_applied_and_can_be_disabled():
-    assert build_optimizer(1e-3, None, 100, clipnorm=1.0, lr_schedule="constant").clipnorm == 1.0
-    assert build_optimizer(1e-3, None, 100, clipnorm=0, lr_schedule="constant").clipnorm is None
+    assert build_optimizer(1e-3, None, 100, clipnorm=1.0, lr_schedule="constant").global_clipnorm == 1.0
+    assert build_optimizer(1e-3, None, 100, clipnorm=0, lr_schedule="constant").global_clipnorm is None
+
+
+def test_clipping_is_global_not_per_variable():
+    """
+    Regression: `clipnorm` and `global_clipnorm` are not interchangeable.
+
+    Keras' `clipnorm` rescales each weight tensor independently, so on the spikes clipping exists
+    for it shrinks whichever tensors blew up and leaves the others, rotating the update away from
+    the gradient. Pascanu et al. (2013) specify one scalar over the whole gradient for recurrent
+    nets precisely so the direction survives.
+    """
+    optimizer = build_optimizer(1e-3, None, 100, clipnorm=1.0, lr_schedule="constant")
+    assert optimizer.clipnorm is None, "per-variable clipping must stay off"
+    assert optimizer.global_clipnorm == 1.0
+
+    # one tensor spikes hard, another does not: per-variable clipping would change their ratio
+    grads = [tf.constant([40.0, 0.0]), tf.constant([0.0, 1.0])]
+    scale = 1.0 / float(tf.linalg.global_norm(grads))
+    clipped = [g * min(1.0, scale) for g in grads]
+
+    flat_raw = tf.concat([tf.reshape(g, [-1]) for g in grads], 0)
+    flat_clipped = tf.concat([tf.reshape(g, [-1]) for g in clipped], 0)
+    cosine = float(tf.reduce_sum(flat_raw * flat_clipped) / (tf.norm(flat_raw) * tf.norm(flat_clipped)))
+    np.testing.assert_allclose(cosine, 1.0, atol=1e-6)  # direction exactly preserved
+    np.testing.assert_allclose(float(tf.linalg.global_norm(clipped)), 1.0, rtol=1e-6)
 
 
 def rate_at(optimizer, step):
@@ -534,8 +635,21 @@ def test_cosine_without_a_step_budget_falls_back_to_a_constant_rate():
 
 def test_no_checkpointing_without_a_handle(tmp_path):
     """The right default for a short run: uploading every epoch would cost more than restarting."""
-    assert build_callbacks(str(tmp_path)) == []
-    assert build_callbacks(None) == []
+    for callbacks in (build_callbacks(str(tmp_path)), build_callbacks(None)):
+        assert [type(c) for c in callbacks] == [asr_callbacks.TerminateOnNaN], "no handle means no checkpointing, but NaN still stops the run"
+
+
+def test_nan_always_terminates_the_run(tmp_path):
+    """
+    A NaN loss is unrecoverable here, so the run must stop rather than burn the session.
+
+    Nothing downstream can undo it: a float32 policy attaches no `LossScaleOptimizer` to skip the
+    step, so once NaN reaches the weights every later forward pass is NaN -- across the epoch
+    boundary, and into the checkpoint. This callback is therefore not optional the way the Kaggle
+    backup is, and must be present with or without a handle.
+    """
+    for callbacks in (build_callbacks(None), build_callbacks(str(tmp_path), kaggle_model_handle="owner/lm/keras/external")):
+        assert any(isinstance(c, keras.callbacks.TerminateOnNaN) for c in callbacks)
 
 
 def test_handle_builds_a_kaggle_backup_callback(tmp_path):
@@ -546,9 +660,9 @@ def test_handle_builds_a_kaggle_backup_callback(tmp_path):
     """
     callbacks = build_callbacks(str(tmp_path), kaggle_model_handle="owner/lm/keras/external")
 
-    assert len(callbacks) == 1
-    callback = callbacks[0]
-    assert isinstance(callback, asr_callbacks.KaggleModelBackupAndRestore)
+    backups = [c for c in callbacks if isinstance(c, asr_callbacks.KaggleModelBackupAndRestore)]
+    assert len(backups) == 1
+    callback = backups[0]
     assert isinstance(callback, keras.callbacks.BackupAndRestore), "it has to restore training state, not just upload files"
     config = callback.get_config()
     assert config["model_handle"] == "owner/lm/keras/external"
