@@ -13,7 +13,47 @@
 # limitations under the License.
 """Language model interface for fusion into transducer beam search"""
 
+import logging
+import os
+
 from tensorflow_asr import keras, tf
+from tensorflow_asr.utils import file_util
+
+logger = logging.getLogger(__name__)
+
+
+def lm_dir(modeldir: str) -> str:
+    """
+    Where a trained language model is written: `<modeldir>/lm`, created if missing.
+
+    Beside `checkpoints/` and `tensorboard/`, which the ASR trainer already puts there. Keeping the
+    language models under `modeldir` rather than at an arbitrary `--output` means one run's
+    artifacts stay together, and `tensorflow_asr test` can be pointed at them by convention.
+    """
+    if not modeldir:
+        raise ValueError("--modeldir is required: it is where the language model weights are written.")
+    path = os.path.join(file_util.preprocess_paths(modeldir), "lm")
+    os.makedirs(path, exist_ok=True)
+    return path
+
+
+def lm_weights_path(modeldir: str, name: str) -> str:
+    """`<modeldir>/lm/<name>.weights.h5` -- the one place a trained language model is looked for."""
+    return os.path.join(lm_dir(modeldir), f"{name}.weights.h5")
+
+
+def save_lm(lm, modeldir: str, name: str) -> str:
+    """
+    Write `<modeldir>/lm/<name>.weights.h5` and say so. Returns the path.
+
+    For the models that are *fitted* rather than trained -- an n-gram, whose estimate is a ratio of
+    counts available in one pass. A model trained by gradient descent should be checkpointed by a
+    callback during `fit` instead, so an interrupted run keeps what it had.
+    """
+    path = lm_weights_path(modeldir, name)
+    lm.save_weights(path)
+    logger.info(f"Wrote {type(lm).__name__} weights to {path}")
+    return path
 
 
 @keras.utils.register_keras_serializable(package=__name__)

@@ -1,5 +1,6 @@
 """
-Tests for the language model training pipeline (`tensorflow_asr/scripts/train_lm.py`).
+Tests for the language model training pipeline: the three trainers (train_external_lm,
+train_internal_lm, train_kenlm_lm) and the KenLM corpus path on `LMDataset`.
 
 The part worth testing is the data plumbing, not the optimizer. Teacher forcing has to line up
 exactly with what the beam search does at decoding time -- position `u` predicts token `u` from
@@ -9,7 +10,9 @@ value and a legal token.
 """
 
 import gzip
+import inspect
 import math
+import os
 import subprocess
 import sys
 
@@ -21,9 +24,8 @@ from tensorflow_asr import keras, tf
 from tensorflow_asr.configs import DatasetConfig, DecoderConfig
 from tensorflow_asr.datasets import LMDataset, get_lm
 from tensorflow_asr.models.lm.lstm_language_model import LSTMLanguageModel
-from tensorflow_asr.scripts.train_lm import (
+from tensorflow_asr.scripts.train_external_lm import (
     LR_SCHEDULES,
-    TARGETS,
     MaskedSparseCategoricalCrossentropy,
     build_callbacks,
     build_optimizer,
@@ -236,8 +238,16 @@ def test_training_reduces_loss_and_learns_the_corpus(tokenizer, tmp_path):
     assert probs[tokenizer.blank] < 0.05, "blank is only padding here; the mask should keep it out"
 
 
-def test_targets_are_the_two_supported_names():
-    assert TARGETS == ("external", "internal")
+def test_each_trainer_targets_one_lm_config_key():
+    """
+    The `--target` flag is gone: which language model gets built is now the script you run. The
+    external key has two trainers because a neural LM and an n-gram are alternatives for it.
+    """
+    from tensorflow_asr.scripts import train_external_lm, train_internal_lm, train_kenlm_lm
+
+    assert "external_config" in inspect.getsource(train_external_lm.main)
+    assert "external_config" in inspect.getsource(train_kenlm_lm.main)
+    assert "internal_config" in inspect.getsource(train_internal_lm.main)
 
 
 # --------------------------------------------------------------------------------------------
@@ -290,9 +300,7 @@ def test_a_non_finite_real_token_still_shows_up():
     logits[0, 0, 0] = np.nan  # a *supervised* position
 
     value = float(
-        MaskedSparseCategoricalCrossentropy()(
-            tf.zeros([1, length], tf.int32), tf.constant(logits), sample_weight=tf.constant([[1.0, 1.0, 0.0, 0.0]])
-        )
+        MaskedSparseCategoricalCrossentropy()(tf.zeros([1, length], tf.int32), tf.constant(logits), sample_weight=tf.constant([[1.0, 1.0, 0.0, 0.0]]))
     )
     assert np.isnan(value), "divergence at a real token must still be reported, for TerminateOnNaN to catch"
 
@@ -482,7 +490,7 @@ tf.config.set_logical_device_configuration(
 import numpy as np
 from tensorflow_asr import keras
 from tensorflow_asr.models.lm.lstm_language_model import LSTMLanguageModel
-from tensorflow_asr.scripts.train_lm import MaskedSparseCategoricalCrossentropy
+from tensorflow_asr.scripts.train_external_lm import MaskedSparseCategoricalCrossentropy
 
 V, N, L = 30, 64, 8
 x = np.random.randint(1, V, (N, L)).astype("int32")
@@ -633,10 +641,22 @@ def test_cosine_without_a_step_budget_falls_back_to_a_constant_rate():
 # --------------------------------------------------------------------------------------------
 
 
-def test_no_checkpointing_without_a_handle(tmp_path):
-    """The right default for a short run: uploading every epoch would cost more than restarting."""
-    for callbacks in (build_callbacks(str(tmp_path)), build_callbacks(None)):
-        assert [type(c) for c in callbacks] == [asr_callbacks.TerminateOnNaN], "no handle means no checkpointing, but NaN still stops the run"
+def test_weights_are_checkpointed_every_epoch_without_a_handle(tmp_path):
+    """
+    There is no save after `fit` returns, so the checkpoint is the only thing that writes the model.
+
+    Training a language model on a real corpus runs long enough that being stopped partway through
+    is the normal case, and it has to leave a usable model from the last completed epoch rather than
+    nothing. The Kaggle backup is a different thing -- it carries optimizer state so a run can
+    *resume* -- and stays optional.
+    """
+    callbacks = build_callbacks(str(tmp_path))
+    kinds = [type(c) for c in callbacks]
+    assert asr_callbacks.TerminateOnNaN in kinds
+    checkpoints = [c for c in callbacks if isinstance(c, keras.callbacks.ModelCheckpoint)]
+    assert len(checkpoints) == 1, f"expected exactly one ModelCheckpoint, got {kinds}"
+    assert str(checkpoints[0].filepath) == os.path.join(str(tmp_path), "lm", "external.weights.h5")
+    assert checkpoints[0].save_weights_only is True
 
 
 def test_nan_always_terminates_the_run(tmp_path):
@@ -648,7 +668,9 @@ def test_nan_always_terminates_the_run(tmp_path):
     boundary, and into the checkpoint. This callback is therefore not optional the way the Kaggle
     backup is, and must be present with or without a handle.
     """
-    for callbacks in (build_callbacks(None), build_callbacks(str(tmp_path), kaggle_model_handle="owner/lm/keras/external")):
+    plain = build_callbacks(str(tmp_path))
+    with_handle = build_callbacks(str(tmp_path), kaggle_model_handle="owner/lm/keras/external")
+    for callbacks in (plain, with_handle):
         assert any(isinstance(c, keras.callbacks.TerminateOnNaN) for c in callbacks)
 
 
@@ -671,15 +693,161 @@ def test_handle_builds_a_kaggle_backup_callback(tmp_path):
     assert str(tmp_path) in callback.backup_dir
 
 
-def test_handle_without_modeldir_is_rejected():
-    """There is nowhere to write the checkpoint before uploading it."""
-    with pytest.raises(ValueError, match="needs --modeldir"):
-        build_callbacks(None, kaggle_model_handle="owner/lm/keras/external")
-    with pytest.raises(ValueError, match="needs --modeldir"):
-        build_callbacks("", kaggle_model_handle="owner/lm/keras/external")
+def test_callbacks_need_a_modeldir():
+    """
+    Every run writes its weights now, so there is always somewhere they have to go -- with or
+    without a Kaggle handle.
+    """
+    for handle in (None, "owner/lm/keras/external"):
+        for modeldir in (None, ""):
+            with pytest.raises(ValueError, match="--modeldir is required"):
+                build_callbacks(modeldir, kaggle_model_handle=handle)
 
 
 def test_unknown_schedule_is_rejected():
     with pytest.raises(ValueError, match="lr_schedule must be one of"):
         build_optimizer(1e-3, 1000, 100, clipnorm=1.0, lr_schedule="triangular")
     assert LR_SCHEDULES == ("cosine", "constant")
+
+
+# --------------------------------------------------------------------------------------------
+# the KenLM path: LMDataset.write_token_ids / create_arpa
+# --------------------------------------------------------------------------------------------
+
+
+STUB_LMPLZ = '''#!/usr/bin/env python3
+"""Stand-in for KenLM lmplz: reads token-id text on stdin, writes a minimal valid ARPA."""
+import sys
+from collections import defaultdict
+
+order = int(sys.argv[sys.argv.index("-o") + 1]) if "-o" in sys.argv else 3
+uni, bi = defaultdict(int), defaultdict(int)
+for line in sys.stdin:
+    toks = line.split()
+    if not toks:
+        continue
+    for t in toks:
+        uni[t] += 1
+    for a, b in zip(["<s>"] + toks, toks):
+        bi[(a, b)] += 1
+total = sum(uni.values()) + len(bi)
+out = ["\\\\data\\\\", f"ngram 1={len(uni) + 2}", f"ngram 2={len(bi)}", ""]
+out.append("\\\\1-grams:")
+out.append("-99\\t<s>\\t-0.3")
+out.append("-1.5\\t<unk>")
+for t, c in uni.items():
+    out.append(f"{-2.0:.4f}\\t{t}\\t-0.3")
+out.append("")
+out.append("\\\\2-grams:")
+for (a, b), c in bi.items():
+    out.append(f"{-1.0:.4f}\\t{a} {b}")
+out.append("")
+out.append("\\\\end\\\\")
+sys.stdout.write("\\n".join(out) + "\\n")
+'''
+
+
+@pytest.fixture
+def stub_lmplz(tmp_path):
+    """A fake `lmplz` on PATH, so the subprocess plumbing is exercised without building KenLM."""
+    path = tmp_path / "lmplz"
+    path.write_text(STUB_LMPLZ)
+    path.chmod(0o755)
+    return str(path)
+
+
+def test_write_token_ids_writes_what_lmplz_expects(transcripts, tmp_path):
+    """One sentence per line, tokens as space-separated integer ids -- lmplz has no other contract."""
+    path = tmp_path / "corpus.ids.txt"
+    lines, tokens = transcripts.write_token_ids(str(path))
+    assert lines == len(LINES) and tokens > 0
+
+    written = path.read_text().strip().split("\n")
+    assert len(written) == lines
+    for row in written:
+        ids = row.split()
+        assert ids, "an empty line would read as a sentence and skew the counts"
+        assert all(i.isdigit() for i in ids), f"non-integer token in {row!r}"
+
+
+def test_write_token_ids_gzips_on_a_gz_suffix(transcripts, tmp_path):
+    path = tmp_path / "corpus.ids.txt.gz"
+    lines, _ = transcripts.write_token_ids(str(path))
+    with gzip.open(path, "rt", encoding="utf-8") as handle:
+        assert len(handle.read().strip().split("\n")) == lines
+
+
+def test_write_token_ids_honours_max_lines(transcripts, tmp_path):
+    path = tmp_path / "short.ids.txt"
+    lines, _ = transcripts.write_token_ids(str(path), max_lines=2)
+    assert lines == 2 and len(path.read_text().strip().split("\n")) == 2
+
+
+def test_create_arpa_says_how_to_get_lmplz_when_it_is_missing(transcripts, tmp_path):
+    with pytest.raises(FileNotFoundError, match="install_kenlm.sh"):
+        transcripts.create_arpa(arpa_path=str(tmp_path / "lm.arpa"), lmplz="definitely-not-a-real-binary")
+
+
+def test_create_arpa_builds_a_loadable_model(transcripts, tokenizer, stub_lmplz, tmp_path):
+    """The whole KenLM path: tokenize, run lmplz, and convert what it wrote into the arc tensors."""
+    from tensorflow_asr.models.lm.ngram_language_model import NGramLanguageModel
+
+    arpa = transcripts.create_arpa(arpa_path=str(tmp_path / "lm.arpa"), order=2, lmplz=stub_lmplz)
+    assert os.path.isfile(arpa)
+
+    lm = NGramLanguageModel(vocab_size=tokenizer.num_classes, blank=tokenizer.blank, order=2, max_arcs=8192, max_states=4096)
+    stats = lm.load_arpa(arpa)
+    assert stats["source"] == "arpa" and stats["arcs"] > 0
+
+    scores, _ = lm.call_next(tf.constant([[1]], tf.int32), lm.get_initial_state(1))
+    labels = np.delete(np.exp(scores.numpy().astype(np.float64)), tokenizer.blank)
+    np.testing.assert_allclose(labels.sum(), 1.0, atol=1e-5)
+
+
+def test_create_arpa_reuses_the_token_ids_it_already_wrote(transcripts, stub_lmplz, tmp_path):
+    """Tokenising is the slow half, so a second run at another order must not repeat it."""
+    text = tmp_path / "corpus.ids.txt"
+    transcripts.create_arpa(arpa_path=str(tmp_path / "a.arpa"), text_path=str(text), order=2, lmplz=stub_lmplz)
+    stamp = text.stat().st_mtime_ns
+    marker = text.read_text()
+
+    transcripts.create_arpa(arpa_path=str(tmp_path / "b.arpa"), text_path=str(text), order=2, lmplz=stub_lmplz)
+    assert text.stat().st_mtime_ns == stamp, "the token ids were rewritten instead of reused"
+    assert text.read_text() == marker
+
+
+def test_create_arpa_reports_a_failing_lmplz(transcripts, tmp_path):
+    failing = tmp_path / "failing-lmplz"
+    failing.write_text("#!/usr/bin/env bash\nexit 1\n")
+    failing.chmod(0o755)
+    with pytest.raises(RuntimeError, match="discount_fallback"):
+        transcripts.create_arpa(arpa_path=str(tmp_path / "lm.arpa"), lmplz=str(failing))
+
+
+def test_create_arpa_overwrites_the_token_ids_on_request(transcripts, stub_lmplz, tmp_path):
+    """
+    Reuse is right between runs that only change pruning, and wrong the moment the ids would differ
+    -- a changed corpus, a changed tokenizer. A stale file is still a valid file, so nothing detects
+    that and the flag is the only way out.
+    """
+    text = tmp_path / "corpus.ids.txt"
+    transcripts.create_arpa(arpa_path=str(tmp_path / "a.arpa"), text_path=str(text), order=2, lmplz=stub_lmplz)
+    text.write_text("1 2 3\n")  # stand in for a stale file from an older corpus
+
+    transcripts.create_arpa(arpa_path=str(tmp_path / "b.arpa"), text_path=str(text), order=2, lmplz=stub_lmplz)
+    assert text.read_text() == "1 2 3\n", "the default must still reuse whatever is there"
+
+    transcripts.create_arpa(
+        arpa_path=str(tmp_path / "c.arpa"), text_path=str(text), order=2, lmplz=stub_lmplz, overwrite_text=True
+    )
+    rebuilt = text.read_text()
+    assert rebuilt != "1 2 3\n", "overwrite_text must re-tokenise rather than reuse"
+    assert len(rebuilt.strip().split("\n")) == len(LINES)
+
+
+def test_create_arpa_overwrite_works_when_there_is_nothing_to_overwrite(transcripts, stub_lmplz, tmp_path):
+    """The flag must not require the file to exist -- a first run with it set is perfectly normal."""
+    text = tmp_path / "fresh.ids.txt"
+    assert not text.exists()
+    transcripts.create_arpa(arpa_path=str(tmp_path / "lm.arpa"), text_path=str(text), order=2, lmplz=stub_lmplz, overwrite_text=True)
+    assert len(text.read_text().strip().split("\n")) == len(LINES)

@@ -144,7 +144,9 @@ def validate_lm(model: BaseModel, decoder_config, lm_h5: str = None, internal_lm
     if has_external and not lm_h5:
         logger.warning("An external language model is configured but no --lm-h5 was given, so it is fused in with its initial (untrained) weights")
     if has_internal and lm_type == "lodr" and not internal_lm_h5:
-        logger.warning("An internal language model is configured but no --internal-lm-h5 was given, so it is subtracted with its initial (untrained) weights")
+        logger.warning(
+            "An internal language model is configured but no --internal-lm-h5 was given, so it is subtracted with its initial (untrained) weights"
+        )
 
     if lm_type != "shallow" and not has_external:
         # Subtracting the internal LM without fusing anything in strips the model's language
@@ -152,7 +154,9 @@ def validate_lm(model: BaseModel, decoder_config, lm_h5: str = None, internal_lm
         # external LM -- but it is far more often a config that forgot `external_config`.
         logger.warning(f'lm_type is "{lm_type}" but no lm_config.external_config was given, so the internal LM is subtracted with nothing fused in')
     if has_internal and lm_type != "lodr":
-        logger.warning(f'lm_config.internal_config was built but lm_type is "{lm_type}", which never reads it. Only "lodr" subtracts a separate model.')
+        logger.warning(
+            f'lm_config.internal_config was built but lm_type is "{lm_type}", which never reads it. Only "lodr" subtracts a separate model.'
+        )
     if has_external and lm_alpha == 0.0:
         logger.warning("An external language model is configured but lm_alpha is 0, so it costs a full LM call per step and changes nothing")
     if lm_type != "shallow" and lm_beta == 0.0:

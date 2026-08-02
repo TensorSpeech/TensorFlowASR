@@ -66,13 +66,10 @@ model_config:
 lm_config:
   # the LM fused *in*. Optional.
   external_config:
-    class_name: tensorflow_asr.models.lm.lstm_language_model>LSTMLanguageModel
+    class_name: tensorflow_asr.models.lm.ngram_language_model>NGramLanguageModel
     config:
       vocab_size: {{decoder_config.vocabsize}}
-      embed_dim: 512
-      units: 2048
-      nlayers: 2
-      tie_embeddings: true
+      order: 4
   # the low-order LM subtracted. Required by lm_type: lodr.
   internal_config:
     class_name: tensorflow_asr.models.lm.bigram_language_model>BigramLanguageModel

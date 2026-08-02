@@ -44,8 +44,13 @@ def count_bigrams(token_sequences, vocab_size: int, blank: int) -> np.ndarray:
     -------
     np.ndarray, shape [V, V], dtype int64
     """
+    from tqdm import tqdm  # pylint: disable=import-outside-toplevel
+
     counts = np.zeros([vocab_size, vocab_size], dtype=np.int64)
-    for tokens in token_sequences:
+    # `disable=False` overrides the `TQDM_DISABLE=1` that `scripts/train_lm.py` sets globally, as
+    # every other progress bar in the repository does. No total: `token_sequences` is a generator,
+    # and measuring it first would mean reading the corpus twice.
+    for tokens in tqdm(token_sequences, desc="Counting bigrams", unit=" lines", disable=False):
         tokens = np.asarray(tokens, dtype=np.int64).reshape(-1)
         tokens = tokens[(tokens >= 0) & (tokens < vocab_size)]  # drop anything outside the vocabulary
         if tokens.size == 0:

@@ -61,9 +61,10 @@ data_config:
   lm_dataset_config:
     enabled: True
     data_paths:
-      - {{datadir}}/train-clean-100/transcripts.tsv
-      - {{datadir}}/train-clean-360/transcripts.tsv
-      - {{datadir}}/train-other-500/transcripts.tsv
+      {# - {{datadir}}/train-clean-100/transcripts.tsv #}
+      {# - {{datadir}}/train-clean-360/transcripts.tsv #}
+      {# - {{datadir}}/train-other-500/transcripts.tsv #}
+      - {{datadir}}/librispeech-lm-norm.txt.gz
       - {{datadir}}/../librispeech-lm-norm.txt.gz
       - {{datadir}}/../librispeech-lm-norm.txt
     shuffle: True

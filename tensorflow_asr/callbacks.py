@@ -106,9 +106,7 @@ class PredictLogger(keras.callbacks.Callback):
         beam_lm_transcripts = self.model.tokenizer.detokenize(logs.pop("beam_lm_tokens"))
         targets = self.model.tokenizer.detokenize(logs.pop("labels"))
 
-        for i, item in enumerate(
-            zip(targets.numpy(), transcripts.numpy(), beam_transcripts.numpy(), beam_lm_transcripts.numpy()), start=self.index
-        ):
+        for i, item in enumerate(zip(targets.numpy(), transcripts.numpy(), beam_transcripts.numpy(), beam_lm_transcripts.numpy()), start=self.index):
             groundtruth, greedy, beam, beam_lm = [x.decode("utf-8") for x in item]
             path = self.test_dataset.entries[i][0]
             line = "\t".join((path, groundtruth, greedy, beam, beam_lm)) + "\n"

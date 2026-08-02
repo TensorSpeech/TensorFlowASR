@@ -156,7 +156,7 @@ class LanguageModel(keras.Model):
     def call_next(self, previous_tokens, previous_states): ...  # ([B,1], [B,...]) -> ([B,V], [B,...])
 ```
 
-It is a full `keras.Model`, not a layer, because it is trained on its own by `train_lm` and saved to its own h5. There are **two** forward passes because training and decoding want different shapes:
+It is a full `keras.Model`, not a layer, because it is trained on its own by one of the `train_*_lm` scripts and saved to its own h5. There are **two** forward passes because training and decoding want different shapes:
 
 - `call` is **training** — teacher forced over a whole sequence, which is what `fit` runs, so it is the keras-idiomatic `call`.
 - `call_next` is **decoding** — one step, carrying state. The beam search calls this. The name is the one the rest of the repository already uses for a single stateful step (`TransducerPrediction.call_next`, `Encoder.call_next`, `Transducer.call_next`).
@@ -171,7 +171,39 @@ Both return log-probabilities over the *transducer* vocabulary with matching ind
 
 Two token conventions are shared with the decoder. The **blank index doubles as start of sentence** — the beam holds `last_token = blank` until a hypothesis emits its first label — so training feeds `[blank, t1, ..., t_{n-1}]` to predict `[t1, ..., tn]` (`shift_tokens` does this). And there is **no end-of-sentence symbol**: a hypothesis ends when the frames run out, never on an emitted token.
 
-One implementation ships: [`LSTMLanguageModel`](../tensorflow_asr/models/lm/lstm_language_model.py). Its defaults reproduce the external LM of the ILME paper \[5\] — two 2048-unit LSTM layers over a 512-dimensional embedding with input and output embeddings tied, which is 58M parameters at their 3999 word-pieces:
+Two implementations ship. [`NGramLanguageModel`](../tensorflow_asr/models/lm/ngram_language_model.py) is the cheap one and the better first thing to try; [`LSTMLanguageModel`](../tensorflow_asr/models/lm/lstm_language_model.py) is the one the ILME paper \[5\] uses.
+
+**`NGramLanguageModel`** is the data structure of NGPU-LM \[9\], the GPU-resident n-gram \[1\] evaluates against: an n-gram LM flattened into sorted GPU tensors, so a step is a binary search and a gather instead of a matrix multiply. It is fitted by counting — one pass, no gradient descent, no epochs to tune — with interpolated Kneser-Ney smoothing:
+
+```yaml
+lm_config:
+  external_config:
+    class_name: tensorflow_asr.models.lm.ngram_language_model>NGramLanguageModel
+    config:
+      vocab_size: 1000
+      order: 4
+      max_arcs: 1000000     # pruning budget, and the tensor shape
+      max_states: 200000
+```
+
+There are two ways to fill it. **Counting in-process** (`train_internal_lm`) is exact and needs no extra tooling, but it holds every n-gram in python dicts at roughly 300–400 bytes per token, so it tops out around a few million tokens — fine for ASR transcripts, hopeless for a corpus like the 800M-word LibriSpeech LM set. **KenLM** does the same job by disk-based merge sort in bounded memory, which is what \[9\] itself uses:
+
+```bash
+./scripts/install_kenlm.sh                     # once
+tensorflow_asr train_kenlm_lm \
+    --config-path=<config> --datadir=<datadir> --modeldir=<modeldir> \
+    --prune='[0,0,1,1]'
+```
+
+That one command does all three steps and keeps each in `<modeldir>/lm`: `corpus.ids.txt` (the corpus tokenized by `LMDataset.write_token_ids`), `lm.arpa` (what `lmplz` wrote), and `kenlm.weights.h5` (the arc tensors). The corpus goes out as space-separated **token ids** — `lmplz` has no idea what a word-piece is, and ids guarantee the LM is indexed against the same vocabulary the transducer emits. The tokenized text is kept, so a rerun at a different pruning reuses it rather than paying for the slow half twice. The **order is not a flag** — it comes from `order` in `external_config`, since that is the value that survives into the h5 and drives the backoff unroll, and a second copy would only be somewhere for the two to disagree. `--prune` is where to shrink the model: cheaper and better informed than having the reader drop arcs to fit a budget. A word-level ARPA cannot be used, and `read_arpa` rejects one rather than decoding with a silently broken LM.
+
+Two conversions are worth knowing about, because they are where an ARPA and this repository disagree. ARPA is **log base 10**; the tensors are natural log. And ARPA has an **end-of-sentence symbol**, which this repository does not (4.6) — `</s>` is not merely deleted but *conditioned away*, every context's remaining arcs rescaled by `1 / (1 - p(</s> | ctx))`. Deleting it outright would leave each state summing to less than one, a sub-normalised LM that decodes perfectly happily while quietly biasing every hypothesis.
+
+`max_arcs` and `max_states` are tensor shapes, so they live in the config and cannot be inferred at fit time. Treat them as a **pruning budget**: fitting keeps the highest-count n-grams that fit and drops the rest, which is what \[9\] does for its larger models and what \[6\] does at order 2. Memory is `max_arcs * 16 + max_states * 8` bytes — 16 MB per million arcs — and the trainer logs actual usage against the budget so it can be tightened. Use `min_counts` (one cutoff per context length) to choose *which* arcs go rather than letting the budget decide. Backoff weights are recomputed after pruning from the normalisation identity, so a pruned model is still a proper distribution rather than one quietly leaking mass.
+
+State is the `[B, V]` table of next-state ids the lookup produces anyway, so a step costs one pass rather than one to advance and another to score. The backoff walk is unrolled to exactly `order` iterations, which is its worst case — that keeps the graph free of data-dependent conditions, so it still exports to XLA and TFLite. \[9\] needed a custom Triton kernel to get the same effect out of a dynamic loop.
+
+**`LSTMLanguageModel`** defaults reproduce the external LM of \[5\] — two 2048-unit LSTM layers over a 512-dimensional embedding with input and output embeddings tied, which is 58M parameters at their 3999 word-pieces:
 
 ```yaml
 lm_config:
@@ -191,14 +223,15 @@ Tying is why there is a projection layer: reusing the `[V, E]` embedding matrix 
 
 ### Where the pretrained weights aren't
 
-There is no drop-in checkpoint, and the reason is worth stating once. The k2/icefall LODR recipe does publish one ([`ezerhouni/icefall-librispeech-rnn-lm`](https://huggingface.co/ezerhouni/icefall-librispeech-rnn-lm), a 3-layer 2048-unit RNN over BPE 500), but `call_next` returns log-probabilities indexed against **your** transducer's vocabulary. Using those weights would mean adopting icefall's exact SentencePiece model — same merges, same integer indices — for the ASR model too, on top of converting PyTorch weights to Keras. Retraining is the cheaper path, which is what `train_lm` is for.
+There is no drop-in checkpoint, and the reason is worth stating once. The k2/icefall LODR recipe does publish one ([`ezerhouni/icefall-librispeech-rnn-lm`](https://huggingface.co/ezerhouni/icefall-librispeech-rnn-lm), a 3-layer 2048-unit RNN over BPE 500), but `call_next` returns log-probabilities indexed against **your** transducer's vocabulary. Using those weights would mean adopting icefall's exact SentencePiece model — same merges, same integer indices — for the ASR model too, on top of converting PyTorch weights to Keras. Retraining is the cheaper path, which is what `train_external_lm` is for.
 
 What *is* reusable is the corpus. ILME and LODR both train on the LibriSpeech LM corpus, ~800M words against the ~9M words of LibriSpeech transcripts, and it is a single download:
 
 ```bash
 wget https://www.openslr.org/resources/11/librispeech-lm-norm.txt.gz
-tensorflow_asr train_lm ... --target=external --text-path=librispeech-lm-norm.txt.gz \
-    --output=lm.weights.h5
+# then point data_config.lm_dataset_config.data_paths at it
+tensorflow_asr train_external_lm --config-path=<config> --datadir=<datadir> --modeldir=<modeldir> \
+    --bs=128 --epochs=1 --steps-per-epoch=7813
 ```
 
 `.gz` is read directly and the file is streamed, so the ~4 GB decompressed size never has to be materialised. `--max-lines` caps it for a quick run.
@@ -233,15 +266,13 @@ which is eq. (25) of \[5\], and matches this repository's joint — `ffn_out(act
 Unlike the external LM, this one **does ship**: [`BigramLanguageModel`](../tensorflow_asr/models/lm/bigram_language_model.py), fitted from your training transcripts by
 
 ```bash
-tensorflow_asr train_lm \
+tensorflow_asr train_internal_lm \
     --config-path=/path/to/config.yml.j2 \
     --datadir=/path/to/data \
-    --dataset-type=slice \
-    --target=internal \
-    --output=/path/to/bigram.weights.h5
+    --modeldir=/path/to/modeldir
 ```
 
-It counts adjacent token pairs over `data_config.train_dataset_config`, tokenizing with the config's own tokenizer so the indices line up with the transducer's vocabulary by construction. Note that a bigram is **not** trained by gradient descent: its maximum-likelihood estimate is a ratio of counts, exact in one pass, so it exposes `fit_counts` and `train_lm` dispatches to that instead of running `fit`. Any model without `fit_counts` — a neural LM — is trained by gradient descent on next-token cross-entropy instead. **The corpus matters**: the bigram must see the transcripts the transducer trained on, because that is what its internal LM learned. Counting the external LM's target-domain text instead would subtract the very knowledge fusion is adding, which is why the script takes no corpus argument.
+It counts adjacent token pairs over `data_config.train_dataset_config`, tokenizing with the config's own tokenizer so the indices line up with the transducer's vocabulary by construction. Note that a bigram is **not** trained by gradient descent: its maximum-likelihood estimate is a ratio of counts, exact in one pass, so it exposes `fit_counts` and `train_internal_lm` calls that instead of running `fit`. A neural LM has no `fit_counts` and belongs in `train_external_lm`, which trains by gradient descent on next-token cross-entropy. **The corpus matters**: the bigram must see the transcripts the transducer trained on, because that is what its internal LM learned. Counting the external LM's target-domain text instead would subtract the very knowledge fusion is adding, which is why the script takes no corpus argument.
 
 Two details of the table:
 
@@ -328,12 +359,15 @@ Both model configs are ordinary keras serialization blobs, exactly like `model_c
 
 For `lm_type: ilme` there is nothing extra to configure — the estimate comes from the transducer's own joint — and `external_config` may be dropped entirely if you want subtraction without fusion. That combination warns, because far more often it means a config that forgot `external_config`.
 
-Fitting the language models is a separate step, before evaluation, and `--target` names the key it builds:
+Fitting the language models is a separate step before evaluation, and which one you build is the script you run. All three write into `<modeldir>/lm`:
 
 ```bash
-tensorflow_asr train_lm ... --target=internal --output=.../bigram.weights.h5   # counting
-tensorflow_asr train_lm ... --target=external --output=.../lm.weights.h5       # gradient descent
+tensorflow_asr train_internal_lm ... --modeldir=<modeldir>   # counting  -> lm/internal.weights.h5
+tensorflow_asr train_external_lm ... --modeldir=<modeldir>   # gradient  -> lm/external.weights.h5
+tensorflow_asr train_kenlm_lm    ... --modeldir=<modeldir>   # KenLM     -> lm/kenlm.weights.h5
 ```
+
+`train_external_lm` and `train_kenlm_lm` both fill `lm_config.external_config` — a neural LM or an n-gram, whichever that key names.
 
 Those two outputs are what evaluation then loads:
 
@@ -372,8 +406,12 @@ Neither LM is tracked as a keras sub-layer of the ASR model, so their weights ne
 ### 4.9 Deviations from the paper
 
 - **Transcript storage.** \[1\] uses a trie (`transcripts` + `transcripts_ptrs` backlinks) to avoid copying whole transcripts on each expansion. Here transcripts are dense `[B, W, 2T+1]` and re-gathered each step, because `tf.gather` over the beam axis is a single vectorized op and keeps every shape static, which is what XLA and TFLite export need. Memory is `O(B * W * T)`.
-- **No bundled n-gram external LM.** \[1\] evaluates against a GPU-resident 6-gram (their NGPU-LM, chosen so the LM call is cheap enough to rescore the full hypothesis set rather than prune early). What ships here is `LSTMLanguageModel`, matching \[5\]'s architecture instead — a dense `[V, V, ...]` n-gram table is only viable at order 2, which is why the *internal* LM is a bigram and the external one is neural. No pretrained weights ship for either; `train_lm` fits them.
-- **Bigram only.** `BigramLanguageModel` is order 2, dense, unpruned. \[6\] notes character-level units may want a higher order; that needs a new class, since a dense `[V, V, V]` trigram is not viable and the state would have to carry the token before last.
+- **N-gram LM: no Triton kernel, and greedy fusion is not implemented.** `NGramLanguageModel` (4.6) is \[9\]'s data structure, but two things from that paper are missing. Its lookup is plain TensorFlow with the backoff walk unrolled, not the custom Triton kernel \[9\] wrote to escape a dynamic loop, so the constant factor is worse than the "<7% overhead" they report. And it is wired into beam search only — \[9\]'s actual contribution is that an LM this cheap can be fused into **greedy** decoding, via two-stage token selection (keep blank if blank wins the plain argmax, otherwise re-score only the labels). That would touch `recognize_batch` for the transducer and would need a frame-by-frame loop for CTC, which currently calls `tf.nn.ctc_greedy_decoder` in one shot.
+- **Arc index.** \[9\] sorts arcs by `(from_state, token)` and keeps `start_arcs` / `end_arcs` to delimit each state's block. Here the same sort key is packed into one integer, `from_state * V + token`, so the table is a single sorted array addressable by one binary search and the per-state ranges are not needed. The reason is the same as for transcript storage above: a ragged per-state slice would not keep shapes static.
+- **Smoothing when counting in-repo.** Via `--arpa` the smoothing is whatever KenLM did, as in \[9\]. The in-process counting path instead uses interpolated Kneser-Ney with a single discount, rather than the modified three-parameter form `lmplz` defaults to.
+- **Backoff weights are recomputed, never read.** \[9\] converts an ARPA as-is. Here the weights are rebuilt from the mass actually left over, because both paths move mass the file's own weights assumed: pruning drops arcs, and `</s>` is conditioned away. It also means a state that lists every label gets its arcs renormalised, since backoff has nowhere to deposit the remainder.
+- **No pretrained LM weights ship**, for either implementation; the `train_*_lm` scripts fit them. See "Where the pretrained weights aren't" in 4.6.
+- **The internal LM is bigram only.** `BigramLanguageModel` is order 2, dense, unpruned. \[6\] notes character-level units may want a higher order — `NGramLanguageModel` can serve as `internal_config` instead, since both satisfy the same interface, though nothing here has measured whether that is worth it.
 - **Fusion form under ILME/LODR.** \[5\] states eq. (27) over plain shallow fusion, which leaves blank alone. Here the external term keeps ALSD++'s `(1 + λ)` blank scaling (4.6) and the subtraction is applied to the labels only. That combination is neither paper verbatim; it is the coherent merge of the two, and it keeps the deletion-rate property eq. (3) exists for.
 - **CUDA graphs.** Not applicable — the loop is a `tf.while_loop`.
 
@@ -470,3 +508,4 @@ Two caveats on what this does **not** establish:
 6. Z. Yao, X. Yang, P. Żelasko, et al. *LODR: Low-order Density Ratio for Language Model Integration in End-to-End ASR*. 2022. <https://arxiv.org/abs/2203.16776>
 7. A. Hannun, A. Maas, D. Jurafsky, A. Ng. *First-Pass Large Vocabulary Continuous Speech Recognition using Bi-Directional Recurrent DNNs*. 2014. <https://arxiv.org/abs/1408.2873>
 8. E. McDermott, H. Sak, E. Variani. *A Density Ratio Approach to Language Model Fusion in End-to-End Automatic Speech Recognition*. ASRU 2019. <https://arxiv.org/abs/2002.11268>
+9. V. Bataev, A. Andrusenko, L. Grigoryan, A. Laptev, V. Lavrukhin, B. Ginsburg. *NGPU-LM: GPU-Accelerated N-Gram Language Model for Context-Biasing in Greedy ASR Decoding*. Interspeech 2025. <https://arxiv.org/abs/2505.22857>

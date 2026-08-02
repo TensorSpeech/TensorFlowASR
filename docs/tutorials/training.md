@@ -135,39 +135,47 @@ lm_config:
 ### 7.1 Internal language model (for `lm_type: lodr`)
 
 ```bash
-tensorflow_asr train_lm \
+tensorflow_asr train_internal_lm \
     --config-path=/path/to/config.yml.j2 \
     --datadir=/path/to/datadir \
-    --dataset-type=slice \
-    --target=internal \
-    --output=/path/to/modeldir/internal_lm.weights.h5
+    --modeldir=/path/to/modeldir
 ```
 
-This one must be fitted on the ASR training transcripts, so there is no `--text-path` for it — the whole point is to approximate what the transducer already picked up from that exact text. `BigramLanguageModel` is fitted by counting in a single pass, which is its exact estimate, so `--epochs`, `--bs` and `--learning-rate` do nothing here.
+Weights land in `/path/to/modeldir/lm/internal.weights.h5`. This one must be fitted on the ASR training transcripts — point `data_config.lm_dataset_config.data_paths` at the transcript `.tsv` files — because the whole point is to approximate what the transducer already picked up from that exact text. `BigramLanguageModel` is fitted by counting in a single pass, which is its exact estimate, so `--epochs`, `--bs` and `--learning-rate` do nothing here.
 
 ### 7.2 External language model
 
-Point `--text-path` at a corpus much larger than your transcripts. The published setups use the LibriSpeech LM corpus, ~800M words against the ~9M words of LibriSpeech transcripts:
+Point `data_config.lm_dataset_config.data_paths` at a corpus much larger than your transcripts. The published setups use the LibriSpeech LM corpus, ~800M words against the ~9M words of LibriSpeech transcripts:
 
 ```bash
 wget https://www.openslr.org/resources/11/librispeech-lm-norm.txt.gz
 
-tensorflow_asr train_lm \
+tensorflow_asr train_external_lm \
     --config-path=/path/to/config.yml.j2 \
     --datadir=/path/to/datadir \
-    --dataset-type=slice \
-    --target=external \
-    --text-path=/path/to/librispeech-lm-norm.txt.gz \
-    --max-lines=1000000 \
+    --modeldir=/path/to/modeldir \
     --bs=128 \
     --epochs=1 \
-    --steps-per-epoch=7813 \
-    --output=/path/to/modeldir/lm.weights.h5
+    --steps-per-epoch=7813
 ## See others params
-tensorflow_asr train_lm --help
+tensorflow_asr train_external_lm --help
 ```
 
-The `.gz` is read directly and streamed, so the several GB never has to be unpacked. `--max-lines` caps it for a quick first run; drop it to use the whole corpus. `--datadir` and `--dataset-type` are still required even though the text comes from `--text-path`, because the config is rendered with them.
+Weights land in `/path/to/modeldir/lm/external.weights.h5`. The `.gz` is read directly and streamed, so the several GB never has to be unpacked; `lm_dataset_config.max_lines` caps it for a quick first run.
+
+An **n-gram** external LM is the cheaper alternative, and does not train by gradient descent at all — build it with KenLM instead, which handles a corpus this size in bounded memory:
+
+```bash
+./scripts/install_kenlm.sh
+
+tensorflow_asr train_kenlm_lm \
+    --config-path=/path/to/config.yml.j2 \
+    --datadir=/path/to/datadir \
+    --modeldir=/path/to/modeldir \
+    --prune='[0,0,1,1]'
+```
+
+That writes `lm/corpus.ids.txt`, `lm/lm.arpa` and `lm/kenlm.weights.h5`. It fills the same `lm_config.external_config` key, so set that to `NGramLanguageModel` rather than `LSTMLanguageModel` — and its `order` there is the n-gram order, which is why there is no `--order` flag. `--lmplz` defaults to where the install script put the binary, so it only needs setting for a system-wide KenLM.
 
 `--steps-per-epoch` is required, and is not derived from the corpus: working it out means reading every line before the first training step, which on a corpus this size costs minutes on every run. Count once instead and keep the number:
 

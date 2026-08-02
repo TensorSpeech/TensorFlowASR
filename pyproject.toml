@@ -47,7 +47,9 @@ dependencies = [
 # `.[tpu]` for linux yields `tensorflow==2.19.1` and `tensorflow-tpu==2.19.1`, and whichever lands
 # last wins. Uninstall-then-install is the only way to get it right, which is what
 # `scripts/install_tpu.sh` does (and what `setup.sh tpu` did before the move to uv).
-apple = ["tensorflow-metal~=1.2.0; sys_platform == 'darwin' and platform_machine == 'arm64'"]
+apple = [
+    "tensorflow-metal~=1.2.0; sys_platform == 'darwin' and platform_machine == 'arm64'",
+]
 cuda = ["tensorflow[and-cuda]~=2.19.0"]
 dev = [
     "pytest>=7.4.1",
@@ -58,6 +60,7 @@ dev = [
     "pre-commit>=3.7.0",
     "tf2onnx>=1.16.1",
     "netron>=8.0.3",
+    "kaggle>=2.2.4",
 ]
 
 [project.urls]

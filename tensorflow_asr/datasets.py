@@ -64,6 +64,8 @@ import gzip
 import json
 import logging
 import os
+import shutil
+import subprocess
 from dataclasses import asdict, dataclass
 
 import numpy as np
@@ -143,6 +145,34 @@ BUFFER_SIZE = 100
 TFRECORD_BUFFER_SIZE = 32 * 1024 * 1024
 TFRECORD_SHARDS = 16
 AUTOTUNE = int(os.environ.get("AUTOTUNE") or tf.data.AUTOTUNE)
+
+
+# Where `scripts/install_kenlm.sh` leaves the binary, relative to the project root.
+KENLM_LMPLZ = os.path.join("externals", "kenlm", "build", "bin", "lmplz")
+
+
+def _resolve_lmplz(lmplz: str = None) -> str:
+    """
+    Find KenLM's `lmplz`, or say how to get it.
+
+    An explicit path is taken as given -- a typo should fail rather than quietly fall back to some
+    other copy and build a model nobody meant to build. Unset, PATH wins and the location
+    `scripts/install_kenlm.sh` uses is the fallback, so a standard install needs no configuration.
+    """
+    if lmplz:
+        found = shutil.which(lmplz)
+        if found or os.path.isfile(lmplz):
+            return found or lmplz
+        raise FileNotFoundError(f"`{lmplz}` not found. Build it with ./scripts/install_kenlm.sh, or correct the path.")
+
+    for candidate in (shutil.which("lmplz"), os.path.join(os.getcwd(), KENLM_LMPLZ)):
+        if candidate and os.path.isfile(candidate):
+            return candidate
+    raise FileNotFoundError(
+        "`lmplz` not found on PATH or at ./"
+        + KENLM_LMPLZ
+        + ". Build it with ./scripts/install_kenlm.sh (run from the project root), or pass the path explicitly."
+    )
 
 
 class ASRDataset(AbstractDataset):
@@ -632,6 +662,130 @@ class LMDataset(AbstractDataset):
         """
         for text in self._iter_texts():
             yield self.tokenizer.tokenize(text).numpy()
+
+    # -------------------------------- KENLM -------------------------------------
+
+    def write_token_ids(self, path, max_lines: int = None):
+        """
+        Write this corpus as space-separated token ids, one sentence per line.
+
+        The form `lmplz` needs. It has no idea what a word-piece is, so tokens go out as **integer
+        ids** -- the ids of the very tokenizer this dataset holds. That is also what guarantees the
+        resulting language model is indexed against the same vocabulary the transducer emits, which
+        is the one thing `NGramLanguageModel.call_next` requires and cannot check.
+
+        A `.gz` suffix is written gzipped. Returns `(lines, tokens)`.
+        """
+        from tqdm import tqdm  # pylint: disable=import-outside-toplevel
+
+        path = file_util.preprocess_paths(path)
+        opener = gzip.open if str(path).endswith(".gz") else open
+        lines = tokens = 0
+        with opener(path, "wt", encoding="utf-8") as handle:
+            logger.info(f"Writing token ids to {path} ...")
+            for ids in tqdm(self.token_generator(), desc="Writing", unit=" lines", disable=False):
+                ids = [int(i) for i in ids]
+                if not ids:
+                    continue  # lmplz reads an empty line as a sentence, which would skew the counts
+                handle.write(" ".join(map(str, ids)))
+                handle.write("\n")
+                lines += 1
+                tokens += len(ids)
+                if max_lines and lines >= max_lines:
+                    break
+        return lines, tokens
+
+    def create_arpa(
+        self,
+        arpa_path,
+        text_path=None,
+        order: int = 4,
+        prune=None,
+        max_lines: int = None,
+        lmplz: str = None,
+        lmplz_args=None,
+        overwrite_text: bool = False,
+    ):
+        """
+        Build a token-level ARPA n-gram over this corpus with KenLM, and return its path.
+
+        Two steps: tokenise the corpus to token ids (`write_token_ids`), then hand that to `lmplz`.
+        The intermediate text is kept rather than piped, because tokenising a large corpus is the
+        slow half and keeping it lets `lmplz` be re-run at another order or pruning without paying
+        for it twice.
+
+        `lmplz` must be on PATH -- `scripts/install_kenlm.sh` builds it and says how. This is the
+        only path to an n-gram over a corpus of any size: `NGramLanguageModel.fit_counts` counts in
+        python dicts and tops out around a few million tokens.
+
+        Parameters
+        ----------
+        arpa_path : str
+            Where to write the ARPA.
+        text_path : Optional[str]
+            Where to write the token-id text. Defaults to `<arpa_path without suffix>.ids.txt`. An
+            existing file is **reused**, not rebuilt, so a second run at a different order skips the
+            tokenisation. See `overwrite_text` for when that is the wrong thing.
+        order : int
+            `lmplz -o`. Must match `NGramLanguageModel`'s `order`.
+        prune : Optional[Sequence[int]]
+            `lmplz --prune`, one count cutoff per order. This is where to shrink the model; it is
+            cheaper and better informed than having `read_arpa` drop arcs to fit its budget.
+        max_lines : Optional[int]
+            Stop after this many lines, for a trial run over a huge corpus.
+        lmplz : Optional[str]
+            The binary. Left unset it is looked for on PATH and then at `KENLM_LMPLZ`, where
+            `scripts/install_kenlm.sh` puts it, so a standard install needs nothing here. An explicit
+            value is used as given and never falls back, so a typo fails loudly instead of silently
+            building with some other copy.
+        lmplz_args : Optional[Sequence[str]]
+            Extra flags passed through, eg. `["-S", "40%"]` to cap memory or `["--discount_fallback"]`
+            which small corpora need when a discount cannot be estimated.
+        overwrite_text : bool
+            Re-tokenise even when `text_path` already exists. Reuse is the default because
+            tokenising is the slow half and it is usually what you want between runs that only
+            change `order` or `prune`. It is **wrong** whenever the ids would come out different:
+            the corpus changed, `data_paths` changed, `max_lines` changed, or the tokenizer did.
+            Nothing detects that -- a stale file is still a valid file -- so an LM built over the
+            previous corpus, or worse over a previous *vocabulary*, would be indexed against
+            indices the transducer no longer emits. Pass this when in doubt; the cost is time.
+        """
+        lmplz = _resolve_lmplz(lmplz)
+
+        arpa_path = file_util.preprocess_paths(arpa_path)
+        if text_path is None:
+            text_path = os.path.splitext(str(arpa_path))[0] + ".ids.txt"
+        text_path = file_util.preprocess_paths(text_path)
+
+        reusable = os.path.isfile(text_path) and os.path.getsize(text_path) > 0
+        if reusable and not overwrite_text:
+            logger.info(f"Reusing the token ids already at {text_path}; pass overwrite_text=True (--overwrite-text) to rebuild")
+        else:
+            if reusable:
+                logger.info(f"Overwriting the token ids at {text_path}")
+            lines, tokens = self.write_token_ids(text_path, max_lines=max_lines)
+            if not lines:
+                raise ValueError(f"No usable text in {self.data_paths}; nothing to build a language model from.")
+            logger.info(f"Wrote {lines:,} lines / {tokens:,} tokens to {text_path}")
+
+        command = [lmplz, "-o", str(order)]
+        if prune:
+            command += ["--prune", *[str(int(p)) for p in prune]]
+        if lmplz_args:
+            command += [str(a) for a in lmplz_args]
+
+        logger.info(f"Running {' '.join(command)} < {text_path} > {arpa_path}")
+        # `lmplz` reads the corpus on stdin and writes the ARPA on stdout; its progress goes to
+        # stderr, which is left attached so a long build is visible rather than silent.
+        with open(text_path, "rb") as source, open(arpa_path, "wb") as destination:
+            result = subprocess.run(command, stdin=source, stdout=destination, check=False)
+        if result.returncode != 0:
+            raise RuntimeError(
+                f"lmplz exited {result.returncode}. A small corpus usually needs --lmplz-args='--discount_fallback', "
+                f"which lets it fall back when an order has too few n-grams to estimate a discount from."
+            )
+        logger.info(f"Wrote {arpa_path}")
+        return arpa_path
 
     # -------------------------------- LOAD AND PREPROCESS -------------------------------------
 

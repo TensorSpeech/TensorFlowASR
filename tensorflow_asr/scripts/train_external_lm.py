@@ -11,6 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+"""Train the external language model -- the neural one that gets shallow fused into the beam"""
 
 import logging
 import os
@@ -21,12 +22,11 @@ from tensorflow_asr import callbacks as asr_callbacks
 from tensorflow_asr import datasets, keras, tf, tokenizers  # import to aid logging messages
 from tensorflow_asr.configs import Config
 from tensorflow_asr.models.base_model import BaseModel
-from tensorflow_asr.models.lm.language_model import LanguageModel
-from tensorflow_asr.utils import cli_util, env_util, file_util
+from tensorflow_asr.models.lm.language_model import LanguageModel, lm_weights_path
+from tensorflow_asr.utils import cli_util, env_util
 
 logger = logging.getLogger(__name__)
 
-TARGETS = ("external", "internal")
 LR_SCHEDULES = ("cosine", "constant")
 
 
@@ -131,17 +131,22 @@ def build_callbacks(modeldir: str, kaggle_model_handle: str = None, save_freq="e
     burning hours reporting `loss: nan`. Note the progress bar's own number is a running mean and
     cannot recover *within* an epoch either way; this stops the run on the first bad step instead.
 
-    Checkpointing matters on a time-boxed machine. A full pass over a corpus like LibriSpeech LM is
-    far longer than a Kaggle session, and `/kaggle/working` starts empty on every run -- so without
-    this an interrupted run loses everything, since the weights are only written once `fit`
-    returns. `KaggleModelBackupAndRestore` round-trips the checkpoint through a Kaggle Model, which
-    is the same mechanism the ASR trainer uses (see `{{ kaggle_model_handle }}` in the example
-    configs); the next session downloads it in `on_train_begin` and resumes.
+    `ModelCheckpoint` writes the weights every epoch, to the same
+    `<modeldir>/lm/external.weights.h5` that decoding loads. It is what makes this the *only* place
+    the trained model is written -- there is no save after `fit` returns, so a run stopped partway
+    through still leaves a usable language model from its last completed epoch rather than nothing
+    at all. Training a language model on a real corpus is long enough that this is the normal case,
+    not the exceptional one.
 
-    Without a handle there is no checkpointing at all, which is the right default for a short run
-    where uploading every epoch would cost more than restarting.
+    `KaggleModelBackupAndRestore` is a different thing and both are wanted: it round-trips
+    optimizer state through a Kaggle Model so an interrupted run can *resume mid-training*, which
+    the checkpoint above cannot do. It is the same mechanism the ASR trainer uses (see
+    `{{ kaggle_model_handle }}` in the example configs), and without a handle it is simply skipped.
     """
-    callbacks = [asr_callbacks.TerminateOnNaN()]
+    callbacks = [
+        asr_callbacks.TerminateOnNaN(),
+        keras.callbacks.ModelCheckpoint(filepath=lm_weights_path(modeldir, "external"), save_weights_only=True, save_freq="epoch"),
+    ]
     if not kaggle_model_handle:
         return callbacks
     if not modeldir:
@@ -224,9 +229,7 @@ def build_optimizer(learning_rate: float, total_steps: int, warmup_steps: int, c
 def main(
     config_path: str,
     datadir: str,
-    output: str,
-    target: str = "internal",
-    modeldir: str = None,
+    modeldir: str,
     bs: int = 32,
     epochs: int = 10,
     steps_per_epoch: int = None,
@@ -246,169 +249,87 @@ def main(
     **kwargs,
 ):
     """
-    Train a beam search language model on transcripts.
+    Train `lm_config.external_config` by gradient descent, and write it to `<modeldir>/lm`.
 
-    Which model is trained is chosen by `target`, naming the key of `lm_config` it builds:
+    The external LM is the one **fused in**, weighted by `decoder_config.lm_alpha`. Its whole value
+    is having seen far more text than the ASR transcripts, so point
+    `data_config.lm_dataset_config.data_paths` at a large corpus. The published setups use the
+    LibriSpeech LM corpus, ~40M lines and 800M words, against the ~9M words of transcripts::
 
-    - "internal" (default) builds `lm_config.internal_config`, the low-order LM that LODR
-      subtracts. This one **must** be fitted on the ASR training transcripts, because what it
-      approximates is the internal LM the transducer picked up from exactly that text. Fitting it
-      on target-domain text would make the correction subtract the knowledge fusion is adding, so
-      point `data_config.lm_dataset_config.data_paths` at the transcript `.tsv` files.
-    - "external" builds `lm_config.external_config`, the LM that gets fused in. The whole value of
-      an external LM is seeing far more text than the ASR transcripts, so point
-      `data_config.lm_dataset_config.data_paths` at a large corpus. The published setups use the
-      LibriSpeech LM corpus, ~40M lines and 800M words, against the ~9M words of LibriSpeech
-      transcripts:
+        wget https://www.openslr.org/resources/11/librispeech-lm-norm.txt.gz
 
-          wget https://www.openslr.org/resources/11/librispeech-lm-norm.txt.gz
+    `.gz` is read directly, no need to decompress.
 
-      `.gz` is read directly, no need to decompress.
+    This script is for a **neural** external LM -- `LSTMLanguageModel` and anything else trained by
+    gradient descent on next-token cross-entropy. An n-gram is not trained that way: its estimate is
+    a ratio of counts, so it has its own script, `train_kenlm_lm`, which also targets
+    `external_config`. The two are alternatives; pick one per config.
 
-    The text, how much of it to read, and how long each sequence may be all come from
-    `data_config.lm_dataset_config`: its `data_paths` (transcript `.tsv`, a `.txt`/`.txt.gz` corpus,
-    or a mix -- `datasets.LMDataset` reads them all), `max_length` (tokens per sequence; sequences
-    are truncated to it and it is what TPU pads to) and `max_lines` (lines to read, for a quick run
-    over a huge corpus). With no `data_paths` there is nothing to train on and the run stops.
-
-    Fitting dispatches on the model. An n-gram exposes `fit_counts` and is fitted in a single
-    counting pass, which is its exact maximum-likelihood estimate; anything else is trained by
-    gradient descent on next-token cross-entropy. Either way the result is written to `output` as
-    h5, ready for the `weights` key of the config that built it.
-
-    Note on the loss: `LanguageModel.call` returns log-probabilities, and cross entropy
-    `from_logits=True` is the correct pairing for those -- `softmax(ln p) = p` whenever `p` is
-    already normalised, so the loss re-normalising is a no-op rather than a second softmax. It is
-    averaged over real tokens only; see `MaskedSparseCategoricalCrossentropy` for why the stock
-    reduction reports the wrong number here.
+    Everything about the text comes from `data_config.lm_dataset_config`: `data_paths`,
+    `max_length` (tokens per sequence, and what TPU pads to) and `max_lines` (for a quick run over a
+    huge corpus). There is no CLI override.
 
     Parameters
     ----------
-    output : str
-        Where to write the h5. Pass it to `tensorflow_asr test` as `--lm-h5` or `--internal-lm-h5`.
-    steps_per_epoch : int
-        Steps per epoch. **Required** for gradient training; the n-gram models, which fit by
-        counting, ignore it.
-
-        For one epoch to be one full pass over the data, set it to
-        `ceil(sequences / (bs x replicas))` -- `wc -l` on the corpus gives the sequence count, and
-        it is worth writing down rather than recomputing, since counting means reading the whole
-        corpus before training can start.
-
-        A full pass is often the wrong epoch anyway. The 40M-line LibriSpeech LM corpus is ~1.25M
-        steps at batch 32, and Keras reports the *running mean* of the loss over the current epoch,
-        so one enormous epoch shows a number that stops moving long before training does. Shorter
-        epochs reset that average and give you a reading you can act on.
-
-        Note that epochs do not restart the stream -- with the data cycling, epoch 2 continues
-        where epoch 1 stopped. Epoch boundaries line up with passes only when the step count
-        matches one pass exactly.
-    lr_schedule : str
-        "cosine" (default) warms up from 0 then decays to 0 over `steps_per_epoch` x `epochs`;
-        "constant" holds `learning_rate`. Cosine needs `steps_per_epoch` and warns without it.
-    warmup_steps : int
-        Steps to reach `learning_rate`. Capped at a tenth of the run so short jobs are not all
-        warmup.
-    clipnorm : float
-        Clip gradients to this global norm. 0 disables. Large LSTMs here reach norms in the tens
-        within a few dozen steps, which is the usual cause of a language model that stalls.
-    kaggle_model_handle : str
-        Kaggle model to check the training state in and out of, e.g.
-        "owner/tensorflowasr-lm/keras/external". Needs `--modeldir`.
-
-        Turn this on for any run longer than the machine it is on. A checkpoint goes up after
-        every epoch and comes back down at the start of the next run, so an interrupted run
-        continues instead of restarting -- which matters because the weights are only written to
-        `--output` once `fit` returns, and a killed session otherwise loses the lot. The ASR
-        trainer uses the same callback via `{{ kaggle_model_handle }}` in the example configs.
-
-        Uploading needs write credentials, which is not the same as being able to read public
-        models: set KAGGLE_USERNAME and KAGGLE_KEY, or have ~/.kaggle/kaggle.json. Inside a Kaggle
-        notebook that means attaching your API token as a Secret -- the notebook's own implicit
-        auth is not enough. The upload is not guarded: without the credentials it raises at the
-        end of the first epoch and takes the run down with it, so check them before a long run.
+    config_path : str
+        The same config the ASR model uses, so the tokenizer -- and therefore the vocabulary the LM
+        is indexed against -- matches.
+    datadir : str
+    modeldir : str
+        Weights are written to `<modeldir>/lm/external.weights.h5`. Pass that to
+        `tensorflow_asr test --lm-h5`.
     bs : int
-        Batch size **per replica**. The dataset is batched at `bs x replicas`, matching
-        `scripts/train.py`, so a TPU v3-8 with `--bs=32` runs a global batch of 256.
-    device_type : str
-        "gpu" (default), "cpu" or "tpu".
-
-        On TPU two pipeline changes are forced, because XLA compiles per input shape and the
-        default pipeline produces a new shape almost every batch: sequences are padded to
-        `max_length` rather than to the longest in the batch, and the short final batch is
-        dropped. Both cost something -- short sequences carry padding out to `max_length`, and up
-        to `bs x replicas - 1` sequences are skipped per pass -- and neither is worth paying on a
-        GPU, where dynamic shapes are free.
-
-        A stacked LSTM is a poor fit for a TPU regardless: it is sequential over timesteps, which
-        is what TPUs are worst at. Measure against the GPU before committing to a session.
-    tpu_address : str
-        Cluster address. Leave unset on a Kaggle TPU VM.
-    tpu_vm : bool
-        True on a TPU VM, which skips `experimental_connect_to_cluster`. Kaggle's TPUs are VMs.
-    spx : int
-        `steps_per_execution`, batches per device call. Raising it cuts host round trips and is the
-        usual throughput lever on TPU.
-
-        **Left at 1 because it could not be verified.** With `keras 3` on `tensorflow 2.19`, any
-        value above 1 combined with a distribution strategy fails during `fit` with
-        `InvalidArgumentError: You must feed a value for placeholder tensor .../while/cond/...`.
-        Measured with `MirroredStrategy` over two virtual CPU devices: it fails for a plain Dense
-        model as readily as for this LSTM, and with the stock Keras loss as readily as with the
-        masked one, so it is not something about this script. Single-device runs are fine at any
-        value. Whether `TPUStrategy` shares the fault is untested -- there is no TPU here. Try it
-        on a real TPU by all means, but check a couple of steps run before spending a session.
+        Per-replica batch size.
+    epochs : int
+    steps_per_epoch : int
+        **Required.** One pass is `ceil(sequences / (bs x replicas))` steps; `wc -l` on the corpus
+        gives the sequence count. It is not derived, because deriving it means walking the whole
+        corpus before the first step.
+    learning_rate : float
+    lr_schedule : str
+        "constant" or "cosine". Cosine warms up then decays, and needs a step budget to decay over.
+    warmup_steps : int
+    clipnorm : float
+        Global-norm clipping. An LSTM language model at these sizes reaches gradient norms in the
+        tens within a few dozen steps, and one bad step is what usually stalls the run.
+    kaggle_model_handle : str
+        Round-trip the checkpoint through a Kaggle Model so a time-boxed session can resume, eg.
+        "owner/tensorflowasr-lm/keras/external".
+    verbose : int
     """
-    if target not in TARGETS:
-        raise ValueError(f"target must be one of {TARGETS}, got {target}")
-    if lr_schedule not in LR_SCHEDULES:
-        raise ValueError(f"lr_schedule must be one of {LR_SCHEDULES}, got {lr_schedule}")
-    if kaggle_model_handle and not modeldir:
-        # Checked here as well as in build_callbacks so it fails before the corpus is counted,
-        # which on a large one is minutes of work thrown away.
-        raise ValueError("--kaggle-model-handle needs --modeldir as well: the checkpoint is written there before being uploaded.")
-
-    strategy = env_util.setup_strategy(device_type=device_type, devices=devices, tpu_address=tpu_address, tpu_vm=tpu_vm)
     env_util.setup_seed()
+    strategy = env_util.setup_strategy(device_type=device_type, devices=devices, tpu_address=tpu_address, tpu_vm=tpu_vm)
+    on_tpu = device_type.lower() == "tpu"
     env_util.setup_mxp(mxp=mxp)
 
-    # XLA compiles per input shape, and the default pipeline pads each batch to its own longest
-    # sequence -- a new shape almost every step. On a GPU that is free; on a TPU it means
-    # recompiling instead of training, so shapes are pinned there.
-    on_tpu = device_type.lower() == "tpu"
     global_batch_size = bs * strategy.num_replicas_in_sync
     if strategy.num_replicas_in_sync > 1:
         logger.info(f"{strategy.num_replicas_in_sync} replicas: --bs={bs} per replica gives a global batch of {global_batch_size}")
 
     config = Config(config_path, training=False, repodir=repodir, datadir=datadir, modeldir=modeldir, **kwargs)
-    model_config = config.lm_config.external_config if target == "external" else config.lm_config.internal_config
+    model_config = config.lm_config.external_config
     if not model_config or not model_config.get("class_name"):
-        raise ValueError(f"`lm_config.{target}_config` is not set in {config_path}, nothing to train")
+        raise ValueError(f"`lm_config.external_config` is not set in {config_path}, nothing to train")
 
     tokenizer = tokenizers.get(config)
     tokenizer.make()
     logger.info(f"Vocabulary size {tokenizer.num_classes}, blank index {tokenizer.blank}")
 
-    # The text to train on, and every dataset knob, come from `data_config.lm_dataset_config` -- no
-    # CLI override. Its `data_paths` may be ASR transcript `.tsv` (for the internal LM), a
-    # `.txt`/`.txt.gz` corpus (for the external LM), or a mix; `LMDataset` reads them all and streams
-    # even a multi-GB corpus rather than loading it, tokenising with this same tokenizer so the
-    # indices match the transducer's vocabulary. `max_length`, `max_lines`, `shuffle`, `buffer_size`,
-    # `drop_remainder` and `indefinite` ride along on the same config; `LMDataset.create` batches and
-    # teacher-forces from them below.
     lm_dataset_config = config.data_config.lm_dataset_config
     if not lm_dataset_config.data_paths:
         raise ValueError(
-            "No LM training data. Set `data_config.lm_dataset_config.data_paths` in the config: "
-            "transcript .tsv for --target=internal, a .txt/.txt.gz corpus for --target=external."
+            "No LM training data. Point `data_config.lm_dataset_config.data_paths` at a .txt/.txt.gz corpus -- "
+            "the whole point of an external LM is seeing more text than the ASR transcripts."
         )
     lm_dataset = datasets.get_lm(tokenizer=tokenizer, dataset_config=lm_dataset_config)
-    source = "the LM dataset (data_config.lm_dataset_config)"
 
     if on_tpu:
         if not lm_dataset.max_length:
             lm_dataset.compute_metadata()
         lm_dataset.drop_remainder = True
+
+    steps_per_epoch = check_steps_per_epoch(steps_per_epoch)
+    total_steps = steps_per_epoch * epochs
 
     # Everything that creates variables goes inside the scope: under `TPUStrategy` a model built
     # outside it is not replicated across the cores, and the optimizer slots compile follows.
@@ -417,49 +338,40 @@ def main(
         lm.summary()
 
         if hasattr(lm, "fit_counts"):
-            # An n-gram's maximum likelihood estimate is a ratio of counts, exact and available in
-            # one pass. Gradient descent would only approximate what this computes outright.
-            logger.info(f"{type(lm).__name__} provides `fit_counts`, fitting by counting rather than gradient descent")
-            if on_tpu:
-                logger.warning("Counting runs on the host, so --device-type=tpu buys this model nothing.")
-            logger.info(f"Counting bigrams over {source}")
-            counts = lm.fit_counts(lm_dataset.token_generator())
-            vocab_size, seen_pairs = counts.shape[0], int((counts > 0).sum())
-            logger.info(
-                f"Counted {int(counts.sum())} bigrams: {seen_pairs} distinct pairs "
-                f"({100.0 * seen_pairs / vocab_size**2:.2f}% of the table), "
-                f"{int((counts.sum(axis=1) > 0).sum())}/{vocab_size} contexts seen"
-            )
-        else:
-            steps_per_epoch = check_steps_per_epoch(steps_per_epoch)
-            total_steps = steps_per_epoch * epochs
-            logger.info(
-                f"Training {type(lm).__name__} ({lm.count_params() / 1e6:.1f}M params) on {source} "
-                f"for {epochs} epochs x {steps_per_epoch:,} steps = {total_steps:,} steps"
-            )
-            pairs = lm_dataset.create(batch_size=global_batch_size)
-            lm.compile(
-                optimizer=build_optimizer(
-                    learning_rate=learning_rate,
-                    total_steps=total_steps,
-                    warmup_steps=warmup_steps,
-                    clipnorm=clipnorm,
-                    lr_schedule=lr_schedule,
-                ),
-                loss=MaskedSparseCategoricalCrossentropy(),
-                steps_per_execution=spx,
-            )
-            lm.fit(
-                pairs,
-                epochs=epochs,
-                steps_per_epoch=steps_per_epoch,
-                verbose=verbose,
-                callbacks=build_callbacks(modeldir, kaggle_model_handle),
+            raise ValueError(
+                f"{type(lm).__name__} is fitted by counting, not gradient descent, so this script would only waste time on it. "
+                f"Use `tensorflow_asr train_kenlm_lm` instead, which also writes lm_config.external_config."
             )
 
-    output = file_util.preprocess_paths(output)
-    lm.save_weights(output)
-    logger.info(f"Wrote {target} language model weights to {output}")
+        logger.info(
+            f"Training {type(lm).__name__} ({lm.count_params() / 1e6:.1f}M params) on the LM dataset "
+            f"for {epochs} epochs x {steps_per_epoch:,} steps = {total_steps:,} steps"
+        )
+        pairs = lm_dataset.create(batch_size=global_batch_size)
+        lm.compile(
+            optimizer=build_optimizer(
+                learning_rate=learning_rate,
+                total_steps=total_steps,
+                warmup_steps=warmup_steps,
+                clipnorm=clipnorm,
+                lr_schedule=lr_schedule,
+            ),
+            loss=MaskedSparseCategoricalCrossentropy(),
+            steps_per_execution=spx,
+        )
+        lm.fit(
+            pairs,
+            epochs=epochs,
+            steps_per_epoch=steps_per_epoch,
+            verbose=verbose,
+            callbacks=build_callbacks(modeldir, kaggle_model_handle),
+        )
+
+    # No save here: `ModelCheckpoint` in `build_callbacks` has been writing the weights every epoch,
+    # so a run that is interrupted still leaves a usable model instead of nothing.
+    path = lm_weights_path(modeldir, "external")
+    logger.info(f"Trained {type(lm).__name__} weights are at {path}")
+    return path
 
 
 if __name__ == "__main__":
