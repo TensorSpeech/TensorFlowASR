@@ -684,8 +684,9 @@ class _DecoderConfigStub:
 
 
 class _TokenizerStub:
-    def __init__(self, decoder_config):
+    def __init__(self, decoder_config, blank=BLANK):
         self.decoder_config = decoder_config
+        self.blank = blank  # read by get_initial_tokens on the greedy path of predict_step
 
 
 def _lm_config(**kwargs):
@@ -735,6 +736,85 @@ def test_beam_decoding_kwargs_carries_the_internal_lm_settings():
     model.tokenizer = _TokenizerStub(_DecoderConfigStub(lm_type="lodr", **common))
     model.make_lm(_lm_config(external_config=blob, internal_config=blob))
     assert model.get_beam_decoding_kwargs()["internal_lm"] is model.internal_lm
+
+
+def test_beam_decoding_kwargs_without_lm_drops_every_language_model_argument():
+    """`with_lm=False` is the plain beam predict_step runs beside the fused one: no LM arguments."""
+    model = build_model(4)
+    blob = keras.saving.serialize_keras_object(CountingLanguageModel(log_softmax(0, (LM_POSITIONS, 4, 4))))
+
+    # a full LODR setup -- external LM, internal LM, alpha and beta all attached
+    model.tokenizer = _TokenizerStub(_DecoderConfigStub(beam_width=3, norm_score=False, lm_type="lodr", lm_alpha=0.4, lm_beta=0.2))
+    model.make_lm(_lm_config(external_config=blob, internal_config=blob))
+
+    assert "lm" in model.get_beam_decoding_kwargs(with_lm=True)  # default keeps the language model
+    # with_lm=False strips all of it back to a bare beam, even with everything configured
+    assert model.get_beam_decoding_kwargs(with_lm=False) == {"beam_width": 3, "score_norm": False}
+
+    # beam_width <= 0 is still "no beam search", whatever with_lm asks for
+    model.tokenizer = _TokenizerStub(_DecoderConfigStub(beam_width=0))
+    assert model.get_beam_decoding_kwargs(with_lm=False) == {}
+
+
+def test_predict_step_reports_a_language_model_free_beam_and_a_fused_beam(monkeypatch):
+    """
+    predict_step emits three token columns. `beam_tokens` is always the language-model-free beam;
+    `beam_lm_tokens` is the fused beam when a language model is attached, and is the very same
+    plain-beam result otherwise -- so the fused decode runs only when it can change something.
+    """
+    model = build_model(4)
+    blob = keras.saving.serialize_keras_object(CountingLanguageModel(log_softmax(0, (LM_POSITIONS, 4, 4))))
+
+    greedy = tf.constant([[1, 1]], tf.int32)
+    beam_calls = []
+
+    def fake_recognize(inputs, **kwargs):
+        return schemas.PredictOutput(tokens=greedy, next_tokens=tf.zeros([1, 1], tf.int32))
+
+    def fake_recognize_beam(inputs, **kwargs):
+        beam_calls.append(kwargs)
+        marker = 3 if "lm" in kwargs else 2  # a fused beam is distinguishable from the plain one
+        return schemas.PredictOutput(tokens=tf.constant([[marker]], tf.int32), next_tokens=tf.zeros([1, 1], tf.int32))
+
+    monkeypatch.setattr(model, "recognize", fake_recognize)
+    monkeypatch.setattr(model, "recognize_beam", fake_recognize_beam)
+
+    data = schemas.TrainData(
+        inputs=schemas.TrainInput(
+            inputs=tf.zeros([1, 16000]),
+            inputs_length=tf.constant([16000], tf.int32),
+            predictions=tf.zeros([1, 1], tf.int32),
+            predictions_length=tf.constant([1], tf.int32),
+        ),
+        labels=schemas.TrainLabel(labels=greedy, labels_length=tf.constant([2], tf.int32)),
+    )
+
+    # no beam search: both beam columns mirror greedy and recognize_beam is never called
+    model.tokenizer = _TokenizerStub(_DecoderConfigStub(beam_width=0))
+    out = model.predict_step(data)
+    assert set(out) == {"tokens", "beam_tokens", "beam_lm_tokens", "labels"}
+    assert beam_calls == []
+    assert np.array_equal(out["beam_tokens"].numpy(), greedy.numpy())
+    assert np.array_equal(out["beam_lm_tokens"].numpy(), greedy.numpy())
+
+    # beam search, no language model: one decode, and the fused column reuses the plain beam
+    model.tokenizer = _TokenizerStub(_DecoderConfigStub(beam_width=4, norm_score=True))
+    model.make_lm(_lm_config())
+    beam_calls.clear()
+    out = model.predict_step(data)
+    assert len(beam_calls) == 1 and "lm" not in beam_calls[0]
+    assert out["beam_lm_tokens"] is out["beam_tokens"]  # the very same object, not a second decode
+    assert np.array_equal(out["beam_tokens"].numpy(), [[2]])
+
+    # beam search with a language model: two decodes, plain then fused, and they differ
+    model.tokenizer = _TokenizerStub(_DecoderConfigStub(beam_width=4, norm_score=True, lm_alpha=0.4))
+    model.make_lm(_lm_config(external_config=blob))
+    beam_calls.clear()
+    out = model.predict_step(data)
+    assert len(beam_calls) == 2
+    assert "lm" not in beam_calls[0] and "lm" in beam_calls[1]
+    assert np.array_equal(out["beam_tokens"].numpy(), [[2]])
+    assert np.array_equal(out["beam_lm_tokens"].numpy(), [[3]])
 
 
 def test_make_lm_builds_only_what_is_configured():

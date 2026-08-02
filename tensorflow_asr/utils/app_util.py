@@ -37,23 +37,25 @@ def evaluate_hypotheses(filepath: str):
     Returns
     -------
     dict
-        {"greedy": {wer, cer, mer, wil, wip}, "beam": {wer, cer, mer, wil, wip}}
-        The results are original, NOT multiplied with 100.
+        {"greedy": {wer, cer, mer, wil, wip}, "beam": {...}, "beam_lm": {...}}
+        `beam` is the language-model-free beam and `beam_lm` the fused one; the two are identical
+        when no language model was attached. The results are original, NOT multiplied with 100.
     """
     import pandas as pd  # pylint: disable=import-outside-toplevel
     from tqdm import tqdm  # pylint: disable=import-outside-toplevel
 
     logger.info(f"Reading file {filepath} ...")
-    reference, greedy_hypothesis, beam_hypothesis = [], [], []
+    reference, greedy_hypothesis, beam_hypothesis, beam_lm_hypothesis = [], [], [], []
     with file_util.read_file(filepath) as path:
         with tf.io.gfile.GFile(path, "r") as openfile:
             lines = openfile.read().splitlines()
             lines = lines[1:]  # skip header
             for eachline in tqdm(lines, disable=False):
-                _, groundtruth, greedy, beamsearch = eachline.split("\t")
+                _, groundtruth, greedy, beamsearch, beamsearch_lm = eachline.split("\t")
                 reference.append(groundtruth)
                 greedy_hypothesis.append(greedy)
                 beam_hypothesis.append(beamsearch)
+                beam_lm_hypothesis.append(beamsearch_lm)
 
     logger.info("Evaluating greedy results ...")
     greedy_wordoutput = jiwer.process_words(reference=reference, hypothesis=greedy_hypothesis)
@@ -62,6 +64,10 @@ def evaluate_hypotheses(filepath: str):
     logger.info("Evaluating beamsearch results ...")
     beam_wordoutput = jiwer.process_words(reference=reference, hypothesis=beam_hypothesis)
     beam_charoutput = jiwer.process_characters(reference=reference, hypothesis=beam_hypothesis)
+
+    logger.info("Evaluating beamsearch + language model results ...")
+    beam_lm_wordoutput = jiwer.process_words(reference=reference, hypothesis=beam_lm_hypothesis)
+    beam_lm_charoutput = jiwer.process_characters(reference=reference, hypothesis=beam_lm_hypothesis)
 
     outputs = {
         "greedy": {
@@ -77,6 +83,13 @@ def evaluate_hypotheses(filepath: str):
             "mer": beam_wordoutput.mer,
             "wil": beam_wordoutput.wil,
             "wip": beam_wordoutput.wip,
+        },
+        "beam_lm": {
+            "wer": beam_lm_wordoutput.wer,
+            "cer": beam_lm_charoutput.cer,
+            "mer": beam_lm_wordoutput.mer,
+            "wil": beam_lm_wordoutput.wil,
+            "wip": beam_lm_wordoutput.wip,
         },
     }
     df = pd.DataFrame.from_dict(outputs, orient="index")

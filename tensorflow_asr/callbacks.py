@@ -94,7 +94,7 @@ class PredictLogger(keras.callbacks.Callback):
     def on_predict_begin(self, logs=None):
         self.index = 0
         self.output_file = tf.io.gfile.GFile(self.output_file_path, mode="w")
-        self.output_file.write("\t".join(("PATH", "GROUND_TRUTH", "GREEDY", "BEAM_SEARCH")) + "\n")  # header
+        self.output_file.write("\t".join(("PATH", "GROUND_TRUTH", "GREEDY", "BEAM_SEARCH", "BEAM_SEARCH_LM")) + "\n")  # header
 
     def on_predict_batch_end(self, batch, logs=None):
         if logs is None:
@@ -102,12 +102,16 @@ class PredictLogger(keras.callbacks.Callback):
 
         transcripts = self.model.tokenizer.detokenize(logs.pop("tokens"))
         beam_transcripts = self.model.tokenizer.detokenize(logs.pop("beam_tokens"))
+        # Beam search with the language model fused in; equal to BEAM_SEARCH when none is attached.
+        beam_lm_transcripts = self.model.tokenizer.detokenize(logs.pop("beam_lm_tokens"))
         targets = self.model.tokenizer.detokenize(logs.pop("labels"))
 
-        for i, item in enumerate(zip(targets.numpy(), transcripts.numpy(), beam_transcripts.numpy()), start=self.index):
-            groundtruth, greedy, beam = [x.decode("utf-8") for x in item]
+        for i, item in enumerate(
+            zip(targets.numpy(), transcripts.numpy(), beam_transcripts.numpy(), beam_lm_transcripts.numpy()), start=self.index
+        ):
+            groundtruth, greedy, beam, beam_lm = [x.decode("utf-8") for x in item]
             path = self.test_dataset.entries[i][0]
-            line = "\t".join((path, groundtruth, greedy, beam)) + "\n"
+            line = "\t".join((path, groundtruth, greedy, beam, beam_lm)) + "\n"
             self.output_file.write(line)
             self.index += 1
 

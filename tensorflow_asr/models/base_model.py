@@ -121,19 +121,25 @@ class BaseModel(keras.Model, TensorFlowTrainer):
         logger.info(f"Language models for beam search: external={self.lm}, internal={self.internal_lm}")
         return self.lm
 
-    def get_beam_decoding_kwargs(self) -> dict:
+    def get_beam_decoding_kwargs(self, with_lm: bool = True) -> dict:
         """
         Beam search settings taken from the tokenizer's decoder config.
 
         Returns an empty dict when `beam_width` is not a positive number, which is the default in
         every shipped config. Callers treat that as "no beam search", matching what
         `make_tflite_function` already does with `beam_width=0`.
+
+        `with_lm=False` keeps only the plain beam-search settings (`beam_width`, `score_norm`) and
+        drops every language-model argument. `predict_step` uses it to run a language-model-free
+        beam next to the fused one, so the test report can show what the language model changed.
         """
         decoder_config = getattr(getattr(self, "tokenizer", None), "decoder_config", None)
         beam_width = int(getattr(decoder_config, "beam_width", 0) or 0)
         if beam_width <= 0:
             return {}
         kwargs = {"beam_width": beam_width, "score_norm": bool(getattr(decoder_config, "norm_score", True))}
+        if not with_lm:
+            return kwargs
         if self.lm is not None:
             kwargs.update(lm=self.lm, lm_alpha=float(getattr(decoder_config, "lm_alpha", 0.0) or 0.0))
         # Only sent when asked for, so a plain shallow fusion setup keeps calling `recognize_beam`
@@ -340,13 +346,25 @@ class BaseModel(keras.Model, TensorFlowTrainer):
             previous_decoder_states=self.get_initial_decoder_states(batch_size=batch_size),
         )
         _tokens = self.recognize(inputs=inputs).tokens
-        # `beam_width: 0` (the default in every shipped config) means no beam search, so the beam
-        # column mirrors the greedy one instead of silently doubling the cost of every evaluation.
-        _beam_kwargs = self.get_beam_decoding_kwargs()
-        _beam_tokens = self.recognize_beam(inputs=inputs, **_beam_kwargs).tokens if _beam_kwargs else _tokens
+        # Two beam columns: `beam_tokens` is always the language-model-free beam, `beam_lm_tokens`
+        # is the fused one. Reporting both is what lets a test read off how much the LM moved WER.
+        #
+        # `beam_width: 0` (the default in every shipped config) means no beam search, so both beam
+        # columns mirror the greedy one instead of silently doubling the cost of every evaluation.
+        _beam_kwargs = self.get_beam_decoding_kwargs(with_lm=False)
+        _beam_lm_kwargs = self.get_beam_decoding_kwargs(with_lm=True)
+        if not _beam_kwargs:
+            _beam_tokens = _beam_lm_tokens = _tokens
+        else:
+            _beam_tokens = self.recognize_beam(inputs=inputs, **_beam_kwargs).tokens
+            # The fused column is a second decode only when a language model is attached, which is
+            # exactly when `_beam_lm_kwargs` carries the `lm` key. Without one the two decodes are
+            # identical, so the plain result is reused rather than run again.
+            _beam_lm_tokens = self.recognize_beam(inputs=inputs, **_beam_lm_kwargs).tokens if "lm" in _beam_lm_kwargs else _beam_tokens
         return {
             "tokens": _tokens,
             "beam_tokens": _beam_tokens,
+            "beam_lm_tokens": _beam_lm_tokens,
             "labels": y_true.labels,
         }
 
