@@ -24,6 +24,7 @@ from tensorflow_asr import keras, tf
 from tensorflow_asr.configs import DatasetConfig, DecoderConfig
 from tensorflow_asr.datasets import LMDataset, get_lm
 from tensorflow_asr.models.lm.lstm_language_model import LSTMLanguageModel
+from tensorflow_asr.scripts import train_kenlm
 from tensorflow_asr.scripts.train_external_lm import (
     LR_SCHEDULES,
     MaskedSparseCategoricalCrossentropy,
@@ -243,11 +244,48 @@ def test_each_trainer_targets_one_lm_config_key():
     The `--target` flag is gone: which language model gets built is now the script you run. The
     external key has two trainers because a neural LM and an n-gram are alternatives for it.
     """
-    from tensorflow_asr.scripts import train_external_lm, train_internal_lm, train_kenlm_lm
+    from tensorflow_asr.scripts import train_external_lm, train_internal_lm
 
     assert "external_config" in inspect.getsource(train_external_lm.main)
-    assert "external_config" in inspect.getsource(train_kenlm_lm.main)
+    assert "external_config" in inspect.getsource(train_kenlm.main)
     assert "internal_config" in inspect.getsource(train_internal_lm.main)
+
+
+def test_each_trainer_reads_its_own_dataset():
+    """
+    Transcripts and a large corpus cannot share one `data_paths`, so each trainer reads its own:
+    the internal LM the transcripts it must approximate, the two external trainers a bigger corpus.
+    """
+    from tensorflow_asr.scripts import train_external_lm, train_internal_lm
+
+    assert "lm_dataset_config.internal_dataset_config" in inspect.getsource(train_internal_lm.main)
+    assert "lm_dataset_config.external_dataset_config" in inspect.getsource(train_external_lm.main)
+    assert "lm_dataset_config.external_dataset_config" in inspect.getsource(train_kenlm.main)
+
+
+def test_lm_data_config_splits_internal_and_external():
+    """`lm_dataset_config` holds two independent `DatasetConfig`s, and is empty-safe."""
+    from tensorflow_asr.configs import Config
+
+    config = Config(
+        {
+            "data_config": {
+                "lm_dataset_config": {
+                    "internal_dataset_config": {"stage": "train", "data_paths": ["/x/transcripts.tsv"]},
+                    "external_dataset_config": {"stage": "train", "data_paths": ["/x/corpus.txt.gz"], "max_length": 256},
+                }
+            }
+        },
+        training=False,
+    )
+    lm = config.data_config.lm_dataset_config
+    assert lm.internal_dataset_config.data_paths == ["/x/transcripts.tsv"]
+    assert lm.external_dataset_config.data_paths == ["/x/corpus.txt.gz"]
+    assert lm.external_dataset_config.max_length == 256
+
+    empty = Config({"data_config": {}}, training=False).data_config.lm_dataset_config
+    assert empty.internal_dataset_config.data_paths is None
+    assert empty.external_dataset_config.data_paths is None
 
 
 # --------------------------------------------------------------------------------------------
@@ -837,9 +875,7 @@ def test_create_arpa_overwrites_the_token_ids_on_request(transcripts, stub_lmplz
     transcripts.create_arpa(arpa_path=str(tmp_path / "b.arpa"), text_path=str(text), order=2, lmplz=stub_lmplz)
     assert text.read_text() == "1 2 3\n", "the default must still reuse whatever is there"
 
-    transcripts.create_arpa(
-        arpa_path=str(tmp_path / "c.arpa"), text_path=str(text), order=2, lmplz=stub_lmplz, overwrite_text=True
-    )
+    transcripts.create_arpa(arpa_path=str(tmp_path / "c.arpa"), text_path=str(text), order=2, lmplz=stub_lmplz, overwrite_text=True)
     rebuilt = text.read_text()
     assert rebuilt != "1 2 3\n", "overwrite_text must re-tokenise rather than reuse"
     assert len(rebuilt.strip().split("\n")) == len(LINES)

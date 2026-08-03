@@ -53,28 +53,31 @@ extra_args = [
   # "--vocabsize=1000",
 ]
 
-# --- Which language model -------------------------------------------------
-# "internal" -> lm_config.internal_config, the bigram LODR subtracts. Fitted by counting
-#               over the ASR transcripts, so epochs/bs/learning_rate/steps_per_epoch do nothing.
-target          = "internal"
-output_path     = "/kaggle/working/internal_lm.weights.h5"
-steps_per_epoch = 1 # unused by the n-gram path, but the variable has no default
-
-# "external" -> lm_config.external_config, the LM fused in. Wants a big corpus, which you point
-# at in the config's data_config.lm_dataset_config -- its data_paths (e.g. the LibriSpeech LM
-# corpus librispeech-lm-norm.txt.gz), max_length and max_lines. These are dataset settings and no
-# longer terraform variables.
-# target      = "external"
-# output_path = "/kaggle/working/lm.weights.h5"
-# bs          = 128
-# epochs      = 1
+# --- Which trainer to run -------------------------------------------------
+# The subcommand picks which language model is built. Each reads its own dataset from the config's
+# data_config.lm_dataset_config -- its data_paths, max_length and max_lines are dataset settings
+# there, not terraform variables.
 #
-# steps_per_epoch has no default on purpose -- train_lm will not read the corpus to guess it.
-# One full pass is ceil(sequences / (bs x replicas)):
-#   `wc -l` the corpus (or `zcat corpus.gz | wc -l` if gzipped) for the sequence count,
-#   replicas is 8 on a TPU and 1 everywhere else.
-# With lm_dataset_config.max_lines = 1000000 and bs = 128 on one GPU that is ceil(1000000/128) = 7813:
-# steps_per_epoch = 7813
+# train_internal_lm -> lm_config.internal_config, the bigram LODR subtracts. Counts the ASR
+#                      transcripts (internal_dataset_config), so bs/epochs/learning_rate do nothing.
+trainer = "train_internal_lm"
+
+# train_external_lm -> lm_config.external_config, the LM fused in. Gradient descent on a big corpus
+# (external_dataset_config, e.g. librispeech-lm-norm.txt.gz):
+# trainer         = "train_external_lm"
+# bs              = 128
+# epochs          = 1
+# lr_schedule     = "constant"   # or "cosine", if epochs x steps_per_epoch is a budget you finish
+# steps_per_epoch = 7813         # REQUIRED for this trainer; it will not read the corpus to guess.
+#   One full pass is ceil(sequences / (bs x replicas)): `wc -l` the corpus (or `zcat corpus.gz |
+#   wc -l`) for the count, replicas is 8 on a TPU and 1 everywhere else. With
+#   lm_dataset_config.external_dataset_config.max_lines = 1000000 and bs = 128 on one GPU that is
+#   ceil(1000000 / 128) = 7813.
+
+# train_kenlm -> a KenLM n-gram, the cheap alternative external LM. Needs the kenlm/lmplz binary.
+# trainer   = "train_kenlm"
+# max_lines = 1000000        # cap the corpus; null reads all
+# prune     = [0, 0, 1]      # KenLM pruning per order; [] prunes nothing
 
 # --- What apply does after pushing ---------------------------------------
 # Default is false: push and return, then watch it with `terraform output status_command`.

@@ -253,8 +253,9 @@ def main(
 
     The external LM is the one **fused in**, weighted by `decoder_config.lm_alpha`. Its whole value
     is having seen far more text than the ASR transcripts, so point
-    `data_config.lm_dataset_config.data_paths` at a large corpus. The published setups use the
-    LibriSpeech LM corpus, ~40M lines and 800M words, against the ~9M words of transcripts::
+    `data_config.lm_dataset_config.external_dataset_config.data_paths` at a large corpus. The
+    published setups use the LibriSpeech LM corpus, ~40M lines and 800M words, against the ~9M words
+    of transcripts::
 
         wget https://www.openslr.org/resources/11/librispeech-lm-norm.txt.gz
 
@@ -265,9 +266,9 @@ def main(
     a ratio of counts, so it has its own script, `train_kenlm_lm`, which also targets
     `external_config`. The two are alternatives; pick one per config.
 
-    Everything about the text comes from `data_config.lm_dataset_config`: `data_paths`,
-    `max_length` (tokens per sequence, and what TPU pads to) and `max_lines` (for a quick run over a
-    huge corpus). There is no CLI override.
+    Everything about the text comes from `data_config.lm_dataset_config.external_dataset_config`:
+    `data_paths`, `max_length` (tokens per sequence, and what TPU pads to) and `max_lines` (for a
+    quick run over a huge corpus). There is no CLI override.
 
     Parameters
     ----------
@@ -315,11 +316,11 @@ def main(
     tokenizer.make()
     logger.info(f"Vocabulary size {tokenizer.num_classes}, blank index {tokenizer.blank}")
 
-    lm_dataset_config = config.data_config.lm_dataset_config
+    lm_dataset_config = config.data_config.lm_dataset_config.external_dataset_config
     if not lm_dataset_config.data_paths:
         raise ValueError(
-            "No LM training data. Point `data_config.lm_dataset_config.data_paths` at a .txt/.txt.gz corpus -- "
-            "the whole point of an external LM is seeing more text than the ASR transcripts."
+            "No LM training data. Point `data_config.lm_dataset_config.external_dataset_config.data_paths` at a "
+            ".txt/.txt.gz corpus -- the whole point of an external LM is seeing more text than the ASR transcripts."
         )
     lm_dataset = datasets.get_lm(tokenizer=tokenizer, dataset_config=lm_dataset_config)
 

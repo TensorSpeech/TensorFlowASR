@@ -114,6 +114,30 @@ class LanguageModelConfig:
             setattr(self, k, v)
 
 
+class LMDataConfig:
+    """
+    The text each language model is trained on, kept as two datasets because they need different data.
+
+    | Key                       | Trained by                            | Data                            |
+    | ------------------------- | ------------------------------------- | ------------------------------- |
+    | `internal_dataset_config` | `train_internal_lm`                   | ASR transcript `.tsv`           |
+    | `external_dataset_config` | `train_external_lm`, `train_kenlm_lm` | a large `.txt`/`.txt.gz` corpus |
+
+    They cannot share one `data_paths`. The internal LM must be fitted on the transducer's own
+    training transcripts -- it approximates the LM the transducer picked up from exactly that text,
+    which is what LODR subtracts -- whereas the external LM's whole value is a corpus far larger than
+    those transcripts. Each is an ordinary `DatasetConfig` and feeds `datasets.LMDataset`.
+    """
+
+    def __init__(self, config: dict = None):
+        if not config:
+            config = {}
+        self.internal_dataset_config = DatasetConfig(config.pop("internal_dataset_config", {}))
+        self.external_dataset_config = DatasetConfig(config.pop("external_dataset_config", {}))
+        for k, v in config.items():
+            setattr(self, k, v)
+
+
 class DataConfig:
     def __init__(self, config: dict = None):
         if not config:
@@ -124,10 +148,10 @@ class DataConfig:
         _test_dataset_config = config.pop("test_dataset_config", None)
         if _test_dataset_config:
             self.test_dataset_configs.append(_test_dataset_config)
-        # The text `scripts/train_lm.py` trains a language model on. Separate from the ASR datasets
-        # because its `data_paths` may be ASR transcript `.tsv` (for the internal LM) or a large
-        # `.txt`/`.txt.gz` corpus (for the external LM), or a mix -- see `datasets.LMDataset`.
-        self.lm_dataset_config = DatasetConfig(config.pop("lm_dataset_config", {}))
+        # The text the language model scripts train on -- one dataset for the internal LM
+        # (`train_internal_lm`) and one for the external LM (`train_external_lm`, `train_kenlm_lm`),
+        # since transcripts and a large corpus cannot share one `data_paths`. See `LMDataConfig`.
+        self.lm_dataset_config = LMDataConfig(config.pop("lm_dataset_config", {}))
 
 
 class LearningConfig:

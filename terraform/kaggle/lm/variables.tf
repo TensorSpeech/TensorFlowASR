@@ -181,32 +181,29 @@ variable "kaggle_model_handle" {
 }
 
 # ---------------------------------------------------------------------------
-# train_lm arguments
+# trainer arguments
 # ---------------------------------------------------------------------------
 
-variable "target" {
+variable "trainer" {
   description = <<-EOT
-    Which language model to train.
+    Which language model trainer to run. All three write under <modeldir>/lm, and each reads its
+    own dataset from the config's data_config.lm_dataset_config:
 
-    "internal" fits lm_config.internal_config, the low-order LM that LODR subtracts. Point
-    data_config.lm_dataset_config.data_paths at the ASR training transcripts (.tsv).
-
-    "external" fits lm_config.external_config, the LM fused in. Point
-    data_config.lm_dataset_config.data_paths at a large .txt/.txt.gz corpus.
+      train_internal_lm -- fits lm_config.internal_config by counting the ASR transcripts
+                           (internal_dataset_config, .tsv). The low-order LM LODR subtracts.
+                           Ignores bs/epochs/learning_rate.
+      train_external_lm -- fits lm_config.external_config by gradient descent on a large corpus
+                           (external_dataset_config, .txt/.txt.gz). The LM fused in.
+      train_kenlm       -- builds a KenLM n-gram over the same external corpus, an alternative
+                           external LM. Needs the kenlm/lmplz binary; ignores bs/epochs.
   EOT
   type        = string
-  default     = "internal"
+  default     = "train_external_lm"
 
   validation {
-    condition     = contains(["external", "internal"], var.target)
-    error_message = "target must be external or internal."
+    condition     = contains(["train_external_lm", "train_internal_lm", "train_kenlm"], var.trainer)
+    error_message = "trainer must be train_external_lm, train_internal_lm or train_kenlm."
   }
-}
-
-variable "output_path" {
-  description = "Where the notebook writes the weights. Keep it under /kaggle/working so it is collected as output."
-  type        = string
-  default     = "/kaggle/working/lm.weights.h5"
 }
 
 variable "bs" {
@@ -228,28 +225,59 @@ variable "epochs" {
 
 variable "steps_per_epoch" {
   description = <<-EOT
-    Batches per epoch. Required: `train_lm` will not guess it, because guessing means reading the
-    whole corpus before training starts.
+    Batches per epoch. Required for `train_external_lm` (a main.tf precondition enforces it) and
+    ignored by the counting trainers -- `train_external_lm` will not guess it, because guessing
+    means reading the whole corpus before training starts.
 
     For one epoch to be one full pass, use ceil(sequences / (bs x replicas)) -- `wc -l` on the
     corpus gives the sequence count, and replicas is 8 on a TPU, 1 otherwise. A shorter epoch is
     often better on a large corpus: the progress bar shows the running mean of the loss within an
     epoch, so a very long one stops looking like it is moving.
-
-    Ignored by the n-gram models, which fit by counting rather than gradient descent.
   EOT
   type        = number
+  default     = null
 
   validation {
-    condition     = var.steps_per_epoch >= 1
+    condition     = var.steps_per_epoch == null || var.steps_per_epoch >= 1
     error_message = "steps_per_epoch must be at least 1."
   }
 }
 
 variable "learning_rate" {
-  description = "Adam learning rate."
+  description = "train_external_lm only. Adam learning rate."
   type        = number
   default     = 0.001
+}
+
+variable "lr_schedule" {
+  description = <<-EOT
+    train_external_lm only. "constant" holds learning_rate; "cosine" warms up then decays to 0 over
+    steps_per_epoch x epochs. Cosine needs a step budget you will actually run to completion -- a
+    budget far larger than the run gives you constant-with-warmup and none of the anneal.
+  EOT
+  type        = string
+  default     = "constant"
+
+  validation {
+    condition     = contains(["constant", "cosine"], var.lr_schedule)
+    error_message = "lr_schedule must be constant or cosine."
+  }
+}
+
+variable "max_lines" {
+  description = "train_kenlm only. Cap the corpus at this many lines. null reads the whole corpus."
+  type        = number
+  default     = null
+}
+
+variable "prune" {
+  description = <<-EOT
+    train_kenlm only. KenLM pruning thresholds, one per n-gram order, e.g. [0, 0, 1] keeps all
+    unigrams and bigrams and drops trigrams seen once. Empty prunes nothing. Other KenLM knobs
+    (--arpa, --lmplz, --lmplz-args) go through extra_args.
+  EOT
+  type        = list(number)
+  default     = []
 }
 
 variable "device_type" {

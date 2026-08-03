@@ -45,9 +45,9 @@ def main(
 
     **Fit this on the ASR training transcripts**, and nothing else. What it approximates is the
     internal LM the transducer picked up from exactly that text, so point
-    `data_config.lm_dataset_config.data_paths` at the transcript `.tsv` files. Fitting it on
-    target-domain text instead would make the correction subtract the very knowledge fusion is
-    adding.
+    `data_config.lm_dataset_config.internal_dataset_config.data_paths` at the transcript `.tsv`
+    files. Fitting it on target-domain text instead would make the correction subtract the very
+    knowledge fusion is adding.
 
     There is no gradient descent here and no flags for it. A `BigramLanguageModel`'s maximum
     likelihood estimate is a ratio of counts, exact and available in a single pass, so `--epochs`,
@@ -73,11 +73,11 @@ def main(
     tokenizer.make()
     logger.info(f"Vocabulary size {tokenizer.num_classes}, blank index {tokenizer.blank}")
 
-    lm_dataset_config = config.data_config.lm_dataset_config
+    lm_dataset_config = config.data_config.lm_dataset_config.internal_dataset_config
     if not lm_dataset_config.data_paths:
         raise ValueError(
-            "No LM training data. Point `data_config.lm_dataset_config.data_paths` at the ASR transcript .tsv files -- "
-            "the internal LM must be fitted on the text the transducer itself trained on."
+            "No LM training data. Point `data_config.lm_dataset_config.internal_dataset_config.data_paths` at the ASR "
+            "transcript .tsv files -- the internal LM must be fitted on the text the transducer itself trained on."
         )
     lm_dataset = datasets.get_lm(tokenizer=tokenizer, dataset_config=lm_dataset_config)
 
@@ -89,7 +89,7 @@ def main(
             f"LODR wants a cheap low-order n-gram; use `BigramLanguageModel` for lm_config.internal_config."
         )
 
-    logger.info("Counting n-grams over the LM dataset (data_config.lm_dataset_config)")
+    logger.info("Counting n-grams over the LM dataset (data_config.lm_dataset_config.internal_dataset_config)")
     counts = lm.fit_counts(lm_dataset.token_generator())
     # What a counting fit reports depends on how it stores the result. A bigram returns its raw
     # `[V, V]` count matrix, which is worth describing as a table; anything sparser returns a dict of

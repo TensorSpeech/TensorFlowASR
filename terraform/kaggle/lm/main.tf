@@ -36,10 +36,27 @@ resource "local_file" "notebook" {
       error_message = "device_type=\"tpu\" needs a Tpu* accelerator (accelerator = \"TpuV5E8\"), and a Tpu* accelerator needs device_type = \"tpu\" (or \"cpu\" to deliberately ignore it)."
     }
     precondition {
-      condition     = startswith(var.output_path, "/kaggle/working")
-      error_message = "output_path must be under /kaggle/working, otherwise Kaggle does not keep it and `kaggle kernels output` cannot fetch the weights."
+      # The trainers write to <modeldir>/lm; only what is under /kaggle/working is kept by Kaggle
+      # and fetchable with `kaggle kernels output`.
+      condition     = startswith(var.modeldir, "/kaggle/working")
+      error_message = "modeldir must be under /kaggle/working, otherwise Kaggle does not keep <modeldir>/lm and the weights cannot be downloaded."
+    }
+    precondition {
+      # Only the gradient-descent trainer needs a step budget; the counting trainers ignore it.
+      condition     = var.trainer != "train_external_lm" || var.steps_per_epoch != null
+      error_message = "train_external_lm needs steps_per_epoch: it will not read the whole corpus to guess it. Use ceil(sequences / (bs x replicas))."
     }
   }
+}
+
+# The whole run as a readable, runnable bash script -- what the notebook cell writes out and
+# executes. Kept here too so it can be inspected or run by hand outside the notebook.
+resource "local_file" "run_sh" {
+  filename = "${local.build_dir}/run.sh"
+  content  = local.run_sh
+  # 0700, not 0644: it is executable, and with `kaggle_model_handle` set it carries the API token,
+  # the same reason build/kaggle.json is owner-only.
+  file_permission = "0700"
 }
 
 resource "local_file" "metadata" {

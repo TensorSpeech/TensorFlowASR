@@ -117,18 +117,18 @@ def main(
         )
     # The ARPA's order has to match the model's, since the config value is what survives into the h5
     # reload and drives how many times the backoff walk unrolls.
-    order = getattr(lm, "order", 4)
+    order = getattr(lm, "order", 6)
 
     directory = lm_dir(modeldir)
     if arpa:
         arpa_path = file_util.preprocess_paths(arpa)
         logger.info(f"Converting the existing ARPA at {arpa_path}; the corpus is not read")
     else:
-        lm_dataset_config = config.data_config.lm_dataset_config
+        lm_dataset_config = config.data_config.lm_dataset_config.external_dataset_config
         if not lm_dataset_config.data_paths:
             raise ValueError(
-                "No LM training data. Point `data_config.lm_dataset_config.data_paths` at a .txt/.txt.gz corpus, "
-                "or pass --arpa=<path> to convert an n-gram you already built."
+                "No LM training data. Point `data_config.lm_dataset_config.external_dataset_config.data_paths` at a "
+                ".txt/.txt.gz corpus, or pass --arpa=<path> to convert an n-gram you already built."
             )
         lm_dataset = datasets.get_lm(tokenizer=tokenizer, dataset_config=lm_dataset_config)
         arpa_path = lm_dataset.create_arpa(

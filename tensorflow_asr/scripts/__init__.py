@@ -1,4 +1,4 @@
-from tensorflow_asr.scripts import save, test, tflite, train, train_external_lm, train_internal_lm, train_kenlm_lm
+from tensorflow_asr.scripts import save, test, tflite, train, train_external_lm, train_internal_lm, train_kenlm
 from tensorflow_asr.scripts.utils import create_datasets_metadata, create_mls_trans, create_tfrecords
 from tensorflow_asr.utils import cli_util
 
@@ -9,7 +9,7 @@ def main():
             "train": train.main,
             "train_external_lm": train_external_lm.main,
             "train_internal_lm": train_internal_lm.main,
-            "train_kenlm_lm": train_kenlm_lm.main,
+            "train_kenlm": train_kenlm.main,
             "test": test.main,
             "tflite": tflite.main,
             "save": save.main,

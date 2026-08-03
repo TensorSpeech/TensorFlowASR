@@ -720,7 +720,7 @@ class NGramLanguageModel(LanguageModel):
         self,
         vocab_size: int,
         blank: int = 0,
-        order: int = 4,
+        order: int = 6,
         max_arcs: int = 20_000_000,
         max_states: int = 10_000_000,
         discount: float = 0.75,

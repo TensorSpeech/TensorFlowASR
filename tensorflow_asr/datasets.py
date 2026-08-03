@@ -839,7 +839,7 @@ class LMDataset(AbstractDataset):
         - `max_length` truncates each sequence, and is also the padded length when set -- a fixed
           shape, which is what XLA/TPU needs. Left unset (0), batches pad to their own longest
           sequence, which is cheaper on a GPU. Pinning the shape for a TPU is therefore just
-          `max_length` plus `drop_remainder` in `lm_dataset_config`, the same way the ASR datasets
+          `max_length` plus `drop_remainder` in the LM dataset config, the same way the ASR datasets
           pin from metadata.
         - `shuffle` with `buffer_size` shuffles single sequences before batching, so the model does
           not spend thousands of consecutive steps inside one slice of a corpus laid out by document.

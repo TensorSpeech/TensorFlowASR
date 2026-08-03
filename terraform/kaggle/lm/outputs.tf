@@ -14,8 +14,12 @@ output "notebook_path" {
 }
 
 output "weights_path_in_kernel" {
-  description = "Where the notebook writes the weights inside the Kaggle machine."
-  value       = var.output_path
+  description = "Where the trainer writes the language model inside the Kaggle machine."
+  value = (
+    var.trainer == "train_internal_lm" ? "${var.modeldir}/lm/internal.weights.h5" :
+    var.trainer == "train_kenlm" ? "${var.modeldir}/lm/kenlm.weights.h5 (plus lm.arpa)" :
+    "${var.modeldir}/lm/external.weights.h5"
+  )
 }
 
 output "local_output_dir" {
@@ -34,7 +38,7 @@ output "logs_command" {
 }
 
 output "test_command" {
-  description = "How to use the downloaded weights, once they are pulled down."
+  description = "How to use the downloaded language model, once it is pulled down."
   value = join(" ", [
     "tensorflow_asr test",
     "--config-path=<config.yml.j2>",
@@ -42,6 +46,10 @@ output "test_command" {
     "--datadir=<datadir>",
     "--outputdir=<outputdir>",
     "--h5=<transducer weights.h5>",
-    var.target == "external" ? "--lm-h5=${local.output_dir}/${basename(var.output_path)}" : "--internal-lm-h5=${local.output_dir}/${basename(var.output_path)}",
+    # `kaggle kernels output` mirrors /kaggle/working, so <modeldir>/lm lands under output_dir at
+    # the same path minus the /kaggle/working prefix.
+    var.trainer == "train_internal_lm" ?
+    "--internal-lm-h5=${local.output_dir}/${trimprefix(var.modeldir, "/kaggle/working/")}/lm/internal.weights.h5" :
+    "--lm-h5=${local.output_dir}/${trimprefix(var.modeldir, "/kaggle/working/")}/lm/${var.trainer == "train_kenlm" ? "kenlm" : "external"}.weights.h5",
   ])
 }

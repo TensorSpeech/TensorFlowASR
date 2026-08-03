@@ -1,9 +1,13 @@
 # Train a language model on Kaggle
 
 Terraform that generates a Kaggle notebook, pushes it, waits for it to run, and downloads the
-weights. The notebook runs [`train_lm`](../../../tensorflow_asr/scripts/train_lm.py), which fits
-the language models beam search fuses in. See [decoders.md](../../../docs/decoders.md) for what
-those models do and [training.md](../../../docs/tutorials/training.md) for the plain CLI version.
+weights. The notebook is a single cell that writes `run.sh` (rendered by Terraform, also saved to
+`build/run.sh`) and runs it: clone, install, then one of the three language-model trainers picked
+by `trainer` -- [`train_internal_lm`](../../../tensorflow_asr/scripts/train_internal_lm.py),
+[`train_external_lm`](../../../tensorflow_asr/scripts/train_external_lm.py) or
+[`train_kenlm`](../../../tensorflow_asr/scripts/train_kenlm.py). These fit the language models beam
+search fuses in. See [decoders.md](../../../docs/decoders.md) for what those models do and
+[training.md](../../../docs/tutorials/training.md) for the plain CLI version.
 
 ## What this is, honestly
 
@@ -57,8 +61,8 @@ session, and Kaggle kills the kernel rather than saving what it had. Start with
 weights are usable, and scale up from there.
 
 **A run that is cut short loses everything by default.** `/kaggle/working` starts empty on every
-run, and `train_lm` only writes the weights once `fit` returns — so a kernel killed at the session
-cap leaves nothing behind. Set `kaggle_model_handle` and the training state is checked into a
+run, and `train_external_lm` only writes the weights once `fit` returns — so a kernel killed at the
+session cap leaves nothing behind. Set `kaggle_model_handle` and the training state is checked into a
 Kaggle model after each epoch and pulled back at the start of the next run, so re-pushing continues
 rather than restarts.
 
@@ -83,8 +87,9 @@ There is no API for it at all: the kernel push request carries 21 fields and non
 whole `kaggle` package contains no occurrence of the string, and the generated SDK exposes 22
 services with no secrets RPC among them. Kaggle's own UI drives an internal endpoint that
 authenticates with a browser session rather than an API token. To switch, replace the two
-`os.environ[...]` lines in `templates/train_lm.py.tftpl` with `UserSecretsClient().get_secret(...)`
-and drop `kaggle_username`/`kaggle_key` from `notebook.tf`.
+`export KAGGLE_...` lines in `templates/run.sh.tftpl` with values fetched from the secret (in a
+Python step, `UserSecretsClient().get_secret(...)`) and drop `kaggle_username`/`kaggle_key` from
+`notebook.tf`.
 
 The same cell sets `DISABLE_KAGGLE_CACHE=1`. Without it, `model_download` goes through the notebook
 data proxy, which answers a model that does not exist yet — every first run — with a generic
@@ -121,11 +126,11 @@ export TF_VAR_kaggle_key=...
 terraform.tfvars
       |
       v
-notebook.tf     renders templates/train_lm.py.tftpl, splits it on `# %%`,
-                builds the .ipynb with jsonencode
+notebook.tf     renders templates/run.sh.tftpl (the whole run) and wraps it in
+                templates/launch.py.tftpl as a one-cell .ipynb (jsonencode)
       |
       v
-build/train_lm.ipynb + build/kernel-metadata.json
+build/run.sh + build/train_lm.ipynb + build/kernel-metadata.json
       |
       v
 scripts/push_and_wait.sh     kaggle kernels push -> poll status -> kernels output
@@ -237,8 +242,8 @@ at. Benchmark a few hundred steps against the P100 before committing — the GPU
 ## Things that will bite you
 
 **The branch has to be pushed, and it cannot be `main`.** The notebook clones over the network, so
-it sees GitHub, not your working tree. `train_lm` and `tensorflow_asr/models/lm` are not on `main`
-yet — `repo_ref` defaults to `feat/beamsearch` for that reason. Commit and push before applying, or
+it sees GitHub, not your working tree. The LM trainers and `tensorflow_asr/models/lm` are not on
+`main` yet — `repo_ref` defaults to `feat/beamsearch` for that reason. Commit and push before applying, or
 the run fails at the train step with a missing command.
 
 **The config is jinja2 and its imports resolve against `repodir`.** `load_yaml` builds a
@@ -252,18 +257,18 @@ collected as notebook output, so cloning there would drag the whole repository i
 `kaggle kernels output` download.
 
 **`extra_args` is where jinja variables go.** The example configs interpolate `{{ vocabprefix }}`,
-`{{ vocabsize }}` and friends; `train_lm` forwards unknown CLI flags into the jinja context. An
+`{{ vocabsize }}` and friends; the trainers forward unknown CLI flags into the jinja context. An
 undefined jinja variable renders as an empty string instead of failing, so a forgotten one usually
 surfaces as a path with a hole in it rather than an error.
 
-**Installing replaces the image's TensorFlow** and takes a while. The notebook bootstraps `uv`
-and runs `uv pip install --system`, which resolves the same dependencies as pip but much faster —
-and `pyproject.toml` pins `tensorflow~=2.19.0`, so a differing image version gets replaced.
+**Installing replaces the image's TensorFlow** and takes a while. `run.sh` bootstraps `uv` and runs
+`uv pip install --system`, which resolves the same dependencies as pip but much faster — and
+`pyproject.toml` pins `tensorflow~=2.19.0`, so a differing image version gets replaced.
 
 **The accelerator picks the extra.** An `Nvidia*` ID installs `-e .[cuda]`, which is what pulls
 `tensorflow[and-cuda]` and the twelve nvidia wheels; a `Tpu*` ID runs `scripts/install_tpu.sh`
-instead. Plain `tensorflow` on a GPU box runs fine, sees no device, and trains on the CPU — so the
-notebook checks `tf.config.list_physical_devices("GPU")` right after installing and stops there if
+instead. Plain `tensorflow` on a GPU box runs fine, sees no device, and trains on the CPU — so
+`run.sh` checks `tf.config.list_physical_devices("GPU")` right after installing and stops there if
 `device_type` is `gpu` and nothing showed up.
 
 Terraform builds the target as `.[cuda]` rather than passing `--extra cuda`: uv rejects `--extra`
@@ -273,20 +278,22 @@ Note `uv pip install` reads `pyproject.toml`, **not `uv.lock`**. Only `uv sync` 
 that builds a virtualenv and re-downloads TensorFlow every session — a poor trade inside a
 time-boxed notebook. So the versions here are the pins, not the locked resolution.
 
-**The training text is a dataset setting, not a flag.** Point
-`data_config.lm_dataset_config.data_paths` at ASR transcript `.tsv` for `target = "internal"`, or a
-large `.txt`/`.txt.gz` corpus for `target = "external"`; `max_length` and `max_lines` live on the
-same config block. `train_lm` reads it all from there.
+**The training text is a dataset setting, not a flag, and each trainer reads its own.** In the
+config's `data_config.lm_dataset_config`, point `internal_dataset_config.data_paths` at ASR
+transcript `.tsv` (for `train_internal_lm`) and `external_dataset_config.data_paths` at a large
+`.txt`/`.txt.gz` corpus (for `train_external_lm` and `train_kenlm`); `max_length` and `max_lines`
+live on those same blocks. The trainer reads whichever one belongs to it.
 
 ## Files
 
 | File | What it does |
 | --- | --- |
 | `variables.tf` | every knob, with the constraints as `validation` blocks |
-| `notebook.tf` | renders the Python template and assembles the `.ipynb` |
-| `main.tf` | writes `build/`, owns push and destroy |
+| `notebook.tf` | renders `run.sh`, wraps it in a one-cell `.ipynb` |
+| `main.tf` | writes `build/` (incl. `run.sh`), owns push and destroy |
 | `outputs.tf` | kernel URL and ready-made CLI commands |
-| `templates/train_lm.py.tftpl` | the notebook source, cells split on `# %%` |
+| `templates/run.sh.tftpl` | the whole run: clone, install, train |
+| `templates/launch.py.tftpl` | the one notebook cell that runs `run.sh` |
 | `scripts/push_and_wait.sh` | push, poll, download |
 | `scripts/delete.sh` | `terraform destroy` |
 | `scripts/write_credentials.sh` | writes `build/kaggle.json` from the provisioner environment |

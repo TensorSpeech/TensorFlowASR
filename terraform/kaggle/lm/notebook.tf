@@ -3,89 +3,93 @@ locals {
   # notebook output, so a clone there would be dragged into every `kaggle kernels output`.
   repo_dir = "/tmp/TensorFlowASR"
 
-  # Flags that only appear when they are set. The dataset itself -- its data_paths, max_length and
-  # max_lines -- lives in the config's data_config.lm_dataset_config, not in flags.
-  optional_flags = concat(
-    var.spx > 1 ? ["--spx=${var.spx}"] : [],
-    var.kaggle_model_handle != "" ? ["--kaggle-model-handle=${var.kaggle_model_handle}"] : [],
-    # Only meaningful on a TPU, and train_lm ignores them otherwise, but passing them anyway would
-    # put misleading flags in the notebook for a GPU run.
-    var.device_type == "tpu" && var.tpu_address != "" ? ["--tpu-address=${var.tpu_address}"] : [],
-    var.device_type == "tpu" && var.tpu_vm ? ["--tpu-vm=True"] : [],
-  )
-
   # The accelerator decides the extra. `cuda` pulls tensorflow[and-cuda] with the nvidia wheels;
-  # plain `tensorflow` cannot see a GPU.
-  #
-  # There is no TPU extra, in pyproject or here, and there cannot be: `tensorflow` is a base
-  # dependency and `tensorflow-tpu` ships its own `tensorflow` distribution, so an extra adding it
-  # installs the pair and whichever lands last wins. The TPU build is swapped in afterwards by
-  # `scripts/install_tpu.sh` -- see the install cell.
-  #
-  # Bracket syntax rather than `--extra cuda`: uv rejects `--extra` alongside `-e .` with
-  # "Requesting extras requires a pyproject.toml ... use <dir>[extra] syntax instead".
+  # plain `tensorflow` cannot see a GPU. There is no TPU extra -- `scripts/install_tpu.sh` swaps
+  # the build in afterwards (see run.sh). Bracket syntax rather than `--extra cuda`: uv rejects
+  # `--extra` alongside `-e .`.
   install_extras = compact([local.use_gpu ? "cuda" : ""])
   install_target = length(local.install_extras) > 0 ? ".[${join(",", local.install_extras)}]" : "."
 
-  notebook_source = templatefile("${path.module}/templates/train_lm.py.tftpl", {
-    repo_url        = var.repo_url
-    repo_ref        = var.repo_ref
-    repo_dir        = local.repo_dir
-    install_target  = local.install_target
-    config_path     = var.config_path
-    datadir         = var.datadir
-    modeldir        = var.modeldir
-    output_path     = var.output_path
-    target          = var.target
-    bs              = var.bs
-    epochs          = var.epochs
-    steps_per_epoch = var.steps_per_epoch
-    learning_rate   = var.learning_rate
-    device_type     = var.device_type
-    mxp             = var.mxp
+  # Flags for the chosen trainer. `train_internal_lm` and `train_kenlm` fit by counting, so the
+  # gradient-descent knobs (bs, epochs, learning_rate, ...) do not apply to them and are not passed.
+  # The dataset itself -- data_paths, max_length, max_lines -- lives in the config's
+  # data_config.lm_dataset_config, not in flags.
+  external_flags = concat(
+    [
+      "--bs=${var.bs}",
+      "--epochs=${var.epochs}",
+      "--steps-per-epoch=${var.steps_per_epoch}",
+      "--learning-rate=${var.learning_rate}",
+      "--lr-schedule=${var.lr_schedule}",
+      "--device-type=${var.device_type}",
+      "--mxp=${var.mxp}",
+    ],
+    var.kaggle_model_handle != "" ? ["--kaggle-model-handle=${var.kaggle_model_handle}"] : [],
+    var.spx > 1 ? ["--spx=${var.spx}"] : [],
+    # Only meaningful on a TPU; passing them on a GPU run would put misleading flags in the script.
+    var.device_type == "tpu" && var.tpu_address != "" ? ["--tpu-address=${var.tpu_address}"] : [],
+    var.device_type == "tpu" && var.tpu_vm ? ["--tpu-vm=True"] : [],
+  )
+  kenlm_flags = concat(
+    var.max_lines != null ? ["--max-lines=${var.max_lines}"] : [],
+    length(var.prune) > 0 ? ["--prune=[${join(",", [for p in var.prune : tostring(p)])}]"] : [],
+  )
+  trainer_flags = (
+    var.trainer == "train_external_lm" ? local.external_flags :
+    var.trainer == "train_kenlm" ? local.kenlm_flags :
+    [] # train_internal_lm: config and dirs only, which run.sh already passes
+  )
+  # extra_args carries jinja variables the config interpolates and the trainer forwards from the
+  # CLI, e.g. ["--vocabprefix=/kaggle/input/vocab/sp", "--vocabsize=1000"].
+  train_flags = join(" ", concat(local.trainer_flags, var.extra_args))
 
-    # Only rendered when kaggle_model_handle is set, since nothing else in the notebook needs to
-    # authenticate -- the repo clone and the dataset mount do not.
-    #
-    # This puts the API token in `local.notebook_source`, so it reaches terraform.tfstate,
-    # build/notebook.ipynb and the notebook Kaggle stores. That is the deliberate trade for not
-    # having to attach a Kaggle Secret by hand: no Kaggle API can create or attach one. The push
-    # credentials in `main.tf` still travel through provisioner `environment`, which stays out of
-    # state; this is the one path that does not.
-    #
-    # jsonencode, not quotes: a JSON string is a valid Python string literal, so Terraform does
-    # the escaping and a key containing a quote or backslash cannot break the cell.
+  # The whole run, as one bash script. Rendered here, written to build/run.sh (main.tf) for
+  # inspection, and embedded verbatim in the single notebook cell below.
+  run_sh = templatefile("${path.module}/templates/run.sh.tftpl", {
+    repo_url       = var.repo_url
+    repo_ref       = var.repo_ref
+    repo_dir       = local.repo_dir
+    install_target = local.install_target
+    datadir        = var.datadir
+    modeldir       = var.modeldir
+    device_type    = var.device_type
+    trainer        = var.trainer
+    config_path    = var.config_path
+    train_flags    = local.train_flags
+
+    # An embedded config is base64-encoded so no quoting or `$` inside it can break the script;
+    # empty means "use the repo path config_path instead". config_file wins over config_path.
+    config_b64 = var.config_file == "" ? "" : base64encode(file(var.config_file))
+
+    # Only rendered when kaggle_model_handle is set -- nothing else in the run authenticates. This
+    # puts the API token in build/run.sh and the notebook (and therefore terraform.tfstate); it is
+    # the deliberate trade for not attaching a Kaggle Secret by hand, which no API can automate.
+    # jsonencode, not bare quotes: a JSON string is a valid shell double-quoted word, so a token
+    # with an odd character cannot break the assignment.
     kaggle_model_handle = var.kaggle_model_handle
     kaggle_username     = jsonencode(var.kaggle_username)
     kaggle_key          = jsonencode(var.kaggle_key)
-
-    # A JSON list is also a valid Python list literal, and a JSON string is a valid Python
-    # string literal, so both drop straight into the source with Terraform doing the escaping.
-    extra_flags   = jsonencode(concat(local.optional_flags, var.extra_args))
-    config_inline = var.config_file == "" ? "None" : jsonencode(file(var.config_file))
   })
 
-  # The notebook is authored as one readable Python file and split into cells on `# %%`, the
-  # jupytext convention. Prefixing a newline makes the leading marker split cleanly; the empty
-  # first chunk is dropped.
-  cells = [
-    for chunk in split("\n# %%\n", "\n${local.notebook_source}") :
-    trimspace(chunk) if trimspace(chunk) != ""
-  ]
+  # The notebook is a single Python cell that writes run.sh and runs it. run.sh is the readable
+  # artifact; the cell is just a launcher.
+  launch_py = templatefile("${path.module}/templates/launch.py.tftpl", {
+    run_sh = local.run_sh
+  })
 
-  # Built with jsonencode rather than a JSON template on purpose. Notebook JSON is one escaped
+  # Built with jsonencode rather than a JSON template on purpose: notebook JSON is one escaped
   # string per source line, and hand-escaping it is exactly where this normally breaks.
   notebook = {
     cells = [
-      for cell in local.cells : {
+      {
         cell_type       = "code"
         execution_count = null
         metadata        = {}
         outputs         = []
         # nbformat wants a list of lines, each keeping its trailing newline except the last.
         source = [
-          for index, line in split("\n", cell) :
-          index == length(split("\n", cell)) - 1 ? line : "${line}\n"
+          for index, line in split("\n", trimspace(local.launch_py)) :
+          index == length(split("\n", trimspace(local.launch_py))) - 1 ? line : "${line}\n"
         ]
       }
     ]
