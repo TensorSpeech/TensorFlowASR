@@ -739,8 +739,10 @@ class LMDataset(AbstractDataset):
             value is used as given and never falls back, so a typo fails loudly instead of silently
             building with some other copy.
         lmplz_args : Optional[Sequence[str]]
-            Extra flags passed through, eg. `["-S", "40%"]` to cap memory or `["--discount_fallback"]`
-            which small corpora need when a discount cannot be estimated.
+            Extra flags passed through, eg. `["-S", "40%"]` to cap memory. `--discount_fallback` is
+            **not** needed here -- it is added automatically and the build retried if `lmplz` aborts
+            because an order has too few n-grams to estimate a discount, which is routine for a
+            token-level corpus. Pass it explicitly only to force fallback discounts on the first try.
         overwrite_text : bool
             Re-tokenise even when `text_path` already exists. Reuse is the default because
             tokenising is the slow half and it is usually what you want between runs that only
@@ -774,15 +776,32 @@ class LMDataset(AbstractDataset):
         if lmplz_args:
             command += [str(a) for a in lmplz_args]
 
-        logger.info(f"Running {' '.join(command)} < {text_path} > {arpa_path}")
-        # `lmplz` reads the corpus on stdin and writes the ARPA on stdout; its progress goes to
-        # stderr, which is left attached so a long build is visible rather than silent.
-        with open(text_path, "rb") as source, open(arpa_path, "wb") as destination:
-            result = subprocess.run(command, stdin=source, stdout=destination, check=False)
-        if result.returncode != 0:
+        def run(cmd):
+            """Run `lmplz`, corpus in on stdin, ARPA out to the file. stderr stays live so a long build is visible."""
+            logger.info(f"Running {' '.join(cmd)} < {text_path} > {arpa_path}")
+            with open(text_path, "rb") as source, open(arpa_path, "wb") as destination:
+                return subprocess.run(cmd, stdin=source, stdout=destination, check=False).returncode
+
+        returncode = run(command)
+        if returncode != 0 and "--discount_fallback" not in command:
+            # `lmplz` aborts (SIGABRT, exit -6) when an n-gram order has too few distinct counts to
+            # estimate a Kneser-Ney discount -- routine for a token-level model, where the vocabulary
+            # is small and the higher orders are sparse, which is the only kind this ever builds.
+            # `--discount_fallback` substitutes default discounts for the orders that cannot be
+            # estimated and leaves the rest alone, so retrying with it is the standard fix and costs
+            # only a second pass over a file that is already on disk. It is added on failure rather
+            # than always, so a corpus healthy enough to estimate real discounts still gets them.
+            logger.warning(
+                f"lmplz exited {returncode}; retrying with --discount_fallback. An order had too few n-grams to estimate "
+                f"a discount, normal for a token-level corpus -- the model will use fallback discounts for those orders."
+            )
+            command.append("--discount_fallback")
+            returncode = run(command)
+        if returncode != 0:
             raise RuntimeError(
-                f"lmplz exited {result.returncode}. A small corpus usually needs --lmplz-args='--discount_fallback', "
-                f"which lets it fall back when an order has too few n-grams to estimate a discount from."
+                f"lmplz exited {returncode}. If this was already retried with --discount_fallback, the corpus is likely "
+                f"too small or too repetitive to build an n-gram of this order; try a lower order or more text. "
+                f"Its own output above says which stage failed."
             )
         logger.info(f"Wrote {arpa_path}")
         return arpa_path

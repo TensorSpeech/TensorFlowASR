@@ -51,6 +51,28 @@ if [ "$DEVICE_TYPE" = "tpu" ]; then
   "$REPO_DIR/scripts/install_tpu.sh" --system --python "$PYTHON"
 fi
 
+# --- KenLM (train_kenlm only) ---------------------------------------------
+# train_kenlm shells out to `lmplz`, a C++ binary rather than a Python package, so pip never brings
+# it in. scripts/install_kenlm.sh clones and compiles it into $REPO_DIR/externals/kenlm/build/bin.
+# Putting that on PATH is what `_resolve_lmplz` picks up: the repo lives outside /kaggle/working, so
+# the trainer's cwd fallback would never find it. Only for this trainer -- the others need no binary.
+if [ "$TRAINER" = "train_kenlm" ]; then
+  # KenLM needs Boost headers, Eigen and a C++ toolchain. Kaggle runs as root on Debian with apt
+  # available; install them best-effort so a stock image can build. Guarded with `|| echo` because
+  # `set -e` is on and already-present packages or a locked apt must not abort the run -- a genuinely
+  # missing dependency surfaces at cmake below with a clear message anyway.
+  if command -v apt-get >/dev/null 2>&1; then
+    [ "$(id -u)" = 0 ] && SUDO="" || SUDO="sudo"
+    ( $SUDO apt-get update -qq \
+      && $SUDO apt-get install -y -qq \
+        build-essential cmake libboost-all-dev libeigen3-dev zlib1g-dev libbz2-dev liblzma-dev ) \
+      || echo "WARN: could not apt-get KenLM build deps; install_kenlm.sh will fail if Boost or cmake are missing."
+  fi
+  "$REPO_DIR/scripts/install_kenlm.sh"
+  export PATH="$REPO_DIR/externals/kenlm/build/bin:$PATH"
+  command -v lmplz >/dev/null 2>&1 || { echo "lmplz was not built; cannot run train_kenlm." >&2; exit 1; }
+fi
+
 # --- device sanity check --------------------------------------------------
 if [ "$DEVICE_TYPE" = "gpu" ]; then
   # A GPU is registered at import, so an empty list here really means no GPU. Fail now rather

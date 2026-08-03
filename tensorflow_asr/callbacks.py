@@ -298,6 +298,38 @@ class EarlyStopping(keras.callbacks.EarlyStopping):
         return cls(**config)
 
 
+def upload_kaggle_model(model_dir: str, model_handle: str, notes: str, ignore_patterns=None):
+    """
+    Push `model_dir` as a new version of the Kaggle model `model_handle`.
+
+    The one-shot counterpart to `KaggleModelBackupAndRestore`, for the trainers that build in a
+    single pass and so have no `fit` loop for a callback to ride. Uploading a directory as a model
+    version is the same `kagglehub.model_upload` the callback uses per epoch; factored out here so
+    both go through one path. The handle is **auto-created** on first upload, so nothing has to exist
+    beforehand.
+
+    Credentials come from the environment (`KAGGLE_USERNAME` / `KAGGLE_KEY`), which is what the
+    Kaggle notebook `run.sh` exports. `.DS_Store` is always ignored; pass `ignore_patterns` to keep
+    large intermediates out -- the token-id corpus, say, which is an input, not a result.
+    """
+    if not model_handle:
+        return
+    try:
+        kagglehub = importlib.import_module("kagglehub")
+    except ImportError as e:
+        raise ImportError("Kaggle library is not installed. Please install it via `pip install '.[kaggle]'`.") from e
+    logging.getLogger("kagglehub").disabled = True
+    logging.getLogger("kagglehub").handlers.clear()
+    model_dir = file_util.preprocess_paths(model_dir, isdir=True)
+    kagglehub.model_upload(
+        handle=model_handle,
+        local_model_dir=model_dir,
+        version_notes=notes,
+        ignore_patterns=[".DS_Store", *(ignore_patterns or [])],
+    )
+    logger.info(f"Uploaded {model_dir} to Kaggle model {model_handle}")
+
+
 @keras.utils.register_keras_serializable(package=__name__)
 class KaggleModelBackupAndRestore(BackupAndRestore):
     def __init__(

@@ -195,7 +195,8 @@ variable "trainer" {
       train_external_lm -- fits lm_config.external_config by gradient descent on a large corpus
                            (external_dataset_config, .txt/.txt.gz). The LM fused in.
       train_kenlm       -- builds a KenLM n-gram over the same external corpus, an alternative
-                           external LM. Needs the kenlm/lmplz binary; ignores bs/epochs.
+                           external LM. run.sh builds the kenlm/lmplz binary automatically for this
+                           trainer (scripts/install_kenlm.sh); ignores bs/epochs.
   EOT
   type        = string
   default     = "train_external_lm"

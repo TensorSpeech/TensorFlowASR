@@ -855,11 +855,50 @@ def test_create_arpa_reuses_the_token_ids_it_already_wrote(transcripts, stub_lmp
 
 
 def test_create_arpa_reports_a_failing_lmplz(transcripts, tmp_path):
+    """A binary that fails no matter what must surface, not loop -- the retry adds the flag once."""
     failing = tmp_path / "failing-lmplz"
     failing.write_text("#!/usr/bin/env bash\nexit 1\n")
     failing.chmod(0o755)
-    with pytest.raises(RuntimeError, match="discount_fallback"):
+    with pytest.raises(RuntimeError, match="lmplz exited"):
         transcripts.create_arpa(arpa_path=str(tmp_path / "lm.arpa"), lmplz=str(failing))
+
+
+def test_create_arpa_retries_with_discount_fallback(transcripts, tokenizer, tmp_path):
+    """
+    `lmplz` aborts on a token-level corpus too sparse to estimate a discount. That is routine, not
+    an error the caller should have to catch, so the build retries itself with --discount_fallback.
+    """
+    from tensorflow_asr.models.lm.ngram_language_model import NGramLanguageModel
+
+    # Stand-in for lmplz: aborts like the real one unless --discount_fallback is present, in which
+    # case it defers to the working stub. `$@` carries the flags create_arpa assembled.
+    marker = tmp_path / "retried"
+    picky = tmp_path / "picky-lmplz"
+    picky.write_text(
+        "#!/usr/bin/env bash\n"
+        'if [[ " $* " != *" --discount_fallback "* ]]; then echo "BadDiscountException" >&2; exit 134; fi\n'
+        f"touch {marker}\n"
+        f"exec python3 {tmp_path / 'stub_lmplz.py'} \"$@\"\n"
+    )
+    picky.chmod(0o755)
+    (tmp_path / "stub_lmplz.py").write_text(STUB_LMPLZ)
+
+    arpa = transcripts.create_arpa(arpa_path=str(tmp_path / "lm.arpa"), order=2, lmplz=str(picky))
+    assert marker.exists(), "the second attempt (with --discount_fallback) is what should have produced the ARPA"
+
+    lm = NGramLanguageModel(vocab_size=tokenizer.num_classes, blank=tokenizer.blank, order=2, max_arcs=8192, max_states=4096)
+    assert lm.load_arpa(arpa)["arcs"] > 0, "the retried build must still be a usable model"
+
+
+def test_create_arpa_does_not_retry_when_the_flag_was_already_given(transcripts, tmp_path):
+    """If the caller already passed --discount_fallback and it still fails, do not loop -- raise."""
+    calls = tmp_path / "calls"
+    counting = tmp_path / "counting-lmplz"
+    counting.write_text(f"#!/usr/bin/env bash\necho x >> {calls}\nexit 134\n")
+    counting.chmod(0o755)
+    with pytest.raises(RuntimeError, match="lmplz exited"):
+        transcripts.create_arpa(arpa_path=str(tmp_path / "lm.arpa"), lmplz=str(counting), lmplz_args=["--discount_fallback"])
+    assert calls.read_text().count("x") == 1, "the flag was already present, so there must be exactly one attempt"
 
 
 def test_create_arpa_overwrites_the_token_ids_on_request(transcripts, stub_lmplz, tmp_path):

@@ -33,6 +33,9 @@ locals {
   kenlm_flags = concat(
     var.max_lines != null ? ["--max-lines=${var.max_lines}"] : [],
     length(var.prune) > 0 ? ["--prune=[${join(",", [for p in var.prune : tostring(p)])}]"] : [],
+    # Same as the external trainer: with a handle set, the built model is pushed to the Kaggle model
+    # so a later run (or `test`) can pull it. train_kenlm uploads once at the end rather than per epoch.
+    var.kaggle_model_handle != "" ? ["--kaggle-model-handle=${var.kaggle_model_handle}"] : [],
   )
   trainer_flags = (
     var.trainer == "train_external_lm" ? local.external_flags :

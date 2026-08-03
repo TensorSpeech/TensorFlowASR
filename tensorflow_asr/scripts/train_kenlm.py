@@ -35,6 +35,7 @@ def main(
     lmplz: str = None,
     lmplz_args: list = None,
     overwrite_text: bool = False,
+    kaggle_model_handle: str = None,
     repodir: str = os.getcwd(),
     **kwargs,
 ):
@@ -97,6 +98,13 @@ def main(
         `data_paths` changed, `--max-lines` changed, or the tokenizer did. A stale file is still a
         valid file, so nothing catches it, and the model would end up indexed against a vocabulary
         the transducer no longer emits.
+    kaggle_model_handle : Optional[str]
+        Upload the finished model to this Kaggle model as a new version, eg.
+        "owner/tensorflowasr-lm/keras/kenlm". This is the counting counterpart to what
+        `train_external_lm` does through its checkpoint callback: there is no `fit` loop here to
+        back up per epoch, so the single built model is pushed once at the end. Auto-creates the
+        handle on first upload; the token-id corpus is left out as an input, not a result.
+        Credentials come from `KAGGLE_USERNAME` / `KAGGLE_KEY`, which the Kaggle notebook exports.
     repodir : str
     """
     config = Config(config_path, training=False, repodir=repodir, datadir=datadir, modeldir=modeldir, **kwargs)
@@ -144,7 +152,22 @@ def main(
 
     stats = lm.load_arpa(arpa_path)
     logger.info(f"Loaded {type(lm).__name__}: " + ", ".join(f"{key}={value}" for key, value in dict(stats).items()))
-    return save_lm(lm, modeldir, "kenlm")
+    weights_path = save_lm(lm, modeldir, "kenlm")
+
+    if kaggle_model_handle:
+        # Upload the modeldir, not just the h5, so the arc weights and the ARPA travel together and a
+        # restore lands them back where decoding expects. The token-id corpus is excluded: it can be
+        # gigabytes, and it is the input to this build, not its result.
+        from tensorflow_asr.callbacks import upload_kaggle_model  # pylint: disable=import-outside-toplevel
+
+        upload_kaggle_model(
+            modeldir,
+            kaggle_model_handle,
+            notes=f"kenlm n-gram: {', '.join(f'{k}={v}' for k, v in dict(stats).items())}",
+            ignore_patterns=["*.ids.txt", "*.ids.txt.gz"],
+        )
+
+    return weights_path
 
 
 if __name__ == "__main__":
