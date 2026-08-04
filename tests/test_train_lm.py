@@ -926,3 +926,56 @@ def test_create_arpa_overwrite_works_when_there_is_nothing_to_overwrite(transcri
     assert not text.exists()
     transcripts.create_arpa(arpa_path=str(tmp_path / "lm.arpa"), text_path=str(text), order=2, lmplz=stub_lmplz, overwrite_text=True)
     assert len(text.read_text().strip().split("\n")) == len(LINES)
+
+
+# A stub lmplz that records the flags it was handed, so a test can assert on -T, then behaves like
+# the working stub. `$LMPLZ_ARGLOG` receives one line per argument.
+STUB_LMPLZ_LOGGING = (
+    "#!/usr/bin/env bash\n"
+    'for a in "$@"; do echo "$a" >> "$LMPLZ_ARGLOG"; done\n'
+    'exec python3 "$STUB_LMPLZ_PY" "$@"\n'
+)
+
+
+@pytest.fixture
+def logging_lmplz(tmp_path, monkeypatch):
+    """A stub lmplz that logs its argv to a file the test can read."""
+    (tmp_path / "stub_lmplz.py").write_text(STUB_LMPLZ)
+    monkeypatch.setenv("STUB_LMPLZ_PY", str(tmp_path / "stub_lmplz.py"))
+    monkeypatch.setenv("LMPLZ_ARGLOG", str(tmp_path / "args.log"))
+    path = tmp_path / "logging-lmplz"
+    path.write_text(STUB_LMPLZ_LOGGING)
+    path.chmod(0o755)
+    return path
+
+
+def test_create_arpa_keeps_lmplz_scratch_off_tmp(transcripts, logging_lmplz, tmp_path):
+    """
+    lmplz spills tens of GB of merge-sort scratch to its -T prefix, which defaults to /tmp -- the
+    small root disk on a Kaggle box. It must be redirected next to the (roomy) output and cleaned up.
+    """
+    outdir = tmp_path / "out"
+    outdir.mkdir()
+    transcripts.create_arpa(arpa_path=str(outdir / "lm.arpa"), order=2, lmplz=str(logging_lmplz))
+
+    args = (tmp_path / "args.log").read_text().splitlines()
+    assert "-T" in args, "lmplz must be told where to put its scratch"
+    temp = args[args.index("-T") + 1]
+    assert temp.startswith(str(outdir)), f"scratch must sit on the output volume, not /tmp; got {temp}"
+    assert not (outdir / ".lmplz_tmp").exists(), "the scratch dir must be removed after the build"
+
+
+def test_create_arpa_honours_a_caller_supplied_temp_prefix(transcripts, logging_lmplz, tmp_path):
+    """If the caller sets -T themselves, do not add ours and do not create/leave a scratch dir."""
+    outdir = tmp_path / "out"
+    outdir.mkdir()
+    user_temp = tmp_path / "mytemp"
+    user_temp.mkdir()
+    transcripts.create_arpa(
+        arpa_path=str(outdir / "lm.arpa"), order=2, lmplz=str(logging_lmplz), lmplz_args=["-T", str(user_temp) + "/"]
+    )
+
+    args = (tmp_path / "args.log").read_text()
+    assert str(user_temp) in args, "the caller's -T must be passed through"
+    assert args.count("-T") == 1, "ours must not be added on top of the caller's"
+    assert not (outdir / ".lmplz_tmp").exists()
