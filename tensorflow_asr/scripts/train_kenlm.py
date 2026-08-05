@@ -31,6 +31,7 @@ def main(
     modeldir: str,
     prune: list = None,
     arpa: str = None,
+    text_path: str = None,
     max_lines: int = None,
     lmplz: str = None,
     lmplz_args: list = None,
@@ -81,6 +82,11 @@ def main(
         model: cheaper and better informed than having the reader drop arcs to fit `max_arcs`.
     arpa : Optional[str]
         Convert this ARPA instead of building one. Skips the corpus entirely.
+    text_path : Optional[str]
+        Where the tokenized token-id corpus that `lmplz` reads is written, and reused from on a
+        later run (see `--overwrite-text`). Defaults to `<modeldir>/lm/corpus.ids.txt`. Point it at
+        a roomier volume when the corpus is large -- the ids file is about the size of the source
+        text, and on a small `/kaggle/working` it can be worth keeping off it.
     max_lines : Optional[int]
         Stop after this many lines, for a trial run over a huge corpus.
     lmplz : Optional[str]
@@ -141,7 +147,7 @@ def main(
         lm_dataset = datasets.get_lm(tokenizer=tokenizer, dataset_config=lm_dataset_config)
         arpa_path = lm_dataset.create_arpa(
             arpa_path=os.path.join(directory, "lm.arpa"),
-            text_path=os.path.join(directory, "corpus.ids.txt"),
+            text_path=text_path or os.path.join(directory, "corpus.ids.txt"),
             order=order,
             prune=prune,
             max_lines=max_lines,

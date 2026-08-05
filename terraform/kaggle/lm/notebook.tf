@@ -17,13 +17,20 @@ locals {
   external_flags = concat(
     [
       "--bs=${var.bs}",
-      "--epochs=${var.epochs}",
-      "--steps-per-epoch=${var.steps_per_epoch}",
       "--learning-rate=${var.learning_rate}",
       "--lr-schedule=${var.lr_schedule}",
       "--device-type=${var.device_type}",
       "--mxp=${var.mxp}",
     ],
+    # epochs and steps_per_epoch are guarded rather than inlined. This whole local is evaluated even
+    # for a counting trainer -- it is one branch of `trainer_flags` below, and Terraform evaluates a
+    # referenced local eagerly, not lazily -- so inlining `${var.steps_per_epoch}` makes a kenlm or
+    # internal run fail at plan time on the null default ("Cannot include a null value in a string").
+    # Omitting them when null lets the trainer fall back to its own default (epochs) and, for
+    # steps_per_epoch, leaves the real requirement to the main.tf precondition, which fires only for
+    # train_external_lm and with a far clearer message.
+    var.epochs != null ? ["--epochs=${var.epochs}"] : [],
+    var.steps_per_epoch != null ? ["--steps-per-epoch=${var.steps_per_epoch}"] : [],
     var.kaggle_model_handle != "" ? ["--kaggle-model-handle=${var.kaggle_model_handle}"] : [],
     var.spx > 1 ? ["--spx=${var.spx}"] : [],
     # Only meaningful on a TPU; passing them on a GPU run would put misleading flags in the script.
@@ -32,6 +39,7 @@ locals {
   )
   kenlm_flags = concat(
     var.max_lines != null ? ["--max-lines=${var.max_lines}"] : [],
+    var.text_path != "" ? ["--text-path=${var.text_path}"] : [],
     length(var.prune) > 0 ? ["--prune=[${join(",", [for p in var.prune : tostring(p)])}]"] : [],
     # Same as the external trainer: with a handle set, the built model is pushed to the Kaggle model
     # so a later run (or `test`) can pull it. train_kenlm uploads once at the end rather than per epoch.

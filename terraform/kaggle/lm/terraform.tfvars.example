@@ -74,10 +74,11 @@ trainer = "train_internal_lm"
 #   lm_dataset_config.external_dataset_config.max_lines = 1000000 and bs = 128 on one GPU that is
 #   ceil(1000000 / 128) = 7813.
 
-# train_kenlm -> a KenLM n-gram, the cheap alternative external LM. Needs the kenlm/lmplz binary.
+# train_kenlm -> a KenLM n-gram, the cheap alternative external LM. run.sh builds lmplz for it.
 # trainer   = "train_kenlm"
 # max_lines = 1000000        # cap the corpus; null reads all
 # prune     = [0, 0, 1]      # KenLM pruning per order; [] prunes nothing
+# text_path = "/kaggle/working/corpus.ids.txt"  # tokenized corpus location; empty -> <modeldir>/lm/corpus.ids.txt
 
 # --- What apply does after pushing ---------------------------------------
 # Default is false: push and return, then watch it with `terraform output status_command`.

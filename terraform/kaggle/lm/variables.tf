@@ -271,6 +271,16 @@ variable "max_lines" {
   default     = null
 }
 
+variable "text_path" {
+  description = <<-EOT
+    train_kenlm only. Where the tokenized token-id corpus lmplz reads is written and reused from.
+    Empty uses <modeldir>/lm/corpus.ids.txt. The file is roughly the size of the source text, so on
+    a small /kaggle/working point it at a roomier attached volume for a large corpus.
+  EOT
+  type        = string
+  default     = ""
+}
+
 variable "prune" {
   description = <<-EOT
     train_kenlm only. KenLM pruning thresholds, one per n-gram order, e.g. [0, 0, 1] keeps all
