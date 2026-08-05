@@ -69,7 +69,7 @@ lm_config:
     class_name: tensorflow_asr.models.lm.ngram_language_model>NGramLanguageModel
     config:
       vocab_size: {{decoder_config.vocabsize}}
-      order: 6
+      order: 3
   # the low-order LM subtracted. Required by lm_type: lodr.
   internal_config:
     class_name: tensorflow_asr.models.lm.bigram_language_model>BigramLanguageModel
