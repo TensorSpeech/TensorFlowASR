@@ -147,8 +147,9 @@ class BigramLanguageModel(LanguageModel):
 
     A bigram is not trained by gradient descent. Its maximum-likelihood estimate is a ratio of
     counts, available exactly and in one pass, so `fit_counts` replaces the usual `fit` and
-    `train_lm.py` dispatches to it. The table is held as a **non-trainable weight**, which is what
-    makes it save and load through the ordinary keras h5 path like any other model.
+    `train_lm.py` dispatches to it. The table is held as a **non-trainable weight**, inside an
+    `Embedding` sublayer, which is what makes it save and load through the ordinary keras h5 path
+    like any other model.
 
     A bigram also needs no recurrent state: it conditions only on the previous token, which the
     beam search already hands to `call_next`. `get_initial_state` returns a placeholder, kept only
@@ -173,20 +174,38 @@ class BigramLanguageModel(LanguageModel):
         self.blank = blank
         self.interpolation = interpolation
         self.delta = delta
-        # Created here rather than in `build` because the decoder calls this model from inside a
-        # `tf.while_loop`, where creating variables fails. Non-trainable: counting sets it, and no
-        # gradient should ever move it.
-        self.table = self.add_weight(
-            name="table",
-            shape=[vocab_size, vocab_size],
-            initializer="zeros",
+        # An `Embedding` *is* this model's forward pass -- one gathered row per token -- and being
+        # a real sublayer it also gives `summary()` something to print, which a weight held
+        # directly on the model does not. Non-trainable: counting sets it, and no gradient should
+        # ever move it. `dtype` is pinned because a global mixed-precision policy would otherwise
+        # hand back float16 rows, and these log-probabilities are subtracted from float32 scores.
+        self.table_layer = keras.layers.Embedding(
+            input_dim=vocab_size,
+            output_dim=vocab_size,
+            embeddings_initializer="zeros",
             trainable=False,
             dtype="float32",
+            name="table",
         )
+        # Built here rather than lazily because the decoder calls this model from inside a
+        # `tf.while_loop`, where creating variables fails. The shape is the `[B, U]` of `call`;
+        # `Embedding` does not use it to make the weight, but `summary()` reads it back to print
+        # an output shape, and `call_next` passing a rank-1 tensor is unaffected either way.
+        self.table_layer.build((None, None))
         # Every weight this model will ever have now exists, so it really is built. Saying so lets
         # `save_weights` / `load_weights` work without a dummy forward pass first, which keras
         # otherwise insists on.
         self.built = True
+
+    @property
+    def table(self):
+        """
+        The `[V, V]` log-probability table, `table[v, w] = ln p(w | v)`.
+
+        A property so that everything reading or assigning the table keeps addressing the weight
+        itself rather than the layer that now holds it.
+        """
+        return self.table_layer.embeddings
 
     def fit_counts(self, token_sequences):
         """
@@ -203,10 +222,10 @@ class BigramLanguageModel(LanguageModel):
         return tf.zeros([batch_size, 1], dtype=tf.int32)
 
     def call(self, tokens, training=False):
-        return tf.gather(self.table, tokens)  # [B, U] => [B, U, V]
+        return self.table_layer(tokens)  # [B, U] => [B, U, V]
 
     def call_next(self, previous_tokens, previous_states):
-        return tf.gather(self.table, tf.reshape(previous_tokens, [-1])), previous_states
+        return self.table_layer(tf.reshape(previous_tokens, [-1])), previous_states
 
     def compute_output_shape(self, tokens_shape):
         return (*tokens_shape, self.vocab_size)

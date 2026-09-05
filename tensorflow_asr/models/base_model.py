@@ -116,6 +116,8 @@ class BaseModel(keras.Model, TensorFlowTrainer):
         `tensorflow_asr.models.lm.language_model.LanguageModel` for the interface. The
         internal one does -- `BigramLanguageModel`.
         """
+        if not self.built:
+            raise RuntimeError("Call `make()` before attaching a language model, so the variables exist.")
         self.lm = self.build_lm(getattr(lm_config, "external_config", None), weights=lm_weights, custom_objects=custom_objects)
         self.internal_lm = self.build_lm(getattr(lm_config, "internal_config", None), weights=internal_lm_weights, custom_objects=custom_objects)
         logger.info(f"Language models for beam search: external={self.lm}, internal={self.internal_lm}")
