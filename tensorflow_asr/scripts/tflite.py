@@ -31,6 +31,7 @@ def main(
     internal_lm_h5: str = None,
     bs: int = 1,
     beam_width: int = 0,
+    nchunks: int = 1,
     repodir: str = os.getcwd(),
 ):
     """
@@ -51,6 +52,11 @@ def main(
     internal_lm_h5 : str
         Same, for the low-order language model LODR subtracts (`train_lm --target=internal`,
         `lm_config.internal_config`). Only read when `decoder_config.lm_type` is "lodr".
+    nchunks : int
+        Attention chunks a streaming client should feed per call, recorded in the exported model's
+        metadata. The graph is unaffected -- this only changes the chunk geometry a client reads
+        back out of the flatbuffer, and a client can rescale it without re-exporting. See
+        `BaseModel.get_tflite_metadata`.
     """
     assert output
     keras.backend.clear_session()
@@ -76,7 +82,7 @@ def main(
     if beam_width > 0:
         app_util.validate_lm(model, config.decoder_config, lm_h5=lm_h5, internal_lm_h5=internal_lm_h5, beam_width=beam_width)
 
-    app_util.convert_tflite(model=model, output=output, batch_size=bs, beam_width=beam_width)
+    app_util.convert_tflite(model=model, output=output, batch_size=bs, beam_width=beam_width, nchunks=nchunks)
 
 
 if __name__ == "__main__":

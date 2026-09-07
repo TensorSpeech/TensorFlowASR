@@ -578,3 +578,43 @@ class BaseModel(keras.Model, TensorFlowTrainer):
             reduce_retracing=True,
             autograph=True,
         )
+
+    def get_tflite_metadata(self, beam_width: int = 0, nchunks: int = 1):
+        """
+        What a client needs to drive the exported model, with no Python config on its side.
+
+        `app_util.convert_tflite` stores this as JSON inside the flatbuffer's `metadata` field, so
+        a deployed `.tflite` is self-describing -- see `utils/tflite_util.py`. Without it the chunk
+        geometry can only be recovered by rebuilding this model from its config, which a phone or a
+        C++ runtime cannot do.
+
+        `beam_width` is the width the export was traced at, and 0 means greedy. A client reads it
+        to know whether the signature carries the `previous_beam_*` inputs, which
+        `make_tflite_function` only adds when the width is positive.
+
+        Parameters
+        ----------
+        nchunks : int
+            Attention chunks the recorded geometry covers -- the deployment's latency knob, since
+            larger means fewer, bigger calls for an unchanged transcript. It is recorded alongside
+            the two lengths because they cannot be read without it: nothing in the numbers says
+            whether they describe one chunk or four.
+
+            Baking a value here is a convenience, not a constraint. Both quantities are linear in
+            `nchunks`::
+
+                step(n) = n * step(1)
+                size(n) = size(1) + (n - 1) * step(1)
+
+            so a client that wants a different `n` recovers the per-chunk values from the recorded
+            pair and the recorded count, without a re-export.
+        """
+        signal_chunk_size, signal_chunk_step = self.get_signal_chunk_size_and_step(nchunks)
+        return {
+            "signal_chunk_size": int(signal_chunk_size),
+            "signal_chunk_step": int(signal_chunk_step),
+            "sample_rate": int(self.feature_extraction.sample_rate),
+            "blank": int(self.tokenizer.blank),
+            "beam_width": int(beam_width),
+            "nchunks": int(nchunks),
+        }

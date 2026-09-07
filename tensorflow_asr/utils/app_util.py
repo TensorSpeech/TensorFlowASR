@@ -20,7 +20,7 @@ from tensorflow.python.framework import convert_to_constants
 
 from tensorflow_asr import tf
 from tensorflow_asr.models.base_model import BaseModel
-from tensorflow_asr.utils import file_util, math_util
+from tensorflow_asr.utils import file_util, math_util, tflite_util
 
 logger = logging.getLogger(__name__)
 
@@ -174,6 +174,7 @@ def convert_tflite(
     output: str = None,
     batch_size: int = 1,
     beam_width: int = 0,
+    nchunks: int = 1,
 ) -> bytes:
     """
     Convert a model to TFLite and return the flatbuffer.
@@ -183,6 +184,10 @@ def convert_tflite(
     output : str, optional
         Where to write the converted model. When None, the model is only returned and
         nothing is written to disk -- useful for callers that just want the bytes.
+    nchunks : int, optional
+        Attention chunks per streaming call, recorded in the model's metadata. It changes nothing
+        about the exported graph -- only the chunk geometry a client reads back out of it. See
+        `BaseModel.get_tflite_metadata`.
 
     Returns
     -------
@@ -266,6 +271,10 @@ def convert_tflite(
     ]
     converter.allow_custom_ops = True
     tflite_model = converter.convert()
+
+    # Record the chunk geometry and friends inside the flatbuffer itself, so a client can stream
+    # without rebuilding this model from its config. See `BaseModel.get_tflite_metadata`.
+    tflite_model = tflite_util.write_metadata(tflite_model, model.get_tflite_metadata(beam_width=beam_width, nchunks=nchunks))
 
     if output is not None:
         output = file_util.preprocess_paths(output)

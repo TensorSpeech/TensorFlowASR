@@ -283,7 +283,7 @@ def build_model(name, tokenizer, batch_size=1) -> BaseModel:
     return model
 
 
-def convert(model: BaseModel, batch_size=1, beam_width=0, output=None) -> bytes:
+def convert(model: BaseModel, batch_size=1, beam_width=0, output=None, nchunks=1) -> bytes:
     """
     Export through the real `app_util.convert_tflite`.
 
@@ -293,7 +293,7 @@ def convert(model: BaseModel, batch_size=1, beam_width=0, output=None) -> bytes:
     """
     from tensorflow_asr.utils import app_util
 
-    return app_util.convert_tflite(model=model, output=output, batch_size=batch_size, beam_width=beam_width)
+    return app_util.convert_tflite(model=model, output=output, batch_size=batch_size, beam_width=beam_width, nchunks=nchunks)
 
 
 def _make_interpreter(tflite_model: bytes):
@@ -670,3 +670,218 @@ def test_subsampling_config_is_consumed_destructively():
     assert "type" not in shared, "pop() no longer mutates the caller's dict -- this test can go"
     with pytest.raises(ValueError, match="subsampling must be either"):
         TransformerEncoder(subsampling=shared, num_blocks=1, dmodel=8, dff=16, num_heads=2, head_size=4)
+
+
+# ---------------------------------- METADATA ---------------------------------- #
+#
+# The flatbuffer carries a `metadata` vector of (name, buffer index) pairs that the interpreter
+# never reads. `app_util.convert_tflite` puts a JSON blob there describing what a streaming client
+# needs to drive the model -- chunk geometry, sample rate, blank id, beam width -- so a `.tflite`
+# is self-describing and needs no sidecar file or Python config to stream.
+
+
+@pytest.fixture(scope="module")
+def conformer_tflite(tokenizer):
+    """One converted model shared by the metadata tests -- conversion is the slow part."""
+    return convert(build_model("ctc.Conformer", tokenizer))
+
+
+def _metadata_names(tflite_model: bytes):
+    """
+    Entry names in the flatbuffer's `metadata` vector, read without going through `tflite_util`.
+
+    Deliberately duplicates a little of what the helper does: a test that located entries with the
+    same code that wrote them would pass even if both sides agreed on the wrong thing.
+    """
+    from tensorflow.lite.python import schema_py_generated as schema
+
+    model = schema.Model.GetRootAsModel(bytearray(tflite_model), 0)
+    return [model.Metadata(i).Name().decode() for i in range(model.MetadataLength())]
+
+
+def test_metadata_round_trips_through_flatbuffer(conformer_tflite):
+    """A dict written into the flatbuffer comes back out unchanged."""
+    from tensorflow_asr.utils import tflite_util
+
+    written = tflite_util.write_metadata(conformer_tflite, {"signal_chunk_size": 3600, "signal_chunk_step": 3200})
+
+    assert tflite_util.read_metadata(written) == {"signal_chunk_size": 3600, "signal_chunk_step": 3200}
+
+
+def test_metadata_write_replaces_rather_than_duplicates(conformer_tflite):
+    """
+    Writing twice leaves one entry, not two.
+
+    `convert_tflite` already writes metadata, so any caller adding its own would otherwise stack a
+    second `TFASR_METADATA` entry that `read_metadata` would silently shadow.
+    """
+    from tensorflow_asr.utils import tflite_util
+
+    once = tflite_util.write_metadata(conformer_tflite, {"signal_chunk_size": 1})
+    twice = tflite_util.write_metadata(once, {"signal_chunk_size": 2})
+
+    names = _metadata_names(twice)
+    assert names.count(tflite_util.METADATA_NAME) == 1, f"duplicate entries: {names}"
+    assert tflite_util.read_metadata(twice) == {"signal_chunk_size": 2}
+
+
+def test_metadata_write_preserves_converter_entries(conformer_tflite):
+    """
+    The entries TensorFlow writes during conversion must survive the repack.
+
+    Adding metadata means unpacking and rebuilding the whole flatbuffer, so a slip here drops
+    `min_runtime_version` -- which runtimes use to refuse a model they are too old to run.
+    """
+    from tensorflow_asr.utils import tflite_util
+
+    before = _metadata_names(conformer_tflite)
+    after = _metadata_names(tflite_util.write_metadata(conformer_tflite, {"signal_chunk_size": 3600}))
+
+    assert "min_runtime_version" in before, "the converter no longer writes it -- this test can go"
+    assert set(before).issubset(set(after)), f"lost entries: {set(before) - set(after)}"
+
+
+def test_read_metadata_returns_empty_when_absent():
+    """
+    A flatbuffer that is not ours reads as empty rather than raising.
+
+    Converted here rather than through `convert()`, which always injects the entry -- a client
+    pointed at somebody else's model needs a dict back, not an exception.
+    """
+    import tensorflow as tf
+
+    from tensorflow_asr.utils import tflite_util
+
+    module = tf.Module()
+    module.identity = tf.function(lambda x: x, input_signature=[tf.TensorSpec([1], tf.float32)])
+    foreign = tf.lite.TFLiteConverter.from_concrete_functions([module.identity.get_concrete_function()], module).convert()
+
+    assert tflite_util.read_metadata(foreign) == {}
+
+
+@pytest.mark.usefixtures("flex_delegate")
+def test_model_with_metadata_still_runs_in_interpreter(conformer_tflite, signal):
+    """
+    The repacked flatbuffer is still a loadable model.
+
+    This is the test that catches a rebuild finished without the `TFL3` file identifier: the
+    bytes look plausible and every interpreter refuses them.
+    """
+    from tensorflow_asr.utils import tflite_util
+
+    written = tflite_util.write_metadata(conformer_tflite, {"signal_chunk_size": 3600})
+    outputs = invoke(written, signal)
+
+    assert len(outputs) >= 2, f"expected at least transcript and tokens, got {len(outputs)}"
+
+
+def test_converted_model_carries_client_metadata(tokenizer):
+    """
+    `convert_tflite` bakes in everything a streaming client needs, with no Python config.
+
+    The chunk geometry must match what the model itself reports -- a client that picks its own
+    chunk size straddles attention chunks and decodes differently from a single pass, which
+    `tests/test_inference.py` covers from the other side.
+    """
+    from tensorflow_asr.utils import tflite_util
+
+    model = build_model("ctc.Conformer", tokenizer)
+    metadata = tflite_util.read_metadata(convert(model, beam_width=0))
+
+    size, step = model.get_signal_chunk_size_and_step(1)
+    assert metadata == {
+        "signal_chunk_size": int(size),
+        "signal_chunk_step": int(step),
+        "sample_rate": SPEECH_CONFIG["sample_rate"],
+        "blank": tokenizer.blank,
+        "beam_width": 0,
+        "nchunks": 1,
+    }
+
+
+def test_converted_model_records_the_exported_beam_width(tokenizer):
+    """
+    `beam_width` tells a client whether the export wants the `previous_beam_*` inputs.
+
+    `make_tflite_function` only adds them when the width is positive, so a client reading 0 knows
+    the greedy signature and a client reading 3 knows to seed a beam of that width.
+    """
+    from tensorflow_asr.utils import tflite_util
+
+    model = build_model("ctc.Conformer", tokenizer)
+
+    assert tflite_util.read_metadata(convert(model, beam_width=3))["beam_width"] == 3
+
+
+def test_metadata_reads_from_a_written_file(tokenizer, tmp_path):
+    """
+    A client has a path on disk, not a buffer, so `read_metadata` takes one.
+
+    This is the whole point of putting the values in the flatbuffer: the file alone is enough.
+    """
+    from tensorflow_asr.utils import tflite_util
+
+    output = str(tmp_path / "model.tflite")
+    convert(build_model("ctc.Conformer", tokenizer), output=output)
+
+    assert tflite_util.read_metadata(output)["signal_chunk_size"] > 0
+
+
+def test_metadata_geometry_follows_nchunks(tokenizer):
+    """
+    `nchunks` picks how many attention chunks one streaming call covers, and the geometry follows.
+
+    Larger means fewer, bigger calls and more latency for the same transcript, so it is the
+    exporter's latency knob. The recorded count is what makes the two lengths readable: without it
+    a client cannot tell whether they describe one chunk or four.
+    """
+    model = build_model("ctc.Conformer", tokenizer)
+    metadata = model.get_tflite_metadata(nchunks=4)
+
+    size, step = model.get_signal_chunk_size_and_step(4)
+    assert (metadata["signal_chunk_size"], metadata["signal_chunk_step"]) == (int(size), int(step))
+    assert metadata["nchunks"] == 4
+
+
+def test_metadata_geometry_scales_the_way_the_docstring_claims(tokenizer):
+    """
+    `size(n) = size(1) + (n - 1) * step(1)` and `step(n) = n * step(1)`.
+
+    A client streaming several chunks per call derives its own geometry with this, so an export
+    made at `nchunks=1` still serves one made at 4. If the arithmetic in `feature_extraction`
+    ever stops being linear, the docstring becomes a lie and this catches it.
+    """
+    model = build_model("ctc.Conformer", tokenizer)
+    one, four = model.get_tflite_metadata(nchunks=1), model.get_tflite_metadata(nchunks=4)
+
+    assert four["signal_chunk_step"] == 4 * one["signal_chunk_step"]
+    assert four["signal_chunk_size"] == one["signal_chunk_size"] + 3 * one["signal_chunk_step"]
+
+
+def test_convert_tflite_exports_the_requested_chunk_count(tokenizer):
+    """`nchunks` has to reach the flatbuffer, not just the model method."""
+    from tensorflow_asr.utils import tflite_util
+
+    model = build_model("ctc.Conformer", tokenizer)
+    metadata = tflite_util.read_metadata(convert(model, nchunks=2))
+
+    assert metadata["nchunks"] == 2
+    assert metadata["signal_chunk_step"] == int(model.get_signal_chunk_size_and_step(2)[1])
+
+
+def test_tflite_cli_exposes_nchunks():
+    """
+    `tensorflow_asr tflite --nchunks` reaches `convert_tflite`.
+
+    `cli_util.run` builds the CLI from the signature, so the parameter is the flag. Driving `main`
+    for real would need a config, a checkpoint and a full conversion, so the forwarding is pinned
+    by source the way `tests/test_train_lm.py` pins its trainers' dataset wiring.
+    """
+    import inspect
+
+    from tensorflow_asr.scripts import tflite as tflite_script
+
+    parameter = inspect.signature(tflite_script.main).parameters.get("nchunks")
+    assert parameter is not None, "no --nchunks flag"
+    assert parameter.default == 1, "the default must keep exporting one attention chunk"
+    assert "nchunks=nchunks" in inspect.getsource(tflite_script.main), "the flag is accepted but never forwarded"
