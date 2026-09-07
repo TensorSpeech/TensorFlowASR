@@ -665,12 +665,66 @@ def test_internal_lm_subtraction_changes_the_hypothesis(lm_type):
 
 
 def test_rejects_bad_lm_type_and_missing_internal_lm():
+    """
+    An unknown `lm_type` is rejected, and so is "lodr" with an external LM but nothing to subtract.
+
+    The second is a misconfiguration only while there *is* an external LM: the correction exists to
+    compensate for one, so with `lm=None` there is nothing to compensate for -- see
+    `test_lodr_without_an_external_lm_decodes_as_a_plain_beam`.
+    """
     model = build_model(3)
     stub_transducer(model, log_softmax(0, (1, 2, 3, 3)), [2], 3, 2)
+    lm = CountingLanguageModel(log_softmax(0, (LM_POSITIONS, 3, 3)))
+
     with pytest.raises(ValueError, match="lm_type"):
         model.recognize_beam(inputs=make_inputs(1), beam_width=4, lm_type="density_ratio")
     with pytest.raises(ValueError, match="internal_lm"):
-        model.recognize_beam(inputs=make_inputs(1), beam_width=4, lm_type="lodr")
+        model.recognize_beam(inputs=make_inputs(1), beam_width=4, lm=lm, lm_type="lodr")
+
+
+@pytest.mark.parametrize("lm_type", ["shallow", "ilme", "lodr"])
+def test_no_language_model_decodes_whatever_the_lm_type_says(lm_type):
+    """
+    `lm=None` must decode, for every `lm_type`, rather than reaching for a model that is not there.
+
+    "lodr" used to crash here with `AttributeError: 'NoneType' object has no attribute
+    'get_initial_state'`: the guard above stopped demanding an `internal_lm` when there is no
+    external LM, but the decoder still set up the low-order LM's state from whatever `lm_type`
+    named. Asking for a correction with nothing to correct is now a plain beam, not a crash.
+    """
+    model = build_model(3)
+    # "ilme" reads the internal LM off the joint, so the stub needs a table to hand back; the
+    # other two never ask for one.
+    stub_transducer(model, log_softmax(0, (1, 2, 3, 3)), [2], 3, 2, ilm_logp=internal_log_softmax(1, (3, 3)))
+
+    outputs = model.recognize_beam(inputs=make_inputs(1), beam_width=4, lm=None, lm_type=lm_type)
+
+    assert outputs.tokens.shape[0] == 1
+
+
+def test_lodr_without_an_external_lm_decodes_as_a_plain_beam():
+    """
+    With no external LM, "lodr" is not merely survivable -- it must change nothing.
+
+    Dropping the subtraction is the whole point: a correction applied on its own would strip the
+    model's own language knowledge and put none back. The transcript therefore has to match the
+    plain beam exactly, whether or not an `internal_lm` was handed over.
+    """
+    model = build_model(3)
+    stub_transducer(model, log_softmax(0, (1, 2, 3, 3)), [2], 3, 2)
+    internal_lm = CountingLanguageModel(log_softmax(1, (LM_POSITIONS, 3, 3)))
+
+    plain = model.recognize_beam(inputs=make_inputs(1), beam_width=4).tokens.numpy()
+    without = model.recognize_beam(inputs=make_inputs(1), beam_width=4, lm=None, lm_type="lodr", lm_beta=0.5).tokens.numpy()
+
+    assert np.array_equal(plain, without), "a correction was applied with no external LM to correct for"
+
+    # An internal LM handed over without an external one is still honoured -- that combination is
+    # documented as legal, and it is only the *missing* model that is dropped.
+    with_internal = model.recognize_beam(
+        inputs=make_inputs(1), beam_width=4, lm=None, lm_type="lodr", internal_lm=internal_lm, lm_beta=0.5
+    ).tokens.numpy()
+    assert with_internal.shape == plain.shape
 
 
 # --------------------------------------------------------------------------------------------

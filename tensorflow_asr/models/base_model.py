@@ -25,7 +25,7 @@ from tensorflow_asr import keras, schemas, tf
 from tensorflow_asr.models.layers.feature_extraction import FeatureExtraction
 from tensorflow_asr.optimizers.accumulation import GradientAccumulator
 from tensorflow_asr.tokenizers import Tokenizer
-from tensorflow_asr.utils import file_util, keras_util, math_util, shape_util
+from tensorflow_asr.utils import file_util, keras_util, math_util, shape_util, tflite_util
 
 logger = logging.getLogger(__name__)
 
@@ -569,6 +569,20 @@ class BaseModel(keras.Model, TensorFlowTrainer):
             previous_encoder_states=tf.nest.map_structure(tf.TensorSpec.from_tensor, self.get_initial_encoder_states(batch_size)),
             previous_decoder_states=tf.nest.map_structure(tf.TensorSpec.from_tensor, self.get_initial_decoder_states(batch_size)),
             **beam_signature,
+        )
+
+        # Name each leaf after its position in the flattened signature, which is the order the
+        # outputs are numbered in. Leaving the specs unnamed lets `tf.function` label the
+        # placeholders `inputs`, `inputs_1`, ... in an order of its own -- a Conformer's leaf 3
+        # lands in `inputs_5` -- and since the name is the only thing the flatbuffer keeps, a
+        # client reading one back cannot tell which new state replaces which old one, which is
+        # exactly what streaming needs. See `utils/tflite_util.INPUT_NAME`.
+        input_signature = tf.nest.pack_sequence_as(
+            input_signature,
+            [
+                tf.TensorSpec(spec.shape, spec.dtype, name=tflite_util.INPUT_NAME.format(position=position))
+                for position, spec in enumerate(tf.nest.flatten(input_signature))
+            ],
         )
 
         return tf.function(

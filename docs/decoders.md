@@ -301,7 +301,7 @@ Practical notes:
 
 - Tune `λ_I` **below** `λ`. Neither paper analyses the failure mode, but it follows from the formula: `ln p_ILM` is negative, so subtracting it *raises* label scores while blank is untouched — oversubtracting drives over-emission.
 - `λ_I = 0` makes the correction an exact no-op, so it is safe to leave configured while sweeping.
-- `lm=None` with `lm_type="ilme"` is legal and means "subtract the internal LM, fuse nothing". Unusual, but it is what \[8\]'s density-ratio framing degenerates to with a uniform external LM.
+- `lm=None` with `lm_type="ilme"` is legal and means "subtract the internal LM, fuse nothing". Unusual, but it is what \[8\]'s density-ratio framing degenerates to with a uniform external LM. The same holds for `"lodr"` **when an `internal_lm` is supplied**; without one there is no model to subtract, and since a correction only exists to compensate for an external LM that is not there either, the decode falls back to a plain beam instead of raising.
 - `"shallow"` is the default, so a config written before any of this existed decodes bit-identically.
 
 ### 4.8 Usage
@@ -463,7 +463,7 @@ What is covered:
 | Zeroing the encoder works      | on the **real** joint, not the stub: two very different acoustic frames give the same `p_ILM`, while the ordinary output differs                                             |
 | `λ_I = 0` is a no-op           | both `"ilme"` and `"lodr"` at `λ_I = 0` decode identically to plain shallow fusion                                                                                          |
 | LODR state threading           | the low-order LM is the same stateful test LM, so mis-ordering its state onto the parents fails                                                                              |
-| Bad configuration is rejected  | unknown `lm_type` (at config load), and `"lodr"` with no `internal_lm` / no `internal_config`                                                                               |
+| Bad configuration is rejected  | unknown `lm_type` (at config load); `"lodr"` with an external LM but no `internal_lm`; `"lodr"` with no `internal_config` (at `validate_lm`). With **no** external LM there is nothing to correct for, so any `lm_type` decodes as a plain beam rather than raising |
 | Config plumbing                | `get_beam_decoding_kwargs` for `beam_width <= 0`, `norm_score`, LM attachment, and that a config with no `type` yields exactly the pre-ILME argument set                     |
 | Config plumbing, LM side       | `make_lm` builds only what is configured and ignores `lm_type` entirely, and routes each h5 path to its own model                                                            |
 | Misconfiguration is caught     | `validate_lm` raises only for `"lodr"` with nothing to subtract, and warns on each of the six silent cases above; `DecoderConfig` rejects an unknown `lm_type` at load        |

@@ -1037,7 +1037,9 @@ class Transducer(BaseModel):
             - "lodr":    subtract `internal_lm`, a cheap low-order n-gram standing in for the
                          internal LM [5].
         internal_lm : Optional[LanguageModel]
-            The low-order LM of "lodr", same interface as `lm`. Ignored by the other types.
+            The low-order LM of "lodr", same interface as `lm`. Ignored by the other types, and
+            required only when an external `lm` is being fused: `lm=None` with `lm_type="lodr"`
+            has nothing to correct, so it decodes as a plain beam instead of raising.
         lm_beta : float
             The internal LM weight, `lambda_I` of eq. (27) in [4]. Ignored when `lm_type` is
             "shallow". Both papers tune it below the external weight: [4] lands on
@@ -1054,7 +1056,10 @@ class Transducer(BaseModel):
         with tf.name_scope(f"{self.name}_recognize_beam"):
             if lm_type not in ("shallow", "ilme", "lodr"):
                 raise ValueError(f'lm_type must be one of "shallow", "ilme", "lodr", got "{lm_type}"')
-            if lm_type == "lodr" and internal_lm is None:
+            # Only when there is something to correct: fusing an external LM under "lodr" without
+            # the low-order LM to subtract is a misconfiguration, but asking for "lodr" with no
+            # external LM at all is just a decode with no language model, and runs as a plain beam.
+            if lm is not None and lm_type == "lodr" and internal_lm is None:
                 raise ValueError('lm_type "lodr" needs an `internal_lm` to subtract, got None')
             # Stand-in for -inf: kept finite so that masked entries can be added to without
             # producing NaNs, and small enough that they can never win a top_k.
@@ -1097,7 +1102,12 @@ class Transducer(BaseModel):
             lm_states = _tile_to_beam(lm.get_initial_state(batch_size) if lm is not None else tf.zeros([batch_size, 1]), beam)
             # Same for the LODR low-order LM. "ilme" needs no state of its own: it reads the
             # internal LM off the prediction network, whose state is already carried in `states`.
-            _has_lodr = lm_type == "lodr"
+            #
+            # The model has to actually exist, not merely be asked for. With no external LM the
+            # guard above lets `lm_type` stand unsatisfied, because the corrections only exist to
+            # compensate for an external LM and there is nothing to compensate for -- so the
+            # subtraction is dropped rather than attempted against a `None`.
+            _has_lodr = lm_type == "lodr" and internal_lm is not None
             ilm_states = _tile_to_beam(internal_lm.get_initial_state(batch_size) if _has_lodr else tf.zeros([batch_size, 1]), beam)
             frame_indices = tf.zeros([batch_size, beam], dtype=tf.int32)  # t of each hypothesis
             num_expansions = tf.zeros([batch_size, beam], dtype=tf.int32)  # labels emitted on the current frame

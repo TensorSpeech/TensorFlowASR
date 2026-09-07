@@ -40,6 +40,16 @@ from tensorflow_asr.utils import file_util
 
 METADATA_NAME = "TFASR_METADATA"
 
+# Name given to the `position`-th leaf of the flattened input signature, by
+# `BaseModel.make_tflite_function`, and read back by `inferences.ASRInference`.
+#
+# It has to be set explicitly. An unnamed `tf.TensorSpec` leaves `tf.function` to auto-name the
+# placeholder `inputs`, `inputs_1`, ... in an order that is *not* the flattened order -- a traced
+# Conformer puts leaf 3 in `inputs_5` -- and the name is all the flatbuffer keeps. Since outputs
+# are numbered in flattened order (`Identity_N`), an export whose inputs are auto-named cannot be
+# streamed: nothing in the file says which new state belongs to which old one.
+INPUT_NAME = "tfasr_input_{position}"
+
 
 def _entry_name(entry) -> str:
     """Entry names come back as `bytes` when unpacked and stay `str` when we set them."""
