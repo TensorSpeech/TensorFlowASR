@@ -317,6 +317,8 @@ TFLite export (see [tflite_convertion](./tutorials/tflite.md)):
 tensorflow_asr tflite \
     --config-path=/path/to/config.yml.j2 \
     --h5=/path/to/weight.h5 \
+    --lm-h5=/path/to/lm.h5 \           # external LM, only if lm_config.external_config is set
+    --internal-lm-h5=/path/to/ilm.h5 \ # low-order LM, only if lm_type is "lodr"
     --bs=1 \
     --beam-width=16 \ # >0 enables ALSD++, 0 keeps greedy
     --output=/path/to/output.tflite
@@ -324,7 +326,11 @@ tensorflow_asr tflite \
 
 `make_tflite_function(batch_size, beam_width)` routes to `recognize_beam` whenever `beam_width > 0`, and to greedy otherwise.
 
-> **The TFLite export currently decodes without any language model.** `make_tflite_function` calls `recognize_beam(inputs, beam_width=beam_width)` and passes nothing else, so `lm`, `lm_alpha`, `lm_type`, `internal_lm` and `lm_beta` are all left at their defaults — even though `scripts/tflite.py` calls `model.make_lm()` first. This predates ILME/LODR and applies to plain shallow fusion just the same. Everything on this page about fusion holds for `model.recognize_beam(...)` and for evaluation via `predict_step`, but an exported `.tflite` is a plain ALSD++ beam.
+A beam export carries the language model with it. `make_tflite_function` builds its arguments through `get_beam_decoding_kwargs`, the same call `predict_step` uses, so `lm`, `lm_alpha`, `lm_type`, `internal_lm` and `lm_beta` come from `decoder_config` exactly as they do when evaluating — everything on this page about fusion holds for an exported `.tflite` too. The language models themselves are frozen into the flatbuffer alongside the ASR weights, which is why `--lm-h5` and `--internal-lm-h5` exist: without them the model described by `lm_config` is exported with its *initial* weights and contributes noise. `tensorflow_asr tflite` warns about that, and about the other silent misconfigurations, through the same `validate_lm` that `tensorflow_asr test` uses.
+
+`--beam-width` overrides `decoder_config.beam_width` rather than reading it, since the shipped configs all leave it at 0. The LM settings are read regardless of that value, so a config that only ever exports does not need a `beam_width` key.
+
+> **A fused export decodes correctly only when the whole utterance arrives in one call.** The exported signature is streaming-capable — it takes and returns encoder, decoder and beam states — but there is no field for LM state, so the fused LM restarts on every invocation. See 4.10. Greedy exports are unaffected: they never read a language model.
 
 The split follows what each thing *is*. The language models are models, so they sit in a top-level `lm_config` next to `model_config`; how to score with them is a decoding setting, so it sits in `decoder_config` next to `beam_width`:
 
@@ -424,7 +430,7 @@ Neither LM is tracked as a keras sub-layer of the ASR model, so their weights ne
 - **`lm_alpha=0` with an `lm` set still costs a full LM call per step** — it is a no-op mathematically, not computationally. Pass `lm=None` to skip the work. The same holds for `lm_beta=0`: `"ilme"` still runs the second joint call, and `"lodr"` still runs the low-order LM. Set `lm_type="shallow"` to skip it.
 - **ILME roughly doubles the joint cost.** The prediction network is reused, but the joint runs twice per step on all `B * W` rows. LODR exists precisely to avoid this.
 - **No weight tuning is provided.** `λ` and `λ_I` are dataset-specific and both papers tune them on held-out data. There is no sweep helper in this repository.
-- **TFLite export drops every LM setting.** See the note in 4.8. Pre-existing, and not specific to the internal LM correction.
+- **TFLite export cannot carry LM state between calls.** The settings do carry over (4.8), but `PredictOutput` has no LM state field, so a fused export is only correct fed one whole utterance per call — the same limitation as the bullet above, reached through a different door. It also means the LM weights land in the flatbuffer, so a large external LM makes a correspondingly large `.tflite`.
 - **No timestamps and no n-best output** — only the single best hypothesis is returned.
 
 ### 4.11 Verification

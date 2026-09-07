@@ -5,9 +5,11 @@
 decoder_config:
   type: characters
   blank_index: 0
-  beam_width: 0
+  beam_width: 8
   norm_score: True
-  lm_config: null
+  lm_alpha: 0.5
+  lm_beta: 0.2
+  lm_type: lodr
   vocabulary: {{vocabprefix}}.vocab
   vocab_size: {{vocabsize}}
 

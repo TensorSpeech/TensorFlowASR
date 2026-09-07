@@ -738,6 +738,30 @@ def test_beam_decoding_kwargs_carries_the_internal_lm_settings():
     assert model.get_beam_decoding_kwargs()["internal_lm"] is model.internal_lm
 
 
+def test_beam_decoding_kwargs_beam_width_override_wins_and_lifts_the_gate():
+    """
+    An explicit `beam_width` replaces the config value and enables the settings on its own.
+
+    `make_tflite_function` takes its width from `tensorflow_asr tflite --beam-width`, not from
+    `decoder_config.beam_width`, which every shipped config leaves at 0. Without the override the
+    empty-dict gate would fire and the export would silently drop the whole language model.
+    """
+    model = build_model(4)
+    blob = keras.saving.serialize_keras_object(CountingLanguageModel(log_softmax(0, (LM_POSITIONS, 4, 4))))
+    model.tokenizer = _TokenizerStub(_DecoderConfigStub(beam_width=0, norm_score=True, lm_alpha=0.4))
+    model.make_lm(_lm_config(external_config=blob))
+
+    assert model.get_beam_decoding_kwargs() == {}, "beam_width 0 with no override is still no beam search"
+
+    kwargs = model.get_beam_decoding_kwargs(beam_width=5)
+    assert kwargs == {"beam_width": 5, "score_norm": True, "lm": model.lm, "lm_alpha": 0.4}
+
+    # and it wins over a config that does set one
+    model.tokenizer = _TokenizerStub(_DecoderConfigStub(beam_width=7, norm_score=True, lm_alpha=0.4))
+    assert model.get_beam_decoding_kwargs(beam_width=2)["beam_width"] == 2
+    assert model.get_beam_decoding_kwargs(beam_width=0)["beam_width"] == 7, "0 means unset, so the config decides"
+
+
 def test_beam_decoding_kwargs_without_lm_drops_every_language_model_argument():
     """`with_lm=False` is the plain beam predict_step runs beside the fused one: no LM arguments."""
     model = build_model(4)

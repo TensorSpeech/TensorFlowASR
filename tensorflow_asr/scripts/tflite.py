@@ -27,10 +27,31 @@ def main(
     config_path: str,
     output: str,
     h5: str = None,
+    lm_h5: str = None,
+    internal_lm_h5: str = None,
     bs: int = 1,
     beam_width: int = 0,
     repodir: str = os.getcwd(),
 ):
+    """
+    Convert a checkpoint to a TFLite flatbuffer.
+
+    Parameters
+    ----------
+    beam_width : int
+        Hypotheses per utterance. `0` exports the greedy decoder, anything positive exports the
+        ALSD++ beam search together with the language model settings from `decoder_config` --
+        this flag overrides `decoder_config.beam_width`, which is 0 in every shipped config.
+    lm_h5 : str
+        Weights of the external language model fused into the exported beam search, from
+        `tensorflow_asr train_lm --target=external`. Same flag as `tensorflow_asr test` for the
+        same reason: which trained copy you ship is a property of the run, not of the config.
+        Only read when `lm_config.external_config` describes a model; without it that model is
+        frozen into the flatbuffer with its *initial* weights, which is never what you want.
+    internal_lm_h5 : str
+        Same, for the low-order language model LODR subtracts (`train_lm --target=internal`,
+        `lm_config.internal_config`). Only read when `decoder_config.lm_type` is "lodr".
+    """
     assert output
     keras.backend.clear_session()
     env_util.setup_seed()
@@ -43,14 +64,17 @@ def main(
 
     model: BaseModel = keras_util.model_from_config(config.model_config)
     model.tokenizer = tokenizer
-    # Built but unused: `make_tflite_function` calls `recognize_beam` without any LM arguments, so
-    # an exported model is a plain ALSD++ beam. No weight flags here for that reason -- see the
-    # note in docs/decoders.md 4.8.
-    model.make_lm(config.lm_config)
     model.make(batch_size=bs)
     if h5 and tf.io.gfile.exists(h5):
         model.load_weights(h5, skip_mismatch=False)
     model.summary()
+    # After `make()`, which `make_lm` requires, and only meaningful for a beam export -- the greedy
+    # decoder never reads a language model. Validated the same way `scripts/test.py` validates it,
+    # so a combination that would silently decode without the correction asked for is caught here
+    # rather than after the conversion has run.
+    model.make_lm(config.lm_config, lm_weights=lm_h5, internal_lm_weights=internal_lm_h5)  # no-op unless lm_config sets a model
+    if beam_width > 0:
+        app_util.validate_lm(model, config.decoder_config, lm_h5=lm_h5, internal_lm_h5=internal_lm_h5, beam_width=beam_width)
 
     app_util.convert_tflite(model=model, output=output, batch_size=bs, beam_width=beam_width)
 

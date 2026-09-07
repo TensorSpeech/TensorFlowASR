@@ -27,7 +27,7 @@ import re
 import numpy as np
 import pytest
 
-from tensorflow_asr.configs import DecoderConfig
+from tensorflow_asr.configs import DecoderConfig, LanguageModelConfig
 from tensorflow_asr.models.base_model import BaseModel
 from tensorflow_asr.tokenizers import CharTokenizer
 
@@ -436,6 +436,112 @@ def test_beam_export_traces_the_beam_search(name, tokenizer):
     assert "TopKV2" not in greedy, "greedy decoding should not need a top_k"
     assert "TopKV2" in beam, "beam_width>0 did not trace the beam search"
     assert "OneHot" in beam, "the forced-blank mask is missing from the beam graph"
+
+
+def _lm_tokenizer(beam_width=2, lm_alpha=0.4):
+    """
+    A tokenizer of its own, so mutating `decoder_config` cannot leak into the module fixture.
+
+    `beam_width` here is deliberately *not* what the export uses -- `make_tflite_function` takes
+    its own -- but the rest of the language model settings do come off this object.
+    """
+    tok = CharTokenizer(DecoderConfig({"type": "characters", "blank_index": 0, "vocabulary": None, "beam_width": beam_width, "lm_alpha": lm_alpha}))
+    tok.make()
+    return tok
+
+
+def _attach_bigram_lm(model, tokenizer, internal=False):
+    """
+    Give `model` a `BigramLanguageModel` through the real `make_lm` path.
+
+    A bigram is the cheapest LM that is a real one: its forward pass is an `Embedding` gather, so
+    it traces and converts like any other layer, and it is what LODR subtracts in practice.
+    """
+    import keras
+
+    from tensorflow_asr.models.lm.bigram_language_model import BigramLanguageModel
+
+    blob = keras.saving.serialize_keras_object(BigramLanguageModel(vocab_size=tokenizer.num_classes, blank=0))
+    # LODR needs both: one to fuse in and one to subtract. The same architecture stands in for
+    # both here -- what is being tested is that they reach the graph, not what they score.
+    config = {"external_config": blob, "internal_config": blob} if internal else {"external_config": blob}
+    model.make_lm(LanguageModelConfig(config))
+    return model
+
+
+@pytest.mark.parametrize("name", [_maybe_xfail(name) for name in ["transducer.RnnTransducer"]])
+def test_beam_export_passes_the_language_model_settings(name):
+    """
+    A beam export must decode with the LM, not without it.
+
+    `make_tflite_function` used to call `recognize_beam(inputs, beam_width=beam_width)` and pass
+    nothing else, so every fusion setting silently reverted to its default and an exported
+    `.tflite` was a plain ALSD++ beam however the config was written. It now builds its arguments
+    with `get_beam_decoding_kwargs`, the same call `predict_step` uses.
+    """
+    tokenizer = _lm_tokenizer(beam_width=0, lm_alpha=0.4)  # 0 in the config: the export's own width must still win
+    model = build_model(name, tokenizer)
+    _attach_bigram_lm(model, tokenizer)
+
+    captured = {}
+    original = model.recognize_beam
+    model.recognize_beam = lambda inputs, **kwargs: (captured.update(kwargs), original(inputs, **kwargs))[1]
+
+    model.make_tflite_function(batch_size=1, beam_width=3).get_concrete_function()
+
+    assert captured["lm"] is model.lm, "the external language model never reached recognize_beam"
+    assert captured["lm_alpha"] == 0.4, "lm_alpha did not come from decoder_config"
+    assert captured["beam_width"] == 3, "the export's own beam width must win over decoder_config"
+
+
+@pytest.mark.parametrize("name", [_maybe_xfail(name) for name in ["transducer.RnnTransducer"]])
+def test_greedy_export_ignores_the_language_model(name):
+    """A greedy export has no beam to fuse into, so an attached LM must not change what it traces."""
+    tokenizer = _lm_tokenizer()
+    plain = graph_ops(build_model(name, tokenizer), 0)
+    fused = graph_ops(_attach_bigram_lm(build_model(name, tokenizer), tokenizer), 0)
+    assert plain == fused, "an attached language model leaked into the greedy export"
+
+
+def loop_node_names(model: BaseModel, beam_width) -> set:
+    """Names of the nodes inside the traced `tf.while_loop` bodies, where decoding happens."""
+    graph_def = model.make_tflite_function(batch_size=1, beam_width=beam_width).get_concrete_function().graph.as_graph_def()
+    return {node.name for function in graph_def.library.function for node in function.node_def}
+
+
+@pytest.mark.parametrize("name", [_maybe_xfail(name) for name in ["transducer.RnnTransducer"]])
+def test_beam_export_with_a_language_model_converts(name):
+    """
+    The fused beam must survive the converter, and the LM must land inside the decoding loop.
+
+    The LM is called once per step from inside the beam's `tf.while_loop` under
+    `jit_compile=True`, which is where this was most likely to break, so it is worth converting
+    rather than assuming. `BigramLanguageModel`'s forward pass is a gather over its `table` layer,
+    so a `table` node in a loop body is the LM being evaluated per step rather than merely being
+    reachable from the graph.
+    """
+    tokenizer = _lm_tokenizer()
+    model = _attach_bigram_lm(build_model(name, tokenizer), tokenizer)
+
+    fused = loop_node_names(model, 2)
+    plain = loop_node_names(build_model(name, tokenizer), 2)
+    assert not any("table" in n for n in plain), "the plain beam already has a table; this test cannot tell the LM apart"
+    assert any("table" in n for n in fused), "the language model is not evaluated inside the beam loop"
+
+    assert len(convert(model, batch_size=1, beam_width=2)) > 0
+
+
+@pytest.mark.parametrize("name", [_maybe_xfail(name) for name in ["transducer.RnnTransducer"]])
+def test_lodr_beam_export_converts(name):
+    """Same, for the `"lodr"` correction, which sends a second language model into the loop."""
+    tokenizer = _lm_tokenizer()
+    tokenizer.decoder_config.lm_type = "lodr"
+    tokenizer.decoder_config.lm_beta = 0.2
+    model = _attach_bigram_lm(build_model(name, tokenizer), tokenizer, internal=True)
+
+    kwargs = model.get_beam_decoding_kwargs(beam_width=2)
+    assert kwargs["internal_lm"] is model.internal_lm and kwargs["lm_beta"] == 0.2
+    assert len(convert(model, batch_size=1, beam_width=2)) > 0
 
 
 @pytest.mark.parametrize("name", [_maybe_xfail(name) for name in ["ctc.Conformer", "transducer.RnnTransducer"]])

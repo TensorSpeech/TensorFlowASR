@@ -96,7 +96,7 @@ def evaluate_hypotheses(filepath: str):
     return df
 
 
-def validate_lm(model: BaseModel, decoder_config, lm_h5: str = None, internal_lm_h5: str = None):
+def validate_lm(model: BaseModel, decoder_config, lm_h5: str = None, internal_lm_h5: str = None, beam_width: int = None):
     """
     Check that the language models attached to `model` make sense for how it is about to decode.
 
@@ -118,6 +118,10 @@ def validate_lm(model: BaseModel, decoder_config, lm_h5: str = None, internal_lm
     lm_h5, internal_lm_h5 : str
         The paths that were passed to `make_lm`, used only to tell a trained model from one left
         at its initial weights.
+    beam_width : int
+        Overrides `decoder_config.beam_width`, for callers that take their own. `scripts/tflite.py`
+        does: its `--beam-width` decides what gets exported, so without this the check below would
+        report beam search as off and skip every remaining warning.
 
     Raises
     ------
@@ -125,7 +129,7 @@ def validate_lm(model: BaseModel, decoder_config, lm_h5: str = None, internal_lm
         `lm_type` is "lodr" but no internal language model was built.
     """
     lm_type = str(getattr(decoder_config, "lm_type", "shallow") or "shallow").lower()
-    beam_width = int(getattr(decoder_config, "beam_width", 0) or 0)
+    beam_width = int(beam_width or getattr(decoder_config, "beam_width", 0) or 0)
     lm_alpha = float(getattr(decoder_config, "lm_alpha", 0.0) or 0.0)
     lm_beta = float(getattr(decoder_config, "lm_beta", 0.0) or 0.0)
     has_external, has_internal = model.lm is not None, model.internal_lm is not None

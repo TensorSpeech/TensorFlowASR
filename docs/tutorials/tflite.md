@@ -21,6 +21,8 @@ tensorflow_asr tflite \
 tensorflow_asr tflite --help
 ```
 
+A `--beam-width` above 0 exports the beam search along with the language model settings from `decoder_config`. Pass `--lm-h5` (and `--internal-lm-h5` when `lm_type` is `"lodr"`) so the language models are frozen in with their trained weights rather than their initial ones. Note that a fused export restarts the LM on every call, so it is only correct fed one whole utterance at a time — see [decoders](../decoders.md) 4.8 and 4.10.
+
 ## Inference
 
 ### 1. Input

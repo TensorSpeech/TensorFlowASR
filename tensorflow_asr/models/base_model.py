@@ -123,7 +123,7 @@ class BaseModel(keras.Model, TensorFlowTrainer):
         logger.info(f"Language models for beam search: external={self.lm}, internal={self.internal_lm}")
         return self.lm
 
-    def get_beam_decoding_kwargs(self, with_lm: bool = True) -> dict:
+    def get_beam_decoding_kwargs(self, with_lm: bool = True, beam_width: int = None) -> dict:
         """
         Beam search settings taken from the tokenizer's decoder config.
 
@@ -134,9 +134,15 @@ class BaseModel(keras.Model, TensorFlowTrainer):
         `with_lm=False` keeps only the plain beam-search settings (`beam_width`, `score_norm`) and
         drops every language-model argument. `predict_step` uses it to run a language-model-free
         beam next to the fused one, so the test report can show what the language model changed.
+
+        `beam_width` overrides the config value, for callers that take their own. Passing a
+        positive one also lifts the empty-dict gate above: `make_tflite_function` gets its width
+        from `tensorflow_asr tflite --beam-width`, so gating it on a `decoder_config.beam_width`
+        that is 0 in every shipped config would silently export the beam without any of the
+        language model settings underneath -- which is exactly the bug this parameter fixes.
         """
         decoder_config = getattr(getattr(self, "tokenizer", None), "decoder_config", None)
-        beam_width = int(getattr(decoder_config, "beam_width", 0) or 0)
+        beam_width = int(beam_width or getattr(decoder_config, "beam_width", 0) or 0)
         if beam_width <= 0:
             return {}
         kwargs = {"beam_width": beam_width, "score_norm": bool(getattr(decoder_config, "norm_score", True))}
@@ -513,10 +519,25 @@ class BaseModel(keras.Model, TensorFlowTrainer):
     # ---------------------------------- TFLITE ---------------------------------- #
 
     def make_tflite_function(self, batch_size: int = 1, beam_width: int = 0):
+        """
+        Trace the decoder into a `tf.function` ready for TFLite conversion.
+
+        `beam_width > 0` exports the beam search, 0 exports greedy. A beam export carries the
+        language model settings from `decoder_config` -- fusion weight, correction type, and the
+        models themselves, frozen into the flatbuffer alongside the ASR weights -- so an exported
+        beam decodes the same way `predict_step` does. It follows that `scripts/tflite.py` must
+        load the LM weights, or the export embeds a randomly initialised language model.
+
+        The one thing that does not carry over is LM state across calls: `PredictOutput` has no
+        field for it, so a fused LM restarts from `get_initial_state` on every invocation. A fused
+        export is therefore only correct when the whole utterance is passed in one call. See
+        `docs/decoders.md` 4.10.
+        """
+        beam_kwargs = self.get_beam_decoding_kwargs(beam_width=beam_width) if beam_width > 0 else {}
 
         def tflite_func(inputs: schemas.PredictInput):
             if beam_width > 0:
-                outputs = self.recognize_beam(inputs, beam_width=beam_width)
+                outputs = self.recognize_beam(inputs, **beam_kwargs)
             else:
                 outputs = self.recognize(inputs)
             return schemas.PredictOutputWithTranscript(
