@@ -12,12 +12,32 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+"""
+Transcribe one audio file with an exported `.tflite`, in a single pass, through `ASRInference`::
+
+    python examples/inferences/tflite.py \\
+        --audio-file-path /path/to/audio.wav \\
+        --tflite /path/to/model.tflite
+
+`streaming=False` sends the whole signal in one call with fresh state and keeps nothing, which is
+exact for every architecture -- offline models included. To feed it a piece at a time instead, see
+`streaming_tflite.py` (a file read in blocks) and `live_streaming_tflite.py` (a microphone).
+
+Nothing has to be configured on this side. `tensorflow_asr tflite` records the sample rate, the
+blank id and the chunk geometry in the flatbuffer's own metadata, and the transcript is produced
+inside the graph, so there is no config to load, no tokenizer to build and no rate to pass in --
+one wrong number there would transcribe nonsense rather than fail. See
+`tensorflow_asr/utils/tflite_util.py` for what is stored and `tensorflow_asr/inferences.py` for the
+interpreter work this hides: locating each tensor in a signature the converter reordered, seeding
+the carried state, and decoding the transcript bytes.
+
+The export must be traced at batch size 1 (`tensorflow_asr tflite --bs=1`), since one file is one
+signal. A larger one takes that many signals per call and refuses this one, saying so.
+"""
+
 import logging
 
-import tensorflow_text as tft
-from tensorflow.lite.python import interpreter
-
-from tensorflow_asr import tf
+from tensorflow_asr.inferences import ASRInference
 from tensorflow_asr.utils import cli_util, data_util
 
 logger = logging.getLogger(__name__)
@@ -26,46 +46,24 @@ logger = logging.getLogger(__name__)
 def main(
     audio_file_path: str,
     tflite: str,
-    sample_rate: int = 16000,
-    blank: int = 0,
 ):
-    wav = data_util.load_and_convert_to_wav(audio_file_path, sample_rate=sample_rate)
-    signal = data_util.read_raw_audio(wav)
-    signal = tf.reshape(signal, [1, -1])
-    signal_length = tf.reshape(tf.shape(signal)[1], [1])
+    """
+    Parameters
+    ----------
+    audio_file_path : str
+        Audio to transcribe. Any format `librosa` reads; it is resampled to the rate recorded in
+        the model's metadata.
+    tflite : str
+        An export from `tensorflow_asr tflite`, traced at `--bs=1`.
+    """
+    asr = ASRInference(tflite=tflite)
+    logger.info(f"Model metadata: {asr.metadata}")
 
-    tflitemodel = interpreter.InterpreterWithCustomOps(model_path=tflite, custom_op_registerers=tft.tflite_registrar.SELECT_TFTEXT_OPS)
-    input_details = tflitemodel.get_input_details()
-    output_details = tflitemodel.get_output_details()
+    signal = data_util.read_raw_audio(data_util.load_and_convert_to_wav(audio_file_path, sample_rate=asr.metadata["sample_rate"]))
 
-    tflitemodel.resize_tensor_input(input_details[0]["index"], signal.shape, strict=True)
-    tflitemodel.allocate_tensors()
-    tflitemodel.set_tensor(input_details[0]["index"], signal)
-    tflitemodel.set_tensor(input_details[1]["index"], signal_length)
-    tflitemodel.set_tensor(input_details[2]["index"], tf.ones(input_details[2]["shape"], dtype=input_details[2]["dtype"]) * blank)
-    tflitemodel.set_tensor(input_details[3]["index"], tf.zeros(input_details[3]["shape"], dtype=input_details[3]["dtype"]))
-    tflitemodel.set_tensor(input_details[4]["index"], tf.zeros(input_details[4]["shape"], dtype=input_details[4]["dtype"]))
-
-    tflitemodel.invoke()
-
-    transcript = tflitemodel.get_tensor(output_details[0]["index"])
-    tokens = tflitemodel.get_tensor(output_details[1]["index"])
-    next_tokens = tflitemodel.get_tensor(output_details[2]["index"])
-    if len(output_details) > 4:
-        next_encoder_states = tflitemodel.get_tensor(output_details[3]["index"])
-        next_decoder_states = tflitemodel.get_tensor(output_details[4]["index"])
-    elif len(output_details) > 3:
-        next_encoder_states = None
-        next_decoder_states = tflitemodel.get_tensor(output_details[3]["index"])
-    else:
-        next_encoder_states = None
-        next_decoder_states = None
-
+    # A flat signal is a batch of one, so the transcript is row 0.
+    transcript = asr(signal, streaming=False)[0]
     logger.info(f"Transcript: {transcript}")
-    logger.info(f"Tokens: {tokens}")
-    logger.info(f"Next tokens: {next_tokens}")
-    logger.info(f"Next encoder states: {None if next_encoder_states is None else next_encoder_states.shape}")
-    logger.info(f"Next decoder states: {None if next_decoder_states is None else next_decoder_states.shape}")
 
 
 if __name__ == "__main__":

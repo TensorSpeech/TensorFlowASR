@@ -190,7 +190,7 @@ There are two ways to fill it. **Counting in-process** (`train_internal_lm`) is 
 
 ```bash
 ./scripts/install_kenlm.sh                     # once
-tensorflow_asr train_kenlm_lm \
+tensorflow_asr train_kenlm \
     --config-path=<config> --datadir=<datadir> --modeldir=<modeldir> \
     --prune='[0,0,1,1]'
 ```
@@ -370,10 +370,10 @@ Fitting the language models is a separate step before evaluation, and which one 
 ```bash
 tensorflow_asr train_internal_lm ... --modeldir=<modeldir>   # counting  -> lm/internal.weights.h5
 tensorflow_asr train_external_lm ... --modeldir=<modeldir>   # gradient  -> lm/external.weights.h5
-tensorflow_asr train_kenlm_lm    ... --modeldir=<modeldir>   # KenLM     -> lm/kenlm.weights.h5
+tensorflow_asr train_kenlm       ... --modeldir=<modeldir>   # KenLM     -> lm/kenlm.weights.h5
 ```
 
-`train_external_lm` and `train_kenlm_lm` both fill `lm_config.external_config` — a neural LM or an n-gram, whichever that key names.
+`train_external_lm` and `train_kenlm` both fill `lm_config.external_config` — a neural LM or an n-gram, whichever that key names.
 
 Those two outputs are what evaluation then loads:
 

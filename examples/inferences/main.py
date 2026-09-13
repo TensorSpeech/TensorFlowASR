@@ -17,8 +17,8 @@ Transcribe one audio file with a checkpoint, through `ASRInference`.
 
 Decoding is `ASRInference`'s job -- building the predict input, threading the states, detokenizing
 -- so this file is only about getting a model and a signal in front of it. See
-`tensorflow_asr/inferences.py` for the streaming form and for driving an exported `.tflite`
-instead, and `examples/inferences/tflite.py` for the interpreter API underneath.
+`tensorflow_asr/inferences.py` for the streaming form, and `examples/inferences/tflite.py` for the
+same one-pass decode driven from an exported `.tflite` rather than a checkpoint.
 """
 
 import logging

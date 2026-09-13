@@ -104,12 +104,15 @@ tensorflow_asr train --help
 
 Only needed if you decode with beam search and a language model. Greedy decoding uses none, so you can stop at step 6.
 
-There are two language models, and `--target` picks which one is trained:
+There are two roles a language model can play, and a separate command trains each:
 
-| `--target`   | What it is                                        | Trained on                       | Config key                 |
-| ------------ | ------------------------------------------------- | -------------------------------- | -------------------------- |
-| `external`   | the LM fused *into* the scores                    | a large text corpus              | `lm_config.external_config` |
-| `internal`   | the low-order LM that LODR *subtracts*            | the ASR training transcripts     | `lm_config.internal_config` |
+| Command                            | What it is                                     | Trained on                   | Config key                  |
+| ---------------------------------- | ---------------------------------------------- | ---------------------------- | --------------------------- |
+| `train_external_lm` / `train_kenlm` | the LM fused *into* the scores                 | a large text corpus          | `lm_config.external_config` |
+| `train_internal_lm`                | the low-order LM that LODR *subtracts*          | the ASR training transcripts | `lm_config.internal_config` |
+
+`train_external_lm` trains the neural LM and `train_kenlm` fits an n-gram; both fill the same
+`external_config` key, so pick whichever that key names. Both are in 7.2.
 
 Which ones you need depends on `decoder_config.lm_type`: `shallow` and `ilme` use the external LM only, `lodr` uses both. See [decoders.md](../decoders.md) for what each mode does and how to set `lm_alpha` and `lm_beta`.
 
@@ -168,7 +171,7 @@ An **n-gram** external LM is the cheaper alternative, and does not train by grad
 ```bash
 ./scripts/install_kenlm.sh
 
-tensorflow_asr train_kenlm_lm \
+tensorflow_asr train_kenlm \
     --config-path=/path/to/config.yml.j2 \
     --datadir=/path/to/datadir \
     --modeldir=/path/to/modeldir \

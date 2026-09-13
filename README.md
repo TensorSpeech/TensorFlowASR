@@ -34,6 +34,7 @@ TensorFlowASR implements some automatic speech recognition architectures such as
 - [Training \& Testing Tutorial](#training--testing-tutorial)
 - [Features Extraction](#features-extraction)
 - [Decoders](#decoders)
+- [Inference](#inference)
 - [Augmentations](#augmentations)
 - [TFLite Convertion](#tflite-convertion)
 - [Pretrained Models](#pretrained-models)
@@ -136,6 +137,14 @@ See [features_extraction](./tensorflow_asr/features/README.md)
 Greedy and beam search decoding for CTC and Transducer models, including the ALSD++ transducer beam search
 
 See [decoders](./docs/decoders.md)
+
+## Inference
+
+`ASRInference` transcribes with either a checkpoint or an exported tflite model, in one pass or
+streaming chunk by chunk
+
+See [inferences](./docs/inferences.md), and [examples/inferences](./examples/inferences/) for
+runnable scripts including a live microphone
 
 ## Augmentations
 
