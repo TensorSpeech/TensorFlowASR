@@ -35,6 +35,7 @@ dependencies = [
     "tabulate~=0.9.0",
     "tensorflow~=2.19.0",
     "tensorflow-text~=2.19.0",
+    "num2words>=0.5.14",
 ]
 
 [project.optional-dependencies]

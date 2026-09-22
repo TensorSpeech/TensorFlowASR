@@ -192,7 +192,57 @@ A full pass is often the wrong epoch. The whole corpus at `--bs=32` is ~1.25M st
 
 Without `--text-path` it falls back to the training transcripts and warns, since that trains the external LM on the text the transducer already learned.
 
-### 7.3 Use the weights
+### 7.3 Normalize the corpus
+
+A corpus is written, not spoken. It carries punctuation and digits; an ASR vocabulary carries
+neither. Every token the language model knows but the acoustic model can never emit is probability
+mass spent on nothing, so an un-normalized corpus makes fusion *worse* rather than better. OpenSLR
+ships the LibriSpeech corpus already normalized (`librispeech-lm-norm.txt.gz`); no such file exists
+for most languages.
+
+Set `language` on the external dataset config and `LMDataset` rewrites each line as it streams:
+
+```yaml
+data_config:
+  lm_dataset_config:
+    external_dataset_config:
+      data_paths: [/path/to/corpus.txt.gz]
+      language: vi            # enables normalization and picks how numbers are read
+      # keep_punctuation: ""  # optional; overrides the language default
+```
+
+| Input | Output (`vi`) |
+| --- | --- |
+| `Năm 2018, giá 1.000.000 đồng.` | `năm hai nghìn không trăm mười tám giá một triệu đồng` |
+| `Phiên bản 1.2.3` | `phiên bản một hai ba` |
+| `tăng 3,14%` | `tăng ba phẩy một bốn` |
+
+What it does:
+
+- **Expands numbers** with [`num2words`](https://github.com/savoirfairelinux/num2words), in the
+  language given. Anything that is not a quantity — a version, a date, an id — is read digit by
+  digit instead, so no bare digit ever reaches the tokenizer.
+- **Strips punctuation and symbols**, except what a transcript in that language really contains:
+  English keeps `'` and `-` so `don't` and `well-known` survive, Vietnamese keeps neither. Those
+  characters are only kept *inside* a word — a standalone `--` still goes.
+
+What it deliberately does not do:
+
+- **Lowercase or unicode-normalize.** `Tokenizer.normalize_text` already does both on the way to
+  being tokenized, and its NFKC pass is what folds the two Vietnamese tone placements (`hoà` /
+  `hòa`) onto one spelling.
+- **Speak symbols.** `%` becomes a space, not `phần trăm`. That needs a word per symbol per
+  language, and a wrong reading is worse than a missing one.
+- **Touch `.tsv` transcripts.** Only the corpus is rewritten. Transcripts are what the transducer
+  trained on, and the internal LM's job is to approximate what it picked up from exactly that text.
+
+Without `language` set, nothing is normalized — there is no language-independent reading of `2018`.
+
+`tests/test_lm_normalization.py` covers the rules, including a sweep of 0–99999 for the Vietnamese
+`lẻ` / `không trăm` distinction, which `num2words` gets wrong on its own for every year of this
+century.
+
+### 7.4 Use the weights
 
 The weights are not named in the config. Pass them to `tensorflow_asr test`, which loads them into the models `lm_config` describes:
 

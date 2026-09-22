@@ -60,15 +60,19 @@
 
 # Where `predictions` and `predictions_length` are the label prepanded by blank and its length for training *Transducer*
 
+import functools
 import gzip
 import json
 import logging
 import os
+import re
 import shutil
 import subprocess
+import unicodedata
 from dataclasses import asdict, dataclass
 
 import numpy as np
+from num2words import num2words
 
 from tensorflow_asr import schemas, tf
 from tensorflow_asr.abstracts import AbstractDataset, AbstractTokenizer
@@ -533,6 +537,46 @@ class ASRSliceDataset(ASRDataset):
         return self.process(dataset, batch_size, ga_steps=ga_steps, padded_shapes=padded_shapes)
 
 
+# How a corpus is normalised per language, for `LMDataset.normalize_corpus_text`.
+#
+# Only what differs between languages lives here. `keep` is the punctuation a transcript in that
+# language actually contains -- English writes "don't" and "well-known", so stripping `'` and `-`
+# would teach the language model words the transducer never emits, while Vietnamese writes neither.
+# `thousands` is the digit-group separator to delete before a number is read, and `point` the word
+# for the decimal separator.
+_LANGUAGE_RULES = {
+    "en": {"keep": "'-", "thousands": ",", "point": "point"},
+    "vi": {"keep": "", "thousands": ".", "point": "phẩy"},
+    "fr": {"keep": "'-", "thousands": " ", "point": "virgule"},
+    "de": {"keep": "-", "thousands": ".", "point": "komma"},
+    "es": {"keep": "-", "thousands": ".", "point": "coma"},
+}
+_DEFAULT_RULES = {"keep": "", "thousands": "", "point": None}
+
+# A run of digits, allowing the separators a written number carries: "1.000.000", "3,14", "2018".
+_NUMBER = re.compile(r"\d[\d.,\s]*\d|\d")
+
+# `num2words` reads a Vietnamese group whose hundreds digit is zero as "lẻ" regardless of the tens
+# digit, so 2018 comes back "hai nghìn lẻ mười tám". "lẻ" (or "linh") is only correct when the tens
+# digit is zero too -- 2005, "hai nghìn lẻ năm". With a tens digit present the group is read
+# "không trăm ...", so every year of this century is wrong out of the box, which in a news corpus is
+# the single most common number there is. This rewrites exactly that case and leaves the rest alone;
+# `tests/test_datasets.py` sweeps 0..99999 to check both halves of the rule.
+_VI_LE_BEFORE_TENS = re.compile(r"\blẻ (?=(?:mười|(?:một|hai|ba|bốn|năm|sáu|bảy|tám|chín) mươi)\b)")
+
+
+@functools.lru_cache(maxsize=None)
+def _punctuation_table(keep: str):
+    """
+    A `str.translate` table mapping every punctuation and symbol codepoint to a space.
+
+    Built over the whole of Unicode once per `keep` set and cached -- 8.6k codepoints, ~60ms -- so
+    the per-line cost is one C-level translate rather than a Python loop over characters. Mapping to
+    a space rather than deleting keeps "one,two" two words instead of one.
+    """
+    return {cp: " " for cp in range(0x110000) if unicodedata.category(chr(cp))[0] in "PS" and chr(cp) not in keep}
+
+
 class LMDataset(AbstractDataset):
     """
     Text dataset for training a `LanguageModel` (see `scripts/train_lm.py`).
@@ -572,6 +616,8 @@ class LMDataset(AbstractDataset):
         enabled: bool = True,
         max_length: int = 0,  # truncate sequences to this many tokens; 0 = no limit
         max_lines: int = None,  # stop after this many lines across all files; None = read all
+        language: str = None,  # enables corpus normalisation and picks how numbers are read
+        keep_punctuation: str = None,  # overrides the language's default; "" strips everything
         name: str = "",
         **kwargs,
     ):
@@ -589,6 +635,13 @@ class LMDataset(AbstractDataset):
         self.enabled = enabled
         self.max_length = max_length
         self.max_lines = max_lines
+        self.language = (language or "").lower() or None
+        self.keep_punctuation = keep_punctuation
+        if self.language and self.language not in _LANGUAGE_RULES:
+            logger.warning(
+                f"No normalisation rules for language {self.language!r}, falling back to stripping every "
+                f"punctuation mark and reading numbers with num2words. Known: {sorted(_LANGUAGE_RULES)}"
+            )
         self.name = name or stage
         self.total_steps = None
         self.num_entries = 0
@@ -627,12 +680,101 @@ class LMDataset(AbstractDataset):
         """Stream text, one line at a time, across every file in `data_paths`."""
         count = 0
         for path in self._resolved_paths():
-            source = self._iter_tsv(path) if path.lower().endswith(".tsv") else self._iter_textfile(path)
+            is_tsv = path.lower().endswith(".tsv")
+            source = self._iter_tsv(path) if is_tsv else self._iter_textfile(path)
             for text in source:
-                yield text
+                # Transcripts are left exactly as they are. They are what the transducer trained on,
+                # and the internal LM's whole job is to approximate what it picked up from that text,
+                # so rewriting them here would change what LODR subtracts. Only the corpus is dirty.
+                yield text if is_tsv else self.normalize_corpus_text(text)
                 count += 1
                 if self.max_lines and count >= self.max_lines:
                     return
+
+    # ----------------------------- NORMALISATION --------------------------------
+
+    def _read_digits(self, digits: str) -> str:
+        """Every digit read on its own, the fallback for anything that is not a quantity."""
+        try:
+            return " ".join(num2words(int(digit), lang=self.language) for digit in digits if digit.isdigit())
+        except (NotImplementedError, ValueError):
+            return digits
+
+    def _read_number(self, digits: str) -> str:
+        """
+        One written number as words.
+
+        Anything that does not parse as a quantity -- a version, a date, an id -- is read digit by
+        digit instead. That is roughly how such a string is spoken, and more to the point it leaves
+        no bare digits behind: a digit that survives into the corpus is a token the transducer has
+        no way to emit, which is the whole problem this normalisation exists to solve.
+        """
+        rules = _LANGUAGE_RULES.get(self.language, _DEFAULT_RULES)
+        digits = "".join(digits.split())  # a thin space is a group separator in some locales
+
+        whole, separator, fraction = digits.partition("," if rules["thousands"] == "." else ".")
+        # A group separator only counts as one when it really separates groups of three. Otherwise
+        # "1.000.000" and "1.2.3" are the same string with the dots gone, and a version number would
+        # be read out as a million.
+        if rules["thousands"] and rules["thousands"] in whole:
+            head, *groups = whole.split(rules["thousands"])
+            if not head or len(head) > 3 or any(len(group) != 3 for group in groups):
+                return self._read_digits(digits)
+            whole = head + "".join(groups)
+        if not whole.isdigit() or (separator and not fraction.isdigit()):
+            return self._read_digits(digits)
+
+        try:
+            words = num2words(int(whole), lang=self.language)
+        except (NotImplementedError, OverflowError, ValueError):
+            return self._read_digits(digits)
+        if self.language == "vi":
+            words = _VI_LE_BEFORE_TENS.sub("không trăm ", words)
+
+        if separator and rules["point"]:
+            # Digits after the separator are read one by one, which is how a decimal is spoken --
+            # "3,14" is "ba phẩy một bốn", not "ba phẩy mười bốn".
+            spoken = [num2words(int(digit), lang=self.language) for digit in fraction]
+            words = f"{words} {rules['point']} {' '.join(spoken)}"
+        return words
+
+    def normalize_corpus_text(self, text: str) -> str:
+        """
+        Rewrite one line of corpus text into something the transducer could actually have said.
+
+        A web or news corpus is written, not spoken: it carries punctuation and digits, and neither
+        survives contact with an ASR vocabulary. Every token the language model knows but the
+        acoustic model can never emit is probability mass spent on nothing, so fusion gets worse
+        rather than better. The corpus OpenSLR ships for LibriSpeech is normalised before release;
+        no such file exists for most languages.
+
+        Off unless `language` is set -- there is no correct language-independent reading of "2018",
+        so a corpus whose language is not declared is passed through untouched.
+
+        Deliberately *not* done here: lowercasing and unicode normalisation, which
+        `Tokenizer.normalize_text` already applies to every line on its way to being tokenised.
+        Doing it twice would be wasted work, and NFKC there is what folds the two Vietnamese tone
+        placements together.
+
+        Numbers are expanded before punctuation is stripped, because the separators inside
+        "1.000.000" are punctuation and removing them first would leave three numbers.
+
+        Symbols are stripped rather than spoken: "%" becomes a space, not "phần trăm". Reading them
+        needs a word per symbol per language, and a wrong one is worse than a missing one.
+        """
+        if not self.language:
+            return text
+        rules = _LANGUAGE_RULES.get(self.language, _DEFAULT_RULES)
+        keep = self.keep_punctuation if self.keep_punctuation is not None else rules["keep"]
+
+        text = _NUMBER.sub(lambda match: f" {self._read_number(match.group())} ", text)
+        text = text.translate(_punctuation_table(keep))
+        if keep:
+            # Kept punctuation is kept for what it does *inside* a word -- "don't", "well-known".
+            # The same characters standing alone are ordinary punctuation ("go -- wait") and would
+            # otherwise survive as tokens of their own.
+            text = re.sub(rf"(?<!\w)[{re.escape(keep)}]+|[{re.escape(keep)}]+(?!\w)", " ", text)
+        return " ".join(text.split())
 
     # -------------------------------- ENTRIES -------------------------------------
 
