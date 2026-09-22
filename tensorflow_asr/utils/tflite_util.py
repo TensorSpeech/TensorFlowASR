@@ -107,3 +107,47 @@ def read_metadata(tflite_model) -> dict:
         if entry.Name().decode() == METADATA_NAME:
             return json.loads(bytes(model.Buffers(entry.Buffer()).DataAsNumpy()))
     return {}
+
+
+# Custom-op prefixes something registers at runtime. `Flex*` is the flex delegate, applied
+# automatically when the model needs it; `TFText>*` comes from `tensorflow_text`'s
+# `SELECT_TFTEXT_OPS`, which `inferences.ASRInference` hands to the interpreter. A custom op
+# outside these has no kernel in any interpreter this project builds.
+REGISTERED_CUSTOM_OP_PREFIXES = ("Flex", "TFText>")
+
+
+def custom_ops(tflite_model) -> list:
+    """
+    Every custom op the flatbuffer uses, sorted and deduplicated.
+
+    Parameters
+    ----------
+    tflite_model : bytes or str
+        The flatbuffer itself, or a path to it.
+    """
+    if isinstance(tflite_model, str):
+        with tf.io.gfile.GFile(file_util.preprocess_paths(tflite_model), "rb") as tflite_file:
+            tflite_model = tflite_file.read()
+
+    model = schema.Model.GetRootAsModel(bytearray(tflite_model), 0)
+    names = set()
+    for index in range(model.OperatorCodesLength()):
+        code = model.OperatorCodes(index).CustomCode()
+        if code is not None:
+            names.add(code.decode())
+    return sorted(names)
+
+
+def unregistered_custom_ops(tflite_model) -> list:
+    """
+    The custom ops in the flatbuffer that nothing registers -- an empty list means it can run.
+
+    The converter only writes these when `allow_custom_ops` is set, which `app_util.convert_tflite`
+    must set for the sentencepiece detokenizer. The flag is indiscriminate: it also silently accepts
+    an op with no TFLite builtin and no place on the flex allowlist, turning what would have been a
+    conversion error into a file that loads, allocates, and then raises `Encountered unresolved
+    custom op` on its first `invoke()`. Two have shown up here -- `LowerBound`, from
+    `tf.searchsorted` in the n-gram language model, and `CudnnRNNV3`, from converting with a GPU
+    visible -- so the export checks rather than trusts.
+    """
+    return [name for name in custom_ops(tflite_model) if not name.startswith(REGISTERED_CUSTOM_OP_PREFIXES)]

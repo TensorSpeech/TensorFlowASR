@@ -885,3 +885,79 @@ def test_tflite_cli_exposes_nchunks():
     assert parameter is not None, "no --nchunks flag"
     assert parameter.default == 1, "the default must keep exporting one attention chunk"
     assert "nchunks=nchunks" in inspect.getsource(tflite_script.main), "the flag is accepted but never forwarded"
+
+
+def test_unregistered_custom_ops_names_what_no_interpreter_can_resolve():
+    """
+    The guard that would have caught this export before it shipped.
+
+    `convert_tflite` needs `allow_custom_ops` for the sentencepiece detokenizer, and that flag is
+    indiscriminate: any op with no TFLite builtin and no place on the flex allowlist is written
+    into the flatbuffer as a raw custom op instead of failing the conversion. `tf.searchsorted`
+    was one such op and produced a 446 MB file that died on its first `invoke()`. `Flex*` comes
+    with the flex delegate and `TFText>*` with `SELECT_TFTEXT_OPS`, which `ASRInference`
+    registers; anything else has no kernel anywhere.
+    """
+    from tensorflow_asr import tf
+    from tensorflow_asr.utils import tflite_util
+
+    table = tf.constant(np.arange(0, 32, 2, dtype=np.int64))
+
+    @tf.function(input_signature=[tf.TensorSpec([1, 4], tf.int64)])
+    def search(queries):
+        return tf.searchsorted(tf.expand_dims(table, 0), queries, side="left")
+
+    converter = tf.lite.TFLiteConverter.from_concrete_functions([search.get_concrete_function()])
+    converter.target_spec.supported_ops = [tf.lite.OpsSet.TFLITE_BUILTINS, tf.lite.OpsSet.SELECT_TF_OPS]
+    converter.allow_custom_ops = True
+    flatbuffer = converter.convert()
+
+    assert tflite_util.custom_ops(flatbuffer) == ["LowerBound"]
+    assert tflite_util.unregistered_custom_ops(flatbuffer) == ["LowerBound"]
+
+
+def test_unregistered_custom_ops_allows_the_ops_the_runtime_registers():
+    """A real export carries `Flex*` ops by design; the guard must not reject its own output."""
+    from tensorflow_asr.utils import tflite_util
+
+    flatbuffer = convert(build_model("transducer.RnnTransducer", _lm_tokenizer()), batch_size=1, beam_width=0)
+    names = tflite_util.custom_ops(flatbuffer)
+    assert any(name.startswith("Flex") for name in names), f"expected flex ops in a real export, got {names}"
+    assert tflite_util.unregistered_custom_ops(flatbuffer) == []
+
+
+def _attach_ngram_lm(model, tokenizer):
+    """
+    Give `model` an `NGramLanguageModel` through the real `make_lm` path.
+
+    Left unfitted -- its arc table is all sentinel -- because what is under test is which ops the
+    lookup traces to, which does not depend on what is in the table. Sized down to keep the
+    unrolled binary search short; the default 20M arcs would unroll to 25 steps instead of 8.
+    """
+    import keras
+
+    from tensorflow_asr.models.lm.ngram_language_model import NGramLanguageModel
+
+    lm = NGramLanguageModel(vocab_size=tokenizer.num_classes, blank=0, order=2, max_arcs=256, max_states=64)
+    model.make_lm(LanguageModelConfig({"external_config": keras.saving.serialize_keras_object(lm)}))
+    return model
+
+
+@pytest.mark.parametrize("name", [_maybe_xfail(name) for name in ["transducer.RnnTransducer"]])
+def test_ngram_beam_export_is_runnable(name):
+    """
+    A fused `NGramLanguageModel` must export to something an interpreter can actually run.
+
+    `test_beam_export_with_a_language_model_converts` only ever fused a `BigramLanguageModel`,
+    whose forward pass is a gather, so nothing covered the n-gram's arc lookup. That lookup used
+    `tf.searchsorted`, which converted into an unresolvable `LowerBound` custom op -- a flatbuffer
+    that passed every conversion test here and then raised "unresolved custom op: LowerBound" on
+    the first `invoke()`. `convert_tflite` now refuses to return such a file, so this asserting
+    that the conversion happens at all is the regression test.
+    """
+    from tensorflow_asr.utils import tflite_util
+
+    tokenizer = _lm_tokenizer()
+    model = _attach_ngram_lm(build_model(name, tokenizer), tokenizer)
+    flatbuffer = convert(model, batch_size=1, beam_width=2)
+    assert tflite_util.unregistered_custom_ops(flatbuffer) == []

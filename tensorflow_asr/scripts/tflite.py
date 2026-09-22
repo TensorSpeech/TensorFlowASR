@@ -32,6 +32,7 @@ def main(
     bs: int = 1,
     beam_width: int = 0,
     nchunks: int = 1,
+    gpu: bool = False,
     repodir: str = os.getcwd(),
 ):
     """
@@ -57,8 +58,16 @@ def main(
         metadata. The graph is unaffected -- this only changes the chunk geometry a client reads
         back out of the flatbuffer, and a client can rescale it without re-exporting. See
         `BaseModel.get_tflite_metadata`.
+    gpu : bool
+        Leave accelerators visible while converting. Off by default because Keras picks the fused
+        LSTM kernel whenever a GPU is *visible* -- placement does not matter -- and that kernel
+        converts to a `CudnnRNNV3` custom op no interpreter can resolve. `convert_tflite` refuses
+        such a file, so turning this on only makes sense for a model with no LSTM in it.
     """
     assert output
+    if not gpu:
+        # First, before anything builds a tensor -- the visible device list is fixed from then on.
+        env_util.setup_cpu()
     keras.backend.clear_session()
     env_util.setup_seed()
 

@@ -30,6 +30,38 @@ logger = logging.getLogger(__name__)
 PAD_KEY = np.int64(1) << np.int64(62)
 
 
+def _lower_bound(sorted_keys, queries, size: int):
+    """
+    Index of the first entry of `sorted_keys` that is not less than each query -- `searchsorted`
+    with `side="left"`, written out.
+
+    `tf.searchsorted` would be one fused op and is what this started as. It traces to `tf.LowerBound`,
+    which is neither a TFLite builtin nor an allowlisted flex op, so `convert_tflite` -- which has to
+    pass `allow_custom_ops` for the sentencepiece detokenizer -- wrote it into the flatbuffer as a raw
+    custom op that no interpreter can resolve. The export converted and then died on its first
+    `invoke()`. Everything below is a TFLite builtin.
+
+    The search is the usual binary lifting: hold `lo` at a count of entries already known to be less
+    than the query, and try to extend it by a power of two, largest first. `sorted_keys[lo+step-1] <
+    q` proves every entry below `lo+step` is too, because the table is sorted, so the whole block can
+    be taken at once. `size` is static -- it is `max_arcs`, a tensor shape -- so the loop unrolls at
+    trace time into `ceil(log2(size))` steps with no control flow left in the graph.
+
+    `sorted_keys` is `[size]`; `queries` has any shape, and the result has that same shape. A query
+    past every entry returns `size`, which is off the end: the caller clamps it and then rejects it
+    on the key comparison, exactly as it did with `searchsorted`.
+    """
+    lo = tf.zeros_like(queries, dtype=tf.int32)
+    step = 1 << (size.bit_length() - 1)  # the largest power of two that fits in the table
+    while step >= 1:
+        nxt = lo + step
+        # `minimum` only keeps the gather in range on the branch `logical_and` is about to discard.
+        probe = tf.gather(sorted_keys, tf.minimum(nxt, size) - 1)
+        lo = tf.where(tf.logical_and(nxt <= size, probe < queries), nxt, lo)
+        step //= 2
+    return lo
+
+
 def count_ngrams(token_sequences, order: int, vocab_size: int, blank: int):
     """
     Count n-grams of every order from 1 to `order` over tokenized transcripts.
@@ -858,15 +890,12 @@ class NGramLanguageModel(LanguageModel):
         found = tf.zeros([rows, self.vocab_size], dtype=tf.bool)
         accumulated = tf.zeros([rows, 1], dtype=tf.float32)
 
-        sorted_keys = tf.expand_dims(self.arc_keys, axis=0)  # [1, max_arcs]
         for _ in range(self.order):
             keys = tf.expand_dims(tf.cast(current, tf.int64) * self.vocab_size, axis=1) + tf.expand_dims(tokens, axis=0)  # [M, V]
-            # One binary search over the whole table. `searchsorted` wants matching leading
-            # dimensions, hence the flatten to a single row and back.
-            indices = tf.searchsorted(sorted_keys, tf.reshape(keys, [1, -1]), side="left")
-            indices = tf.reshape(indices, [rows, self.vocab_size])
+            # One binary search over the whole table, per key.
+            indices = _lower_bound(self.arc_keys, keys, self.max_arcs)  # [M, V]
             indices = tf.minimum(indices, self.max_arcs - 1)  # a key past the last arc would index off the end
-            # `searchsorted` gives the insertion point; the arc exists only if what sits there is
+            # The search gives the insertion point; the arc exists only if what sits there is
             # the key we asked for. Padding is the sentinel, so it never compares equal.
             hit = tf.equal(tf.gather(self.arc_keys, indices), keys)
             fresh = tf.logical_and(hit, tf.logical_not(found))

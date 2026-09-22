@@ -599,3 +599,80 @@ def test_arpa_rejects_a_context_carrying_more_than_all_the_probability(tmp_path)
     path = write_arpa(tmp_path, broken, name="overfull.arpa")
     with pytest.raises(ValueError, match="more probability than one"):
         read_arpa(path, vocab_size=VOCAB, blank=BLANK, max_arcs=4096, max_states=512)
+
+
+# --------------------------------------------------------------------------------------------
+# the binary search behind the arc lookup
+# --------------------------------------------------------------------------------------------
+
+
+def test_lower_bound_matches_numpy_on_random_tables():
+    """`_lower_bound` is `np.searchsorted(side="left")`, which is what the arc lookup assumes."""
+    from tensorflow_asr.models.lm.ngram_language_model import _lower_bound
+
+    rng = np.random.default_rng(0)
+    for size in (1, 2, 3, 7, 8, 9, 64, 100):
+        keys = np.sort(rng.choice(5000, size=size, replace=False)).astype(np.int64)
+        queries = rng.integers(-5, 5005, size=[4, 9]).astype(np.int64)
+        found = _lower_bound(tf.constant(keys), tf.constant(queries), size).numpy()
+        np.testing.assert_array_equal(found, np.searchsorted(keys, queries, side="left"), err_msg=f"size={size}")
+
+
+def test_lower_bound_handles_the_edges():
+    """Below the first key, past the last, an exact hit, and duplicates -- all of which arise here."""
+    from tensorflow_asr.models.lm.ngram_language_model import PAD_KEY, _lower_bound
+
+    # Duplicates are what a padded arc table looks like: real keys, then one sentinel repeated.
+    keys = np.array([10, 20, 20, 20, 30, PAD_KEY, PAD_KEY, PAD_KEY], dtype=np.int64)
+    queries = np.array([9, 10, 11, 20, 21, 30, 31, PAD_KEY, PAD_KEY + 1], dtype=np.int64)
+    found = _lower_bound(tf.constant(keys), tf.constant(queries), len(keys)).numpy()
+    np.testing.assert_array_equal(found, np.searchsorted(keys, queries, side="left"))
+    # A query past every key returns `size`, which is off the end -- `_step` clamps it, and the
+    # key comparison there rejects whatever the clamped index lands on.
+    assert found[-1] == len(keys)
+
+
+def test_lower_bound_is_all_padding_safe():
+    """An unfitted model is a table of nothing but the sentinel; every query must miss, not crash."""
+    from tensorflow_asr.models.lm.ngram_language_model import PAD_KEY, _lower_bound
+
+    keys = np.full([16], PAD_KEY, dtype=np.int64)
+    queries = np.array([0, 1, 12345], dtype=np.int64)
+    found = _lower_bound(tf.constant(keys), tf.constant(queries), 16).numpy()
+    np.testing.assert_array_equal(found, 0)  # every real key sorts before the sentinel
+
+
+def test_lower_bound_converts_to_tflite_without_custom_ops():
+    """
+    The reason this exists instead of `tf.searchsorted`.
+
+    `tf.searchsorted` traces to `tf.LowerBound`, which is neither a TFLite builtin nor an
+    allowlisted flex op. With `allow_custom_ops` -- which `convert_tflite` needs for the
+    sentencepiece detokenizer -- the converter wrote it into the flatbuffer as a raw custom op
+    and the export died at `invoke()` with "unresolved custom op: LowerBound". Converting with
+    `allow_custom_ops=False` is the strict form of the same check: nothing here may need a kernel
+    the interpreter does not have.
+    """
+    from tensorflow_asr.models.lm.ngram_language_model import _lower_bound
+    from tensorflow_asr.utils import tflite_util
+
+    keys = np.sort(np.random.default_rng(1).choice(5000, size=64, replace=False)).astype(np.int64)
+    table = tf.constant(keys)
+
+    @tf.function(input_signature=[tf.TensorSpec([3, 5], tf.int64)])
+    def search(queries):
+        return _lower_bound(table, queries, 64)
+
+    converter = tf.lite.TFLiteConverter.from_concrete_functions([search.get_concrete_function()])
+    converter.target_spec.supported_ops = [tf.lite.OpsSet.TFLITE_BUILTINS, tf.lite.OpsSet.SELECT_TF_OPS]
+    converter.allow_custom_ops = False
+    flatbuffer = converter.convert()
+    assert tflite_util.custom_ops(flatbuffer) == [], "the arc lookup must convert to builtins alone"
+
+    queries = np.random.default_rng(2).integers(-5, 5005, size=[3, 5]).astype(np.int64)
+    interpreter = tf.lite.Interpreter(model_content=flatbuffer)
+    interpreter.allocate_tensors()
+    interpreter.set_tensor(interpreter.get_input_details()[0]["index"], queries)
+    interpreter.invoke()
+    found = interpreter.get_tensor(interpreter.get_output_details()[0]["index"])
+    np.testing.assert_array_equal(found, np.searchsorted(keys, queries, side="left"))

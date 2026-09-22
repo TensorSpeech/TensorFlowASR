@@ -242,7 +242,9 @@ def convert_tflite(
       runs every conversion test, so the coverage loss is limited to executing the flatbuffer.
     * Conversion must run with no GPU visible. Keras selects the fused LSTM kernel whenever one is
       *visible* -- placement does not matter -- and it converts to a `CudnnRNNV3` custom op that no
-      interpreter can resolve. `tests/conftest.py` hides accelerators for this reason.
+      interpreter can resolve. `scripts/tflite.py` (unless `--gpu`) and `tests/conftest.py` both hide
+      accelerators for this reason, and the custom-op check below catches it if something else does
+      not.
     """
     if not math_util.is_power_of_two(model.feature_extraction.nfft):
         logger.error("NFFT must be power of 2 for TFLite conversion")
@@ -271,6 +273,20 @@ def convert_tflite(
     ]
     converter.allow_custom_ops = True
     tflite_model = converter.convert()
+
+    # `allow_custom_ops` is required above -- the sentencepiece detokenizer is a custom op -- but it
+    # does not distinguish between an op something registers and an op nothing does. An op with no
+    # builtin and no place on the flex allowlist is written into the flatbuffer anyway, and the
+    # export then dies on its first `invoke()` rather than here. Checked rather than trusted, so a
+    # broken file is never written. See `tflite_util.unregistered_custom_ops`.
+    unresolvable = tflite_util.unregistered_custom_ops(tflite_model)
+    if unresolvable:
+        raise ValueError(
+            f"conversion produced custom op(s) no interpreter can resolve: {', '.join(unresolvable)}. "
+            "`CudnnRNNV3` means a GPU was visible while converting -- drop `--gpu` from `tensorflow_asr "
+            "tflite`, or hide it as `tests/conftest.py` does. Anything else is an op with no TFLite builtin and no place on "
+            "the flex allowlist, which has to be rewritten with ops that have one."
+        )
 
     # Record the chunk geometry and friends inside the flatbuffer itself, so a client can stream
     # without rebuilding this model from its config. See `BaseModel.get_tflite_metadata`.
