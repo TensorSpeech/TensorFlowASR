@@ -2,6 +2,146 @@
 
 <!-- version list -->
 
+## v3.1.0 (2026-09-24)
+
+### Bug Fixes
+
+- Beam search test result
+  ([`a0480fb`](https://github.com/TensorSpeech/TensorFlowASR/commit/a0480fbc563ec4518269568d2993bad66cd768b8))
+
+- Device scope
+  ([`9379765`](https://github.com/TensorSpeech/TensorFlowASR/commit/93797650d6f1f0c7a452cdd1a291af8e059d0bb9))
+
+- Github actions
+  ([`aedec2f`](https://github.com/TensorSpeech/TensorFlowASR/commit/aedec2f587749e61f5c490f1be61fa60d2cd2b2a))
+
+- Github actions
+  ([`284c444`](https://github.com/TensorSpeech/TensorFlowASR/commit/284c444bf9755b1ed38aed124bdc37dd9987dd9c))
+
+- Install tpu
+  ([`5f365b0`](https://github.com/TensorSpeech/TensorFlowASR/commit/5f365b0cc53d34b50c3d37a383c09f9d1d86c537))
+
+- Kaggle lm train define accelerator
+  ([`57ede0e`](https://github.com/TensorSpeech/TensorFlowASR/commit/57ede0edd534e7b3e78acfb3284c0b8bcaa4d88d))
+
+- Kenlm training on kaggle
+  ([`a3b3b85`](https://github.com/TensorSpeech/TensorFlowASR/commit/a3b3b855d06b4260a5f9c76e15543713b7e2fdb6))
+
+- Lm training
+  ([`802394b`](https://github.com/TensorSpeech/TensorFlowASR/commit/802394b24befbc0603fedaeacaecdb02d72d7b91))
+
+- Memory for multi-head attention layer
+  ([`7076e72`](https://github.com/TensorSpeech/TensorFlowASR/commit/7076e72e63a79594e0b3bd0749c4a411ff7e69f6))
+
+- Refactor lm
+  ([`f057eff`](https://github.com/TensorSpeech/TensorFlowASR/commit/f057effcee011eb051bcfae8ad8c3999ace56981))
+
+- Split lm dataset, update kaggle
+  ([`07183ef`](https://github.com/TensorSpeech/TensorFlowASR/commit/07183ef4e05aa40902358f731ee0103e032b98e1))
+
+- Step per epoch
+  ([`409d709`](https://github.com/TensorSpeech/TensorFlowASR/commit/409d709774d33cecaf8a4d37736a6c34f19649a3))
+
+- Streaming should have states for conv and mha layers
+  ([`74b5313`](https://github.com/TensorSpeech/TensorFlowASR/commit/74b531318864982ff855bfc4c0c9f2128f0577a6))
+
+- Text path
+  ([`8885de9`](https://github.com/TensorSpeech/TensorFlowASR/commit/8885de9bdadd489823f648cc2404ee9def164fa7))
+
+- Tf 2.19 to enable tf.lite flex delegate ops
+  ([`e2228bf`](https://github.com/TensorSpeech/TensorFlowASR/commit/e2228bf638091db077b7bfeabb90c12cf165881e))
+
+- Tflite convert and run
+  ([`ab6f29c`](https://github.com/TensorSpeech/TensorFlowASR/commit/ab6f29c59b72f71b43eae4b94a95faf510fff06f))
+
+- Tflite convert metadata
+  ([`586c36f`](https://github.com/TensorSpeech/TensorFlowASR/commit/586c36fc6bb8ffe3a96c81a6c35fd93d392f57fe))
+
+- Tflite converter
+  ([`1161b80`](https://github.com/TensorSpeech/TensorFlowASR/commit/1161b80cdd229555148ed06d5f4b375a9290ff5d))
+
+- Tmp dir for kenlm
+  ([`4bc7a41`](https://github.com/TensorSpeech/TensorFlowASR/commit/4bc7a41b90554e1e7c411fa919ed643fe2b52764))
+
+- Train lm loss
+  ([`05476c5`](https://github.com/TensorSpeech/TensorFlowASR/commit/05476c586b2fc3dcb494ef7e4ce064f5f3f59cb3))
+
+- Train lm model upload checkpoint
+  ([`9a8dbdb`](https://github.com/TensorSpeech/TensorFlowASR/commit/9a8dbdb9d43564fcb8e9e21f99e1a97232babcf1))
+
+- Unittests for tflite
+  ([`fbe4c91`](https://github.com/TensorSpeech/TensorFlowASR/commit/fbe4c91853bee64a794d7a1d4e39673403c3ee06))
+
+- Update lm dataset and training
+  ([`6aa7088`](https://github.com/TensorSpeech/TensorFlowASR/commit/6aa70885176b81e0b00caeb933ffe995586c22c1))
+
+- Update lm dataset and training
+  ([`78b3544`](https://github.com/TensorSpeech/TensorFlowASR/commit/78b3544a515d1930a5e8ab222f7055c9272c4723))
+
+- Update streaming with kv-cache
+  ([`cf90972`](https://github.com/TensorSpeech/TensorFlowASR/commit/cf909720d6d9b331a55d7fe2d5cb5b5c339900e1))
+
+- Update test with beam search lm
+  ([`29c680e`](https://github.com/TensorSpeech/TensorFlowASR/commit/29c680e8f8f60476d36680a6ecbc4240d17b5efb))
+
+- Update tests
+  ([`9a27ccd`](https://github.com/TensorSpeech/TensorFlowASR/commit/9a27ccd4be5d718398ebb6981c450067de570c1c))
+
+### Chores
+
+- Config
+  ([`610a696`](https://github.com/TensorSpeech/TensorFlowASR/commit/610a696d27231cd3ebe7cc21e60d24e448359561))
+
+- Config
+  ([`179da42`](https://github.com/TensorSpeech/TensorFlowASR/commit/179da42200898428ca94198119276363327e70cc))
+
+- Config
+  ([`961c100`](https://github.com/TensorSpeech/TensorFlowASR/commit/961c10015c570ae0e52c6cb924765e8600fe6123))
+
+- Config
+  ([`60017b9`](https://github.com/TensorSpeech/TensorFlowASR/commit/60017b94d756495faae720553a9c661fbd852841))
+
+- Tests
+  ([`8f09205`](https://github.com/TensorSpeech/TensorFlowASR/commit/8f092051aca8f1b9f45faa6bb099b8daf19727ee))
+
+### Documentation
+
+- Lstm lm with training
+  ([`70d2472`](https://github.com/TensorSpeech/TensorFlowASR/commit/70d247275c29c40d0638aabd5c8edf3426d6961a))
+
+### Features
+
+- Add ASRInference
+  ([`c5f296b`](https://github.com/TensorSpeech/TensorFlowASR/commit/c5f296b91efec5dbf19789fd1774bd9ed3be12d3))
+
+- Add beam search with lm separately from beam search only
+  ([`5451cf6`](https://github.com/TensorSpeech/TensorFlowASR/commit/5451cf6e49569ee53d4c9d48112821018590e3b5))
+
+- Add examples on ASRInferences and update docs
+  ([`50a9fab`](https://github.com/TensorSpeech/TensorFlowASR/commit/50a9fab09a63d393e1b1cd4b118d2989330bf34c))
+
+- Add norm lm dataset
+  ([`fb7508f`](https://github.com/TensorSpeech/TensorFlowASR/commit/fb7508f015d0218f075fde0e76f286780dd0b391))
+
+- ALSD transducer beam search, ruff+uv refactor
+  ([`0886de7`](https://github.com/TensorSpeech/TensorFlowASR/commit/0886de7efaf83fa9100c948d74646ff719907657))
+
+- Ilme,lodr for beam search transducer
+  ([`74e730e`](https://github.com/TensorSpeech/TensorFlowASR/commit/74e730e3caef4cdd9a55e9e7041081c029d229ba))
+
+- Kenlm ngram load via arpa
+  ([`b9db071`](https://github.com/TensorSpeech/TensorFlowASR/commit/b9db0712775e0e0e91f978ca54fe9a53d3ea7d6f))
+
+- Lstm lm with training
+  ([`c6739c5`](https://github.com/TensorSpeech/TensorFlowASR/commit/c6739c5b600391cc08e5aa5db31b9ac889f26488))
+
+- Lstm lm with training
+  ([`561d4d9`](https://github.com/TensorSpeech/TensorFlowASR/commit/561d4d97d72fbac3e7fa15c3e52ac9b81f6c4fc8))
+
+- Tpu support for train lm
+  ([`b8f66ec`](https://github.com/TensorSpeech/TensorFlowASR/commit/b8f66ec186b2286ea147413239a7ff31cd5f49fd))
+
+
 ## v3.0.0 (2025-05-25)
 
 ### Bug Fixes

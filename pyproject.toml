@@ -1,6 +1,6 @@
 [project]
 name = "TensorFlowASR"
-version = "3.0.0"
+version = "3.1.0"
 description = "Almost State-of-the-art Automatic Speech Recognition using Tensorflow 2"
 readme = "README.md"
 license = { text = "Apache-2.0" }
