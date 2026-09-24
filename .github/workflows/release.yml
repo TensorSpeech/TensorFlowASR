@@ -20,7 +20,7 @@ jobs:
   release:
     runs-on: ubuntu-latest
     permissions:
-      # Needed to push the version bump commit + tag and create the GitHub Release
+      # Needed to create the GitHub Release
       contents: write
 
     steps:
@@ -30,6 +30,9 @@ jobs:
           # next version
           fetch-depth: 0
           ref: ${{ github.ref_name }}
+          # secrets.TOKEN is the private key of a deploy key with write access.
+          # main is protected, so the release commit is pushed with this key.
+          ssh-key: ${{ secrets.TOKEN }}
 
       - name: Install uv
         uses: astral-sh/setup-uv@v5
@@ -39,19 +42,25 @@ jobs:
       - name: Set up Python
         run: uv python install 3.12
 
-      # Bumps the version in pyproject.toml, updates CHANGELOG.md, commits, tags
-      # and creates the GitHub Release. The action runs in its own Docker
-      # container without uv, so the build runs in the next step instead.
+      # Bumps the version in pyproject.toml, updates CHANGELOG.md, commits and
+      # tags locally. The action runs in its own Docker container, which has no
+      # uv and no deploy key, so build, push and GitHub Release run in later steps.
       - name: Python Semantic Release
         id: release
         uses: python-semantic-release/python-semantic-release@v10.6.1
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           build: false
+          push: false
+          vcs_release: false
 
       - name: Build
         if: steps.release.outputs.released == 'true'
         run: uv build
+
+      - name: Push release commit and tag
+        if: steps.release.outputs.released == 'true'
+        run: git push origin "HEAD:${{ github.ref_name }}" "${{ steps.release.outputs.tag }}"
 
       - name: Publish to PyPI
         if: steps.release.outputs.released == 'true'
@@ -60,12 +69,13 @@ jobs:
           UV_PUBLISH_PASSWORD: ${{ secrets.PYPI_PASSWORD }}
         run: uv publish
 
-      - name: Attach distributions to the GitHub Release
+      - name: Create GitHub Release
         if: steps.release.outputs.released == 'true'
-        uses: python-semantic-release/publish-action@v10.6.1
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          tag: ${{ steps.release.outputs.tag }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.release.outputs.tag }}
+          NOTES: ${{ steps.release.outputs.release_notes }}
+        run: gh release create "$TAG" dist/* --title "$TAG" --notes "$NOTES"
 
       - name: Summary
         run: |
