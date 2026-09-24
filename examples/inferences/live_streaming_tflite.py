@@ -57,7 +57,7 @@ def main(
     Parameters
     ----------
     tflite : str
-        An export from `tensorflow_asr tflite`, traced at `--bs=1`.
+        An export from `tensorflow_asr tflite`.
     device : int or str, optional
         Recording device, by id or by name. The system default when unset.
     blocksize : int, optional
@@ -66,9 +66,10 @@ def main(
         exactly one chunk.
     """
     asr = ASRInference(tflite=tflite)
-    sample_rate = asr.metadata["sample_rate"]
-    blocksize = blocksize or asr.metadata["signal_chunk_step"]
-    logger.info(f"Model metadata: {asr.metadata}")
+    metadata = asr.engine.metadata
+    sample_rate = metadata["sample_rate"]
+    blocksize = blocksize or metadata["signal_chunk_step"]
+    logger.info(f"Model metadata: {metadata}")
     logger.info(f"Recording at {sample_rate} Hz in blocks of {blocksize} samples ({blocksize / sample_rate:.2f}s of latency)")
 
     asr.start()
@@ -84,14 +85,14 @@ def main(
                 overflows += bool(overflowed)
                 # [frames, channels] -> the single mono channel. Each call returns only what this
                 # block completed, empty until a chunk is full, so the caller appends.
-                piece = asr(block[:, 0])[0]
+                piece = asr(block[:, 0])
                 print(piece, end="", flush=True)
                 transcript += piece
     except KeyboardInterrupt:
         pass
     # Whatever is left in the cache is padded up to a whole chunk and decoded, so the last words
     # spoken before Ctrl-C still land in the transcript.
-    transcript += asr.end()[0]
+    transcript += asr.end()
 
     print()
     if overflows:

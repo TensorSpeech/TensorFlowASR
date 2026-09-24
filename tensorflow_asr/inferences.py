@@ -13,28 +13,32 @@
 # limitations under the License.
 
 """
-Run a trained model, or an exported `.tflite`, over audio.
+Run a trained model, or an exported `.tflite`, over audio, for many sessions at once.
 
-A call takes a **batch** of signals, `[B, T]`, and returns one transcript per row. `B` is fixed:
-a model bakes it in at `make(batch_size=...)` and an export at trace time, so it is part of the
-signature rather than something either can adapt to, and a mismatch is refused. A flat `[T]` vector
-is read as a batch of one.
+Two classes:
 
-Two modes through that one call:
+* `ASREngine` holds the loaded model. There is one engine per backend and mode in the process, so
+  a server with many clients loads the model once. The engine has a worker thread that takes
+  requests from all sessions and decodes up to `B` of them in one call. `B` is the batch size the
+  model was built with at `make(batch_size=...)`, or the export was traced with.
+* `ASRInference` is one session: one stream of audio, with its own state. Build one per websocket.
+  Sessions built from the same `tflite` path or the same `model` object share one engine.
+
+Two modes, chosen when the session is built:
 
 * **Non-streaming** (`streaming=False`) sends the whole signal in one pass with fresh state and
-  keeps nothing. This is exact for every architecture, offline ones included.
+  keeps nothing. This is exact for every architecture, offline ones included. Signals in one batch
+  differ in length, so the engine pads them to the longest and passes each real length.
 * **Streaming** (`streaming=True`) is fed one piece of audio at a time. Samples that do not yet
-  fill a chunk stay in `self.cache` along with the decoder state, so the next call continues where
-  this one stopped. `start()` opens a session and `end()` closes it -- `end()` zero-pads whatever
-  is left to a whole chunk, decodes it, and returns that last piece of transcript.
+  fill a chunk stay in `self.cache` along with the session's decoder state, so the next call
+  continues where this one stopped. `start()` opens a session and `end()` closes it -- `end()`
+  zero-pads whatever is left to a whole chunk, decodes it, and returns that last piece of
+  transcript. A session sends its chunks in order, one at a time, because each chunk starts from
+  the state the previous one left. The engine batches chunks from different sessions, never two
+  chunks of the same session.
 
-  A streaming batch advances in lockstep. The rows share one buffer and one set of states, and the
-  model consumes the whole batch per invocation, so every row must be handed the same number of
-  samples per call. Feeding one row more than another is not representable; pad the short rows.
-
-Both modes run the same per-chunk step. The only difference is where the state and the leftover
-samples live: on `self.cache` for streaming, thrown away immediately otherwise.
+Streaming and non-streaming use separate engines, so a padded whole signal never shares a call
+with a streaming chunk.
 
 Chunk geometry is never guessed. A `.tflite` carries it in its own metadata (see
 `utils/tflite_util.py`), and a live model computes it with `BaseModel.get_signal_chunk_size_and_step`.
@@ -54,10 +58,10 @@ else has to be loaded::
     from tensorflow_asr.inferences import ASRInference
     from tensorflow_asr.utils import data_util
 
-    asr = ASRInference(tflite="/path/to/model.tflite")
+    asr = ASRInference(tflite="/path/to/model.tflite", streaming=False)
     signal = data_util.read_raw_audio(data_util.load_and_convert_to_wav("/path/to/audio.wav", sample_rate=16000))
 
-    print(asr(signal, streaming=False)[0])  # a flat signal is a batch of one, so take row 0
+    print(asr(signal))
 
 The same from a checkpoint, built the way `tensorflow_asr test` builds it. `make()` must have run
 and the tokenizer must be attached -- the model detokenizes its own output::
@@ -75,43 +79,46 @@ and the tokenizer must be attached -- the model detokenizes its own output::
 
     model = keras_util.model_from_config(config.model_config)
     model.tokenizer = tokenizer
-    model.make(batch_size=1)
+    model.make(batch_size=8)  # up to 8 sessions are decoded in one call
     model.load_weights("/path/to/weights.h5", skip_mismatch=False)
 
-    asr = ASRInference(model=model)
-    print(asr(signal, streaming=False)[0])
+    asr = ASRInference(model=model, streaming=False)
+    print(asr(signal))
 
 Streaming, one piece of audio at a time. The pieces have nothing to do with the chunk size -- feed
 whatever the source produces and the cache does the aligning. Each call returns only what it
 decoded, so the caller appends::
 
-    asr.start()
+    asr = ASRInference(tflite="/path/to/model.tflite")  # streaming=True is the default
     transcript = ""
-    try:
-        for block in microphone():  # any producer: a device, a socket, a file read in pieces
-            transcript += asr(block)[0]  # streaming=True is the default
-            print(transcript, end="\r", flush=True)
-    except KeyboardInterrupt:
-        pass  # the escape hatch; `end()` still runs below
-    transcript += asr.end()[0]  # pads the last partial chunk, decodes it, closes the session
-    print(transcript)
+    for block in microphone():  # any producer: a device, a socket, a file read in pieces
+        transcript += asr(block)
+    transcript += asr.end()  # pads the last partial chunk, decodes it, closes the session
 
-Several streams at once, on a model or export built for that batch. Rows must be equal length, and
-padding one to match the others is the caller's job::
+In an async server, use `infer()` and `aend()` so a decode does not block the event loop. Every
+websocket gets its own session, and all sessions share the engine::
 
-    asr = ASRInference(tflite="/path/to/model.tflite")  # exported with --bs=4
-    width = max(len(signal) for signal in signals)
-    batch = np.stack([np.pad(signal, [0, width - len(signal)]) for signal in signals])  # [4, width]
-
-    for row, transcript in enumerate(asr(batch, streaming=False)):
-        print(row, transcript)
-
-To stream a batch, hand every row the same number of samples per call -- one `[B, n]` array per
-call, not one row at a time.
+    @app.websocket("/asr")
+    async def asr_socket(websocket: WebSocket):
+        await websocket.accept()
+        asr = ASRInference(tflite="/path/to/model.tflite")
+        try:
+            while True:
+                block = np.frombuffer(await websocket.receive_bytes(), dtype=np.float32)
+                await websocket.send_text(await asr.infer(block))
+        except WebSocketDisconnect:
+            pass
+        finally:
+            await asr.aend()
 """
 
+import asyncio
+import concurrent.futures
 import logging
+import queue
 import re
+import threading
+import time
 import typing
 
 import numpy as np
@@ -150,26 +157,71 @@ def _ordered(details, pattern, kind):
     return [positions[index] for index in range(len(details))]
 
 
-def _signals(signals) -> np.ndarray:
+def _signal(signal) -> np.ndarray:
     """
-    Audio as a `[B, T]` float32 array, whatever shape or container it arrived in.
+    One stream's audio as a flat float32 vector, whatever container it arrived in.
 
-    A flat vector is a batch of one, which is what an interactive caller with a single microphone
-    has. Anything of higher rank is rejected by the caller's batch check rather than silently
-    reshaped, since there is no reading of `[B, T, C]` that is obviously right.
+    A session is one stream, so `[T]` and `[1, T]` are the only shapes accepted. Anything else is
+    rejected rather than reshaped, since there is no reading of several rows that is obviously
+    right for a single session.
     """
-    return np.atleast_2d(np.asarray(signals, dtype=np.float32))
+    signal = np.asarray(signal, dtype=np.float32)
+    if signal.ndim == 2 and signal.shape[0] == 1:
+        signal = signal[0]
+    if signal.ndim != 1:
+        raise ValueError(f"a session is one stream: expected [samples] or [1, samples], got shape {signal.shape}")
+    return signal
+
+
+def _take(leaf, row, batch_size):
+    """
+    The rows of one batch slot out of a state leaf.
+
+    A leaf is `[batch_size * k, ...]`: k is 1 for most states and `beam_width` for the beam ones,
+    which are `[B * W, ...]` with each row's hypotheses kept together. The Keras mask a memory
+    state carries is sliced along with it, or the next chunk would treat the memory as padding.
+    """
+    if leaf is None:
+        return None
+    k = int(leaf.shape[0]) // batch_size
+    part = leaf[row * k : (row + 1) * k]
+    mask = getattr(leaf, "_keras_mask", None)
+    if mask is not None:
+        part._keras_mask = mask[row * k : (row + 1) * k]  # pylint: disable=protected-access
+    return part
+
+
+def _concat(*leaves):
+    """The inverse of `_take`: the slots of one state leaf stacked back into a batch."""
+    if leaves[0] is None:
+        return None
+    if isinstance(leaves[0], np.ndarray):
+        return np.concatenate(leaves)
+    joined = tf.concat(leaves, 0)
+    masks = [getattr(leaf, "_keras_mask", None) for leaf in leaves]
+    if all(mask is not None for mask in masks):
+        joined._keras_mask = tf.concat(masks, 0)  # pylint: disable=protected-access
+    return joined
+
+
+def _split(states, batch_size):
+    """A batch state as one state per slot."""
+    return [tf.nest.map_structure(lambda leaf, row=row: _take(leaf, row, batch_size), states) for row in range(batch_size)]
+
+
+def _join(states):
+    """One state per slot as a batch state."""
+    return tf.nest.map_structure(_concat, *states)
 
 
 class StreamCache(typing.NamedTuple):
     """
     What a streaming session carries from one call to the next, on `ASRInference.cache`.
 
-    `signal` is a `[B, n]` buffer: audio that has arrived but not yet filled a chunk, plus the tail
-    of the last chunk that the next one overlaps. All rows hold the same `n`, since the batch is
-    decoded together and advances together. `states` is whatever the backend threads through -- a
-    list of arrays for a `.tflite`, the trailing fields of `schemas.PredictInput` for a live model
-    -- and is deliberately opaque, so one loop drives both.
+    `signal` is a `[n]` buffer: audio that has arrived but not yet filled a chunk, plus the tail of
+    the last chunk that the next one overlaps. `states` is this session's slot of whatever the
+    backend threads through -- a list of arrays for a `.tflite`, the trailing fields of
+    `schemas.PredictInput` for a live model -- and is deliberately opaque, so one loop drives both.
 
     Both are `None` until the session has something to remember: no audio buffered, and no state
     because nothing has decoded yet.
@@ -182,37 +234,113 @@ class StreamCache(typing.NamedTuple):
     states: typing.Any = None
 
 
-class ASRInference:
-    def __init__(
-        self,
-        tflite: str = None,
-        model: BaseModel = None,
-    ):
+class ASREngine:
+    """
+    One loaded model shared by every session, with a worker thread that batches their requests.
+
+    Get one with `ASREngine.get`, which returns the same engine for the same backend and mode. A
+    request is one session's signal and its state. The worker takes the first request in the queue,
+    waits up to `max_wait_ms` for more, and decodes up to `batch_size` of them in one call. Slots
+    with no request decode silence from the initial state, and their result is thrown away.
+
+    Streaming and non-streaming requests go to separate engines. Streaming chunks are all
+    `signal_chunk_size` long, so they stack without padding. Whole signals differ in length, so they
+    are zero-padded to the longest in the batch and each row gets its real length in
+    `inputs_length`. Keeping the two apart means a padded tail never reaches a carried state.
+
+    The worker thread is the only code that runs the backend after setup, so no lock is needed
+    around it. The two engines of one live model do call that model from two threads.
+    """
+
+    _engines = {}
+    _engines_lock = threading.Lock()
+
+    @classmethod
+    def get(cls, tflite: str = None, model: BaseModel = None, streaming: bool = True, max_wait_ms: float = 5):
+        """
+        The shared engine for this backend and mode, built on the first call.
+
+        A `.tflite` is keyed by its path and a model by its identity. `max_wait_ms` only applies to
+        the call that builds the engine.
+        """
+        if not tflite and not model:
+            raise ValueError("Either `tflite` or `model` must be provided.")
+        key = (file_util.preprocess_paths(tflite) if tflite else id(model), streaming)
+        with cls._engines_lock:
+            if key not in cls._engines:
+                cls._engines[key] = cls(tflite=tflite, model=model, streaming=streaming, max_wait_ms=max_wait_ms)
+            return cls._engines[key]
+
+    def __init__(self, tflite: str = None, model: BaseModel = None, streaming: bool = True, max_wait_ms: float = 5):
         if not tflite and not model:
             raise ValueError("Either `tflite` or `model` must be provided.")
         self.tflite = tflite
         self.model = model
-        self.cache = StreamCache()
+        self.streaming = streaming
+        self.max_wait = max_wait_ms / 1000
         # Loading the interpreter and reading the metadata is done once, here, rather than on the
         # first chunk: a missing file or an export too old to carry metadata should fail when the
         # object is built, not part way through someone's audio stream.
-        self._setup_tflite() if tflite else self._setup_model()
+        if tflite:
+            self._setup_tflite()
+            self._step, initial_states = self._tflite_step, self._tflite_initial_states()
+        else:
+            self._setup_model()
+            self._step, initial_states = self._model_step, self._model_initial_states()
+        # One slot's starting state. Every slot starts the same, so the first is as good as any.
+        self.initial_state = _split(initial_states, self.batch_size)[0]
+        self._requests = queue.Queue()
+        threading.Thread(target=self._serve, name="ASREngine", daemon=True).start()
 
-    def _as_batch(self, signals) -> np.ndarray:
+    def submit(self, signal: np.ndarray, state=None) -> concurrent.futures.Future:
         """
-        Audio as `[B, T]`, checked against the batch this backend was built for.
+        Queue one `[n]` signal for decoding, from `state` or from the initial state if None.
 
-        Checked here so the message names the mismatch. Left to the interpreter it surfaces as a
-        resize failure, and on the model side a wrong batch reaches the decoder as a shape error
-        from somewhere inside a `tf.while_loop`.
+        The future resolves to `(transcript, next_state)`.
         """
-        signals = _signals(signals)
-        if signals.ndim != 2:
-            raise ValueError(f"signals must be [batch, samples], got shape {signals.shape}")
-        if signals.shape[0] != self.batch_size:
-            built = "export" if self.tflite else "model"
-            raise ValueError(f"this {built} takes {self.batch_size} signal(s) per call, got {signals.shape[0]}")
-        return signals
+        future = concurrent.futures.Future()
+        self._requests.put((signal, state, future))
+        return future
+
+    def _serve(self):
+        while True:
+            batch = [self._requests.get()]
+            deadline = time.monotonic() + self.max_wait
+            while len(batch) < self.batch_size:
+                try:
+                    batch.append(self._requests.get(timeout=max(0.0, deadline - time.monotonic())))
+                except queue.Empty:
+                    break
+            self._run(batch)
+
+    def _run(self, batch):
+        """Decode up to `batch_size` requests in one call and resolve each one's future."""
+        try:
+            width = max(len(signal) for signal, _, _ in batch)
+            signals = np.zeros([self.batch_size, width], dtype=np.float32)
+            lengths = np.full([self.batch_size], width, dtype=np.int32)
+            states = [self.initial_state] * self.batch_size
+            for slot, (signal, state, _) in enumerate(batch):
+                signals[slot, : len(signal)] = signal
+                lengths[slot] = len(signal)
+                if state is not None:
+                    states[slot] = state
+            transcripts, next_states = self._step(signals, lengths, _join(states))
+            next_states = _split(next_states, self.batch_size)
+        except Exception as error:  # pylint: disable=broad-except
+            # Raised in the caller that waits on the future, not lost in this thread.
+            for _, _, future in batch:
+                future.set_exception(error)
+            return
+        for slot, (_, _, future) in enumerate(batch):
+            future.set_result((transcripts[slot], next_states[slot]))
+
+    def _geometry(self):
+        """`(signal_chunk_size, signal_chunk_step)` -- samples per call, and samples per advance."""
+        if self.tflite:
+            return int(self.metadata["signal_chunk_size"]), int(self.metadata["signal_chunk_step"])
+        size, step = self.model.get_signal_chunk_size_and_step(1)
+        return int(size), int(step)
 
     # ------------------------------------ TFLITE ------------------------------------ #
 
@@ -303,8 +431,8 @@ class ASRInference:
             states[scores[0]][:, 1:] = -1e9
         return states
 
-    def _tflite_step(self, signals, states):
-        """One invocation on one chunk of the batch. Returns a transcript per row, and the next state."""
+    def _tflite_step(self, signals, lengths, states):
+        """One invocation on the batch. Returns a transcript per row, and the next state."""
         if self._allocated != signals.shape[1]:
             self.interpreter.resize_tensor_input(self._signal["index"], list(signals.shape), strict=True)
             self.interpreter.allocate_tensors()
@@ -312,7 +440,7 @@ class ASRInference:
             self._locate_tensors()  # allocation rebuilds the descriptors, tensor indices included
 
         self.interpreter.set_tensor(self._signal["index"], signals)
-        self.interpreter.set_tensor(self._length["index"], np.full([self.batch_size], signals.shape[1], dtype=self._length["dtype"]))
+        self.interpreter.set_tensor(self._length["index"], lengths.astype(self._length["dtype"]))
         for detail, value in zip(self._states, states):
             self.interpreter.set_tensor(detail["index"], value)
 
@@ -324,13 +452,6 @@ class ASRInference:
         for position, tensor_index in self._feedback:
             next_states[position] = self.interpreter.get_tensor(tensor_index)
         return transcripts, next_states
-
-    def _tflite_inference(self, signals, streaming=True):
-        signals = self._as_batch(signals)
-        if not streaming:
-            transcripts, _ = self._tflite_step(signals, self._tflite_initial_states())
-            return transcripts
-        return self._consume(signals, self._tflite_step, self._tflite_initial_states)
 
     # ------------------------------------- MODEL ------------------------------------- #
 
@@ -362,11 +483,8 @@ class ASRInference:
             )
         return states
 
-    def _model_step(self, signals, states):
-        signals = tf.convert_to_tensor(signals)
-        # Every row is the same length, so one width fills the whole `[B]` vector.
-        inputs_length = tf.fill([self.batch_size], tf.shape(signals)[1])
-        inputs = schemas.PredictInput(inputs=signals, inputs_length=inputs_length, **states)
+    def _model_step(self, signals, lengths, states):
+        inputs = schemas.PredictInput(inputs=tf.convert_to_tensor(signals), inputs_length=tf.convert_to_tensor(lengths), **states)
         outputs = self.model.recognize_beam(inputs, **self._beam_kwargs) if self._beam_kwargs else self.model.recognize(inputs)
 
         transcripts = [row.decode("utf-8") for row in self.model.tokenizer.detokenize(outputs.tokens).numpy()]
@@ -383,74 +501,101 @@ class ASRInference:
             )
         return transcripts, next_states
 
-    def _model_inference(self, signals, streaming=True):
-        signals = self._as_batch(signals)
-        if not streaming:
-            transcripts, _ = self._model_step(signals, self._model_initial_states())
-            return transcripts
-        return self._consume(signals, self._model_step, self._model_initial_states)
 
-    # ----------------------------------- STREAMING ----------------------------------- #
+class ASRInference:
+    """
+    One session: a single stream of audio, decoded on the shared `ASREngine` for its backend.
 
-    def _geometry(self):
-        """`(signal_chunk_size, signal_chunk_step)` -- samples per call, and samples per advance."""
-        if self.tflite:
-            return int(self.metadata["signal_chunk_size"]), int(self.metadata["signal_chunk_step"])
-        size, step = self.model.get_signal_chunk_size_and_step(1)
-        return int(size), int(step)
+    Build one per websocket, or per request. Sessions built from the same `tflite` path or the same
+    `model` object share one engine, so they share one loaded model and are batched together.
 
-    def _consume(self, signals, step_fn, initial_states):
+    A streaming session sends its chunks one at a time and waits for each, because every chunk
+    starts from the state the previous one left. Do not call one session from two tasks at once.
+    """
+
+    def __init__(
+        self,
+        tflite: str = None,
+        model: BaseModel = None,
+        streaming: bool = True,
+    ):
+        self.streaming = streaming
+        self.engine = ASREngine.get(tflite=tflite, model=model, streaming=streaming)
+        self.cache = StreamCache()
+
+    def _chunks(self, signal):
         """
-        Add `signals` to the cache and decode every whole chunk the batch now completes.
+        Add `signal` to the buffer and cut out every whole chunk it now completes.
 
-        Returns one transcript per row, holding only what this call decoded, so a caller appends
-        rather than replaces. Every row is empty whenever the audio so far has not filled a chunk.
+        What is left, including the `size - step` overlap that is the next chunk's left context,
+        stays on the cache.
         """
-        size, step = self._geometry()
-        buffered = self.cache.signal
-        signal = signals if buffered is None else np.concatenate([buffered, signals], axis=1)
-        states = self.cache.states
+        size, step = self.engine._geometry()
+        buffered = signal if self.cache.signal is None else np.concatenate([self.cache.signal, signal])
+        chunks = []
+        while len(buffered) >= size:
+            chunks.append(buffered[:size])
+            buffered = buffered[step:]  # step, not size: the overlap is the next chunk's left context
+        self.cache = self.cache._replace(signal=buffered)
+        return chunks
 
-        decoded = [[] for _ in range(self.batch_size)]
-        while signal.shape[1] >= size:
-            # Seeded here rather than above so that a call too short to fill a chunk only buffers
-            # audio, leaving `states` None as `StreamCache` documents. Building the initial state
-            # costs a handful of allocations, and a caller feeding small pieces makes many such
-            # calls before the first chunk is ready.
-            states = initial_states() if states is None else states
-            transcripts, states = step_fn(signal[:, :size], states)
-            for row, transcript in enumerate(transcripts):
-                decoded[row].append(transcript)
-            signal = signal[:, step:]  # step, not size: the overlap is the next chunk's left context
+    def __call__(self, signal) -> str:
+        """
+        Decode `signal` and wait for the result.
 
-        self.cache = StreamCache(signal=signal, states=states)
-        return ["".join(parts) for parts in decoded]
+        Non-streaming, this is the transcript of the whole signal. Streaming, it is only what this
+        call decoded, and it is empty when the audio so far has not filled a chunk, so a caller
+        appends rather than replaces.
+        """
+        signal = _signal(signal)
+        if not self.streaming:
+            return self.engine.submit(signal).result()[0]
+        transcript = ""
+        for chunk in self._chunks(signal):
+            text, states = self.engine.submit(chunk, self.cache.states).result()
+            self.cache = self.cache._replace(states=states)
+            transcript += text
+        return transcript
+
+    async def infer(self, signal) -> str:
+        """The same as calling the session, but it awaits the engine and does not block the event loop."""
+        signal = _signal(signal)
+        if not self.streaming:
+            return (await asyncio.wrap_future(self.engine.submit(signal)))[0]
+        transcript = ""
+        for chunk in self._chunks(signal):
+            text, states = await asyncio.wrap_future(self.engine.submit(chunk, self.cache.states))
+            self.cache = self.cache._replace(states=states)
+            transcript += text
+        return transcript
 
     def start(self):
         self.cache = StreamCache()
 
-    def __call__(self, signals, streaming=True):
-        if self.tflite:
-            return self._tflite_inference(signals, streaming)
-        elif self.model:
-            return self._model_inference(signals, streaming)
-        else:
-            raise ValueError("Either `tflite` or `model` must be provided.")
-
-    def end(self):
+    def _tail(self):
         """
-        Close the session: decode whatever audio is left, then drop the cache.
+        The zero padding that completes the last partial chunk, or None if there is nothing to flush.
 
-        The leftover is padded with zeros to a whole `signal_chunk_size` because the model only
-        accepts that length. It is only worth decoding when there is genuinely new audio in it:
-        after a chunk the cache still holds `size - step` samples, but those were already decoded
-        as the tail of that chunk and are kept solely as the next one's left context, so a cache no
-        longer than that would decode nothing but overlap and padding.
+        The leftover is padded to a whole `signal_chunk_size` because the model only accepts that
+        length. It is only worth decoding when there is genuinely new audio in it: after a chunk
+        the cache still holds `size - step` samples, but those were already decoded as the tail of
+        that chunk and are kept solely as the next one's left context, so a cache no longer than
+        that would decode nothing but overlap and padding.
         """
-        transcripts = [""] * self.batch_size
-        size, step = self._geometry()
-        leftover = 0 if self.cache.signal is None else self.cache.signal.shape[1]
-        if leftover > size - step:
-            transcripts = self(np.zeros([self.batch_size, size - leftover], dtype=np.float32), streaming=True)
+        size, step = self.engine._geometry()
+        leftover = 0 if self.cache.signal is None else len(self.cache.signal)
+        return np.zeros([size - leftover], dtype=np.float32) if leftover > size - step else None
+
+    def end(self) -> str:
+        """Close the session: decode whatever audio is left, then drop the cache."""
+        padding = self._tail()
+        transcript = "" if padding is None else self(padding)
         self.cache = StreamCache()
-        return transcripts
+        return transcript
+
+    async def aend(self) -> str:
+        """The same as `end()`, awaited."""
+        padding = self._tail()
+        transcript = "" if padding is None else await self.infer(padding)
+        self.cache = StreamCache()
+        return transcript

@@ -29,11 +29,11 @@ Everything it needs comes out of the file itself. `tensorflow_asr tflite` record
 the chunk geometry and the blank id in the flatbuffer's metadata, so there is no config to load and
 no tokenizer to build -- see `tensorflow_asr/utils/tflite_util.py`.
 
-The export must be traced at batch size 1 (`tensorflow_asr tflite --bs=1`), since one file is one
-signal. A larger one refuses the call with a message saying so.
+Any export batch size works. One file is one session, and the engine under it decodes up to
+`--bs` sessions per call, so with a single session the other slots decode silence.
 
-For a whole-utterance decode instead, see `examples/inferences/tflite.py`, or pass
-`streaming=False` here. For a microphone in place of the file, `live_streaming_tflite.py`.
+For a whole-utterance decode instead, see `examples/inferences/tflite.py`. For a microphone in
+place of the file, `live_streaming_tflite.py`.
 """
 
 import logging
@@ -57,16 +57,17 @@ def main(
     audio_file_path : str
         Audio to transcribe. Resampled to the rate recorded in the model's metadata.
     tflite : str
-        An export from `tensorflow_asr tflite`, traced at `--bs=1`.
+        An export from `tensorflow_asr tflite`.
     blocksize : int, optional
         Samples handed over per call, standing in for however much a live source would deliver at
         once. Defaults to one `signal_chunk_step`, so each call after the first decodes one chunk.
     """
     asr = ASRInference(tflite=tflite)
-    logger.info(f"Model metadata: {asr.metadata}")
+    metadata = asr.engine.metadata
+    logger.info(f"Model metadata: {metadata}")
 
-    signal = np.asarray(data_util.read_raw_audio(data_util.load_and_convert_to_wav(audio_file_path, sample_rate=asr.metadata["sample_rate"])))
-    blocksize = blocksize or asr.metadata["signal_chunk_step"]
+    signal = np.asarray(data_util.read_raw_audio(data_util.load_and_convert_to_wav(audio_file_path, sample_rate=metadata["sample_rate"])))
+    blocksize = blocksize or metadata["signal_chunk_step"]
 
     def blocks():
         """The live source, faked. A microphone callback or a socket read would go here instead."""
@@ -79,8 +80,8 @@ def main(
     try:
         for block in blocks():
             # Each call returns only what this block completed -- empty until a chunk is full -- so
-            # the caller appends. Row 0 because a flat block is a batch of one.
-            piece = asr(block)[0]
+            # the caller appends.
+            piece = asr(block)
             # Only the new text is printed, never the whole transcript again: it grows past the
             # width of a terminal, and rewriting the line would then wrap instead of overwrite.
             print(piece, end="", flush=True)
@@ -89,7 +90,7 @@ def main(
         logger.info("Interrupted; flushing what has been received so far")
     # `end()` zero-pads the last partial chunk up to a whole one, decodes it, and closes the
     # session. Without it the tail of the audio is never transcribed.
-    transcript += asr.end()[0]
+    transcript += asr.end()
 
     print()
     logger.info(f"Transcript: {transcript}")

@@ -140,8 +140,9 @@ See [decoders](./docs/decoders.md)
 
 ## Inference
 
-`ASRInference` transcribes with either a checkpoint or an exported tflite model, in one pass or
-streaming chunk by chunk
+`ASRInference` transcribes one stream with either a checkpoint or an exported tflite model, in one pass or
+streaming chunk by chunk. All sessions on one model share one `ASREngine`, which loads the model once and
+decodes many sessions per call, for example one session per websocket in a server
 
 See [inferences](./docs/inferences.md), and [examples/inferences](./examples/inferences/) for
 runnable scripts including a live microphone

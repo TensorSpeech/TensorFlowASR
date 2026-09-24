@@ -31,8 +31,8 @@ one wrong number there would transcribe nonsense rather than fail. See
 interpreter work this hides: locating each tensor in a signature the converter reordered, seeding
 the carried state, and decoding the transcript bytes.
 
-The export must be traced at batch size 1 (`tensorflow_asr tflite --bs=1`), since one file is one
-signal. A larger one takes that many signals per call and refuses this one, saying so.
+Any export batch size works. One file is one session, and the engine under it decodes up to
+`--bs` sessions per call, so with a single session the other slots decode silence.
 """
 
 import logging
@@ -54,15 +54,15 @@ def main(
         Audio to transcribe. Any format `librosa` reads; it is resampled to the rate recorded in
         the model's metadata.
     tflite : str
-        An export from `tensorflow_asr tflite`, traced at `--bs=1`.
+        An export from `tensorflow_asr tflite`.
     """
-    asr = ASRInference(tflite=tflite)
-    logger.info(f"Model metadata: {asr.metadata}")
+    asr = ASRInference(tflite=tflite, streaming=False)
+    metadata = asr.engine.metadata
+    logger.info(f"Model metadata: {metadata}")
 
-    signal = data_util.read_raw_audio(data_util.load_and_convert_to_wav(audio_file_path, sample_rate=asr.metadata["sample_rate"]))
+    signal = data_util.read_raw_audio(data_util.load_and_convert_to_wav(audio_file_path, sample_rate=metadata["sample_rate"]))
 
-    # A flat signal is a batch of one, so the transcript is row 0.
-    transcript = asr(signal, streaming=False)[0]
+    transcript = asr(signal)
     logger.info(f"Transcript: {transcript}")
 
 

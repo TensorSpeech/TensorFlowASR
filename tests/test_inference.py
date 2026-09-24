@@ -166,7 +166,44 @@ def encoder_frames(model, signal):
     return encoded, int(encoded_length[0])
 
 
+def batch_emitted(model, signals):
+    """Greedy decode of `[B, T]` rows zero-padded to the longest, each with its real length."""
+    width = max(int(tf.shape(row)[0]) for row in signals)
+    padded = tf.stack([tf.pad(row, [[0, width - int(tf.shape(row)[0])]]) for row in signals])
+    batch_size = len(signals)
+    output = model.recognize(
+        schemas.PredictInput(
+            inputs=padded,
+            inputs_length=tf.constant([int(tf.shape(row)[0]) for row in signals], tf.int32),
+            previous_tokens=model.get_initial_tokens(batch_size),
+            previous_encoder_states=model.get_initial_encoder_states(batch_size),
+            previous_decoder_states=model.get_initial_decoder_states(batch_size),
+        )
+    )
+    return [[token for token in row if token != 0] for row in output.tokens.numpy().tolist()]
+
+
 # --------------------------------------------------------------------------- output contract
+
+
+def test_batched_greedy_decodes_each_row_on_its_own(tokenizer, signal):
+    """
+    A row of `recognize_batch` must decode the same whatever the other rows hold.
+
+    A short row next to a long one has fewer frames, so it finishes first and then waits for the
+    loop to end. While it waits it must not decode its last frame again, and its token cap must
+    come from its own frames, not from the longest row. Both sides decode at batch 2, because
+    `recognize` sends batch 1 to `recognize_single`, which is a different decoder.
+    """
+    model = build_model(tokenizer)
+    model.make(batch_size=2)
+    full = signal[0]
+    short = full[: int(tf.shape(full)[0]) // 3]
+
+    alone = batch_emitted(model, [short, tf.zeros_like(short)])[0]
+    beside_a_longer_row = batch_emitted(model, [short, full])[0]
+
+    assert beside_a_longer_row == alone, "the longer row changed what the short row decoded"
 
 
 @pytest.mark.parametrize("beam_width", [0, 2, 4])

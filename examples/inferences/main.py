@@ -63,8 +63,8 @@ def main(
     signal = data_util.read_raw_audio(data_util.load_and_convert_to_wav(file_path, sample_rate=model.feature_extraction.sample_rate))
 
     # `streaming=False` decodes the whole signal in one pass, which is exact for every
-    # architecture. A flat signal is a batch of one, so the transcript is row 0.
-    transcript = ASRInference(model=model)(signal, streaming=False)[0]
+    # architecture.
+    transcript = ASRInference(model=model, streaming=False)(signal)
     logger.info(f"Transcript: {transcript}")
 
 

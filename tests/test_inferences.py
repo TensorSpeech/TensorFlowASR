@@ -1,10 +1,11 @@
 """
-`tensorflow_asr.inferences.ASRInference`, over both of its backends.
+`tensorflow_asr.inferences`, over both of its backends: the shared `ASREngine` and the per-stream
+`ASRInference` session on top of it.
 
 Not to be confused with `tests/test_inference.py`, which drives `recognize` / `recognize_beam`
-directly. This file is about the layer above them: one entry point that decodes either a live model
-or an exported `.tflite`, in one pass or chunk by chunk, and the cache that makes the chunked form
-continue where the previous call stopped.
+directly. This file is about the layer above them: one engine per loaded model that batches the
+requests of many sessions, and one session per stream that decodes either in one pass or chunk by
+chunk, with the cache that makes the chunked form continue where the previous call stopped.
 
 The property worth the most here is that **chunked streaming reproduces a single whole-utterance
 pass exactly**, through both backends. It holds only when every piece is right at once -- chunk
@@ -15,17 +16,23 @@ side that last one is the fragile part: the flatbuffer keeps only tensor *names*
 which, so a Conformer silently fed its convolution cache into a subsampling slot. That is what
 `test_state_feedback_pairs_every_state_output` and the equivalence tests pin down.
 
+The second property is that **batching is invisible**: a session decoded in the same model call as
+other sessions gets the same transcript as when it is decoded alone. It needs each session's state
+cut out of and put back into the batch at the right rows, and padding that never leaks into a row.
+
 Models and builders are imported from the two neighbouring test modules rather than copied: the
 streaming Conformer of `test_inference.py` is the only model here whose chunked decode is exactly
 equal to its one-pass decode, and `test_tflite.py` already carries a builder per architecture.
 """
+
+import asyncio
 
 import numpy as np
 import pytest
 
 from tensorflow_asr import tf
 from tensorflow_asr.configs import DecoderConfig
-from tensorflow_asr.inferences import _INPUT_POSITION, ASRInference, StreamCache, _ordered, _signals
+from tensorflow_asr.inferences import _INPUT_POSITION, ASREngine, ASRInference, StreamCache, _ordered, _signal
 from tensorflow_asr.tokenizers import CharTokenizer
 from tensorflow_asr.utils import app_util, tflite_util
 from tests.test_inference import SPEECH_CONFIG, subsampling_config
@@ -38,9 +45,12 @@ from tests.test_tflite import build_model as build_export_model
 # here means a failure points at this file's cache and state plumbing rather than at the encoder.
 CONV_KERNEL = 1
 
-# A call takes a batch. Two rows rather than one so that a per-row slip -- a transcript built from
-# the wrong row, or a state carried across rows -- has somewhere to show up.
+# The batch the engine decodes per call. Two rather than one so that a per-slot slip -- a
+# transcript built from the wrong row, or a state carried across rows -- has somewhere to show up.
 BATCH = 2
+
+# Long enough that requests submitted back to back always land in the same call.
+BATCHING_WAIT_MS = 500
 
 
 @pytest.fixture(scope="module")
@@ -83,45 +93,45 @@ def exported(backends):
     return backends(BATCH)[1]
 
 
-def _inference(backend, model, exported):
-    return ASRInference(model=model) if backend == "model" else ASRInference(tflite=exported)
+def _backend(backend, model, exported):
+    """Keyword arguments that pick one backend, for `ASRInference` or `ASREngine`."""
+    return {"model": model} if backend == "model" else {"tflite": exported}
 
 
 @pytest.fixture
-def model_asr(model):
-    return ASRInference(model=model)
+def backend(request, model, exported):
+    return _backend(request.param, model, exported)
 
 
 @pytest.fixture
-def tflite_asr(exported):
-    return ASRInference(tflite=exported)
-
-
-@pytest.fixture
-def asr(request, model, exported):
+def asr(backend):
     """
-    One `ASRInference` per test, over whichever backend the parametrisation asked for.
+    One streaming session per test, over whichever backend the parametrisation asked for.
 
-    Built fresh rather than shared: these objects hold a streaming session, and a test that leaves
-    audio in the cache would otherwise decide what the next one sees. The expensive part -- the
-    model and its conversion -- stays module scoped.
+    Built fresh rather than shared: a session holds a stream, and a test that leaves audio in the
+    cache would otherwise decide what the next one sees. The engine under it -- the loaded model --
+    is shared, which is the point of it.
     """
-    return _inference(request.param, model, exported)
+    return ASRInference(**backend)
 
 
 @pytest.fixture
-def single_asr(request, backends):
-    """The same, built for one signal per call."""
-    return _inference(request.param, *backends(1))
+def single_backend(request, backends):
+    """The same backend choice, built for one signal per call."""
+    return _backend(request.param, *backends(1))
 
 
-both_backends = pytest.mark.parametrize("asr", ["model", "tflite"], indirect=True)
-both_backends_single = pytest.mark.parametrize("single_asr", ["model", "tflite"], indirect=True)
+both_backends = pytest.mark.parametrize("backend", ["model", "tflite"], indirect=True)
+both_backends_single = pytest.mark.parametrize("single_backend", ["model", "tflite"], indirect=True)
 
 
 @pytest.fixture(scope="module")
 def geometry(model):
     return tuple(int(value) for value in model.get_signal_chunk_size_and_step(1))
+
+
+def noise(length, seed):
+    return np.asarray(tf.random.stateless_normal([length], seed=[seed, seed + 1]) * 0.1, np.float32)
 
 
 @pytest.fixture(scope="module")
@@ -134,39 +144,63 @@ def aligned_audio(geometry):
     one-pass decode without a padded tail confusing the two.
     """
     size, step = geometry
-    return np.asarray(tf.random.stateless_normal([BATCH, size + step * 5], seed=[4, 5]) * 0.1, np.float32)
-
-
-def width(audio):
-    """Samples per row -- every row of a streaming batch always holds the same number."""
-    return audio.shape[1]
+    return noise(size + step * 5, seed=4)
 
 
 def stream(asr, audio, piece=1000):
     """
     Feed `audio` in fixed pieces that have nothing to do with the chunk size, as a caller would.
 
-    Returns one transcript per row, each the concatenation of every piece that row decoded.
+    Returns the concatenation of every piece the session decoded.
     """
     asr.start()
-    pieces = [asr(audio[:, index : index + piece], streaming=True) for index in range(0, width(audio), piece)]
-    pieces.append(asr.end())
-    return ["".join(row) for row in zip(*pieces)]
+    pieces = [asr(audio[index : index + piece]) for index in range(0, len(audio), piece)]
+    return "".join(pieces) + asr.end()
+
+
+async def astream(asr, audio, piece=1000):
+    """`stream`, through the async methods, so several sessions can run at once in one loop."""
+    asr.start()
+    pieces = [await asr.infer(audio[index : index + piece]) for index in range(0, len(audio), piece)]
+    return "".join(pieces) + await asr.aend()
+
+
+class StepSpy:
+    """Wraps an engine's `_step` to count the model calls and, optionally, to fail them."""
+
+    def __init__(self, engine, error=None):
+        self.calls = 0
+        self.error = error
+        self.step = engine._step
+        engine._step = self
+
+    def __call__(self, signals, lengths, states):
+        self.calls += 1
+        if self.error:
+            raise self.error
+        return self.step(signals, lengths, states)
 
 
 # --------------------------------------------------------------------------------- helpers
 
 
-def test_signals_normalises_to_a_batch():
-    """Callers hand over lists, tensors or arrays; a flat one is a batch of one, and `[B, T]` is kept."""
+def test_signal_normalises_to_one_stream():
+    """Callers hand over lists, tensors or arrays, flat or as a single row; all become `[T]`."""
     values = [0.0, 0.5, -0.5, 1.0]
 
-    single = _signals(np.asarray(values, np.float32))
-    assert single.dtype == np.float32 and single.shape == (1, 4), "a flat vector is a batch of one"
-    assert np.array_equal(_signals(values), single), "a plain list must convert"
-    assert np.array_equal(_signals(tf.constant(values)), single), "a tensor must convert"
-    assert np.array_equal(_signals(np.asarray(values, np.float64)), single), "float64 audio must be cast down"
-    assert _signals(np.zeros([3, 4], np.float32)).shape == (3, 4), "a batch must be passed through untouched"
+    single = _signal(np.asarray(values, np.float32))
+    assert single.dtype == np.float32 and single.shape == (4,)
+    assert np.array_equal(_signal(values), single), "a plain list must convert"
+    assert np.array_equal(_signal(tf.constant(values)), single), "a tensor must convert"
+    assert np.array_equal(_signal(np.asarray(values, np.float64)), single), "float64 audio must be cast down"
+    assert np.array_equal(_signal(np.asarray([values], np.float32)), single), "a single row must be flattened"
+
+
+@pytest.mark.parametrize("shape", [(2, 4), (1, 1, 4), ()])
+def test_signal_refuses_anything_but_one_stream(shape):
+    """A session is one stream, so several rows or a scalar are refused rather than reshaped."""
+    with pytest.raises(ValueError, match="one stream"):
+        _signal(np.zeros(shape, np.float32))
 
 
 def test_ordered_refuses_an_export_whose_inputs_are_not_named():
@@ -204,6 +238,8 @@ def test_ordered_reads_the_position_out_of_a_named_input():
 def test_requires_a_model_or_a_tflite():
     with pytest.raises(ValueError, match="Either"):
         ASRInference()
+    with pytest.raises(ValueError, match="Either"):
+        ASREngine()
 
 
 def test_an_unbuilt_model_is_refused(tokenizer):
@@ -240,78 +276,129 @@ def test_a_tflite_without_metadata_is_refused(tmp_path):
         ASRInference(tflite=str(foreign))
 
 
-def test_geometry_comes_from_the_metadata_not_a_guess(model_asr, tflite_asr, model):
+def test_geometry_comes_from_the_metadata_not_a_guess(model, exported):
     """Both backends must agree with the model itself, or the two decode different chunks."""
     size, step = (int(value) for value in model.get_signal_chunk_size_and_step(1))
 
-    assert model_asr._geometry() == (size, step)
-    assert tflite_asr._geometry() == (size, step), "the exported metadata disagrees with the model"
+    assert ASRInference(model=model).engine._geometry() == (size, step)
+    assert ASRInference(tflite=exported).engine._geometry() == (size, step), "the exported metadata disagrees with the model"
+
+
+# ------------------------------------------------------------------------- shared engine
+
+
+@both_backends
+def test_sessions_share_one_engine(backend):
+    """Every session on one backend decodes on one loaded model, not one model per session."""
+    first, second = ASRInference(**backend), ASRInference(**backend)
+
+    assert first.engine is second.engine, "two sessions loaded two models"
+
+
+@both_backends
+def test_streaming_and_non_streaming_use_separate_engines(backend):
+    """Whole signals are padded and chunks are not, so the two must never share a model call."""
+    streaming = ASRInference(**backend, streaming=True).engine
+    non_streaming = ASRInference(**backend, streaming=False).engine
+
+    assert streaming is not non_streaming
+    assert streaming.streaming and not non_streaming.streaming
+    assert ASRInference(**backend, streaming=False).engine is non_streaming, "the non-streaming engine is not shared"
+
+
+def test_different_backends_get_different_engines(model, exported, backends):
+    assert ASRInference(model=model).engine is not ASRInference(tflite=exported).engine
+    assert ASRInference(tflite=exported).engine is not ASRInference(tflite=backends(1)[1]).engine
+
+
+@both_backends
+def test_requests_from_several_sessions_share_one_model_call(backend, geometry):
+    """Chunks that arrive together are decoded in one call, which is what batching is for."""
+    size, _ = geometry
+    engine = ASREngine(**backend, max_wait_ms=BATCHING_WAIT_MS)
+    spy = StepSpy(engine)
+
+    futures = [engine.submit(noise(size, seed=slot)) for slot in range(BATCH)]
+    for future in futures:
+        future.result()
+
+    assert spy.calls == 1, f"{BATCH} requests took {spy.calls} model calls"
+
+
+@both_backends
+def test_more_requests_than_the_batch_are_all_decoded(backend, geometry):
+    """A request that does not fit in the current call waits for the next one, it is not dropped."""
+    size, _ = geometry
+    engine = ASREngine(**backend, max_wait_ms=BATCHING_WAIT_MS)
+    spy = StepSpy(engine)
+
+    futures = [engine.submit(noise(size, seed=slot)) for slot in range(BATCH + 1)]
+    transcripts = [future.result()[0] for future in futures]
+
+    assert len(transcripts) == BATCH + 1 and all(isinstance(text, str) for text in transcripts)
+    assert spy.calls == 2, "the batch was not filled before a second call was made"
+
+
+@both_backends
+def test_a_failed_call_raises_in_every_waiting_session(backend, geometry):
+    """An error in the worker thread must reach the callers, not hang them or vanish."""
+    size, _ = geometry
+    engine = ASREngine(**backend, max_wait_ms=BATCHING_WAIT_MS)
+    spy = StepSpy(engine, error=RuntimeError("model failed"))
+
+    futures = [engine.submit(noise(size, seed=slot)) for slot in range(BATCH)]
+
+    for future in futures:
+        with pytest.raises(RuntimeError, match="model failed"):
+            future.result(timeout=10)
+    engine._step = spy.step  # a working step again: the worker must have survived the error
+    assert isinstance(engine.submit(noise(size, seed=9)).result(timeout=60)[0], str)
 
 
 # ------------------------------------------------------------------------------ one pass
 
 
 @both_backends
-def test_non_streaming_decodes_and_keeps_no_cache(asr, aligned_audio):
+def test_non_streaming_decodes_and_keeps_no_cache(backend, aligned_audio):
     """`streaming=False` is a whole-signal decode with fresh state that stores nothing."""
-    transcripts = asr(aligned_audio, streaming=False)
+    asr = ASRInference(**backend, streaming=False)
 
-    assert len(transcripts) == BATCH, "one transcript per row of the batch"
-    assert all(isinstance(transcript, str) for transcript in transcripts)
+    assert isinstance(asr(aligned_audio), str)
     assert asr.cache == StreamCache(), "a non-streaming call must not leave a session behind"
 
 
-def test_both_backends_agree_on_a_one_pass_decode(model_asr, tflite_asr, aligned_audio):
+def test_both_backends_agree_on_a_one_pass_decode(model, exported, aligned_audio):
     """The exported graph is the same computation; a divergence here is an export defect."""
-    assert model_asr(aligned_audio, streaming=False) == tflite_asr(aligned_audio, streaming=False)
+    assert ASRInference(model=model, streaming=False)(aligned_audio) == ASRInference(tflite=exported, streaming=False)(aligned_audio)
 
 
 @both_backends
-def test_a_wrong_sized_batch_is_refused(asr, geometry):
+def test_a_padded_signal_decodes_as_it_does_alone(backend, geometry):
     """
-    The batch is part of the signature, so a mismatch is named rather than left to fail deeper.
+    Whole signals of different lengths share a call by padding, and the padding must not show.
 
-    A model bakes it in at `make()` and an export at trace time. Unchecked, the model side reaches
-    the decoder as a shape error from inside a `tf.while_loop` and the export side as an opaque
-    interpreter resize failure.
+    Each row gets its real length in `inputs_length`, so the short one must decode exactly as it
+    does in a call of its own. Both sides go through the same engine, so both are decoded at
+    `BATCH` and the comparison measures only the padding.
     """
-    size, _ = geometry
+    size, step = geometry
+    short, long = noise(size + step, seed=11), noise(size + step * 4, seed=12)
+    engine = ASREngine(**backend, streaming=False, max_wait_ms=BATCHING_WAIT_MS)
 
-    with pytest.raises(ValueError, match="signal"):
-        asr(np.zeros([BATCH + 1, size], np.float32), streaming=False)
+    alone = [engine.submit(signal).result()[0] for signal in (short, long)]
+    spy = StepSpy(engine)
+    futures = [engine.submit(signal) for signal in (short, long)]
+    together = [future.result()[0] for future in futures]
 
-
-def test_rows_are_decoded_independently(model_asr, aligned_audio):
-    """
-    A row's transcript must depend only on that row.
-
-    The batch shares one set of carried states, one buffer and one invocation, so a slip in how
-    those are folded -- a state gathered across the batch axis, a transcript read off the wrong
-    row -- shows up as one row's audio changing another's transcript.
-
-    The reference is that same row repeated to fill the batch, not the row decoded alone at batch
-    1: `Transducer.recognize` sends a batch to `recognize_batch` and a single to
-    `recognize_single`, and those two disagree, so comparing across them would fail for reasons
-    that have nothing to do with this layer. Both sides here go through the batched decoder, which
-    is what isolates cross-row leakage.
-    """
-    together = model_asr(aligned_audio, streaming=False)
-
-    alone = []
-    for row in range(BATCH):
-        single = ASRInference(model=model_asr.model)
-        single.batch_size = BATCH  # the model is built at BATCH; repeat one row to fill it
-        repeated = np.repeat(aligned_audio[row : row + 1], BATCH, axis=0)
-        alone.append(single(repeated, streaming=False)[0])
-
-    assert together == alone, f"rows influenced each other:\n  batched ={together}\n  separate={alone}"
+    assert spy.calls == 1, "the two signals were not decoded in one call"
+    assert together == alone, f"padding changed a transcript:\n  together={together}\n  alone   ={alone}"
 
 
 # ----------------------------------------------------------------------------- streaming
 
 
 @both_backends_single
-def test_streaming_reproduces_the_whole_utterance(single_asr, geometry):
+def test_streaming_reproduces_the_whole_utterance(single_backend, geometry):
     """
     The strongest statement in this file, and it holds for a causal model with aligned chunks.
 
@@ -327,12 +414,41 @@ def test_streaming_reproduces_the_whole_utterance(single_asr, geometry):
     equivalence asserted at batch 2 would be measuring the disagreement rather than the cache.
     """
     size, step = geometry
-    audio = np.asarray(tf.random.stateless_normal([1, size + step * 5], seed=[4, 5]) * 0.1, np.float32)
+    audio = noise(size + step * 5, seed=4)
 
-    whole = single_asr(audio, streaming=False)
-    streamed = stream(single_asr, audio)
+    whole = ASRInference(**single_backend, streaming=False)(audio)
+    streamed = stream(ASRInference(**single_backend), audio)
 
     assert streamed == whole, f"chunked decode diverged:\n  whole   ={whole!r}\n  streamed={streamed!r}"
+
+
+@both_backends
+def test_sessions_streamed_together_decode_as_they_do_alone(backend, geometry):
+    """
+    Batching is invisible: a session gets the same transcript with or without company.
+
+    More sessions than `BATCH` run at once, so some chunks share a call and some wait for the next
+    one, and each session's state has to be cut out of the batch and put back at its own slot on
+    every chunk. The reference is each session streamed alone on the same engine, which still
+    decodes at `BATCH` with the other slots silent -- see
+    `test_streaming_reproduces_the_whole_utterance` for why that matters.
+    """
+    size, step = geometry
+    audios = [noise(size + step * (3 + index), seed=20 + index) for index in range(BATCH + 1)]
+
+    alone = [stream(ASRInference(**backend), audio) for audio in audios]
+
+    async def together():
+        return await asyncio.gather(*(astream(ASRInference(**backend), audio) for audio in audios))
+
+    assert asyncio.run(together()) == alone, "sessions decoded together influenced each other"
+
+
+@both_backends
+def test_async_and_sync_calls_agree(backend, aligned_audio):
+    assert asyncio.run(astream(ASRInference(**backend), aligned_audio)) == stream(ASRInference(**backend), aligned_audio)
+    non_streaming = ASRInference(**backend, streaming=False)
+    assert asyncio.run(non_streaming.infer(aligned_audio)) == non_streaming(aligned_audio)
 
 
 @both_backends
@@ -341,8 +457,8 @@ def test_a_partial_chunk_is_buffered_and_decodes_nothing(asr, geometry):
     size, _ = geometry
     asr.start()
 
-    assert asr(np.zeros([BATCH, size // 2], np.float32), streaming=True) == [""] * BATCH, "decoded before a chunk was full"
-    assert width(asr.cache.signal) == size // 2, "the audio was dropped rather than buffered"
+    assert asr(np.zeros([size // 2], np.float32)) == "", "decoded before a chunk was full"
+    assert len(asr.cache.signal) == size // 2, "the audio was dropped rather than buffered"
     assert asr.cache.states is None, "no chunk ran, so no state should have been created"
 
 
@@ -356,10 +472,10 @@ def test_only_the_overlap_is_kept_between_chunks(asr, geometry, aligned_audio):
     """
     size, step = geometry
     asr.start()
-    asr(aligned_audio[:, :size], streaming=True)
+    asr(aligned_audio[:size])
 
-    assert width(asr.cache.signal) == size - step
-    assert np.array_equal(asr.cache.signal, aligned_audio[:, step:size]), "the retained tail is not the overlap"
+    assert len(asr.cache.signal) == size - step
+    assert np.array_equal(asr.cache.signal, aligned_audio[step:size]), "the retained tail is not the overlap"
 
 
 @both_backends
@@ -371,11 +487,11 @@ def test_end_decodes_nothing_when_only_overlap_is_left(asr, geometry, aligned_au
     """
     size, step = geometry
     asr.start()
-    for index in range(0, width(aligned_audio), 1000):
-        asr(aligned_audio[:, index : index + 1000], streaming=True)
+    for index in range(0, len(aligned_audio), 1000):
+        asr(aligned_audio[index : index + 1000])
 
-    assert width(asr.cache.signal) == size - step, "this audio was meant to end flush with a chunk"
-    assert asr.end() == [""] * BATCH, "overlap already decoded was decoded a second time"
+    assert len(asr.cache.signal) == size - step, "this audio was meant to end flush with a chunk"
+    assert asr.end() == "", "overlap already decoded was decoded a second time"
 
 
 @both_backends
@@ -386,14 +502,13 @@ def test_end_flushes_a_genuine_partial_tail(asr, geometry):
     It is zero-padded up to a whole chunk because that is the only length the model accepts.
     """
     size, step = geometry
-    audio = np.asarray(tf.random.stateless_normal([BATCH, size + step * 2 + 900], seed=[7, 8]) * 0.1, np.float32)
+    audio = noise(size + step * 2 + 900, seed=7)
     asr.start()
-    for index in range(0, width(audio), 1000):
-        asr(audio[:, index : index + 1000], streaming=True)
+    for index in range(0, len(audio), 1000):
+        asr(audio[index : index + 1000])
 
-    leftover = width(asr.cache.signal)
-    assert leftover > size - step, "this audio was meant to leave a partial tail"
-    assert asr.end() != [""] * BATCH, "the trailing audio was dropped instead of being padded and decoded"
+    assert len(asr.cache.signal) > size - step, "this audio was meant to leave a partial tail"
+    assert asr.end() != "", "the trailing audio was dropped instead of being padded and decoded"
 
 
 @both_backends
@@ -409,8 +524,8 @@ def test_start_abandons_a_half_finished_session(asr, geometry, aligned_audio):
     """A caller that gives up mid-stream must not have that audio prepended to the next session."""
     size, _ = geometry
     asr.start()
-    asr(aligned_audio[:, : size // 2], streaming=True)
-    assert width(asr.cache.signal) > 0
+    asr(aligned_audio[: size // 2])
+    assert len(asr.cache.signal) > 0
 
     asr.start()
     assert asr.cache == StreamCache(), "the abandoned audio survived into the new session"
@@ -427,14 +542,11 @@ def test_state_is_actually_carried_between_chunks(asr, aligned_audio, geometry):
     size, step = geometry
     carried = stream(asr, aligned_audio)
 
-    pieces = []
-    start = 0
-    while start + size <= width(aligned_audio):
+    independent = ""
+    for start in range(0, len(aligned_audio) - size + 1, step):
         asr.start()
-        pieces.append(asr(aligned_audio[:, start : start + size], streaming=True))
+        independent += asr(aligned_audio[start : start + size])
         asr.end()
-        start += step
-    independent = ["".join(row) for row in zip(*pieces)]
 
     assert carried != independent, "resetting state per chunk changed nothing; state is unused"
 
@@ -456,15 +568,15 @@ def test_state_feedback_pairs_every_state_output(name, tokenizer, tmp_path):
     output = str(tmp_path / "model.tflite")
     convert(build_export_model(name, tokenizer), batch_size=1, beam_width=0, output=output)
 
-    asr = ASRInference(tflite=output)
-    state_outputs = asr._outputs[2:]
+    engine = ASREngine(tflite=output)
+    state_outputs = engine._outputs[2:]
 
-    assert len(asr._feedback) == len(state_outputs), "some state output feeds nothing"
-    fed = [position for position, _ in asr._feedback]
+    assert len(engine._feedback) == len(state_outputs), "some state output feeds nothing"
+    fed = [position for position, _ in engine._feedback]
     assert fed == sorted(set(fed)), "a state input is fed twice"
-    assert len(asr._states) - len(state_outputs) == (1 if name.startswith("ctc.") else 0), "unexpected number of unfed inputs"
-    for position, _ in asr._feedback:
-        assert 0 <= position < len(asr._states)
+    assert len(engine._states) - len(state_outputs) == (1 if name.startswith("ctc.") else 0), "unexpected number of unfed inputs"
+    for position, _ in engine._feedback:
+        assert 0 <= position < len(engine._states)
 
 
 @pytest.mark.parametrize("name", sorted(BUILDERS))
@@ -480,13 +592,11 @@ def test_every_architecture_streams(name, tokenizer, tmp_path):
     output = str(tmp_path / "model.tflite")
     convert(build_export_model(name, tokenizer), batch_size=1, beam_width=0, output=output)
     asr = ASRInference(tflite=output)
-    size, _ = asr._geometry()
+    size, _ = asr.engine._geometry()
 
-    audio = np.asarray(tf.random.stateless_normal([asr.batch_size, size * 3], seed=[1, 2]) * 0.1, np.float32)
-    transcripts = stream(asr, audio, piece=size // 2)
+    transcript = stream(asr, noise(size * 3, seed=1), piece=size // 2)
 
-    assert len(transcripts) == asr.batch_size
-    assert all(isinstance(transcript, str) for transcript in transcripts)
+    assert isinstance(transcript, str)
     assert asr.cache == StreamCache()
 
 
@@ -503,9 +613,20 @@ def test_beam_export_seeds_only_the_first_hypothesis(tokenizer, tmp_path):
     output = str(tmp_path / "beam.tflite")
     convert(build_export_model("transducer.RnnTransducer", tokenizer), batch_size=1, beam_width=beam_width, output=output)
 
-    asr = ASRInference(tflite=output)
-    seeded = [state for state in asr._tflite_initial_states() if state.dtype == np.float32 and list(state.shape) == [1, beam_width]]
+    engine = ASREngine(tflite=output)
+    seeded = [state for state in engine._tflite_initial_states() if state.dtype == np.float32 and list(state.shape) == [1, beam_width]]
 
     assert len(seeded) == 1, "the beam scores were not identified"
     assert seeded[0][0, 0] == 0, "the first hypothesis must start alive"
     assert np.all(seeded[0][0, 1:] == -1e9), "the remaining hypotheses must start dead"
+
+
+def test_beam_export_streams_through_the_engine(tokenizer, tmp_path):
+    """Beam states are `[B * W, ...]`, so a session's slot is W rows, and it must stream end to end."""
+    output = str(tmp_path / "beam.tflite")
+    convert(build_export_model("transducer.RnnTransducer", tokenizer), batch_size=1, beam_width=2, output=output)
+    asr = ASRInference(tflite=output)
+    size, _ = asr.engine._geometry()
+
+    assert isinstance(stream(asr, noise(size * 3, seed=3), piece=size // 2), str)
+    assert asr.cache == StreamCache()

@@ -160,13 +160,15 @@ each new state back into the input it belongs to, and decodes the transcript byt
 ```python
 from tensorflow_asr.inferences import ASRInference
 
-asr = ASRInference(tflite="/path/to/model.tflite")
-transcript = asr(signal, streaming=False)[0]
+asr = ASRInference(tflite="/path/to/model.tflite", streaming=False)
+transcript = asr(signal)
 ```
 
-For streaming, `asr.start()`, call it with each block as it arrives, then `asr.end()` to flush the
-padded tail. The full contract — batches, the cache, chunk geometry, what streaming costs — is in
-[inferences](../inferences.md).
+For streaming, build the session with `streaming=True` (the default), call `asr.start()`, call it with
+each block as it arrives, then call `asr.end()` to flush the padded tail. Sessions on the same file
+share one interpreter, which decodes up to `--bs` sessions per call. The full contract is in
+[inferences](../inferences.md): sessions, the shared engine, the cache, chunk geometry and what
+streaming costs.
 
 Runnable scripts for both, plus a microphone, are in
 [examples/inferences](../../examples/inferences/README.md).

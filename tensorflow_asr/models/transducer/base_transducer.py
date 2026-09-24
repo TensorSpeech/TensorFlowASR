@@ -646,28 +646,26 @@ class Transducer(BaseModel):
             # The current indices of the token that are currently being recognized, shape [B, 1], the tokens indices are started with 1 so that any
             # blank token recognized got updated to index 0 to avoid affecting results
             tokens_indices = tf.ones([batch_size, 1], dtype=tf.int32, name="tokens_indices")
+            # The same cap per row, from the row's own number of frames, so a row decodes the same whatever the other rows hold, shape [B, 1]
+            last_token_indices = nframes * 2
+
+            def done(_frame_indices, _tokens_indices):
+                # A row is done when it is past its last frame, or when it filled its own share of tokens
+                return tf.logical_or(tf.greater_equal(_frame_indices, nframes), tf.greater_equal(_tokens_indices, last_token_indices))
 
             def cond(_frame_indices, _previous_tokens, _previous_decoder_states, _tokens, _tokens_indices):
-                return tf.logical_not(  # Reversed so that the loop check and continue
-                    # One of the following condition met will terminate the loop
-                    tf.logical_or(
-                        # Stop when ALL of the indices of the output of the encoder reach the end
-                        tf.math.reduce_all(tf.greater_equal(_frame_indices, nframes - 1)),
-                        # Stop when ALL of the indices of recognized tokens reach the end
-                        tf.math.reduce_all(tf.greater_equal(_tokens_indices, max_tokens - 1)),
-                    )
-                )
+                return tf.logical_not(tf.math.reduce_all(done(_frame_indices, _tokens_indices)))  # Stop when ALL of the rows are done
 
             def body(_frame_indices, _previous_tokens, _previous_decoder_states, _tokens, _tokens_indices):
-                _current_frames = tf.expand_dims(tf.gather_nd(encoded, tf.minimum(_frame_indices, nframes - 1), batch_dims=1), axis=1)  # [B, 1, E]
+                # Clamped so a finished row, or one with no frames, still gathers a valid index; its result is ignored below
+                _gather_indices = tf.maximum(tf.minimum(_frame_indices, nframes - 1), 0)
+                _current_frames = tf.expand_dims(tf.gather_nd(encoded, _gather_indices, batch_dims=1), axis=1)  # [B, 1, E]
                 _log_softmax, _states = self.call_next(_current_frames, _previous_tokens, _previous_decoder_states)
                 _current_tokens = tf.reshape(tf.argmax(_log_softmax, axis=-1, output_type=tf.int32), [batch_size, 1])  # [B, 1, 1] -> [B, 1]
                 # conditions, blanks are ignored
                 _equal_blank = tf.equal(_current_tokens, self.blank)  # [B, 1]
-                # if the token index >= max tokens, it's already finished, set to blank to ignore
-                _equal_blank = tf.logical_or(_equal_blank, tf.greater_equal(_tokens_indices, max_tokens))
-                # if the frame index > nframes, it's already done, set to blank to ignore
-                _equal_blank = tf.logical_or(_equal_blank, tf.greater(_frame_indices, nframes))
+                # if the row is done, it only waits for the others, set to blank to ignore
+                _equal_blank = tf.logical_or(_equal_blank, done(_frame_indices, _tokens_indices))
                 # update results
                 _update_tokens = tf.reshape(tf.where(_equal_blank, self.blank, _current_tokens), [batch_size])  # [B]
                 _update_tokens_indices = tf.where(

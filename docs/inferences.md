@@ -9,7 +9,10 @@
     - [4.2 Why `end()` matters](#42-why-end-matters)
     - [4.3 Block size is latency, not correctness](#43-block-size-is-latency-not-correctness)
     - [4.4 Chunk geometry](#44-chunk-geometry)
-  - [5. Batches](#5-batches)
+  - [5. Many sessions, one model](#5-many-sessions-one-model)
+    - [5.1 The shared engine](#51-the-shared-engine)
+    - [5.2 How requests are batched](#52-how-requests-are-batched)
+    - [5.3 In an async server](#53-in-an-async-server)
   - [6. What streaming costs you](#6-what-streaming-costs-you)
   - [7. Language models](#7-language-models)
   - [8. Examples](#8-examples)
@@ -19,52 +22,62 @@
 
 ## 1. Overview
 
-[`ASRInference`](../tensorflow_asr/inferences.py) is the entry point for transcribing audio. It
-wraps either backend behind one call:
+[`inferences.py`](../tensorflow_asr/inferences.py) transcribes audio with one of two classes:
 
-| Built with                | Decodes with                                             |
-| ------------------------- | -------------------------------------------------------- |
-| `ASRInference(model=...)` | a live `BaseModel` — `recognize` / `recognize_beam`        |
-| `ASRInference(tflite=...)` | an exported `.tflite`, through a TFLite interpreter       |
+| Class          | What it is                                                                         |
+| -------------- | ---------------------------------------------------------------------------------- |
+| `ASRInference` | one session: one stream of audio, with its own buffer and state                     |
+| `ASREngine`    | one loaded model, shared by all sessions, that decodes up to `B` sessions per call  |
+
+You build `ASRInference` objects. Each one gets its engine by itself, and sessions built on the same
+backend share that engine. The backend is either of these:
+
+| Built with                  | Decodes with                                          |
+| --------------------------- | ----------------------------------------------------- |
+| `ASRInference(model=...)`   | a live `BaseModel`, through `recognize` / `recognize_beam` |
+| `ASRInference(tflite=...)`  | an exported `.tflite`, through a TFLite interpreter    |
 
 ```python
 from tensorflow_asr.inferences import ASRInference
 
-asr = ASRInference(tflite="/path/to/model.tflite")
-transcripts = asr(signal, streaming=False)   # ["the transcript"]
+asr = ASRInference(tflite="/path/to/model.tflite", streaming=False)
+transcript = asr(signal)   # "the transcript"
 ```
 
-A call takes a **batch** of signals, `[B, T]`, and returns one transcript per row — always a list,
-even at `B = 1`. A flat `[T]` vector is read as a batch of one. `streaming=False` decodes the whole
-signal in one pass; `streaming=True` decodes whatever arrives, a piece at a time.
+A call takes one signal, `[T]` or `[1, T]`, and returns one `str`. When you build the session, you
+choose the mode:
 
-What it does for you is the bookkeeping that used to sit in every caller: building the
-`schemas.PredictInput`, seeding and threading the encoder, decoder and beam states across calls,
-buffering audio that does not yet fill a chunk, and turning tokens into text. See
-[decoders](./decoders.md) for what happens underneath.
+- `streaming=False` decodes the whole signal in one pass.
+- `streaming=True` (the default) decodes whatever arrives, a piece at a time.
+
+The session does the work that used to be in every caller. It builds the `schemas.PredictInput`. It
+seeds the encoder, decoder and beam states and carries them across calls. It buffers audio that does
+not yet fill a chunk, and it turns tokens into text. See [decoders](./decoders.md) for what happens
+underneath.
 
 ## 2. Building one
 
 ### 2.1 From an export
 
-Nothing else is needed. `tensorflow_asr tflite` records the sample rate, blank id, beam width and
-chunk geometry inside the flatbuffer, so the file describes itself — see
+You do not need anything else. `tensorflow_asr tflite` records the sample rate, blank id, beam width
+and chunk geometry inside the flatbuffer, so the file describes itself. See
 [tflite](./tutorials/tflite.md) for what is stored and why.
 
 ```python
 asr = ASRInference(tflite="/path/to/model.tflite")
-asr.metadata
+asr.engine.metadata
 # {'signal_chunk_size': 2800, 'signal_chunk_step': 2560, 'sample_rate': 16000,
 #  'blank': 0, 'beam_width': 0, 'nchunks': 1}
 ```
 
-An export made before metadata and named inputs existed is refused, with a message saying to
-re-export. It cannot be driven safely: nothing in such a file says which new state replaces which
-old one.
+An export made before metadata and named inputs existed is refused, with a message that tells you
+to export it again. Such a file cannot be run safely, because nothing in it says which new state
+replaces which old one.
 
 ### 2.2 From a checkpoint
 
-`make()` must have run and the tokenizer must be attached — the model detokenizes its own output.
+`make()` must run first, and the tokenizer must be attached, because the model turns its own tokens
+into text.
 
 ```python
 import os
@@ -80,139 +93,204 @@ tokenizer.make()
 
 model = keras_util.model_from_config(config.model_config)
 model.tokenizer = tokenizer
-model.make(batch_size=1)
+model.make(batch_size=1)   # the number of sessions decoded per call, see section 5
 model.load_weights("/path/to/weights.h5", skip_mismatch=False)
 
 asr = ASRInference(model=model)
 ```
 
-`repodir` is not optional: the config is a jinja template and that is its include root.
+`repodir` is required, because the config is a jinja template and `repodir` is its include root.
 
 ## 3. One pass
 
 ```python
+asr = ASRInference(tflite="/path/to/model.tflite", streaming=False)
 signal = data_util.read_raw_audio(data_util.load_and_convert_to_wav(path, sample_rate=16000))
-transcript = asr(signal, streaming=False)[0]
+transcript = asr(signal)
 ```
 
-The whole signal goes in one call with fresh state, and nothing is kept — `asr.cache` is untouched.
-This is exact for every architecture, offline ones included, and is what you want whenever the
-audio is already complete.
+The whole signal goes in one call with fresh state, and nothing is kept, so `asr.cache` does not
+change. This is exact for every architecture, offline ones too. If the audio is already complete, use
+this mode.
 
 ## 4. Streaming
 
 ### 4.1 The session
 
-`start()` opens a session, each call feeds it more audio, `end()` closes it. Every call returns
+`start()` opens a session, each call feeds it more audio, and `end()` closes it. Every call returns
 only what it decoded, so the caller appends:
 
 ```python
+asr = ASRInference(tflite="/path/to/model.tflite")   # streaming=True is the default
 asr.start()
 transcript = ""
 for block in source:                 # microphone, socket, file read in pieces
-    transcript += asr(block)[0]      # streaming=True is the default
-transcript += asr.end()[0]
+    transcript += asr(block)
+transcript += asr.end()
 ```
 
-Between calls the leftover audio and the decoder state live on `asr.cache`, a `StreamCache`:
+Between calls, the leftover audio and the decoder state stay on `asr.cache`, a `StreamCache`:
 
-| Field    | Holds                                                                             |
-| -------- | --------------------------------------------------------------------------------- |
-| `signal` | `[B, n]` — audio not yet decoded, plus the tail the next chunk overlaps            |
-| `states` | whatever the backend threads through; `None` until something has actually decoded  |
+| Field    | Holds                                                                        |
+| -------- | ---------------------------------------------------------------------------- |
+| `signal` | `[n]`: audio not yet decoded, plus the tail that the next chunk overlaps      |
+| `states` | this session's slot of the backend state, `None` until something decodes      |
 
-`start()` and `end()` both reset it, so an abandoned session cannot leak into the next one.
+`start()` and `end()` both reset the cache, so an abandoned session cannot leak into the next one.
+
+A session sends its chunks in order and waits for each one, because every chunk starts from the
+state that the previous chunk left. Do not call one session from two threads or two tasks at once.
 
 ### 4.2 Why `end()` matters
 
-The model only accepts whole chunks, so audio left over at the end of a stream is zero-padded up to
-`signal_chunk_size` and decoded by `end()`. Skip it and the last words are never transcribed.
+The model only accepts whole chunks. `end()` pads the audio left at the end of a stream with zeros up
+to `signal_chunk_size` and decodes it. If you skip `end()`, the last words are never transcribed.
 
-It pads only when there is genuinely new audio. After a chunk the cache still holds
-`signal_chunk_size - signal_chunk_step` samples, but those were already decoded as that chunk's
-tail and are kept solely as the next one's left context — so a cache no larger than that decodes
-nothing, and `end()` returns empty strings.
+If there is no new audio, it does not pad. After a chunk, the cache still holds
+`signal_chunk_size - signal_chunk_step` samples. Those samples were already decoded as the tail of
+that chunk, and they stay only as the left context of the next chunk. So a cache no longer than that
+decodes nothing, and `end()` returns an empty string.
 
 ### 4.3 Block size is latency, not correctness
 
-Feed 100 samples or 100000. Anything that does not fill a chunk waits in the cache, and anything
-that fills several decodes several. The transcript is the same either way; what changes is how long
-you wait for it — `blocksize / sample_rate` seconds before a block can be decoded at all.
+Feed 100 samples or 100000. Audio that does not fill a chunk waits in the cache, and audio that fills
+several chunks decodes several. The transcript is the same either way. Only the wait changes: a block
+needs `blocksize / sample_rate` seconds of audio before it can decode.
 
 ### 4.4 Chunk geometry
 
-Two numbers drive the buffering, and neither is ever guessed:
+Two numbers control the buffering, and neither one is guessed:
 
-| Number              | Meaning                                    | Comes from                                        |
-| ------------------- | ------------------------------------------ | ------------------------------------------------- |
-| `signal_chunk_size` | samples a call to the model consumes        | `.tflite` metadata, or `get_signal_chunk_size_and_step` |
-| `signal_chunk_step` | samples the buffer advances afterwards      | the same                                          |
+| Number              | Meaning                                    | Comes from                                              |
+| ------------------- | ------------------------------------------ | ------------------------------------------------------- |
+| `signal_chunk_size` | samples that one model call takes           | `.tflite` metadata, or `get_signal_chunk_size_and_step` |
+| `signal_chunk_step` | samples that the buffer moves forward after | the same                                                |
 
-They differ because consecutive feature frames overlap: a window is `frame_length` long but only
-`frame_step` new samples arrive per frame, so the tail of one chunk is the head of the next. That is
-why the cache advances by `step` and not by `size`.
+They differ because feature frames overlap. A window is `frame_length` long, but only `frame_step`
+new samples arrive per frame, so the tail of one chunk is the head of the next. For this reason the
+cache moves forward by `step` and not by `size`.
 
-## 5. Batches
+## 5. Many sessions, one model
 
-`B` is fixed. A model bakes it in at `make(batch_size=...)`, an export at trace time, so it is part
-of the signature rather than something either can adapt to. A mismatch is refused by name:
+### 5.1 The shared engine
 
+`ASRInference` does not load a model. It asks `ASREngine.get(...)` for the engine of its backend and
+mode, and the first call builds that engine. So a server with many clients loads the model once.
+
+| Sessions built with                         | Share an engine when                           |
+| ------------------------------------------- | ---------------------------------------------- |
+| `tflite=path`                               | the path is the same                            |
+| `model=model`                               | it is the same model object                     |
+
+Streaming and non-streaming sessions use separate engines. Streaming chunks all have the same
+length. Whole signals do not, so they are padded, and padding must never reach a carried state.
+
+For a `.tflite`, each engine loads its own interpreter. For a live model, both engines call the same
+model object from their own threads.
+
+### 5.2 How requests are batched
+
+`B` is the batch size of the backend. A model gets it at `make(batch_size=...)`, and an export gets
+it at trace time (`tensorflow_asr tflite --bs=B`). It is the most sessions that one call can decode.
+
+Each engine has one worker thread, and it is the only code that runs the model:
+
+1. The worker takes the first request from the queue.
+2. It waits up to `max_wait_ms` (5 ms by default) for more requests, until it has `B`.
+3. It stacks them into one `[B, width]` call. Empty slots decode silence from the initial state.
+4. It gives each session its own transcript and next state.
+
+A non-streaming batch is padded to its longest signal, and each row gets its real length in
+`inputs_length`. A row decodes the same text alone or next to other rows. `tests/test_inferences.py`
+and `tests/test_inference.py` pin this.
+
+The engine batches chunks from different sessions, never two chunks from the same session.
+
+To set `max_wait_ms`, build the engine before the first session:
+
+```python
+from tensorflow_asr.inferences import ASREngine
+
+ASREngine.get(tflite="/path/to/model.tflite", streaming=True, max_wait_ms=10)
 ```
-ValueError: this export takes 2 signal(s) per call, got 1
+
+### 5.3 In an async server
+
+A model call blocks. In an async handler, use `await asr.infer(block)` and `await asr.aend()`, so the
+event loop keeps running while the engine decodes. They return the same values as `asr(block)` and
+`asr.end()`.
+
+```python
+@app.websocket("/asr")
+async def asr_socket(websocket: WebSocket):
+    await websocket.accept()
+    asr = ASRInference(tflite="/path/to/model.tflite")   # one session per websocket
+    try:
+        while True:
+            block = np.frombuffer(await websocket.receive_bytes(), dtype=np.float32)
+            await websocket.send_text(await asr.infer(block))
+    except WebSocketDisconnect:
+        pass
+    finally:
+        await asr.aend()
 ```
 
-A streaming batch advances in **lockstep**. The rows share one buffer and one set of states, and
-the model consumes the whole batch per invocation, so every row must be handed the same number of
-samples per call. Feeding one row more than another is not representable — pad the short rows.
+If the model fails, the error is raised in every session that waits on that call. The worker keeps
+running for the next requests.
 
 ## 6. What streaming costs you
 
-Chunked decoding reproduces a one-pass decode **exactly** when the model is causal and the audio is
-a whole number of chunks. `tests/test_inferences.py` pins that in both directions.
+If the model is causal and the audio is a whole number of chunks, chunked decoding gives
+**exactly** the same result as a one-pass decode. `tests/test_inferences.py` pins that in both directions.
 
-Off that path, expect small differences, and know which:
+In other cases, expect small differences:
 
-- **A padded tail.** Audio that is not chunk-aligned ends with a zero-padded final chunk, and those
+- A padded tail. Audio that does not end on a chunk boundary ends with a zero-padded chunk, and those
   zeros can emit a token or two. The one-pass decode is then a strict prefix of the streamed one.
-- **A non-causal model.** Streaming an offline encoder is legal and will simply decode worse: it
-  never sees the future frames a single pass would have given it.
-- **Beam search stays approximate.** Tokens already emitted cannot be revised, while a single pass
-  still can. See [decoders](./decoders.md) 4.10.
+- A non-causal model. You can stream an offline encoder, but it will decode worse, because it never
+  sees the future frames that a single pass gives it.
+- Beam search. Tokens already emitted cannot change, but a single pass can still change them. See
+  [decoders](./decoders.md) 4.10.
+
+A transducer at `B = 1` decodes with `recognize_single`, and at `B > 1` with `recognize_batch`. The
+two decoders can give different text for the same audio.
 
 ## 7. Language models
 
-Nothing extra to do. On the model backend the settings come from `decoder_config` through
-`get_beam_decoding_kwargs`, the same call `predict_step` uses, so a beam runs with whatever fusion
-the config describes and the beam state is carried across chunks. On an export they were frozen in
-at conversion time.
+You do not need to do anything. On the model backend, the settings come from `decoder_config`
+through `get_beam_decoding_kwargs`, the same call that `predict_step` uses. So a beam runs with the
+fusion that the config describes, and the beam state is carried across chunks. On an export, the
+configuration was fixed at conversion time.
 
-One limitation carries over: `PredictOutput` has no field for LM state, so a fused LM restarts on
-every call. A fused beam is therefore only correct fed one whole utterance at a time — see
+One limit remains: `PredictOutput` has no field for LM state, so a fused LM starts again on every
+call. If you feed a fused beam one whole utterance at a time, it is correct. Otherwise it is not. See
 [decoders](./decoders.md) 4.10.
 
 ## 8. Examples
 
-Four runnable scripts, one per way audio can arrive. See
+There are four runnable scripts, one for each way audio can arrive. See
 [examples/inferences](../examples/inferences/README.md).
 
-| Script                                                                          | Model      | Audio arrives          |
-| ------------------------------------------------------------------------------- | ---------- | ---------------------- |
-| [`main.py`](../examples/inferences/main.py)                                     | checkpoint | whole file, one call   |
-| [`tflite.py`](../examples/inferences/tflite.py)                                 | `.tflite`  | whole file, one call   |
-| [`streaming_tflite.py`](../examples/inferences/streaming_tflite.py)             | `.tflite`  | file, block at a time  |
-| [`live_streaming_tflite.py`](../examples/inferences/live_streaming_tflite.py)   | `.tflite`  | microphone, live       |
+| Script                                                                        | Model      | Audio arrives          |
+| ----------------------------------------------------------------------------- | ---------- | ---------------------- |
+| [`main.py`](../examples/inferences/main.py)                                   | checkpoint | whole file, one call   |
+| [`tflite.py`](../examples/inferences/tflite.py)                               | `.tflite`  | whole file, one call   |
+| [`streaming_tflite.py`](../examples/inferences/streaming_tflite.py)           | `.tflite`  | file, block at a time  |
+| [`live_streaming_tflite.py`](../examples/inferences/live_streaming_tflite.py) | `.tflite`  | microphone, live       |
 
 ## 9. Verification
 
-`tests/test_inferences.py` drives both backends over the same causal streaming Conformer. What it
-pins:
+`tests/test_inferences.py` runs both backends over the same causal streaming Conformer. It pins:
 
-| Property                        | Why it matters                                                                                  |
-| ------------------------------- | ----------------------------------------------------------------------------------------------- |
-| Streaming equals one pass       | only holds if geometry, the `step` advance and every state feedback pair are right at once       |
-| State is actually consumed      | re-running each chunk from a fresh session must give a different answer, or "streaming" is fiction |
-| Only the overlap is retained    | keeping `size` would decode audio twice; keeping nothing would drop the frames chunks share      |
-| `end()` flushes, but only new audio | a padded re-decode of pure overlap would append a phantom repeat to every transcript         |
-| Every architecture streams      | all eight export, pair their states and run, whatever the shape of that state                    |
-| Rows are independent            | one row's audio must not change another's transcript                                             |
-| A wrong batch is refused        | named at the call rather than failing inside the interpreter                                     |
+| Property                               | Why it matters                                                                       |
+| -------------------------------------- | ------------------------------------------------------------------------------------ |
+| Streaming equals one pass              | it needs the geometry, the `step` advance and every state pair to be right at once   |
+| State is used                          | each chunk from a fresh session must give a different answer, or streaming is fake    |
+| Only the overlap stays                 | keeping `size` decodes audio twice, and keeping nothing drops the shared frames       |
+| `end()` flushes only new audio         | decoding pure overlap again adds a phantom repeat to every transcript                 |
+| Sessions share one engine              | many clients must not load many models                                                |
+| Requests share one call                | `B` requests that arrive together take one model call, and extra requests wait        |
+| Batching does not change a transcript  | a session decodes the same alone or with other sessions, and padding does not show    |
+| Errors reach the caller                | a failed call raises in every waiting session, and the worker survives                |
+| Async equals sync                      | `infer()` and `aend()` return what `__call__` and `end()` return                      |
+| Every architecture streams             | all eight export, pair their states and run, whatever the shape of that state         |

@@ -69,9 +69,10 @@ python examples/inferences/live_streaming_tflite.py \
 
 ## Two things that trip people up
 
-**Export at batch size 1.** `tensorflow_asr tflite --bs=1`. The batch is baked into the signature
-at trace time, so an export made at 4 takes four signals per call and refuses one file. The error
-says so rather than failing somewhere inside the interpreter.
+**The export batch size is sessions per call.** `tensorflow_asr tflite --bs=B` sets how many sessions
+one call can decode. Each script here runs one session, so any `B` works, and the other slots decode
+silence. `--bs=1` is the cheapest for a single session. A server with many clients can use a larger
+`B`, see [inferences](../../docs/inferences.md) section 5.
 
 **A streamed transcript may end slightly longer than a one-pass one.** The last chunk is zero-padded
 up to a whole `signal_chunk_size` before it is decoded, since that is the only length the model
