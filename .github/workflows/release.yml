@@ -37,15 +37,21 @@ jobs:
           enable-cache: true
 
       - name: Set up Python
-        run: uv python install 3.13
+        run: uv python install 3.12
 
       # Bumps the version in pyproject.toml, updates CHANGELOG.md, commits, tags
-      # and creates the GitHub Release. Runs build_command (uv build) on the way.
+      # and creates the GitHub Release. The action runs in its own Docker
+      # container without uv, so the build runs in the next step instead.
       - name: Python Semantic Release
         id: release
         uses: python-semantic-release/python-semantic-release@v10.6.1
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
+          build: false
+
+      - name: Build
+        if: steps.release.outputs.released == 'true'
+        run: uv build
 
       - name: Publish to PyPI
         if: steps.release.outputs.released == 'true'

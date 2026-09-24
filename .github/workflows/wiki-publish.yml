@@ -6,14 +6,31 @@ concurrency:
   group: publish-wiki
   cancel-in-progress: true
 permissions:
-  contents: write
+  contents: read
 jobs:
   publish-wiki:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4.1.4
-      - uses: nglehuy/github-wiki-action@master
+
+      # secrets.TOKEN holds the private SSH key of a deploy key with write access
+      - uses: webfactory/ssh-agent@v0.9.0
         with:
-          token: ${{ secrets.TOKEN }}
-          path: docs
-          preprocess: true
+          ssh-private-key: ${{ secrets.TOKEN }}
+
+      - name: Publish docs to the wiki
+        run: |
+          git clone "git@github.com:${{ github.repository }}.wiki.git" wiki
+          # Replace the wiki contents with docs/, and README.md as the Home page
+          rsync -a --delete --exclude .git docs/ wiki/
+          cp README.md wiki/Home.md
+          # Wiki pages have no .md extension, so strip it from relative links
+          find wiki -name '*.md' -not -path 'wiki/.git/*' \
+            -exec sed -i -E 's#\]\(([^):]+)\.md(\#[^)]*)?\)#](\1\2)#g' {} +
+          cd wiki
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git diff --cached --quiet && { echo "No wiki changes"; exit 0; }
+          git commit -m "Update wiki ${{ github.sha }}"
+          git push
