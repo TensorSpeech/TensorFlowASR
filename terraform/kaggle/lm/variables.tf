@@ -1,0 +1,409 @@
+# ---------------------------------------------------------------------------
+# Kaggle account and the notebook itself
+# ---------------------------------------------------------------------------
+
+variable "kaggle_username" {
+  description = "Kaggle username. Also the owner half of the kernel id."
+  type        = string
+}
+
+variable "kaggle_key" {
+  description = <<-EOT
+    Kaggle API key, from https://www.kaggle.com/settings ("Create New Token").
+
+    This is a live credential. It is passed to the Kaggle CLI through a provisioner
+    `environment` block, which Terraform does not persist, so it never reaches
+    terraform.tfstate. It is written to build/kaggle.json (mode 0600) because
+    `terraform destroy` needs it and destroy-time provisioners cannot read variables.
+    Both that file and *.tfvars are gitignored -- keep them that way.
+  EOT
+  type        = string
+  sensitive   = true
+}
+
+variable "kernel_slug" {
+  description = <<-EOT
+    Kernel slug. The notebook lives at kaggle.com/code/<username>/<slug>, and the slug doubles as
+    the title.
+
+    The 5-character minimum comes from the title: Kaggle rejects anything shorter. Slugs alone
+    could be 3.
+  EOT
+  type        = string
+  default     = "tensorflowasr-train-lm"
+
+  validation {
+    condition     = can(regex("^[a-z0-9][a-z0-9-]{4,}$", var.kernel_slug))
+    error_message = "kernel_slug must be lowercase letters, digits and hyphens, at least 5 characters (Kaggle rejects titles shorter than that, and the slug is used as the title)."
+  }
+}
+
+variable "is_private" {
+  description = "Keep the notebook private."
+  type        = bool
+  default     = true
+}
+
+variable "accelerator" {
+  description = <<-EOT
+    Accelerator ID, written to `machine_shape` and passed as `kaggle kernels push --accelerator`.
+    This is what picks the hardware. "" means no accelerator; pair it with device_type = "cpu".
+
+    Kaggle also has older `enable_gpu` / `enable_tpu` booleans, which this module does not expose:
+    they cannot say *which* GPU, and `enable_tpu` maps to the v3-8 that Kaggle has phased out, so
+    a TPU asked for that way comes up with nothing attached. The metadata booleans are derived
+    from the prefix of this ID instead, so they can never contradict it.
+
+    Valid IDs as of Feb 2026, from https://github.com/Kaggle/kaggle-cli/blob/main/docs/kernels.md
+    -- some are restricted to competition participants or Kaggle admins:
+
+      NvidiaTeslaP100  NvidiaTeslaT4  NvidiaTeslaT4Highmem  NvidiaTeslaA100
+      NvidiaL4  NvidiaL4X1  NvidiaH100  NvidiaRtxPro6000
+      TpuV38  Tpu1VmV38  TpuV5E8  TpuV6E8
+  EOT
+  type        = string
+
+  validation {
+    condition = contains(
+      [
+        "", "NvidiaTeslaP100", "NvidiaTeslaT4", "NvidiaTeslaT4Highmem", "NvidiaTeslaA100",
+        "NvidiaL4", "NvidiaL4X1", "NvidiaH100", "NvidiaRtxPro6000",
+        "TpuV38", "Tpu1VmV38", "TpuV5E8", "TpuV6E8",
+      ],
+      var.accelerator
+    )
+    error_message = "Unknown accelerator ID. See https://github.com/Kaggle/kaggle-cli/blob/main/docs/kernels.md for the current list."
+  }
+}
+
+variable "dataset_sources" {
+  description = <<-EOT
+    Kaggle datasets to mount, as "owner/dataset-slug". Each appears at
+    /kaggle/input/<dataset-slug>, which is what `datadir` should point at.
+  EOT
+  type        = list(string)
+  default     = []
+
+  validation {
+    condition     = alltrue([for source in var.dataset_sources : can(regex("^[^/]+/[^/]+$", source))])
+    error_message = "Each dataset source must be \"owner/dataset-slug\"."
+  }
+}
+
+variable "competition_sources" {
+  description = "Kaggle competitions to mount, as competition slugs."
+  type        = list(string)
+  default     = []
+}
+
+variable "model_sources" {
+  description = "Kaggle models to mount, as \"owner/model/framework/variation/version\"."
+  type        = list(string)
+  default     = []
+}
+
+# ---------------------------------------------------------------------------
+# Where the code comes from
+# ---------------------------------------------------------------------------
+
+variable "repo_url" {
+  description = "Git URL cloned inside the notebook. Must be reachable without credentials."
+  type        = string
+  default     = "https://github.com/TensorSpeech/TensorFlowASR.git"
+}
+
+variable "repo_ref" {
+  description = <<-EOT
+    Branch or tag to clone.
+
+    Not "main": `train_lm` and `tensorflow_asr/models/lm` are not on main yet, and the notebook
+    fails at the train step if they are missing. Point this at whichever branch carries them.
+
+    Whatever you choose has to be pushed -- the notebook clones over the network and cannot see
+    your working tree.
+  EOT
+  type        = string
+  default     = "feat/beamsearch"
+}
+
+# ---------------------------------------------------------------------------
+# Config and data
+# ---------------------------------------------------------------------------
+
+variable "config_path" {
+  description = <<-EOT
+    Config file to train against, as a path inside the cloned repository.
+    Ignored when `config_file` is set.
+  EOT
+  type        = string
+  default     = "examples/models/transducer/conformer/small.yml.j2"
+}
+
+variable "config_file" {
+  description = <<-EOT
+    Optional path to a config on this machine. Its contents are embedded in the notebook
+    and written to /kaggle/working/config.yml.j2, so a config that is not committed to the
+    repository can still be used. Jinja imports inside it still resolve against the clone.
+  EOT
+  type        = string
+  default     = ""
+}
+
+variable "datadir" {
+  description = "Value for --datadir inside the notebook, normally /kaggle/input/<dataset-slug>."
+  type        = string
+}
+
+variable "modeldir" {
+  description = <<-EOT
+    Value for --modeldir. Where the checkpoint is written when `kaggle_model_handle` is set, and
+    also what the config sees if it interpolates {{ modeldir }}.
+  EOT
+  type        = string
+  default     = "/kaggle/working/model"
+}
+
+variable "kaggle_model_handle" {
+  description = <<-EOT
+    Kaggle model to check the training state in and out of, e.g.
+    "owner/tensorflowasr-lm/keras/external". Empty disables checkpointing.
+
+    Worth setting for any run longer than a session. `/kaggle/working` starts empty on every run,
+    and `train_lm` only writes the weights once `fit` returns, so a kernel killed at the session
+    cap loses the lot. With a handle the state goes up after each epoch and comes back down at the
+    start of the next run, so re-pushing the notebook continues rather than restarting.
+
+    Uploading needs write credentials, which the notebook does not have by default -- attach your
+    Kaggle API token as a Secret so KAGGLE_USERNAME and KAGGLE_KEY are set. Reading public models
+    works without that; writing does not.
+  EOT
+  type        = string
+}
+
+# ---------------------------------------------------------------------------
+# trainer arguments
+# ---------------------------------------------------------------------------
+
+variable "trainer" {
+  description = <<-EOT
+    Which language model trainer to run. All three write under <modeldir>/lm, and each reads its
+    own dataset from the config's data_config.lm_dataset_config:
+
+      train_internal_lm -- fits lm_config.internal_config by counting the ASR transcripts
+                           (internal_dataset_config, .tsv). The low-order LM LODR subtracts.
+                           Ignores bs/epochs/learning_rate.
+      train_external_lm -- fits lm_config.external_config by gradient descent on a large corpus
+                           (external_dataset_config, .txt/.txt.gz). The LM fused in.
+      train_kenlm       -- builds a KenLM n-gram over the same external corpus, an alternative
+                           external LM. run.sh builds the kenlm/lmplz binary automatically for this
+                           trainer (scripts/install_kenlm.sh); ignores bs/epochs.
+  EOT
+  type        = string
+  default     = "train_external_lm"
+
+  validation {
+    condition     = contains(["train_external_lm", "train_internal_lm", "train_kenlm"], var.trainer)
+    error_message = "trainer must be train_external_lm, train_internal_lm or train_kenlm."
+  }
+}
+
+variable "bs" {
+  description = <<-EOT
+    Batch size **per replica**. The dataset is batched at `bs x replicas`.
+
+    One replica on CPU or a single GPU, so there it is simply the batch size. A TPU v3-8 has 8
+    cores, so bs = 32 means a global batch of 256.
+  EOT
+  type        = number
+  default     = 32
+}
+
+variable "epochs" {
+  description = "Training epochs."
+  type        = number
+  default     = 10
+}
+
+variable "steps_per_epoch" {
+  description = <<-EOT
+    Batches per epoch. Required for `train_external_lm` (a main.tf precondition enforces it) and
+    ignored by the counting trainers -- `train_external_lm` will not guess it, because guessing
+    means reading the whole corpus before training starts.
+
+    For one epoch to be one full pass, use ceil(sequences / (bs x replicas)) -- `wc -l` on the
+    corpus gives the sequence count, and replicas is 8 on a TPU, 1 otherwise. A shorter epoch is
+    often better on a large corpus: the progress bar shows the running mean of the loss within an
+    epoch, so a very long one stops looking like it is moving.
+  EOT
+  type        = number
+  default     = null
+
+  validation {
+    condition     = var.steps_per_epoch == null || var.steps_per_epoch >= 1
+    error_message = "steps_per_epoch must be at least 1."
+  }
+}
+
+variable "learning_rate" {
+  description = "train_external_lm only. Adam learning rate."
+  type        = number
+  default     = 0.001
+}
+
+variable "lr_schedule" {
+  description = <<-EOT
+    train_external_lm only. "constant" holds learning_rate; "cosine" warms up then decays to 0 over
+    steps_per_epoch x epochs. Cosine needs a step budget you will actually run to completion -- a
+    budget far larger than the run gives you constant-with-warmup and none of the anneal.
+  EOT
+  type        = string
+  default     = "constant"
+
+  validation {
+    condition     = contains(["constant", "cosine"], var.lr_schedule)
+    error_message = "lr_schedule must be constant or cosine."
+  }
+}
+
+variable "max_lines" {
+  description = "train_kenlm only. Cap the corpus at this many lines. null reads the whole corpus."
+  type        = number
+  default     = null
+}
+
+variable "text_path" {
+  description = <<-EOT
+    train_kenlm only. Where the tokenized token-id corpus lmplz reads is written and reused from.
+    Empty uses <modeldir>/lm/corpus.ids.txt. The file is roughly the size of the source text, so on
+    a small /kaggle/working point it at a roomier attached volume for a large corpus.
+  EOT
+  type        = string
+  default     = ""
+}
+
+variable "prune" {
+  description = <<-EOT
+    train_kenlm only. KenLM pruning thresholds, one per n-gram order, e.g. [0, 0, 1] keeps all
+    unigrams and bigrams and drops trigrams seen once. Empty prunes nothing. Other KenLM knobs
+    (--arpa, --lmplz, --lmplz-args) go through extra_args.
+  EOT
+  type        = list(number)
+  default     = []
+}
+
+variable "device_type" {
+  description = "cpu, gpu or tpu. Must line up with `accelerator`; a precondition rejects a mismatch."
+  type        = string
+  default     = "gpu"
+
+  validation {
+    condition     = contains(["cpu", "gpu", "tpu"], var.device_type)
+    error_message = "device_type must be cpu, gpu or tpu."
+  }
+}
+
+variable "mxp" {
+  description = "Mixed precision: none, auto, strict."
+  type        = string
+  default     = "none"
+}
+
+variable "tpu_address" {
+  description = <<-EOT
+    Cluster address for --tpu-address. Only used when device_type is "tpu".
+
+    "local" is what `docs/tutorials/training.md` uses and what a TPU VM wants, since the chips are
+    attached to the machine running the code rather than reached over the network. Set it to ""
+    to let the resolver auto-detect.
+
+    If the TPU runtime complains
+
+        Could not find SliceBuilder port 8471 in any of the 0 ports provided in
+        tpu_process_addresses="local"
+
+    then "local" is being read as a list of process addresses and finding none. Try "" first,
+    then "" together with tpu_vm = false, which restores the `experimental_connect_to_cluster`
+    call that the VM path skips. Which combination Kaggle wants is untested here.
+  EOT
+  type        = string
+  default     = "local"
+}
+
+variable "tpu_vm" {
+  description = <<-EOT
+    Pass --tpu-vm. True for Kaggle, whose TPUs are TPU VMs: the flag skips
+    `experimental_connect_to_cluster`, which is for reaching a remote TPU node and is wrong when
+    the chips are local.
+  EOT
+  type        = bool
+  default     = true
+}
+
+variable "spx" {
+  description = <<-EOT
+    --spx, `steps_per_execution`: batches per device call. Raising it cuts host round trips and is
+    the usual TPU throughput lever.
+
+    Left at 1 because it could not be verified. On keras 3 / tensorflow 2.19, any value above 1
+    combined with a distribution strategy fails during `fit` with an InvalidArgumentError about a
+    `while/cond` placeholder -- reproduced with a plain Dense model and with the stock Keras loss,
+    so it is not specific to this repository. Single-device runs are fine at any value. Whether
+    TPUStrategy shares the fault is untested. If you raise it, confirm a few steps run before
+    spending a session on it.
+  EOT
+  type        = number
+  default     = 1
+}
+
+variable "extra_args" {
+  description = <<-EOT
+    Extra flags appended to the train_lm command, verbatim.
+
+    The example configs interpolate jinja variables that train_lm forwards from the CLI, so
+    this is where they go, for example ["--vocabprefix=/kaggle/input/vocab/sp", "--vocabsize=1000"].
+    An undefined jinja variable renders empty rather than failing, which usually shows up as a
+    path that is missing a component.
+  EOT
+  type        = list(string)
+  default     = []
+}
+
+# ---------------------------------------------------------------------------
+# What apply does after pushing
+# ---------------------------------------------------------------------------
+
+variable "wait_for_completion" {
+  description = <<-EOT
+    Poll until the kernel finishes. `terraform apply` blocks for the whole training run --
+    hours, for a real corpus. Set false to push and return immediately.
+  EOT
+  type        = bool
+  default     = false
+}
+
+variable "poll_interval_seconds" {
+  description = "Seconds between status checks."
+  type        = number
+  default     = 60
+}
+
+variable "timeout_minutes" {
+  description = <<-EOT
+    Give up waiting after this long. The kernel keeps running on Kaggle; only the wait stops.
+    Kaggle caps a session at around 9-12 hours, so a longer timeout than that buys nothing.
+  EOT
+  type        = number
+  default     = 720
+}
+
+variable "download_output" {
+  description = "Run `kaggle kernels output` after a successful run to fetch the weights."
+  type        = bool
+  default     = true
+}
+
+variable "output_dir" {
+  description = "Where to download the output. Defaults to output/ next to this module."
+  type        = string
+  default     = ""
+}

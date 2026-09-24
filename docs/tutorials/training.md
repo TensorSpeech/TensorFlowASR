@@ -1,10 +1,11 @@
 - [Training Tutorial](#training-tutorial)
-  - [1. Install packages](#1-install-packages)
+  - [1. Installation](#1-installation)
   - [2. Prepare transcripts files](#2-prepare-transcripts-files)
   - [3. Prepare config file](#3-prepare-config-file)
-  - [4. \[Optional\]\[Required if using TPUs\] Create tfrecords](#4-optionalrequired-if-using-tpus-create-tfrecords)
+  - [4. \[Optional\] Create tfrecords](#4-optional-create-tfrecords)
   - [5. Generate vocabulary and metadata](#5-generate-vocabulary-and-metadata)
   - [6. Run training](#6-run-training)
+  - [7. \[Optional\] Train a language model](#7-optional-train-a-language-model)
 
 
 # Training Tutorial
@@ -14,7 +15,13 @@ These commands are example for librispeech dataset, but we can apply similar to 
 ## 1. Installation
 
 ```bash
-./setup.sh [tpu|gpu|cpu] install
+uv sync                 # CPU / Apple Silicon
+uv sync --extra cuda    # NVIDIA GPU
+
+# TPU: sync first, then swap TensorFlow for the Cloud TPU build. This cannot be an
+# extra -- `tensorflow-tpu` ships its own `tensorflow` distribution, so the two
+# cannot be installed together. Re-run it after any later `uv sync`.
+uv sync && ./scripts/install_tpu.sh
 ```
 
 ## 2. Prepare transcripts files
@@ -91,4 +98,161 @@ tensorflow_asr train \
     --tpu-address=local
 ## See others params
 tensorflow_asr train --help
+```
+
+## 7. [Optional] Train a language model
+
+Only needed if you decode with beam search and a language model. Greedy decoding uses none, so you can stop at step 6.
+
+There are two roles a language model can play, and a separate command trains each:
+
+| Command                            | What it is                                     | Trained on                   | Config key                  |
+| ---------------------------------- | ---------------------------------------------- | ---------------------------- | --------------------------- |
+| `train_external_lm` / `train_kenlm` | the LM fused *into* the scores                 | a large text corpus          | `lm_config.external_config` |
+| `train_internal_lm`                | the low-order LM that LODR *subtracts*          | the ASR training transcripts | `lm_config.internal_config` |
+
+`train_external_lm` trains the neural LM and `train_kenlm` fits an n-gram; both fill the same
+`external_config` key, so pick whichever that key names. Both are in 7.2.
+
+Which ones you need depends on `decoder_config.lm_type`: `shallow` and `ilme` use the external LM only, `lodr` uses both. See [decoders.md](../decoders.md) for what each mode does and how to set `lm_alpha` and `lm_beta`.
+
+Add the models to the same config file used for training. `vocab_size` must equal the tokenizer's vocabulary size, because the LM returns scores indexed against the transducer's own tokens:
+
+```yaml
+lm_config:
+  external_config:
+    class_name: tensorflow_asr.models.lm.lstm_language_model>LSTMLanguageModel
+    config:
+      vocab_size: 1000
+      embed_dim: 512
+      units: 2048
+      nlayers: 2
+      tie_embeddings: True
+  internal_config:
+    class_name: tensorflow_asr.models.lm.bigram_language_model>BigramLanguageModel
+    config:
+      vocab_size: 1000
+      blank: 0
+```
+
+### 7.1 Internal language model (for `lm_type: lodr`)
+
+```bash
+tensorflow_asr train_internal_lm \
+    --config-path=/path/to/config.yml.j2 \
+    --datadir=/path/to/datadir \
+    --modeldir=/path/to/modeldir
+```
+
+Weights land in `/path/to/modeldir/lm/internal.weights.h5`. This one must be fitted on the ASR training transcripts — point `data_config.lm_dataset_config.data_paths` at the transcript `.tsv` files — because the whole point is to approximate what the transducer already picked up from that exact text. `BigramLanguageModel` is fitted by counting in a single pass, which is its exact estimate, so `--epochs`, `--bs` and `--learning-rate` do nothing here.
+
+### 7.2 External language model
+
+Point `data_config.lm_dataset_config.data_paths` at a corpus much larger than your transcripts. The published setups use the LibriSpeech LM corpus, ~800M words against the ~9M words of LibriSpeech transcripts:
+
+```bash
+wget https://www.openslr.org/resources/11/librispeech-lm-norm.txt.gz
+
+tensorflow_asr train_external_lm \
+    --config-path=/path/to/config.yml.j2 \
+    --datadir=/path/to/datadir \
+    --modeldir=/path/to/modeldir \
+    --bs=128 \
+    --epochs=1 \
+    --steps-per-epoch=7813
+## See others params
+tensorflow_asr train_external_lm --help
+```
+
+Weights land in `/path/to/modeldir/lm/external.weights.h5`. The `.gz` is read directly and streamed, so the several GB never has to be unpacked; `lm_dataset_config.max_lines` caps it for a quick first run.
+
+An **n-gram** external LM is the cheaper alternative, and does not train by gradient descent at all — build it with KenLM instead, which handles a corpus this size in bounded memory:
+
+```bash
+./scripts/install_kenlm.sh
+
+tensorflow_asr train_kenlm \
+    --config-path=/path/to/config.yml.j2 \
+    --datadir=/path/to/datadir \
+    --modeldir=/path/to/modeldir \
+    --prune='[0,0,1,1]'
+```
+
+That writes `lm/corpus.ids.txt`, `lm/lm.arpa` and `lm/kenlm.weights.h5`. It fills the same `lm_config.external_config` key, so set that to `NGramLanguageModel` rather than `LSTMLanguageModel` — and its `order` there is the n-gram order, which is why there is no `--order` flag. `--lmplz` defaults to where the install script put the binary, so it only needs setting for a system-wide KenLM.
+
+`--steps-per-epoch` is required, and is not derived from the corpus: working it out means reading every line before the first training step, which on a corpus this size costs minutes on every run. Count once instead and keep the number:
+
+```bash
+zcat librispeech-lm-norm.txt.gz | wc -l    # 40418260 for the full corpus
+```
+
+One full pass is `ceil(sequences / (bs x replicas))` — replicas is 8 on a TPU and 1 everywhere else. Above, `ceil(1000000 / 128) = 7813`.
+
+A full pass is often the wrong epoch. The whole corpus at `--bs=32` is ~1.25M steps, and the progress bar shows the running mean of the loss *within* an epoch — so one huge epoch reports a number that stops moving long before training does. Shorter epochs reset that average and give you a reading you can act on. Epochs do not restart the stream, so nothing is re-read: epoch 2 carries on where epoch 1 stopped.
+
+Without `--text-path` it falls back to the training transcripts and warns, since that trains the external LM on the text the transducer already learned.
+
+### 7.3 Normalize the corpus
+
+A corpus is written, not spoken. It carries punctuation and digits; an ASR vocabulary carries
+neither. Every token the language model knows but the acoustic model can never emit is probability
+mass spent on nothing, so an un-normalized corpus makes fusion *worse* rather than better. OpenSLR
+ships the LibriSpeech corpus already normalized (`librispeech-lm-norm.txt.gz`); no such file exists
+for most languages.
+
+Set `language` on the external dataset config and `LMDataset` rewrites each line as it streams:
+
+```yaml
+data_config:
+  lm_dataset_config:
+    external_dataset_config:
+      data_paths: [/path/to/corpus.txt.gz]
+      language: vi            # enables normalization and picks how numbers are read
+      # keep_punctuation: ""  # optional; overrides the language default
+```
+
+| Input | Output (`vi`) |
+| --- | --- |
+| `Năm 2018, giá 1.000.000 đồng.` | `năm hai nghìn không trăm mười tám giá một triệu đồng` |
+| `Phiên bản 1.2.3` | `phiên bản một hai ba` |
+| `tăng 3,14%` | `tăng ba phẩy một bốn` |
+
+What it does:
+
+- **Expands numbers** with [`num2words`](https://github.com/savoirfairelinux/num2words), in the
+  language given. Anything that is not a quantity — a version, a date, an id — is read digit by
+  digit instead, so no bare digit ever reaches the tokenizer.
+- **Strips punctuation and symbols**, except what a transcript in that language really contains:
+  English keeps `'` and `-` so `don't` and `well-known` survive, Vietnamese keeps neither. Those
+  characters are only kept *inside* a word — a standalone `--` still goes.
+
+What it deliberately does not do:
+
+- **Lowercase or unicode-normalize.** `Tokenizer.normalize_text` already does both on the way to
+  being tokenized, and its NFKC pass is what folds the two Vietnamese tone placements (`hoà` /
+  `hòa`) onto one spelling.
+- **Speak symbols.** `%` becomes a space, not `phần trăm`. That needs a word per symbol per
+  language, and a wrong reading is worse than a missing one.
+- **Touch `.tsv` transcripts.** Only the corpus is rewritten. Transcripts are what the transducer
+  trained on, and the internal LM's job is to approximate what it picked up from exactly that text.
+
+Without `language` set, nothing is normalized — there is no language-independent reading of `2018`.
+
+`tests/test_lm_normalization.py` covers the rules, including a sweep of 0–99999 for the Vietnamese
+`lẻ` / `không trăm` distinction, which `num2words` gets wrong on its own for every year of this
+century.
+
+### 7.4 Use the weights
+
+The weights are not named in the config. Pass them to `tensorflow_asr test`, which loads them into the models `lm_config` describes:
+
+```bash
+tensorflow_asr test \
+    --config-path=/path/to/config.yml.j2 \
+    --dataset-type=slice \
+    --datadir=/path/to/datadir \
+    --outputdir=/path/to/modeldir/tests \
+    --h5=/path/to/modeldir/weights.h5 \
+    --lm-h5=/path/to/modeldir/lm.weights.h5 \
+    --internal-lm-h5=/path/to/modeldir/internal_lm.weights.h5
 ```

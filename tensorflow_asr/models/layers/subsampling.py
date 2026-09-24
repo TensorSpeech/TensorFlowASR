@@ -215,18 +215,68 @@ class Conv2dSubsampling(Layer):
             self.convs.append(subblock)
             self.time_reduction_factor *= subblock.layers[0].strides[0]
 
-    def call(self, inputs, training=False):
-        outputs, outputs_length = inputs
+        # Left context each causal convolution needs to carry between chunks. `causal` padding
+        # left-pads `kernel - 1` frames of zeros and then convolves `valid`, so a streaming caller
+        # must substitute the previous chunk's frames or the leading outputs of every chunk are
+        # computed against a false silence. The cache is rounded up to a whole number of strides
+        # so that dropping `length // stride` output frames realigns exactly.
+        self._state_lengths = []
         for block in self.convs:
-            outputs = block(outputs, training=training)
+            conv = block.layers[0]
+            kernel, stride = conv.kernel_size[0], conv.strides[0]
+            if conv._padding != "causal" or kernel <= 1:  # pylint: disable=protected-access
+                self._state_lengths.append(0)
+                continue
+            self._state_lengths.append(-(-(kernel - 1) // stride) * stride)  # ceil to a multiple of stride
+        self._block_input_shapes = None
+
+    def build(self, input_shape):
+        # record what flows into each convolution so `get_initial_state` can size the caches
+        outputs_shape, _ = input_shape
+        shapes, shape = [], tuple(outputs_shape)
+        for block in self.convs:
+            shapes.append(shape)
+            shape = tuple(block.compute_output_shape(shape))
+        self._block_input_shapes = shapes
+        return super().build(input_shape)
+
+    def get_initial_state(self, batch_size: int):
+        """Zeroed left context, one entry per causal convolution that needs any."""
+        if self._block_input_shapes is None or not any(self._state_lengths):
+            return None
+        states = []
+        for length, shape in zip(self._state_lengths, self._block_input_shapes):
+            if length == 0:
+                continue
+            states.append(tf.zeros([batch_size, length, *shape[2:]], dtype=self.dtype))
+        return states
+
+    def call(self, inputs, initial_state=None, training=False, return_states=False):
+        outputs, outputs_length = inputs
+        states, index = [], 0
+        for block, state_length in zip(self.convs, self._state_lengths):
+            conv = block.layers[0]
+            if state_length and initial_state is not None:
+                # prepend the previous chunk's frames, convolve, then drop the outputs that
+                # belong to them; the new cache is the tail of the *combined* sequence, which is
+                # always at least `state_length` long even when this chunk is shorter than that
+                combined = tf.concat([initial_state[index], outputs], axis=1)
+                index += 1
+                states.append(combined[:, -state_length:])
+                outputs = block(combined, training=training)
+                outputs = outputs[:, state_length // conv.strides[0] :]
+            else:
+                outputs = block(outputs, training=training)
             outputs_length = math_util.conv_output_length(
                 outputs_length,
-                filter_size=block.layers[0].kernel_size[0],
-                padding=block.layers[0]._padding,
-                stride=block.layers[0].strides[0],
-                dilation=block.layers[0].dilation_rate[0],
+                filter_size=conv.kernel_size[0],
+                padding=conv._padding,  # pylint: disable=protected-access
+                stride=conv.strides[0],
+                dilation=conv.dilation_rate[0],
             )
         outputs = math_util.merge_two_last_dims(outputs)
+        if return_states:
+            return outputs, outputs_length, (states or None)
         return outputs, outputs_length
 
     def compute_mask(self, inputs, mask=None):

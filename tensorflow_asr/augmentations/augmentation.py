@@ -95,7 +95,7 @@ class Augmentation:
         for key, value in sorted(config.items(), key=lambda x: x[0]):
             au = AUGMENTATIONS.get(key, None)
             if au is None:
-                raise KeyError(f"No tf augmentation named: {key}\n" f"Available tf augmentations: {AUGMENTATIONS.keys()}")
+                raise KeyError(f"No tf augmentation named: {key}\nAvailable tf augmentations: {AUGMENTATIONS.keys()}")
             aug = au(**value) if value is not None else au()
             augmentations.append(aug)
         return augmentations

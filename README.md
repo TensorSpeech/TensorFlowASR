@@ -33,6 +33,8 @@ TensorFlowASR implements some automatic speech recognition architectures such as
 - [Installation](#installation)
 - [Training \& Testing Tutorial](#training--testing-tutorial)
 - [Features Extraction](#features-extraction)
+- [Decoders](#decoders)
+- [Inference](#inference)
 - [Augmentations](#augmentations)
 - [TFLite Convertion](#tflite-convertion)
 - [Pretrained Models](#pretrained-models)
@@ -71,15 +73,44 @@ TensorFlowASR implements some automatic speech recognition architectures such as
 
 For training and testing, you should use `git clone` for installing necessary packages from other authors (`ctc_decoders`, `rnnt_loss`, etc.)
 
-**NOTE ONLY FOR APPLE SILICON**: TensorFlowASR requires python >= 3.12
+TensorFlowASR uses [uv](https://docs.astral.sh/uv/) as its package manager and requires python 3.12 or 3.13.
 
-See the `requirements.[extra].txt` files for extra dependencies
+A plain `uv sync` installs `tensorflow` + `tensorflow-text`, which is all that CPU
+and Apple Silicon need. Accelerators are opt-in extras:
 
 ```bash
 git clone https://github.com/TensorSpeech/TensorFlowASR.git
 cd TensorFlowASR
-./setup.sh [apple|tpu|gpu] [dev]
+uv sync                 # CPU / Apple Silicon
+uv sync --extra cuda    # NVIDIA GPU
+uv sync --extra dev     # add the development tooling
 ```
+
+Extras are declared in `pyproject.toml`:
+
+| Extra  | Contents |
+| ------ | -------- |
+| _(none)_ | `tensorflow` + `tensorflow-text`, works on CPU and Apple Silicon |
+| `cuda` | `tensorflow[and-cuda]` for NVIDIA GPUs |
+| `dev`  | `pytest`, `ruff`, `pre-commit`, plotting and export tooling |
+
+Run commands inside the environment with `uv run`, e.g. `uv run pytest` or
+`uv run tensorflow_asr --help`.
+
+**Cloud TPU** is not an extra:
+
+```bash
+uv sync && ./scripts/install_tpu.sh
+```
+
+`tensorflow-tpu` ships its own `tensorflow` distribution, and `tensorflow` is a base
+dependency, so an extra adding it would install both and leave whichever landed last in
+place. The script uninstalls the stock build first, then installs the TPU one. Re-run it
+after any later `uv sync`, which puts the stock `tensorflow` back.
+
+> **TPU note:** `tensorflow-tpu` ships its own `tensorflow` distribution and
+> overwrites the base one. This matches the previous `setup.sh tpu` behaviour,
+> which uninstalled `tensorflow` and force-installed `tensorflow-tpu` over it.
 
 **Running in a container**
 
@@ -100,6 +131,20 @@ See [examples](./examples/) for some predefined ASR models and results
 ## Features Extraction
 
 See [features_extraction](./tensorflow_asr/features/README.md)
+
+## Decoders
+
+Greedy and beam search decoding for CTC and Transducer models, including the ALSD++ transducer beam search
+
+See [decoders](./docs/decoders.md)
+
+## Inference
+
+`ASRInference` transcribes with either a checkpoint or an exported tflite model, in one pass or
+streaming chunk by chunk
+
+See [inferences](./docs/inferences.md), and [examples/inferences](./examples/inferences/) for
+runnable scripts including a live microphone
 
 ## Augmentations
 

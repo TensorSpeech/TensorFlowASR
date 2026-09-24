@@ -7,9 +7,11 @@ decoder_config:
   blank_index: 0
   unknown_token: "<unk>"
   unknown_index: 0
-  beam_width: 0
+  beam_width: 8
   norm_score: True
-  lm_config: null
+  lm_alpha: 0.5
+  lm_beta: 0.2
+  lm_type: lodr
   vocabulary: {{vocabprefix}}.vocab
   keep_whitespace: True
   vocab_size: {{vocabsize}}

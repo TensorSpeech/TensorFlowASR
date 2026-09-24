@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" http://arxiv.org/abs/2005.03191 """
+"""http://arxiv.org/abs/2005.03191"""
 
 from typing import List
 
@@ -325,7 +325,8 @@ class ContextNetEncoder(keras.Model):
             Outputs, outputs_length, new_states
         """
         with tf.name_scope(f"{self.name}_call_next"):
-            return self.call((features, features_length), training=False)
+            outputs, outputs_length = self.call((features, features_length), training=False)
+            return outputs, outputs_length, None  # contextnet is stateless, but callers unpack three
 
     def compute_mask(self, inputs, mask=None):
         outputs, outputs_length = inputs

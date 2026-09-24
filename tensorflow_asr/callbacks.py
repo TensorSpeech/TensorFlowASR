@@ -94,7 +94,7 @@ class PredictLogger(keras.callbacks.Callback):
     def on_predict_begin(self, logs=None):
         self.index = 0
         self.output_file = tf.io.gfile.GFile(self.output_file_path, mode="w")
-        self.output_file.write("\t".join(("PATH", "GROUND_TRUTH", "GREEDY", "BEAM_SEARCH")) + "\n")  # header
+        self.output_file.write("\t".join(("PATH", "GROUND_TRUTH", "GREEDY", "BEAM_SEARCH", "BEAM_SEARCH_LM")) + "\n")  # header
 
     def on_predict_batch_end(self, batch, logs=None):
         if logs is None:
@@ -102,12 +102,14 @@ class PredictLogger(keras.callbacks.Callback):
 
         transcripts = self.model.tokenizer.detokenize(logs.pop("tokens"))
         beam_transcripts = self.model.tokenizer.detokenize(logs.pop("beam_tokens"))
+        # Beam search with the language model fused in; equal to BEAM_SEARCH when none is attached.
+        beam_lm_transcripts = self.model.tokenizer.detokenize(logs.pop("beam_lm_tokens"))
         targets = self.model.tokenizer.detokenize(logs.pop("labels"))
 
-        for i, item in enumerate(zip(targets.numpy(), transcripts.numpy(), beam_transcripts.numpy()), start=self.index):
-            groundtruth, greedy, beam = [x.decode("utf-8") for x in item]
+        for i, item in enumerate(zip(targets.numpy(), transcripts.numpy(), beam_transcripts.numpy(), beam_lm_transcripts.numpy()), start=self.index):
+            groundtruth, greedy, beam, beam_lm = [x.decode("utf-8") for x in item]
             path = self.test_dataset.entries[i][0]
-            line = "\t".join((path, groundtruth, greedy, beam)) + "\n"
+            line = "\t".join((path, groundtruth, greedy, beam, beam_lm)) + "\n"
             self.output_file.write(line)
             self.index += 1
 
@@ -296,6 +298,38 @@ class EarlyStopping(keras.callbacks.EarlyStopping):
         return cls(**config)
 
 
+def upload_kaggle_model(model_dir: str, model_handle: str, notes: str, ignore_patterns=None):
+    """
+    Push `model_dir` as a new version of the Kaggle model `model_handle`.
+
+    The one-shot counterpart to `KaggleModelBackupAndRestore`, for the trainers that build in a
+    single pass and so have no `fit` loop for a callback to ride. Uploading a directory as a model
+    version is the same `kagglehub.model_upload` the callback uses per epoch; factored out here so
+    both go through one path. The handle is **auto-created** on first upload, so nothing has to exist
+    beforehand.
+
+    Credentials come from the environment (`KAGGLE_USERNAME` / `KAGGLE_KEY`), which is what the
+    Kaggle notebook `run.sh` exports. `.DS_Store` is always ignored; pass `ignore_patterns` to keep
+    large intermediates out -- the token-id corpus, say, which is an input, not a result.
+    """
+    if not model_handle:
+        return
+    try:
+        kagglehub = importlib.import_module("kagglehub")
+    except ImportError as e:
+        raise ImportError("Kaggle library is not installed. Please install it via `pip install '.[kaggle]'`.") from e
+    logging.getLogger("kagglehub").disabled = True
+    logging.getLogger("kagglehub").handlers.clear()
+    model_dir = file_util.preprocess_paths(model_dir, isdir=True)
+    kagglehub.model_upload(
+        handle=model_handle,
+        local_model_dir=model_dir,
+        version_notes=notes,
+        ignore_patterns=[".DS_Store", *(ignore_patterns or [])],
+    )
+    logger.info(f"Uploaded {model_dir} to Kaggle model {model_handle}")
+
+
 @keras.utils.register_keras_serializable(package=__name__)
 class KaggleModelBackupAndRestore(BackupAndRestore):
     def __init__(
@@ -323,9 +357,7 @@ class KaggleModelBackupAndRestore(BackupAndRestore):
             raise ValueError(f"Model dir must be local path for Kaggle backup and restore. Received: {model_dir}")
         self.save_freq = save_freq
         if save_freq != "epoch" and not isinstance(save_freq, int):
-            raise ValueError(
-                "Invalid value for argument `save_freq`. " f"Received: save_freq={save_freq}. " "Expected either 'epoch' or an integer value."
-            )
+            raise ValueError(f"Invalid value for argument `save_freq`. Received: save_freq={save_freq}. Expected either 'epoch' or an integer value.")
 
         self._batches_seen_since_last_saving = 0
         self._last_batch_seen = 0

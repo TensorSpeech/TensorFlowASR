@@ -20,6 +20,10 @@ from tensorflow_asr.utils import file_util
 
 logger = logging.getLogger(__name__)
 
+# How beam search corrects for the transducer's own internal language model, see
+# `Transducer.recognize_beam`: no correction, exact estimate from the joint, or a low-order n-gram.
+LM_TYPES = ("shallow", "ilme", "lodr")
+
 
 class DecoderConfig:
     def __init__(self, config: dict = None):
@@ -39,7 +43,14 @@ class DecoderConfig:
 
         self.beam_width: int = config.pop("beam_width", 0)
         self.norm_score: bool = config.pop("norm_score", True)
-        self.lm_config: dict = config.pop("lm_config", {})
+        # How to score with the language models. The models themselves are the top-level
+        # `lm_config`, next to `model_config`, because they are models -- these three are decoding
+        # knobs and belong with the rest of the beam settings.
+        self.lm_type: str = str(config.pop("lm_type", "shallow")).lower()  # "shallow" | "ilme" | "lodr"
+        if self.lm_type not in LM_TYPES:
+            raise ValueError(f"decoder_config.lm_type must be one of {LM_TYPES}, got {self.lm_type}")
+        self.lm_alpha: float = config.pop("lm_alpha", 0.0)  # lambda of eq. (3) in https://arxiv.org/abs/2506.00185
+        self.lm_beta: float = config.pop("lm_beta", 0.0)  # lambda_I of eq. (27) in https://arxiv.org/abs/2011.01991
 
         self.model_type: str = config.pop("model_type", "unigram")
         self.vocabulary: str = config.pop("vocabulary", None)
@@ -79,6 +90,54 @@ class DatasetConfig:
             setattr(self, k, v)
 
 
+class LanguageModelConfig:
+    """
+    The language models beam search fuses with.
+
+    | Key               | Meaning                                                            |
+    | ----------------- | ------------------------------------------------------------------ |
+    | `external_config` | keras blob of the LM fused *in*, plus an optional `weights` h5 path |
+    | `internal_config` | keras blob of the low-order LM "lodr" subtracts, same shape         |
+
+    Both are ordinary keras serialization blobs exactly like `model_config`, since that is what
+    they are -- models in their own right, fitted by `scripts/train_lm.py` and saved to their own
+    h5 files. How to *score* with them -- `lm_type`, `lm_alpha`, `lm_beta` -- is a decoding
+    setting and lives in `DecoderConfig` alongside `beam_width`.
+    """
+
+    def __init__(self, config: dict = None):
+        if not config:
+            config = {}
+        self.external_config: dict = config.pop("external_config", {})
+        self.internal_config: dict = config.pop("internal_config", {})
+        for k, v in config.items():
+            setattr(self, k, v)
+
+
+class LMDataConfig:
+    """
+    The text each language model is trained on, kept as two datasets because they need different data.
+
+    | Key                       | Trained by                            | Data                            |
+    | ------------------------- | ------------------------------------- | ------------------------------- |
+    | `internal_dataset_config` | `train_internal_lm`                   | ASR transcript `.tsv`           |
+    | `external_dataset_config` | `train_external_lm`, `train_kenlm_lm` | a large `.txt`/`.txt.gz` corpus |
+
+    They cannot share one `data_paths`. The internal LM must be fitted on the transducer's own
+    training transcripts -- it approximates the LM the transducer picked up from exactly that text,
+    which is what LODR subtracts -- whereas the external LM's whole value is a corpus far larger than
+    those transcripts. Each is an ordinary `DatasetConfig` and feeds `datasets.LMDataset`.
+    """
+
+    def __init__(self, config: dict = None):
+        if not config:
+            config = {}
+        self.internal_dataset_config = DatasetConfig(config.pop("internal_dataset_config", {}))
+        self.external_dataset_config = DatasetConfig(config.pop("external_dataset_config", {}))
+        for k, v in config.items():
+            setattr(self, k, v)
+
+
 class DataConfig:
     def __init__(self, config: dict = None):
         if not config:
@@ -89,6 +148,10 @@ class DataConfig:
         _test_dataset_config = config.pop("test_dataset_config", None)
         if _test_dataset_config:
             self.test_dataset_configs.append(_test_dataset_config)
+        # The text the language model scripts train on -- one dataset for the internal LM
+        # (`train_internal_lm`) and one for the external LM (`train_external_lm`, `train_kenlm_lm`),
+        # since transcripts and a large corpus cannot share one `data_paths`. See `LMDataConfig`.
+        self.lm_dataset_config = LMDataConfig(config.pop("lm_dataset_config", {}))
 
 
 class LearningConfig:
@@ -114,6 +177,10 @@ class Config:
         config = data if isinstance(data, dict) else file_util.load_yaml(file_util.preprocess_paths(data), **kwargs)
         self.decoder_config = DecoderConfig(config.pop("decoder_config", {}))
         self.model_config: dict = config.pop("model_config", {})
+        # Language model fusion for beam search. Sits here next to `model_config` rather than under
+        # `decoder_config` because it carries trained models in their own right --
+        # `scripts/train_lm.py` fits them and writes the h5 files it points at.
+        self.lm_config = LanguageModelConfig(config.pop("lm_config", {}))
         self.data_config = DataConfig(config.pop("data_config", {}))
         self.learning_config = LearningConfig(config.pop("learning_config", {})) if training else None
         for k, v in config.items():

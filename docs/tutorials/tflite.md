@@ -1,14 +1,17 @@
 - [TFLite Tutorial](#tflite-tutorial)
-  - [Conversion](#conversion)
-  - [Inference](#inference)
-    - [1. Input](#1-input)
-    - [2. Output](#2-output)
-    - [3. Example script](#3-example-script)
-
+  - [1. Conversion](#1-conversion)
+    - [1.1 Batch size is baked in](#11-batch-size-is-baked-in)
+    - [1.2 Beam search and language models](#12-beam-search-and-language-models)
+    - [1.3 The Flex delegate](#13-the-flex-delegate)
+  - [2. What the file carries](#2-what-the-file-carries)
+    - [2.1 Metadata](#21-metadata)
+    - [2.2 Signature](#22-signature)
+    - [2.3 Why the inputs are named](#23-why-the-inputs-are-named)
+  - [3. Inference](#3-inference)
 
 # TFLite Tutorial
 
-## Conversion
+## 1. Conversion
 
 ```bash
 tensorflow_asr tflite \
@@ -16,51 +19,154 @@ tensorflow_asr tflite \
     --h5=/path/to/weight.h5 \
     --bs=1 \ # Batch size
     --beam-width=0 \ # Beam width, set >0 to enable beam search
+    --nchunks=1 \ # Attention chunks the recorded chunk geometry covers
     --output=/path/to/output.tflite
 ## See others params
 tensorflow_asr tflite --help
 ```
 
-## Inference
+`--nchunks` changes nothing about the exported graph — only the chunk geometry written into the
+metadata, which is a streaming client's latency knob. Larger means fewer, bigger calls for an
+unchanged transcript. Both lengths are linear in it, so a client can recover a different `n` from
+the recorded pair without re-exporting.
 
-### 1. Input
+### 1.1 Batch size is baked in
 
-Input of each tflite depends on the models' parameters and configs.
+`--bs` fixes the leading dimension of every input at trace time. It is part of the signature, not
+something the file adapts to later: an export made at 4 takes four signals per call and refuses one.
+Export at `--bs=1` unless you are batching deliberately.
 
-The `inputs`, `inputs_length` and `previous_tokens` are still the same as bellow for all models.
+### 1.2 Beam search and language models
+
+`--beam-width` above 0 exports the ALSD++ beam search instead of the greedy decoder, together with
+the language model settings from `decoder_config` — fusion weight, correction type, and the models
+themselves, frozen into the flatbuffer beside the ASR weights. It overrides
+`decoder_config.beam_width` rather than reading it, since the shipped configs leave that at 0.
+
+Pass `--lm-h5` (and `--internal-lm-h5` when `lm_type` is `"lodr"`) so the language models are frozen
+in with their trained weights. Without them the model `lm_config` describes is exported with its
+*initial* weights and contributes noise; `tensorflow_asr tflite` warns about that and the other
+silent misconfigurations through the same `validate_lm` that `tensorflow_asr test` uses.
+
+```bash
+tensorflow_asr tflite \
+    --config-path=/path/to/config.yml.j2 \
+    --h5=/path/to/weight.h5 \
+    --lm-h5=/path/to/lm.h5 \
+    --internal-lm-h5=/path/to/ilm.h5 \
+    --bs=1 \
+    --beam-width=16 \
+    --output=/path/to/output.tflite
+```
+
+A fused export restarts the LM on every call, so it is only correct fed one whole utterance at a
+time — see [decoders](../decoders.md) 4.8 and 4.10.
+
+### 1.3 The Flex delegate
+
+These models need `SELECT_TF_OPS`: the decoders' `tf.while_loop` and the in-graph detokenization
+have no TFLite builtin equivalents. **TensorFlow 2.20 dropped the Flex delegate from the pip
+wheel**, so conversion still works there but inference fails with:
+
+```
+RuntimeError: Select TensorFlow op(s), included in the given model, is(are) not
+supported by this interpreter. Make sure you apply/link the Flex delegate before inference.
+```
+
+A flatbuffer produced by 2.20 loads fine in a 2.18/2.19 interpreter, so the two halves can be split
+across environments. On Android the delegate is a dependency:
+`org.tensorflow:tensorflow-lite-select-tf-ops`.
+
+Convert with **no GPU visible**. Keras picks the fused LSTM kernel whenever one is *visible* —
+placement is irrelevant — and that kernel converts to a `CudnnRNNV3` custom op no interpreter can
+resolve. See the note on `app_util.convert_tflite`.
+
+## 2. What the file carries
+
+### 2.1 Metadata
+
+Conversion stores a JSON blob under `TFASR_METADATA` in the flatbuffer's own `metadata` field, so a
+deployed model needs neither a sidecar file nor the Python config that produced it:
 
 ```python
-schemas.PredictInput(
+from tensorflow_asr.utils import tflite_util
+
+tflite_util.read_metadata("/path/to/model.tflite")
+# {'signal_chunk_size': 2800, 'signal_chunk_step': 2560, 'sample_rate': 16000,
+#  'blank': 0, 'beam_width': 0, 'nchunks': 1}
+```
+
+| Key                 | What a client does with it                                                    |
+| ------------------- | ------------------------------------------------------------------------------ |
+| `signal_chunk_size` | samples to pass as `inputs` in one streaming call                              |
+| `signal_chunk_step` | samples to advance by afterwards — smaller than the size, because frames overlap |
+| `sample_rate`       | the rate to resample incoming audio to                                          |
+| `blank`             | the token id to seed `previous_tokens` with                                     |
+| `beam_width`        | the width traced, so 0 means greedy and the `previous_beam_*` inputs are absent  |
+| `nchunks`           | attention chunks the recorded geometry covers, so the two lengths can be read    |
+
+The interpreter never reads any of it, so it costs nothing at inference. Reading it back is not part
+of `tf.lite.Interpreter`'s API — a non-Python client writes the equivalent of `read_metadata`
+against the same schema. See [tflite_util.py](../../tensorflow_asr/utils/tflite_util.py).
+
+### 2.2 Signature
+
+The signature is `schemas.PredictInput` in, `schemas.PredictOutputWithTranscript` out, both
+flattened. `previous_encoder_states` and `previous_decoder_states` are nested structures rather than
+single tensors, so each contributes as many inputs as it has leaves:
+
+```python
+input_signature = schemas.PredictInput(
     inputs=tf.TensorSpec([batch_size, None], dtype=tf.float32),
     inputs_length=tf.TensorSpec([batch_size], dtype=tf.int32),
     previous_tokens=tf.TensorSpec.from_tensor(self.get_initial_tokens(batch_size)),
-    previous_encoder_states=tf.TensorSpec.from_tensor(self.get_initial_encoder_states(batch_size)),
-    previous_decoder_states=tf.TensorSpec.from_tensor(self.get_initial_decoder_states(batch_size)),
+    previous_encoder_states=tf.nest.map_structure(tf.TensorSpec.from_tensor, self.get_initial_encoder_states(batch_size)),
+    previous_decoder_states=tf.nest.map_structure(tf.TensorSpec.from_tensor, self.get_initial_decoder_states(batch_size)),
+    **beam_signature,   # previous_beam_scores / _last_tokens / _states, only when beam_width > 0
 )
 ```
 
-For models that don't have encoder states or decoder states, the default values are `tf.zeros([], dtype=self.dtype)` tensors for `previous_encoder_states` and `previous_decoder_states`. This is just for tflite conversion because tflite does not allow `None` value in `input_signature`. However, the output `next_encoder_states` and `next_decoder_states` are still `None`, so we can simply ignore those outputs.
+The time axis of `inputs` is the only dynamic dimension; everything else is static. A model with no
+encoder or decoder state contributes no inputs for it — `[]` flattens to nothing — and a model that
+returns `None` for an output drops it from the file entirely, which is why a CTC export has one more
+state input than it has state outputs (`next_tokens` is None for a non-autoregressive decoder).
 
-### 2. Output
+Outputs are numbered in flattened order: `Identity`, `Identity_1`, … before the variables are
+frozen, `StatefulPartitionedCall:N` or `PartitionedCall:N` after. The transcript is output 0,
+produced inside the graph, so no tokenizer is needed on the client side.
+
+### 2.3 Why the inputs are named
+
+Every input spec is named `tfasr_input_<position>`, after its position in the flattened signature.
+
+This is not cosmetic. An unnamed `tf.TensorSpec` leaves `tf.function` to label the placeholders
+`inputs`, `inputs_1`, … in an order of its own — a traced Conformer puts leaf 3 in `inputs_5` — and
+the name is the only thing the flatbuffer keeps. Since outputs *are* numbered in flattened order,
+an export whose inputs are auto-named cannot be streamed: nothing in the file says which new state
+replaces which old one, and pairing them by position feeds a convolution cache into a subsampling
+slot without raising.
+
+`get_input_details()` returns tensors in interpreter order, not signature order, and
+`get_signature_list()` is empty for some architectures — so sort on the name.
+
+An export made before this existed is refused by `ASRInference`, with a message saying to re-export.
+Older files still work for a one-pass decode, where no state is fed back.
+
+## 3. Inference
+
+Use [`ASRInference`](../inferences.md), which locates the tensors, seeds the carried state, feeds
+each new state back into the input it belongs to, and decodes the transcript bytes:
 
 ```python
-schemas.PredictOutputWithTranscript(
-    transcript=self.tokenizer.detokenize(outputs.tokens),
-    tokens=outputs.tokens,
-    next_tokens=outputs.next_tokens,
-    next_encoder_states=outputs.next_encoder_states,
-    next_decoder_states=outputs.next_decoder_states,
-)
+from tensorflow_asr.inferences import ASRInference
+
+asr = ASRInference(tflite="/path/to/model.tflite")
+transcript = asr(signal, streaming=False)[0]
 ```
 
-This is for supporting streaming inference.
+For streaming, `asr.start()`, call it with each block as it arrives, then `asr.end()` to flush the
+padded tail. The full contract — batches, the cache, chunk geometry, what streaming costs — is in
+[inferences](../inferences.md).
 
-Each output corresponds to the input = each chunk of audio signal.
-
-Then we can overwrite `previous_tokens`, `previous_encoder_states` and `previous_decoder_states` with `next_tokens`, `next_encoder_states` and `next_decoder_states` for the next chunk of audio signal.
-
-And continue until the end of the audio signal.
-
-### 3. Example script
-
-See [examples/inferences/tflite.py](../../examples/inferences/tflite.py) for more details.
+Runnable scripts for both, plus a microphone, are in
+[examples/inferences](../../examples/inferences/README.md).

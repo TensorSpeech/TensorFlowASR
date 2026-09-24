@@ -1,6 +1,6 @@
 {
   "[python]": {
-    "editor.defaultFormatter": "ms-python.black-formatter",
+    "editor.defaultFormatter": "charliermarsh.ruff",
     "editor.tabSize": 4
   },
   "[markdown]": {
@@ -15,17 +15,15 @@
     "editor.tabSize": 2
   },
   "autoDocstring.docstringFormat": "numpy",
-  "black-formatter.args": ["--config", "${workspaceFolder}/pyproject.toml"],
-  "black-formatter.path": ["${interpreter}", "-m", "black"],
   "editor.codeActionsOnSave": {
-    "source.fixAll": "explicit",
-    "source.organizeImports": "explicit"
+    "source.fixAll.ruff": "explicit",
+    "source.organizeImports.ruff": "explicit"
   },
   "editor.formatOnSave": true,
-  "isort.args": ["--settings-file", "${workspaceFolder}/pyproject.toml"],
-  "pylint.args": ["--rcfile=${workspaceFolder}/.pylintrc"],
-  "pylint.path": ["${interpreter}", "-m", "pylint"],
-  "python.analysis.fixAll": ["source.unusedImports", "source.convertImportFormat"],
+  "ruff.configuration": "${workspaceFolder}/pyproject.toml",
+  "ruff.importStrategy": "fromEnvironment",
   "python.analysis.importFormat": "absolute",
-  "markdown.extension.list.indentationSize": "inherit"
+  "markdown.extension.list.indentationSize": "inherit",
+  "pylint.enabled": false,
+  "ruff.enable": true
 }

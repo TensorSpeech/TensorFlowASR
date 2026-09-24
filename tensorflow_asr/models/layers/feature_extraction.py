@@ -157,9 +157,9 @@ class FeatureExtraction(Layer):
         (chunk_size, chunk_step)
             Size of the chunk signals and the step to move to the next chunk
         """
-        chunk_size = (nframes - 1) * self.frame_step + self.frame_length
-        chunk_step = nframes * self.frame_step
-        return chunk_size, chunk_step
+        signal_chunk_size = (nframes - 1) * self.frame_step + self.frame_length
+        signal_chunk_step = nframes * self.frame_step
+        return signal_chunk_size, signal_chunk_step
 
     def normalize_signal(self, signal):
         if not self._normalize_signal:

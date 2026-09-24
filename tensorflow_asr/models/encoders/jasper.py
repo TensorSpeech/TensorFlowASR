@@ -348,7 +348,8 @@ class JasperEncoder(keras.Model):
         Tuple[tf.Tensor, tf.Tensor, tf.Tensor], shape ([B, T, dmodel], [B], [nlayers, nstates, B, rnn_units] -> [B, nlayers, nstates, rnn_units])
         """
         with tf.name_scope(f"{self.name}_call_next"):
-            return self.call((features, features_length), training=False)
+            outputs, outputs_length = self.call((features, features_length), training=False)
+            return outputs, outputs_length, None  # jasper is stateless, but callers unpack three
 
     def compute_output_shape(self, input_shape):
         inputs_shape, inputs_length_shape = input_shape

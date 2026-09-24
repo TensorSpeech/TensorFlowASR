@@ -57,3 +57,30 @@ data_config:
       drop_remainder: False
       stage: test
       indefinite: False
+
+  lm_dataset_config:
+    external_dataset_config:
+      enabled: True
+      data_paths:
+        - {{datadir}}/librispeech-lm-norm.txt.gz
+        - {{datadir}}/../librispeech-lm-norm.txt.gz
+        - {{datadir}}/../librispeech-lm-norm.txt
+      shuffle: True
+      cache: False
+      buffer_size: null
+      drop_remainder: True
+      max_length: 256
+      stage: train
+      indefinite: True
+    internal_dataset_config:
+      enabled: True
+      data_paths:
+        - {{datadir}}/train-clean-100/transcripts.tsv
+        - {{datadir}}/train-clean-360/transcripts.tsv
+        - {{datadir}}/train-other-500/transcripts.tsv
+      shuffle: True
+      cache: False
+      buffer_size: null
+      drop_remainder: True
+      stage: train
+      indefinite: True

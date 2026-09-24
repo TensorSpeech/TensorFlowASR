@@ -1,25 +1,18 @@
 repos:
   - repo: local
     hooks:
-      - id: black-formatter-fix
-        name: black-formatter-fix
-        entry: bash -c "for f in $@; do black --verbose $f; done"
+      - id: ruff-format
+        name: ruff-format
+        entry: uv run ruff format --force-exclude
         language: system
         types: [python]
         stages: [pre-commit]
         fail_fast: true
+        require_serial: true
         verbose: true
-      - id: isort-fix
-        name: isort-fix
-        entry: bash -c "for f in $@; do echo -e \"Organize import for file $f\" && isort $f; done"
-        language: system
-        types: [python]
-        stages: [pre-commit]
-        fail_fast: true
-        verbose: true
-      - id: pylint-check
-        name: pylint-check
-        entry: bash -c "for f in $@; do pylint --rcfile=.pylintrc -rn -sn $f; done"
+      - id: ruff-check
+        name: ruff-check
+        entry: uv run ruff check --fix --force-exclude
         language: system
         types: [python]
         stages: [pre-commit]

@@ -34,8 +34,12 @@ model_config:
     encoder_kernel_size: 31
     encoder_dropout: 0.1
     encoder_padding: causal
-    encoder_memory_length: null
-    encoder_history_size: 64 # frames = 4 * chunk_size
+    # left context, in encoder frames. One number for one receptive field: it is both the
+    # mask history during training and the kv cache length when streaming chunk by chunk.
+    encoder_memory_length: 64 # frames = 4 * chunk_size
+    # "kv" caches the projected keys/values, so the cached frames are not re-projected every
+    # chunk. Identical output to "hidden" while the weights are frozen, i.e. at inference.
+    encoder_memory_mode: kv
     encoder_chunk_size: 16 # frames
     prediction_label_encode_mode: embedding
     prediction_embed_dim: 320
@@ -58,6 +62,22 @@ model_config:
       class_name: l2
       config:
         l2: 1e-6
+
+lm_config:
+  # the LM fused *in*. Optional.
+  external_config:
+    class_name: tensorflow_asr.models.lm.ngram_language_model>NGramLanguageModel
+    config:
+      vocab_size: {{decoder_config.vocabsize}}
+      order: 3
+  # the low-order LM subtracted. Required by lm_type: lodr.
+  internal_config:
+    class_name: tensorflow_asr.models.lm.bigram_language_model>BigramLanguageModel
+    config:
+      vocab_size: {{decoder_config.vocabsize}}
+      blank: 0
+      interpolation: 0.75
+      delta: 0.1
 
 learning_config:
   optimizer_config:
