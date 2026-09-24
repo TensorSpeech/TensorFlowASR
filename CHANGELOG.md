@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v3.1.1 (2026-09-24)
+
+### Bug Fixes
+
+- Inference singleton with dynamic batching
+  ([`dc52432`](https://github.com/TensorSpeech/TensorFlowASR/commit/dc52432f0390f6d44bf3081b7239ad38570327de))
+
+
 ## v3.1.0 (2026-09-24)
 
 ### Bug Fixes
