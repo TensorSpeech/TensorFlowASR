@@ -31,7 +31,7 @@ dependencies = [
     "ipywidgets~=8.1.5",
     "ipython<9.0.0",
     "kagglehub~=0.3.6",
-    "datasets~=3.5.1",
+    "datasets>=3.5.1,<5.1.0",
     "tabulate~=0.9.0",
     "tensorflow~=2.19.0",
     "tensorflow-text~=2.19.0",
