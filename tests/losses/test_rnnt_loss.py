@@ -1,4 +1,4 @@
-import tensorflow_asr.losses.rnnt_losses as rnnt_losses
+import tensorflow_asr.losses.rnnt_loss as rnnt_losses
 import numpy as np
 import tensorflow as tf
 
